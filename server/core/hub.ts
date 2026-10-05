@@ -423,6 +423,11 @@ export class Hub {
       }
     });
 
+    // Phones measure the difference between their clock and this PC's clock
+    socket.on('clock', (ack: (now: number) => void) => {
+      if (typeof ack === 'function') ack(Date.now());
+    });
+
     socket.on('disconnect', () => {
       clearInterval(resetCalls);
       this.unbindGuest(socket);

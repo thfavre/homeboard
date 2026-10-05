@@ -2,7 +2,7 @@
   import { CircleCheck, CircleX, Pause, Play, Sparkles, Zap } from '@lucide/svelte';
   import { fade, scale } from 'svelte/transition';
   import { ANSWER_STYLES, type QuizState } from '$shared/quiz.ts';
-  import { hb, rpc, attempt } from '$lib/client.svelte.ts';
+  import { hb, rpc, attempt, serverNow } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
   import Shape from './Shape.svelte';
@@ -22,9 +22,9 @@
   const answered = $derived(myChoice !== null || (!!meId && !!q?.answered.includes(meId)));
 
   // Seconds left in the current phase
-  let now = $state(Date.now());
+  let now = $state(serverNow());
   $effect(() => {
-    const t = setInterval(() => (now = Date.now()), 250);
+    const t = setInterval(() => (now = serverNow()), 250);
     return () => clearInterval(t);
   });
   const left = $derived(q ? Math.max(0, Math.ceil(((q.endsAt ?? now + q.pausedLeft) - now) / 1000)) : 0);

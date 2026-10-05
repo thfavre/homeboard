@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { serverNow } from '$lib/client.svelte.ts';
   /** Circular countdown until `endsAt` */
   let { endsAt, totalMs, size = '5rem', pausedLeft = 0 }: { endsAt: number | null; totalMs: number; size?: string; pausedLeft?: number } = $props();
-  let now = $state(Date.now());
+  let now = $state(serverNow());
   $effect(() => {
     let frame = requestAnimationFrame(function loop() {
-      now = Date.now();
+      now = serverNow();
       frame = requestAnimationFrame(loop);
     });
     return () => cancelAnimationFrame(frame);

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade, fly } from 'svelte/transition';
   import type { Photo, PhotosState } from '$shared/photos.ts';
-  import { hb, showNames } from '$lib/client.svelte.ts';
+  import { hb, serverNow, showNames } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
 
   const mod = $derived(hb.modules.photos as PhotosState | undefined);
@@ -41,7 +41,7 @@
           in:fade={{ duration: 500 }}
           out:fly={{ y: -80, duration: 500 }}
         >
-          {#if top}<div class="timer" style:animation-duration="{Math.max(0, current.until - Date.now())}ms"></div>{/if}
+          {#if top}<div class="timer" style:animation-duration="{Math.max(0, current.until - serverNow())}ms"></div>{/if}
           <img src={p.url} alt={p.caption || 'Photo from ' + p.guest.name} />
           <figcaption>
             {#if p.caption}<p class="caption">{p.caption}</p>{/if}

@@ -1,10 +1,11 @@
 import type { NowPlaying } from '$shared/spotify.ts';
+import { serverNow } from '$lib/client.svelte.ts';
 
 /** A clock that ticks while mounted, to animate progress bars between server updates */
 export function ticker(ms = 500) {
-  let now = $state(Date.now());
+  let now = $state(serverNow());
   $effect(() => {
-    const t = setInterval(() => (now = Date.now()), ms);
+    const t = setInterval(() => (now = serverNow()), ms);
     return () => clearInterval(t);
   });
   return {

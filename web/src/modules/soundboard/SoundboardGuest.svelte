@@ -1,16 +1,16 @@
 <script lang="ts">
   import { AudioLines } from '@lucide/svelte';
   import type { SoundboardState } from '$shared/soundboard.ts';
-  import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
+  import { hb, rpc, attempt, price, serverNow } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
 
   const mod = $derived(hb.modules.soundboard as SoundboardState | undefined);
   const cost = $derived(price('soundboard.sound'));
-  let now = $state(Date.now());
+  let now = $state(serverNow());
   let last = $state<string | null>(null);
 
   $effect(() => {
-    const t = setInterval(() => (now = Date.now()), 250);
+    const t = setInterval(() => (now = serverNow()), 250);
     return () => clearInterval(t);
   });
 

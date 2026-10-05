@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { fly, scale } from 'svelte/transition';
   import type { QuizFx, QuizPlayer, QuizState } from '$shared/quiz.ts';
-  import { hb, onEvent } from '$lib/client.svelte.ts';
+  import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
   import Sparkles from './Sparkles.svelte';
@@ -86,9 +86,9 @@
   }
 
   // ------------------------------------------------------------ end bar
-  let now = $state(Date.now());
+  let now = $state(serverNow());
   $effect(() => {
-    const t = setInterval(() => (now = Date.now()), 100);
+    const t = setInterval(() => (now = serverNow()), 100);
     return () => clearInterval(t);
   });
   const remaining = $derived(q.endsAt ? Math.max(0, q.endsAt - now) : q.pausedLeft);
@@ -133,7 +133,10 @@
   {#if winner && pos}
     <div class="winner" style:transform="translate({pos.x}px, {pos.y}px)" in:scale={{ duration: 300, start: 0.8 }}>
       {#key spinKey}
-        <span class="spinner" class:spin={spinKey > 0}><Avatar name={winner.name} color={winner.color} id={winner.id} size="7rem" /></span>
+        <!-- Rotation and zoom on two layers, so the spin is one smooth turn that slows down -->
+        <span class="spinner" class:spin={spinKey > 0}>
+          <span class="glow" class:pulse={spinKey > 0}><Avatar name={winner.name} color={winner.color} id={winner.id} size="7rem" /></span>
+        </span>
         {#if spinKey}<Sparkles count={20} spread={10} size={1.4} />{/if}
       {/key}
     </div>
@@ -225,23 +228,39 @@
     border-radius: 50%;
     box-shadow: 0 0 0 0.4rem rgba(255, 217, 61, 0.6), 0 0 3rem rgba(255, 217, 61, 0.5);
   }
+  .glow {
+    display: block;
+    border-radius: 50%;
+  }
+  /* One continuous spin: very fast at first, slowing down smoothly to a stop */
   .spin {
-    animation: beyblade 1.3s cubic-bezier(0.2, 0.7, 0.2, 1);
+    animation: beyblade 1.6s cubic-bezier(0.1, 0.75, 0.25, 1);
   }
   @keyframes beyblade {
-    0% {
-      transform: rotate(0) scale(1);
+    from {
+      transform: rotate(0deg);
     }
-    20% {
-      transform: rotate(540deg) scale(1.25);
+    to {
+      transform: rotate(2160deg);
+    }
+  }
+  .pulse {
+    animation: pulse 1.6s ease-out;
+  }
+  @keyframes pulse {
+    0% {
+      transform: scale(1);
+    }
+    15% {
+      transform: scale(1.25);
       filter: drop-shadow(0 0 1.5rem #fff) brightness(1.3);
     }
-    80% {
-      transform: rotate(1800deg) scale(1.15);
+    70% {
+      transform: scale(1.15);
       filter: drop-shadow(0 0 1rem #ffd93d);
     }
     100% {
-      transform: rotate(2160deg) scale(1);
+      transform: scale(1);
     }
   }
   .hop {
