@@ -92,7 +92,10 @@
         };
 
         // Play audio and wait for both speech & scroll
-        const speechPromise = speak(item.text, item.volume);
+        // As soon as the voice stops, the music can come back up (the banner may still be scrolling)
+        const speechPromise = speak(item.text, item.volume).then(() => {
+          void rpc('tts', 'spoken', { id: item.id }).catch(() => {});
+        });
         const scrollPromise = new Promise((r) => setTimeout(r, durationMs));
 
         await Promise.all([speechPromise, scrollPromise]);

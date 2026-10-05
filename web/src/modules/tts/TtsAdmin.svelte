@@ -5,6 +5,7 @@
   import { hb, rpc, attempt, toast } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
+  import Ducking from '../spotify/Ducking.svelte';
 
   const mod = $derived(hb.modules.tts as TtsState | undefined);
 
@@ -113,6 +114,7 @@
         }}
       />
     </label>
+    <Ducking source="tts" title="Lower the music" hint="Spotify gets quieter while a shoutout is read." />
   </Section>
 
   <Section title="Test announcement" hint="Test the voice and scrolling banner on the TV.">

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { NowPlaying, SpotifyState, Track } from '../../../shared/spotify.ts';
+import type { DuckSetting, DuckSource, NowPlaying, SpotifyState, Track } from '../../../shared/spotify.ts';
 import { defineModule } from '../../core/module.ts';
 import { HbError, num } from '../../core/util.ts';
 
@@ -10,9 +10,12 @@ interface SpotifySettings {
   allowExplicit: boolean;
   allowSkip: boolean;
   /** Lower the music while a soundboard sound plays */
-  duck: boolean;
+  /** Old single setting, read once to fill `ducking` */
+  duck?: boolean;
   /** Music volume during a sound, in % of the normal volume */
-  duckPercent: number;
+  duckPercent?: number;
+  /** Lower the music while soundboard sounds or shoutouts play */
+  ducking: Record<DuckSource, DuckSetting>;
 }
 
 // Overridable so tests can run against a fake Spotify
@@ -52,7 +55,7 @@ export default defineModule<SpotifySettings>({
   id: 'spotify',
   name: 'Music',
   description: 'Guests add songs to your Spotify queue; the TV shows what is playing',
-  settings: { clientId: '', refreshToken: '', account: null, allowExplicit: true, allowSkip: true, duck: true, duckPercent: 30 },
+  settings: { clientId: '', refreshToken: '', account: null, allowExplicit: true, allowSkip: true, ducking: { soundboard: { on: true, percent: 30 }, tts: { on: true, percent: 30 } } },
 
   setup(ctx) {
     const { hub } = ctx;
@@ -195,7 +198,23 @@ export default defineModule<SpotifySettings>({
     // sound ends; the volume goes back up once none is playing. The restore is always
     // sent, then checked against what Spotify reports and sent again until it matches.
 
-    let duck: { original: number; plays: Set<string>; failsafe: NodeJS.Timeout } | null = null;
+    /**
+     * While sounds play: the normal volume to come back to, and each playing sound with
+     * the volume it asks for. The music follows the lowest one.
+     */
+    let duck: { original: number; plays: Map<string, number>; applied: number; failsafe: NodeJS.Timeout } | null = null;
+
+    // Settings saved before there was one setting per source
+    {
+      const s = ctx.settings.get();
+      if (s.duck !== undefined || s.duckPercent !== undefined) {
+        ctx.settings.update({
+          ducking: { ...s.ducking, soundboard: { on: s.duck ?? true, percent: s.duckPercent ?? 30 } },
+          duck: undefined,
+          duckPercent: undefined,
+        });
+      }
+    }
     let restoreTo: number | null = null;
     let restoreTries = 0;
     /** Until then, the volume reported by Spotify may be out of date */
@@ -236,26 +255,37 @@ export default defineModule<SpotifySettings>({
       void restore().then(() => setTimeout(poll, VOLUME_SETTLE_MS + 200));
     };
 
-    ctx.bus.on('soundboard:play', async ({ id }: { id: string }) => {
-      const s = ctx.settings.get();
+    /** Lower the music to the lowest level asked by the sounds playing */
+    const applyDuck = () => {
+      if (!duck || !duck.plays.size) return;
+      const percent = Math.min(...duck.plays.values());
+      if (percent === duck.applied) return;
+      duck.applied = percent;
+      setVolume(Math.round((duck.original * percent) / 100)).catch((err) => ctx.log.warn('Could not lower the music:', (err as Error).message));
+    };
+
+    ctx.bus.on('soundboard:play', ({ id, source }: { id: string; source?: DuckSource }) => {
+      const setting = ctx.settings.get().ducking[source ?? 'soundboard'];
+      if (!setting?.on) return;
       if (!duck) {
         // If the previous restore is still on its way, that is the real normal volume
         const original = restoreTo ?? volume;
-        if (!s.duck || !connected() || !now?.isPlaying || original === null) return;
-        duck = { original, plays: new Set(), failsafe: setTimeout(endDuck, DUCK_MAX_MS) };
+        if (!connected() || !now?.isPlaying || original === null) return;
+        duck = { original, plays: new Map(), applied: 100, failsafe: setTimeout(endDuck, DUCK_MAX_MS) };
         restoreTo = null;
-        setVolume(Math.round((original * s.duckPercent) / 100)).catch((err) => ctx.log.warn('Could not lower the music:', (err as Error).message));
       }
-      duck.plays.add(id);
+      duck.plays.set(id, setting.percent);
       clearTimeout(duck.failsafe);
       duck.failsafe = setTimeout(endDuck, DUCK_MAX_MS);
+      applyDuck();
     });
 
     ctx.bus.on('soundboard:ended', ({ id }: { id: string }) => {
-      if (!duck) return;
-      duck.plays.delete(id);
+      if (!duck || !duck.plays.delete(id)) return;
       // A short pause so back-to-back sounds do not make the music pump
       if (!duck.plays.size) setTimeout(() => duck && !duck.plays.size && endDuck(), 400);
+      // Another sound is still playing: follow its level
+      else applyDuck();
     });
 
     // ------------------------------------------------------------ state
@@ -280,8 +310,7 @@ export default defineModule<SpotifySettings>({
                 // While the music is lowered, show the volume it goes back to
                 volume: duck?.original ?? restoreTo ?? volume,
                 allowExplicit: s.allowExplicit,
-                duck: s.duck,
-                duckPercent: s.duckPercent,
+                ducking: s.ducking,
                 error,
               },
             }
@@ -400,13 +429,24 @@ export default defineModule<SpotifySettings>({
       setTimeout(poll, VOLUME_SETTLE_MS + 200);
     });
 
+    /** Music level while soundboard sounds or shoutouts play */
+    ctx.onAdmin('setDucking', (args) => {
+      const source: DuckSource = args.source === 'tts' ? 'tts' : 'soundboard';
+      const current = ctx.settings.get().ducking[source];
+      const next: DuckSetting = {
+        on: args.on !== undefined ? !!args.on : current.on,
+        percent: args.percent !== undefined ? Math.round(Math.min(95, Math.max(0, num(args.percent, 30)))) : current.percent,
+      };
+      ctx.settings.update({ ducking: { ...ctx.settings.get().ducking, [source]: next } });
+      ctx.publish();
+      return true;
+    });
+
     ctx.onAdmin('setOptions', (args) => {
       const s = ctx.settings.get();
       ctx.settings.update({
         allowExplicit: args.allowExplicit !== undefined ? !!args.allowExplicit : s.allowExplicit,
         allowSkip: args.allowSkip !== undefined ? !!args.allowSkip : s.allowSkip,
-        duck: args.duck !== undefined ? !!args.duck : s.duck,
-        duckPercent: args.duckPercent !== undefined ? Math.round(Math.min(90, Math.max(0, num(args.duckPercent, 30)))) : s.duckPercent,
       });
       ctx.publish();
     });

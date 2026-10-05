@@ -76,7 +76,7 @@ export default defineModule<TtsSettings>({
       playing = queue.shift()!;
       const id = playing.event.id;
       // Lower the music while it speaks (same as soundboard sounds)
-      ctx.bus.emit('soundboard:play', { id });
+      ctx.bus.emit('soundboard:play', { id, source: 'tts' });
       ctx.emit('tv-audio', 'tts', playing.event);
       // If no TV reports the end (closed, disconnected), move on anyway
       failsafe = setTimeout(() => finished(id), playing.event.durationMs + FAILSAFE_MS);
@@ -116,6 +116,11 @@ export default defineModule<TtsSettings>({
       ctx.publish();
     };
 
+    /** The voice stopped: the music comes back up, even if the banner is still scrolling */
+    ctx.onTv('spoken', (args) => {
+      ctx.bus.emit('soundboard:ended', { id: String(args.id) });
+    });
+    /** The banner is gone: next shoutout after the pause */
     ctx.onTv('ended', (args) => finished(String(args.id)));
 
     // ------------------------------------------------------------ guests

@@ -16,6 +16,15 @@ export interface NowPlaying extends Track {
   at: number;
 }
 
+/** What can lower the music while it plays */
+export type DuckSource = 'soundboard' | 'tts';
+
+export interface DuckSetting {
+  on: boolean;
+  /** Music volume while the source plays, in % of the normal volume */
+  percent: number;
+}
+
 export interface SpotifyState {
   connected: boolean;
   now: NowPlaying | null;
@@ -29,9 +38,7 @@ export interface SpotifyState {
     device: string | null;
     volume: number | null;
     allowExplicit: boolean;
-    duck: boolean;
-    /** Music volume while a sound plays, in % of the normal volume */
-    duckPercent: number;
+    ducking: Record<DuckSource, DuckSetting>;
     error: string | null;
   };
 }

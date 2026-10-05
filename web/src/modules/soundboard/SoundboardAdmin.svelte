@@ -6,6 +6,7 @@
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
+  import Ducking from '../spotify/Ducking.svelte';
 
   const mod = $derived(hb.modules.soundboard as SoundboardState | undefined);
   const volume = new Synced(() => (hb.modules.soundboard ? Math.round(hb.modules.soundboard.volume * 100) : undefined), 80);
@@ -45,6 +46,7 @@
       <span>Pause between two sounds (seconds)</span>
       <input class="input" type="number" min="0" max="120" bind:value={cooldown.value} onfocus={cooldown.start} onblur={() => { set({ cooldownSec: Number(cooldown.value) }); cooldown.end(); }} />
     </label>
+    <Ducking source="soundboard" title="Lower the music" hint="Spotify gets quieter while a sound plays." />
   </Section>
 
   <Section title="Built-in sounds">

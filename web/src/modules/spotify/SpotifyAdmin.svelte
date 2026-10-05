@@ -6,13 +6,13 @@
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import Cover from './Cover.svelte';
+  import Ducking from './Ducking.svelte';
   import { Synced } from '$lib/synced.svelte.ts';
 
   const mod = $derived(hb.modules.spotify as SpotifyState | undefined);
   const a = $derived(mod?.admin);
   const clientId = new Synced(() => hb.modules.spotify?.admin?.clientId, '');
   const volume = new Synced(() => hb.modules.spotify?.admin?.volume, 50);
-  const duckPercent = new Synced(() => hb.modules.spotify?.admin?.duckPercent, 30);
 
   async function connect() {
     const url = await attempt(() => rpc<string>('spotify', 'authUrl'));
@@ -82,30 +82,8 @@
         </div>
         <Toggle checked={mod.allowSkip} label="Guests can skip" onchange={(v) => set({ allowSkip: v })} />
       </div>
-      <div class="line">
-        <div>
-          <strong>Lower music during sounds</strong>
-          <p class="faint small">When a soundboard sound plays, Spotify volume drops for a few seconds.</p>
-        </div>
-        <Toggle checked={a.duck} label="Lower music" onchange={(v) => set({ duck: v })} />
-      </div>
-      <label class="field" class:muted={!a.duck}>
-          <span>Music volume during sounds: {duckPercent.value}% of normal</span>
-          <input
-            type="range"
-            min="0"
-            max="90"
-            step="5"
-            bind:value={duckPercent.value}
-            disabled={!a.duck}
-            onpointerdown={duckPercent.start}
-            onchange={() => {
-              set({ duckPercent: duckPercent.value });
-              duckPercent.end();
-            }}
-          />
-          <span class="scale faint"><span>Silent</span><span>Barely lower</span></span>
-        </label>
+      <Ducking source="soundboard" title="Lower music during sounds" hint="While a soundboard sound plays." />
+      <Ducking source="tts" title="Lower music during shoutouts" hint="While the TV reads a shoutout out loud." />
     </Section>
 
     <Section title="Account">
@@ -150,9 +128,6 @@
   .status.bad {
     color: var(--danger);
   }
-  .muted {
-    opacity: 0.45;
-  }
   .np {
     display: flex;
     align-items: center;
@@ -194,12 +169,6 @@
     font-size: 0.82rem;
     word-break: break-all;
     text-align: left;
-  }
-  .scale {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.75rem;
-    font-weight: 400;
   }
   input[type='range'] {
     width: 100%;

@@ -36,7 +36,7 @@
     busy = false;
     if (r) {
       text = '';
-      toast({ text: r.position ? `In line: ${r.position} before yours` : 'On the TV now', kind: 'success' });
+      toast({ text: 'Sent to the TV', kind: 'success' });
     }
   }
 </script>
@@ -110,16 +110,6 @@
           <Toggle checked={anonymous} label="Anonymous" onchange={(v) => (anonymous = v)} />
         </div>
 
-        <!-- Always the same line, so the button never moves -->
-        <p class="status" class:danger={!canAfford && cleanLen > 0}>
-          {#if !canAfford && cleanLen > 0}
-            Not enough {hb.core?.currency.name ?? 'coins'}: <Money amount={totalCost - (hb.me?.balance ?? 0)} /> missing
-          {:else if mod.waiting}
-            {mod.waiting} {mod.waiting === 1 ? 'shoutout' : 'shoutouts'} before yours
-          {:else}
-            Ready to announce
-          {/if}
-        </p>
 
         <!-- Submit Button -->
         <button
@@ -130,7 +120,9 @@
           <Megaphone size={19} />
           <span>
             {#if busy}
-              Broadcasting...
+              Sending...
+            {:else if !canAfford && cleanLen > 0}
+              Not enough {hb.core?.currency.name ?? 'coins'}
             {:else if hb.core?.economyEnabled && totalCost > 0}
               Say it on TV · <Money amount={totalCost} />
             {:else}
@@ -287,15 +279,6 @@
     font-size: 0.78rem;
     color: var(--text-dim);
     line-height: 1.25;
-  }
-  .status {
-    min-height: 1.4em;
-    text-align: center;
-    font-size: 0.85rem;
-    color: var(--text-faint);
-  }
-  .status.danger {
-    color: var(--danger);
   }
   .submit-btn {
     min-height: 3.2rem;
