@@ -12,6 +12,7 @@ export interface PhotosState {
   /** The next photos (up to 3), for the pile on the TV */
   upcoming: Photo[];
   displaySec: number;
+  /** 0 = no limit */
   maxQueue: number;
   /** Admin only */
   queue?: Photo[];

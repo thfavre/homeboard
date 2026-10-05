@@ -5,11 +5,13 @@
   import type { Photo, PhotosState } from '$shared/photos.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
+  import Toggle from '$lib/ui/Toggle.svelte';
   import { ago } from '$lib/time.ts';
 
   const mod = $derived(hb.modules.photos as PhotosState | undefined);
   const seconds = new Synced(() => hb.modules.photos?.displaySec, 12);
-  const maxQueue = new Synced(() => hb.modules.photos?.maxQueue, 20);
+  // Remembers the last limit while the limit is turned off
+  const maxQueue = new Synced(() => (hb.modules.photos?.maxQueue ? hb.modules.photos.maxQueue : undefined), 20);
 
   async function remove(p: Photo) {
     const refund = await choose({
@@ -27,6 +29,39 @@
 </script>
 
 {#if mod}
+  <Section title="Settings">
+    <div class="grid2">
+      <label class="field">
+        <span>Seconds on screen</span>
+        <input class="input" type="number" min="3" max="120" bind:value={seconds.value} onfocus={seconds.start} onblur={() => { set({ displaySec: Number(seconds.value) }); seconds.end(); }} />
+      </label>
+      {#if mod.maxQueue > 0}
+        <label class="field">
+          <span>Max photos waiting</span>
+          <input
+            class="input"
+            type="number"
+            min="1"
+            max="1000"
+            bind:value={maxQueue.value}
+            onfocus={maxQueue.start}
+            onblur={() => {
+              set({ maxQueue: Math.max(1, Number(maxQueue.value)) });
+              maxQueue.end();
+            }}
+          />
+        </label>
+      {/if}
+    </div>
+    <div class="line">
+      <div>
+        <strong>Limit photos waiting</strong>
+        <p class="faint small">When off, guests can send as many photos as they want.</p>
+      </div>
+      <Toggle checked={mod.maxQueue > 0} label="Limit photos waiting" onchange={(v) => set({ maxQueue: v ? maxQueue.value || 20 : 0 })} />
+    </div>
+  </Section>
+
   <!-- Fixed size, so the page below never moves when the photo on the TV changes -->
   <Section title="On the TV now">
     <div class="now">
@@ -64,19 +99,6 @@
       {:else}
         <p class="faint">No photos yet.</p>
       {/each}
-    </div>
-  </Section>
-
-  <Section title="Settings">
-    <div class="grid2">
-      <label class="field">
-        <span>Seconds on screen</span>
-        <input class="input" type="number" min="3" max="120" bind:value={seconds.value} onfocus={seconds.start} onblur={() => { set({ displaySec: Number(seconds.value) }); seconds.end(); }} />
-      </label>
-      <label class="field">
-        <span>Max photos waiting</span>
-        <input class="input" type="number" min="1" max="100" bind:value={maxQueue.value} onfocus={maxQueue.start} onblur={() => { set({ maxQueue: Number(maxQueue.value) }); maxQueue.end(); }} />
-      </label>
     </div>
   </Section>
 {/if}
@@ -148,6 +170,12 @@
     display: flex;
     justify-content: flex-end;
     padding: 0 0.2rem 0.2rem;
+  }
+  .line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
   }
   .grid2 {
     display: grid;

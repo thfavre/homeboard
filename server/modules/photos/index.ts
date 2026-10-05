@@ -8,6 +8,7 @@ import { HbError, clamp, cleanName, num, uid } from '../../core/util.ts';
 
 interface PhotoSettings {
   displaySec: number;
+  /** 0 = no limit */
   maxQueue: number;
 }
 
@@ -94,7 +95,8 @@ export default defineModule<PhotoSettings>({
         if (!ctx.enabled()) throw new HbError('Photos are turned off right now');
         const ext = TYPES[req.get('content-type') ?? ''];
         if (!ext || !Buffer.isBuffer(req.body) || req.body.length < 100) throw new HbError('Send a JPG, PNG or WebP image');
-        if (queue.length >= ctx.settings.get().maxQueue) throw new HbError('Lots of photos are waiting already. Try again in a minute.');
+        const max = ctx.settings.get().maxQueue;
+        if (max > 0 && queue.length >= max) throw new HbError('Lots of photos are waiting already. Try again in a minute.');
         const caption = cleanName(req.query.caption, 80);
         const charge = ctx.economy.charge(guest, 'photos.photo', 1, 'Photo on the TV');
         const id = uid(8);
@@ -154,7 +156,7 @@ export default defineModule<PhotoSettings>({
       const s = ctx.settings.get();
       ctx.settings.update({
         displaySec: args.displaySec !== undefined ? clamp(num(args.displaySec, 12), 3, 120) : s.displaySec,
-        maxQueue: args.maxQueue !== undefined ? clamp(num(args.maxQueue, 20), 1, 100) : s.maxQueue,
+        maxQueue: args.maxQueue !== undefined ? clamp(Math.round(num(args.maxQueue, 20)), 0, 1000) : s.maxQueue,
       });
       ctx.publish();
     });
