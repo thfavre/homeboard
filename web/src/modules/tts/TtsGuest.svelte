@@ -105,21 +105,22 @@
         </div>
 
         <!-- Anonymous option -->
-        <button
-          type="button"
-          class="anon-card"
-          class:active={anonymous}
-          onclick={() => (anonymous = !anonymous)}
-        >
+        <div class="anon-card" class:active={anonymous}>
           <div class="anon-icon" class:active={anonymous}>
             <EyeOff size={18} />
           </div>
-          <div class="anon-meta">
+          <div
+            class="anon-meta"
+            role="button"
+            tabindex="0"
+            onclick={() => (anonymous = !anonymous)}
+            onkeydown={(e) => (e.key === ' ' || e.key === 'Enter') && (anonymous = !anonymous)}
+          >
             <span class="anon-heading">Send anonymously</span>
             <span class="anon-sub">Only display text, hide your head picture</span>
           </div>
           <Toggle checked={anonymous} label="Anonymous" onchange={(v) => (anonymous = v)} />
-        </button>
+        </div>
 
         <!-- Status / Cooldown / Warning messages -->
         {#if wait > 0}

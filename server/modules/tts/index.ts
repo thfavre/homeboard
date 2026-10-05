@@ -39,8 +39,8 @@ export default defineModule<TtsSettings>({
       anonymous = false,
     ) => {
       const s = ctx.settings.get();
-      // Estimated duration: ~12 chars per second + padding
-      const durationMs = Math.max(5000, Math.round((text.length / 12) * 1000) + 1500);
+      // Estimated duration: ~12 chars per second + reading & scroll margin
+      const durationMs = Math.max(5000, Math.round((text.length / 12) * 1000) + 2000);
       const event: TtsEvent = {
         id: uid(6),
         text,
@@ -54,6 +54,12 @@ export default defineModule<TtsSettings>({
       // Lower Spotify background music while TTS is active
       ctx.bus.emit('soundboard:play', { id: event.id });
       ctx.emit('tv', 'tts', event);
+
+      // Failsafe in case TV is closed or loses connection while playing
+      setTimeout(() => {
+        ctx.bus.emit('soundboard:ended', { id: event.id });
+      }, durationMs + 3000);
+
       return event;
     };
 
@@ -64,7 +70,8 @@ export default defineModule<TtsSettings>({
     ctx.onGuest('say', (args, guest) => {
       const s = ctx.settings.get();
       const rawText = String(args?.text ?? '')
-        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .replace(/[\u0000-\u001f\u007f]/g, ' ')
+        .replace(/\s+/g, ' ')
         .trim();
       if (!rawText) throw new HbError('Write something to say');
       if (rawText.length > s.maxLength) {
@@ -80,35 +87,42 @@ export default defineModule<TtsSettings>({
       const anonymous = !!args?.anonymous;
 
       // Charge guest according to current pricingMode
-      if (s.pricingMode === 'per_char') {
-        ctx.economy.charge(guest, 'tts.char', rawText.length, `TTS (${rawText.length} chars)`);
-      } else {
-        ctx.economy.charge(guest, 'tts.message', 1, `TTS: "${snippet}"`);
-      }
+      const charge =
+        s.pricingMode === 'per_char'
+          ? ctx.economy.charge(guest, 'tts.char', rawText.length, `TTS (${rawText.length} chars)`)
+          : ctx.economy.charge(guest, 'tts.message', 1, `TTS: "${snippet}"`);
 
-      cooldownUntil = Date.now() + s.cooldownSec * 1000;
-      triggerTts(
-        rawText,
-        {
-          id: guest.id,
-          name: guest.name,
-          color: guest.color,
-          avatar: guest.avatar?.url,
-        },
-        anonymous,
-      );
+      try {
+        cooldownUntil = Date.now() + s.cooldownSec * 1000;
+        triggerTts(
+          rawText,
+          {
+            id: guest.id,
+            name: guest.name,
+            color: guest.color,
+            avatar: guest.avatar?.url,
+          },
+          anonymous,
+        );
 
-      if (anonymous) {
-        ctx.activity(`Someone said: "${snippet}"`);
-      } else {
-        ctx.activity(`{name} said: "${snippet}"`, { guest });
+        if (anonymous) {
+          ctx.activity(`Someone said: "${snippet}"`);
+        } else {
+          ctx.activity(`{name} said: "${snippet}"`, { guest });
+        }
+        ctx.publish();
+        return true;
+      } catch (err) {
+        ctx.economy.refund(charge);
+        throw err;
       }
-      ctx.publish();
-      return true;
     });
 
     ctx.onAdmin('test', (args) => {
-      const text = String(args?.text ?? 'Testing text to speech on the TV! Homeboard party sound is working great.').trim();
+      const text = String(args?.text ?? 'Testing text to speech on the TV! Homeboard party sound is working great.')
+        .replace(/[\u0000-\u001f\u007f]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       const anonymous = !!args?.anonymous;
       triggerTts(
         text,

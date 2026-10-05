@@ -4,13 +4,11 @@
   import { onEvent, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
 
-  let current = $state<(TtsEvent & { key: number; fromX: number; toX: number; durationMs: number }) | null>(null);
+  let current = $state<(TtsEvent & { key: number; durationMs: number }) | null>(null);
   let queue: TtsEvent[] = [];
   let seq = 0;
   let processing = false;
-
-  let viewportEl = $state<HTMLDivElement>();
-  let contentEl = $state<HTMLDivElement>();
+  let destroyed = false;
   let activeUtterance: SpeechSynthesisUtterance | null = null;
 
   function speak(text: string, volume: number): Promise<void> {
@@ -20,6 +18,7 @@
         return;
       }
       try {
+        if (window.speechSynthesis.paused) window.speechSynthesis.resume();
         window.speechSynthesis.cancel();
       } catch {
         // ignore
@@ -30,6 +29,7 @@
       utterance.volume = Math.max(0, Math.min(1, volume));
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
+      utterance.lang = navigator.language || 'en-US';
 
       const voices = window.speechSynthesis.getVoices();
       if (voices.length > 0) {
@@ -38,9 +38,14 @@
       }
 
       let done = false;
+      let timer: NodeJS.Timeout | null = null;
+      let resumeInterval: NodeJS.Timeout | null = null;
+
       const finish = () => {
         if (!done) {
           done = true;
+          if (timer) clearTimeout(timer);
+          if (resumeInterval) clearInterval(resumeInterval);
           activeUtterance = null;
           resolve();
         }
@@ -49,8 +54,15 @@
       utterance.onend = finish;
       utterance.onerror = finish;
 
+      // Chrome bug workaround: speech synthesis can pause unexpectedly during speech
+      resumeInterval = setInterval(() => {
+        if ('speechSynthesis' in window && window.speechSynthesis.speaking && window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+      }, 1000);
+
       // Fallback timeout in case speech synthesis stalls
-      setTimeout(finish, Math.max(6000, text.length * 150));
+      timer = setTimeout(finish, Math.max(6000, text.length * 150));
 
       try {
         window.speechSynthesis.speak(utterance);
@@ -64,61 +76,45 @@
     if (processing || queue.length === 0) return;
     processing = true;
 
-    while (queue.length > 0) {
-      const item = queue.shift()!;
-      const key = ++seq;
+    try {
+      while (!destroyed && queue.length > 0) {
+        const item = queue.shift()!;
+        const key = ++seq;
 
-      const estimatedSpeechMs = Math.max(5000, Math.round((item.text.length / 12) * 1000) + 1500);
+        // Estimated reading & speech duration
+        const estimatedSpeechMs = Math.max(5000, Math.round((item.text.length / 12) * 1000) + 1500);
+        const durationMs = Math.max(6500, estimatedSpeechMs + 2000);
 
-      // Measure viewport and content
-      const Wc = viewportEl ? viewportEl.clientWidth : (typeof window !== 'undefined' ? window.innerWidth : 1920);
-      // Rough placeholder width
-      const estimatedContentW = Math.max(250, item.text.length * 28 + (item.anonymous ? 0 : 200));
-      const totalDist = Wc + estimatedContentW;
-      const scrollMs = Math.max(5000, Math.round((totalDist / 180) * 1000));
-      const durationMs = Math.max(estimatedSpeechMs, scrollMs);
+        current = {
+          ...item,
+          key,
+          durationMs,
+        };
 
-      // Scroll from left to right: from -contentWidth to +Wc
-      current = {
-        ...item,
-        key,
-        fromX: -estimatedContentW,
-        toX: Wc,
-        durationMs,
-      };
+        // Play audio and wait for both speech & scroll
+        const speechPromise = speak(item.text, item.volume);
+        const scrollPromise = new Promise((r) => setTimeout(r, durationMs));
 
-      // Allow tick for DOM to measure exact content width
-      await new Promise((r) => setTimeout(r, 60));
-      if (contentEl && viewportEl && current?.key === key) {
-        const exactWc = viewportEl.clientWidth;
-        const exactContentW = contentEl.offsetWidth;
-        current.fromX = -exactContentW;
-        current.toX = exactWc;
+        await Promise.all([speechPromise, scrollPromise]);
+
+        // Brief reading pause after scrolling past
+        await new Promise((r) => setTimeout(r, 600));
+
+        // Report ended to server so Spotify restores volume
+        void rpc('tts', 'ended', { id: item.id }).catch(() => {});
+
+        if (current?.key === key) {
+          current = null;
+        }
+
+        // Gap between queued messages
+        if (!destroyed && queue.length > 0) {
+          await new Promise((r) => setTimeout(r, 600));
+        }
       }
-
-      // Play audio and wait for both speech & scroll
-      const speechPromise = speak(item.text, item.volume);
-      const scrollPromise = new Promise((r) => setTimeout(r, durationMs));
-
-      await Promise.all([speechPromise, scrollPromise]);
-
-      // Brief reading pause after scrolling past
-      await new Promise((r) => setTimeout(r, 600));
-
-      // Report ended to server so Spotify restores volume
-      void rpc('tts', 'ended', { id: item.id }).catch(() => {});
-
-      if (current?.key === key) {
-        current = null;
-      }
-
-      // Gap between queued messages
-      if (queue.length > 0) {
-        await new Promise((r) => setTimeout(r, 500));
-      }
+    } finally {
+      processing = false;
     }
-
-    processing = false;
   }
 
   $effect(() => {
@@ -136,11 +132,16 @@
     });
 
     return () => {
+      destroyed = true;
       off();
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
+        try {
+          window.speechSynthesis.cancel();
+        } catch {
+          // ignore
+        }
       }
     };
   });
@@ -152,19 +153,18 @@
       class="tts-strip"
       transition:fade={{ duration: 350 }}
     >
-      <div class="marquee-viewport" bind:this={viewportEl}>
+      <div class="marquee-viewport">
         <div
           class="marquee-track"
-          style:--from="{current.fromX}px"
-          style:--to="{current.toX}px"
           style:--dur="{current.durationMs}ms"
         >
-          <div class="marquee-content" bind:this={contentEl}>
+          <div class="marquee-content">
             {#if !current.anonymous && current.guest}
               <Avatar
                 name={current.guest.name}
                 color={current.guest.color}
                 id={current.guest.id}
+                src={current.guest.avatar}
                 size="4.2rem"
               />
             {/if}
@@ -178,6 +178,7 @@
                 name={current.guest.name}
                 color={current.guest.color}
                 id={current.guest.id}
+                src={current.guest.avatar}
                 size="4.2rem"
               />
             {/if}
@@ -220,7 +221,8 @@
   }
 
   .marquee-track {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     white-space: nowrap;
     will-change: transform;
     animation: scroll-left-to-right var(--dur) linear forwards;
@@ -231,6 +233,11 @@
     align-items: center;
     gap: 2.2rem;
     white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .marquee-content :global(> *) {
+    flex-shrink: 0;
   }
 
   .marquee-text {
@@ -241,14 +248,15 @@
     color: var(--text);
     text-shadow: 0 0 30px color-mix(in srgb, var(--accent) 30%, transparent);
     display: inline-block;
+    flex-shrink: 0;
   }
 
   @keyframes scroll-left-to-right {
     0% {
-      transform: translateX(var(--from));
+      transform: translateX(-100%);
     }
     100% {
-      transform: translateX(var(--to));
+      transform: translateX(100vw);
     }
   }
 </style>
