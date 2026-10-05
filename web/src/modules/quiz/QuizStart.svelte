@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { Pencil, Play, Search, Trash2 } from '@lucide/svelte';
-  import type { CustomQuiz, QuizDraft, QuizState } from '$shared/quiz.ts';
+  import type { CustomQuiz, QuizDraft, QuizState, QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
@@ -19,6 +19,32 @@
   let difficulty = $state<string>('');
   let category = $state(0);
   let search = $state('');
+  // Trivia: pick a category, or search a topic
+  let mode = $state<'category' | 'topic'>('category');
+  let topicQuery = $state('');
+  let topicResults = $state<QuizTopic[]>([]);
+  let topic = $state<QuizTopic | null>(null);
+  let searching = $state(false);
+  let topicTimer: ReturnType<typeof setTimeout> | null = null;
+  let topicSeq = 0;
+
+  function onTopicInput() {
+    if (topicTimer) clearTimeout(topicTimer);
+    topicTimer = setTimeout(async () => {
+      const q = topicQuery.trim();
+      if (q.length < 2) {
+        topicResults = [];
+        return;
+      }
+      const mine = ++topicSeq;
+      searching = true;
+      const r = await rpc<QuizTopic[]>('quiz', 'topics', { q }).catch(() => []);
+      if (mine === topicSeq) {
+        topicResults = r;
+        searching = false;
+      }
+    }, 300);
+  }
   let categories = $state<{ id: number; name: string }[]>([]);
   let chosen = $state<string | null>(null);
   let editing = $state<CustomQuiz | null | 'new'>(null);
@@ -34,7 +60,11 @@
   async function start() {
     busy = true;
     const args =
-      tab === 'custom' ? { source: 'custom', quizId: chosen, timeSec } : { source: 'trivia', questions, timeSec, category, difficulty };
+      tab === 'custom'
+        ? { source: 'custom', quizId: chosen, timeSec }
+        : mode === 'topic'
+          ? { source: 'topic', topic, questions, timeSec, difficulty }
+          : { source: 'trivia', questions, timeSec, category, difficulty };
     await attempt(() => rpc('quiz', 'start', args));
     busy = false;
   }
@@ -73,7 +103,7 @@
 {#if q}
   <div class="start">
     <div class="tabs">
-      <button class:active={tab === 'trivia'} onclick={() => (tab = 'trivia')}>Random</button>
+      <button class:active={tab === 'trivia'} onclick={() => (tab = 'trivia')}>Trivia</button>
       <button class:active={tab === 'custom'} onclick={() => (tab = 'custom')}>Custom</button>
       <button
         class:active={tab === 'create'}
@@ -98,21 +128,43 @@
       {/key}
     {:else}
       {#if tab === 'trivia'}
-        <p class="dim intro">Questions from Open Trivia DB (in English).</p>
+        <div class="modes">
+          <button class:active={mode === 'category'} onclick={() => (mode = 'category')}>By category</button>
+          <button class:active={mode === 'topic'} onclick={() => (mode = 'topic')}>Search a topic</button>
+        </div>
         <div class="card box">
-          <label class="field">
-            <span>Category: <strong>{categoryName}</strong></span>
-            <div class="search">
-              <Search size={16} />
-              <input class="input" bind:value={search} placeholder="Search a category" />
+          {#if mode === 'category'}
+            <label class="field">
+              <span>Category: <strong>{categoryName}</strong></span>
+              <div class="search">
+                <Search size={16} />
+                <input class="input" bind:value={search} placeholder="Filter categories" />
+              </div>
+            </label>
+            <div class="cats">
+              <button class="chip" class:active={category === 0} onclick={() => (category = 0)}>Any</button>
+              {#each shown as c (c.id)}
+                <button class="chip" class:active={category === c.id} onclick={() => (category = c.id)}>{c.name.replace(/^(Entertainment|Science): /, '')}</button>
+              {/each}
             </div>
-          </label>
-          <div class="cats">
-            <button class="chip" class:active={category === 0} onclick={() => (category = 0)}>Any</button>
-            {#each shown as c (c.id)}
-              <button class="chip" class:active={category === c.id} onclick={() => (category = c.id)}>{c.name.replace(/^(Entertainment|Science): /, '')}</button>
-            {/each}
-          </div>
+            <p class="faint small">Questions from Open Trivia DB (in English).</p>
+          {:else}
+            <label class="field">
+              <span>Topic: <strong>{topic ? topic.label : 'none yet'}</strong></span>
+              <div class="search">
+                <Search size={16} />
+                <input class="input" bind:value={topicQuery} oninput={onTopicInput} placeholder="Harry Potter, football, cats, Switzerland..." />
+              </div>
+            </label>
+            <div class="cats">
+              {#each topicResults as t (t.label)}
+                <button class="chip" class:active={topic?.label === t.label} onclick={() => (topic = t)}>{t.label}</button>
+              {:else}
+                <p class="faint small hint">{searching ? 'Searching...' : topicQuery.trim().length < 2 ? 'Type at least 2 letters' : 'No topic found'}</p>
+              {/each}
+            </div>
+            <p class="faint small">Questions from The Trivia API (in English). Small topics may have fewer questions.</p>
+          {/if}
           <div class="field">
             <span class="label">Difficulty</span>
             <div class="row wrap">
@@ -153,7 +205,11 @@
           <span>Seconds per question: {timeSec}</span>
           <input type="range" min="5" max="60" step="5" bind:value={timeSec} />
         </label>
-        <button class="btn primary block" disabled={busy || q.phase !== 'idle' || (tab === 'custom' && !chosen)} onclick={start}>
+        <button
+          class="btn primary block"
+          disabled={busy || q.phase !== 'idle' || (tab === 'custom' && !chosen) || (tab === 'trivia' && mode === 'topic' && !topic)}
+          onclick={start}
+        >
           <Play size={18} />
           {q.phase !== 'idle' ? 'A quiz is running' : 'Start the quiz'}
           {#if hb.core?.economyEnabled && cost}<span class="sep">&middot;</span><Money amount={cost} />{/if}
@@ -189,8 +245,27 @@
     background: var(--accent);
     color: var(--accent-contrast);
   }
-  .intro {
+  .modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+  }
+  .modes button {
+    padding: 0.55rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-weight: 600;
     font-size: 0.88rem;
+  }
+  .modes button.active {
+    border-color: var(--accent);
+    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  .hint {
+    padding: 0.4rem 0.2rem;
   }
   .box {
     padding: 1rem;

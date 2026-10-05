@@ -32,7 +32,16 @@ export interface QuizSettings {
 }
 
 /** Where the questions come from */
-export type QuizSource = { kind: 'trivia'; settings: QuizSettings } | { kind: 'custom'; quizId: string; timeSec: number };
+export type QuizSource =
+  | { kind: 'trivia'; settings: QuizSettings }
+  | { kind: 'topic'; topic: QuizTopic; settings: QuizSettings }
+  | { kind: 'custom'; quizId: string; timeSec: number };
+
+/** A topic of The Trivia API (one label can match several spellings of the same tag) */
+export interface QuizTopic {
+  label: string;
+  tags: string[];
+}
 
 export interface CustomQuestion {
   text: string;
@@ -72,7 +81,7 @@ export interface LibraryItem {
 export interface QuizState {
   phase: QuizPhase;
   title: string;
-  source: 'trivia' | 'custom';
+  source: 'trivia' | 'topic' | 'custom';
   /** Guest who started the quiz: they press Start. Null when the host started it. */
   owner: { id: string; name: string } | null;
   /** 'owner': the owner starts it. 'ready': it starts sooner as players press Ready. */
