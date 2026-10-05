@@ -14,4 +14,3 @@ import tts from './tts/index.ts';
  * with defineModule(), add it here, and register its UI in web/src/modules/index.ts.
  */
 export const modules: ModuleDef<any>[] = [core, spotify, canvas, stickers, photos, wled, soundboard, quiz, tts];
-

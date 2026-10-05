@@ -93,8 +93,7 @@ export default defineModule<TtsSettings>({
           : ctx.economy.charge(guest, 'tts.message', 1, `TTS: "${snippet}"`);
 
       try {
-        cooldownUntil = Date.now() + s.cooldownSec * 1000;
-        triggerTts(
+        const event = triggerTts(
           rawText,
           {
             id: guest.id,
@@ -104,6 +103,8 @@ export default defineModule<TtsSettings>({
           },
           anonymous,
         );
+        // Next message only after this one is over (plus the configured pause)
+        cooldownUntil = Date.now() + event.durationMs + s.cooldownSec * 1000;
 
         if (anonymous) {
           ctx.activity(`Someone said: "${snippet}"`);

@@ -2,9 +2,8 @@
   import { Synced } from '$lib/synced.svelte.ts';
   import { Megaphone, Play, Volume2 } from '@lucide/svelte';
   import type { TtsPricingMode, TtsState } from '$shared/tts.ts';
-  import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
+  import { hb, rpc, attempt, toast } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
-  import AmountInput from '$lib/ui/AmountInput.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
 
   const mod = $derived(hb.modules.tts as TtsState | undefined);
@@ -13,15 +12,12 @@
   const cooldown = new Synced(() => mod?.cooldownSec, 4);
   const maxLength = new Synced(() => mod?.maxLength, 150);
 
-  const flatCost = $derived(price('tts.message'));
-  const charCost = $derived(price('tts.char'));
 
   let testText = $state('Testing text to speech on the TV! Homeboard party sound is working great.');
   let testAnonymous = $state(false);
   let previewing = $state(false);
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('tts', 'setOptions', args));
-  const setCorePrice = (key: string, amount: number) => attempt(() => rpc('core', 'setPrice', { key, amount }));
 
   function setMode(mode: TtsPricingMode) {
     set({ pricingMode: mode });
@@ -33,7 +29,7 @@
 
   function previewLocally() {
     if (!('speechSynthesis' in window)) {
-      alert('Speech synthesis is not supported on this browser.');
+      toast({ text: 'This browser cannot speak text', kind: 'error' });
       return;
     }
     window.speechSynthesis.cancel();
@@ -103,15 +99,8 @@
       </button>
     </div>
 
-    {#if mod.pricingMode === 'flat'}
-      <div class="line">
-        <div>
-          <span>Fixed price per message</span>
-          <p class="faint small">Guests pay this amount for any message</p>
-        </div>
-        <AmountInput value={flatCost} oncommit={(v) => setCorePrice('tts.message', v)} />
-      </div>
-      <label class="field">
+    <p class="faint small">The amounts are in "Prices and rewards" at the top of this page.</p>
+    <label class="field">
         <span>Maximum message length (characters)</span>
         <input
           class="input"
@@ -126,30 +115,6 @@
           }}
         />
       </label>
-    {:else}
-      <div class="line">
-        <div>
-          <span>Price per character</span>
-          <p class="faint small">E.g. 0.05 or 0.10 per character</p>
-        </div>
-        <AmountInput value={charCost} oncommit={(v) => setCorePrice('tts.char', v)} />
-      </div>
-      <label class="field">
-        <span>Maximum message length limit (characters)</span>
-        <input
-          class="input"
-          type="number"
-          min="10"
-          max="1000"
-          bind:value={maxLength.value}
-          onfocus={maxLength.start}
-          onblur={() => {
-            set({ maxLength: Number(maxLength.value) });
-            maxLength.end();
-          }}
-        />
-      </label>
-    {/if}
   </Section>
 
   <Section title="Test announcement" hint="Test the voice and scrolling banner on the TV.">
@@ -199,16 +164,19 @@
     text-align: left;
     cursor: pointer;
     border: 1.5px solid var(--border);
-    background: var(--card);
+    background: var(--surface);
     transition: border-color 0.15s ease, background 0.15s ease;
   }
   .mode-card.active {
     border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, var(--card));
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   }
   .mode-title {
     font-weight: 600;
     font-size: 0.95rem;
+  }
+  .small {
+    font-size: 0.82rem;
   }
   .test-actions {
     display: flex;

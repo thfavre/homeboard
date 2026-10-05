@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import type { TtsEvent } from '$shared/tts.ts';
-  import { onEvent, rpc } from '$lib/client.svelte.ts';
+  import { onEvent, rpc, showNames } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
 
   let current = $state<(TtsEvent & { key: number; durationMs: number }) | null>(null);
@@ -38,8 +38,8 @@
       }
 
       let done = false;
-      let timer: NodeJS.Timeout | null = null;
-      let resumeInterval: NodeJS.Timeout | null = null;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let resumeInterval: ReturnType<typeof setTimeout> | null = null;
 
       const finish = () => {
         if (!done) {
@@ -159,7 +159,7 @@
           style:--dur="{current.durationMs}ms"
         >
           <div class="marquee-content">
-            {#if !current.anonymous && current.guest}
+            {#if !current.anonymous && current.guest && showNames('effectNames')}
               <Avatar
                 name={current.guest.name}
                 color={current.guest.color}
@@ -173,7 +173,7 @@
               {current.text}
             </span>
 
-            {#if !current.anonymous && current.guest}
+            {#if !current.anonymous && current.guest && showNames('effectNames')}
               <Avatar
                 name={current.guest.name}
                 color={current.guest.color}
@@ -198,7 +198,7 @@
     transform: translateY(-50%);
     z-index: 47;
     padding: 1.5rem 0;
-    background: color-mix(in srgb, var(--card) 86%, transparent);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
     backdrop-filter: blur(28px);
     -webkit-backdrop-filter: blur(28px);
     border-top: 2px solid color-mix(in srgb, var(--accent) 45%, var(--border));

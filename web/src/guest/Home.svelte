@@ -40,7 +40,7 @@
             {@const pInfo = hb.core.prices[f.priceKey]}
             <span class="price">
               <Money amount={price(f.priceKey)} free />
-              {#if pInfo?.unit}<span class="dim small">{` / ${pInfo.unit}`}</span>{/if}
+              {#if pInfo?.unit}<span class="unit">{` / ${pInfo.unit}`}</span>{/if}
             </span>
           {/if}
           <ChevronRight size={18} class="chev" />
@@ -107,6 +107,10 @@
   .price {
     font-size: 0.85rem;
     color: var(--text-dim);
+  }
+  .unit {
+    font-size: 0.75rem;
+    color: var(--text-faint);
   }
   .tile :global(.chev) {
     color: var(--text-faint);

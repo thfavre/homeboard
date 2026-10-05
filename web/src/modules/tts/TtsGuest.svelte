@@ -1,7 +1,7 @@
 <script lang="ts">
   import { EyeOff, Megaphone, Volume2 } from '@lucide/svelte';
   import type { TtsState } from '$shared/tts.ts';
-  import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
+  import { hb, rpc, attempt, price, serverNow } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
 
@@ -10,10 +10,10 @@
   let text = $state('');
   let anonymous = $state(false);
   let busy = $state(false);
-  let now = $state(Date.now());
+  let now = $state(serverNow());
 
   $effect(() => {
-    const t = setInterval(() => (now = Date.now()), 250);
+    const t = setInterval(() => (now = serverNow()), 250);
     return () => clearInterval(t);
   });
 
@@ -122,16 +122,16 @@
           <Toggle checked={anonymous} label="Anonymous" onchange={(v) => (anonymous = v)} />
         </div>
 
-        <!-- Status / Cooldown / Warning messages -->
-        {#if wait > 0}
-          <div class="alert warn-alert">
-            <span>Another announcement is playing. Ready in <strong>{wait}s</strong></span>
-          </div>
-        {:else if !canAfford && cleanLen > 0}
-          <div class="alert danger-alert">
-            <span>Not enough {hb.core?.currency.name ?? 'coins'}: need <Money amount={totalCost - (hb.me?.balance ?? 0)} /> more</span>
-          </div>
-        {/if}
+        <!-- Always the same line, so the button never moves -->
+        <p class="status" class:warn={wait > 0} class:danger={wait <= 0 && !canAfford && cleanLen > 0}>
+          {#if wait > 0}
+            Another announcement is playing. Ready in <strong>{wait}s</strong>
+          {:else if !canAfford && cleanLen > 0}
+            Not enough {hb.core?.currency.name ?? 'coins'}: <Money amount={totalCost - (hb.me?.balance ?? 0)} /> missing
+          {:else}
+            Ready to announce
+          {/if}
+        </p>
 
         <!-- Submit Button -->
         <button
@@ -247,7 +247,7 @@
     color: var(--accent);
   }
   .counter {
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-display);
   }
   .counter.warn {
     color: var(--warning, #eab308);
@@ -266,11 +266,11 @@
     transition: border-color 0.15s ease, background 0.15s ease;
   }
   .anon-card:active {
-    background: color-mix(in srgb, var(--accent) 10%, var(--card));
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   }
   .anon-card.active {
     border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, var(--card));
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   }
   .anon-icon {
     display: grid;
@@ -278,7 +278,7 @@
     width: 2.1rem;
     height: 2.1rem;
     border-radius: 0.6rem;
-    background: color-mix(in srgb, var(--card) 80%, transparent);
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
     color: var(--text-dim);
     flex-shrink: 0;
     transition: background 0.15s ease, color 0.15s ease;
@@ -304,22 +304,17 @@
     color: var(--text-dim);
     line-height: 1.25;
   }
-  .alert {
-    padding: 0.65rem 0.85rem;
-    border-radius: 0.65rem;
-    font-size: 0.85rem;
+  .status {
+    min-height: 1.4em;
     text-align: center;
-    line-height: 1.35;
+    font-size: 0.85rem;
+    color: var(--text-faint);
   }
-  .warn-alert {
-    background: color-mix(in srgb, var(--warning, #eab308) 15%, transparent);
-    color: var(--warning, #eab308);
-    border: 1px solid color-mix(in srgb, var(--warning, #eab308) 35%, transparent);
+  .status.warn {
+    color: var(--warning);
   }
-  .danger-alert {
-    background: color-mix(in srgb, var(--danger, #ef4444) 15%, transparent);
-    color: var(--danger, #ef4444);
-    border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 35%, transparent);
+  .status.danger {
+    color: var(--danger);
   }
   .submit-btn {
     min-height: 3.2rem;

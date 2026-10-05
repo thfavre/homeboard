@@ -15,7 +15,6 @@ import tts from './tts/index.ts';
  */
 export const clientModules: ClientModule[] = [core, spotify, canvas, stickers, photos, wled, soundboard, quiz, tts];
 
-
 export function activeModules(): ClientModule[] {
   return clientModules.filter((m) => m.id === 'core' || enabled(m.id));
 }
