@@ -1,0 +1,515 @@
+import { EventEmitter } from 'node:events';
+import { existsSync } from 'node:fs';
+import { createServer, type IncomingHttpHeaders } from 'node:http';
+import { networkInterfaces } from 'node:os';
+import { join } from 'node:path';
+import express, { type Request } from 'express';
+import { Server, type Socket } from 'socket.io';
+import type {
+  ActivityItem,
+  Currency,
+  LeaderboardMode,
+  Role,
+  RpcRequest,
+  RpcResponse,
+  ToastMessage,
+  VisitorState,
+} from '../../shared/protocol.ts';
+import { Economy } from './economy.ts';
+import type { GuestHandler, Handler, ModuleContext, ModuleDef, Target } from './module.ts';
+import { DATA_DIR, MEDIA_DIR, WEB_DIST, ensureDir } from './paths.ts';
+import { Session, type Guest } from './session.ts';
+import { Settings } from './settings.ts';
+import { TunnelManager } from './tunnel.ts';
+import { HbError, log, throttle, uid } from './util.ts';
+
+export interface CoreSettings {
+  appName: string;
+  theme: string;
+  currency: Currency;
+  economyEnabled: boolean;
+  features: Record<string, boolean>;
+  prices: Record<string, number>;
+  earn: Record<string, number>;
+  passiveMinutes: number;
+  leaderboardMode: LeaderboardMode;
+  qrIncludesCode: boolean;
+  requireCode: boolean;
+  adminPassword: string;
+  adminTokens: string[];
+  tunnel: boolean;
+}
+
+const CORE_DEFAULTS: CoreSettings = {
+  appName: 'Homeboard',
+  theme: 'midnight',
+  currency: { name: 'Sparks', symbol: 'SP' },
+  economyEnabled: true,
+  features: {},
+  prices: {},
+  earn: {},
+  passiveMinutes: 5,
+  leaderboardMode: 'balance',
+  qrIncludesCode: true,
+  requireCode: true,
+  adminPassword: '',
+  adminTokens: [],
+  tunnel: true,
+};
+
+type VisitorHandler = (args: any, socket: Socket, bind: (guest: Guest) => void) => unknown | Promise<unknown>;
+
+interface LoadedModule {
+  def: ModuleDef<any>;
+  ctx: ModuleContext<any>;
+  provider?: (role: Role) => unknown;
+  guest: Map<string, GuestHandler>;
+  admin: Map<string, Handler>;
+  tv: Map<string, Handler>;
+  publish: () => void;
+}
+
+const ROLES: Role[] = ['guest', 'tv', 'admin'];
+const RPC_PER_SECOND = 40;
+const ACTIVITY_SIZE = 40;
+
+function isLocal(address: string | undefined, headers: IncomingHttpHeaders): boolean {
+  const loopback = address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+  return loopback && !headers['cf-connecting-ip'] && !headers['x-forwarded-for'];
+}
+
+/**
+ * The heart of Homeboard: owns the HTTP server, sockets, session, economy and modules,
+ * and wires modules to clients through their ModuleContext.
+ */
+export class Hub {
+  readonly settings = new Settings();
+  readonly session = new Session();
+  readonly economy: Economy;
+  readonly bus = new EventEmitter();
+  readonly tunnel = new TunnelManager();
+  readonly app = express();
+  readonly server = createServer(this.app);
+  readonly io: Server;
+
+  readonly activity: ActivityItem[] = [];
+  takeover: string | null = null;
+
+  private modules = new Map<string, LoadedModule>();
+  private services = new Map<string, unknown>();
+  private visitorHandlers = new Map<string, VisitorHandler>();
+  private guestSockets = new Map<string, Set<Socket>>();
+  private activitySeq = 0;
+
+  constructor(readonly port: number) {
+    this.bus.setMaxListeners(100);
+    this.settings.register('core', CORE_DEFAULTS);
+    if (!this.core.adminPassword) {
+      this.settings.update<CoreSettings>('core', { adminPassword: uid(4).replace(/[-_]/g, 'x').slice(0, 6).toLowerCase() });
+    }
+    this.economy = new Economy(this.settings, this.session);
+    this.io = new Server(this.server, { maxHttpBufferSize: 2e6, pingInterval: 10000, pingTimeout: 8000 });
+
+    this.app.use('/api', express.json({ limit: '1mb' }));
+    this.app.post('/api/admin/login', (req, res) => {
+      if (req.body?.password !== this.core.adminPassword) {
+        res.status(401).json({ error: 'Wrong password' });
+        return;
+      }
+      res.json({ token: this.issueAdminToken() });
+    });
+    this.app.use('/media', express.static(MEDIA_DIR, { maxAge: '1h', fallthrough: false }));
+
+    this.io.use((socket, next) => this.authenticate(socket, next));
+    this.io.on('connection', (socket) => this.onConnection(socket));
+
+    this.session.on('guest-changed', (g: Guest) => {
+      this.io.to(`guest:${g.id}`).emit('me', this.session.me(g));
+      this.publish('core');
+    });
+    this.session.on('guests-changed', () => this.publish('core'));
+    this.session.on('reset', () => this.onSessionReset());
+    this.tunnel.on('change', () => this.publish('core'));
+  }
+
+  get core(): CoreSettings {
+    return this.settings.get<CoreSettings>('core');
+  }
+
+  // ---------------------------------------------------------------- modules
+
+  async load(defs: ModuleDef<any>[]): Promise<void> {
+    for (const def of defs) {
+      if (this.modules.has(def.id)) throw new Error(`Duplicate module id "${def.id}"`);
+      const loaded = this.createModule(def);
+      this.modules.set(def.id, loaded);
+      try {
+        await def.setup(loaded.ctx);
+      } catch (err) {
+        log.error(def.id, 'setup failed', err);
+      }
+    }
+  }
+
+  moduleList(): ModuleDef<any>[] {
+    return [...this.modules.values()].map((m) => m.def);
+  }
+
+  isEnabled(id: string): boolean {
+    const m = this.modules.get(id);
+    if (!m) return false;
+    if (m.def.toggleable === false) return true;
+    return this.core.features[id] ?? m.def.defaultEnabled ?? true;
+  }
+
+  setEnabled(id: string, enabled: boolean): void {
+    const m = this.modules.get(id);
+    if (!m || m.def.toggleable === false) throw new HbError('This feature cannot be toggled');
+    this.settings.update<CoreSettings>('core', { features: { ...this.core.features, [id]: enabled } });
+    if (!enabled && this.takeover === id) this.setTakeover(null);
+    this.bus.emit(`toggle:${id}`, enabled);
+    this.publishAll();
+  }
+
+  publish(id: string): void {
+    this.modules.get(id)?.publish();
+  }
+
+  publishAll(): void {
+    for (const m of this.modules.values()) m.publish();
+  }
+
+  private createModule(def: ModuleDef<any>): LoadedModule {
+    const id = def.id;
+    const hub = this;
+    if (def.settings) this.settings.register(id, def.settings);
+    const router = express.Router();
+    this.app.use(`/api/m/${id}`, router);
+    const dataDir = join(DATA_DIR, 'modules', id);
+
+    const loaded: LoadedModule = {
+      def,
+      ctx: null as unknown as ModuleContext<any>,
+      guest: new Map(),
+      admin: new Map(),
+      tv: new Map(),
+      publish: throttle(() => this.sendState(loaded), 60),
+    };
+
+    const ctx: ModuleContext<any> = {
+      id,
+      hub,
+      log: {
+        info: (...a) => log.info(id, ...a),
+        warn: (...a) => log.warn(id, ...a),
+        error: (...a) => log.error(id, ...a),
+      },
+      session: this.session,
+      economy: this.economy,
+      bus: this.bus,
+      settings: {
+        get: () => this.settings.get(id),
+        update: (patch) => this.settings.update(id, patch),
+      },
+      enabled: () => this.isEnabled(id),
+      get dataDir() {
+        return ensureDir(dataDir);
+      },
+      mediaDir: (sub = '') => ensureDir(join(MEDIA_DIR, id, sub)),
+      mediaUrl: (file) => `/media/${id}/${file}`,
+      http: router,
+      guestFromRequest: (req) => this.session.byToken(req.get('x-guest-token')),
+      isAdminRequest: (req) => this.isAdminRequest(req),
+      state: (provider) => {
+        loaded.provider = provider;
+      },
+      publish: () => loaded.publish(),
+      emit: (to, name, data) => this.emitEvent(to, id, name, data),
+      onGuest: (method, handler) => loaded.guest.set(method, handler),
+      onAdmin: (method, handler) => loaded.admin.set(method, handler),
+      onTv: (method, handler) => loaded.tv.set(method, handler),
+      price: (p) => this.economy.registerPrice(id, p),
+      earn: (e) => this.economy.registerEarn(id, e),
+      activity: (text, opts) => this.addActivity(id, text, opts),
+      toast: (guest, msg) => this.toast(guest, msg),
+      onSessionReset: (fn) => this.bus.on('session-reset', fn),
+      onToggle: (fn) => this.bus.on(`toggle:${id}`, fn),
+      onGuestJoined: (fn) => this.bus.on('guest-joined', fn),
+      provide: (name, api) => this.services.set(name, api),
+      use: <T>(name: string) => this.services.get(name) as T | undefined,
+      takeover: {
+        start: () => {
+          if (hub.takeover && hub.takeover !== id) throw new HbError(`Stop "${hub.modules.get(hub.takeover)?.def.name}" first`);
+          hub.setTakeover(id);
+        },
+        stop: () => {
+          if (hub.takeover === id) hub.setTakeover(null);
+        },
+        get active() {
+          return hub.takeover === id;
+        },
+      },
+    };
+    loaded.ctx = ctx;
+    return loaded;
+  }
+
+  setTakeover(id: string | null): void {
+    this.takeover = id;
+    this.publish('core');
+  }
+
+  /** Register an RPC callable before joining (only used by the core module) */
+  onVisitor(method: string, handler: VisitorHandler): void {
+    this.visitorHandlers.set(method, handler);
+  }
+
+  // ---------------------------------------------------------------- state & events
+
+  private sendState(m: LoadedModule): void {
+    if (!m.provider) return;
+    for (const role of ROLES) {
+      const data = m.provider(role);
+      if (data !== undefined) this.io.to(`role:${role}`).emit('state', { module: m.def.id, data });
+    }
+  }
+
+  private sendSnapshot(socket: Socket, role: Role): void {
+    for (const m of this.modules.values()) {
+      if (!m.provider) continue;
+      const data = m.provider(role);
+      if (data !== undefined) socket.emit('state', { module: m.def.id, data });
+    }
+  }
+
+  private emitEvent(to: Target, module: string, name: string, data: unknown): void {
+    const msg = { module, name, data };
+    if (to === 'all') this.io.to(['role:guest', 'role:tv', 'role:admin']).emit('event', msg);
+    else if (typeof to === 'string') this.io.to(`role:${to}`).emit('event', msg);
+    else this.io.to(`guest:${to.guest}`).emit('event', msg);
+  }
+
+  addActivity(module: string, text: string, opts: { guest?: Guest; amount?: number } = {}): void {
+    const item: ActivityItem = {
+      id: ++this.activitySeq,
+      at: Date.now(),
+      module,
+      text,
+      guest: opts.guest ? { name: opts.guest.name, color: opts.guest.color } : undefined,
+      amount: opts.amount,
+    };
+    this.activity.unshift(item);
+    if (this.activity.length > ACTIVITY_SIZE) this.activity.length = ACTIVITY_SIZE;
+    this.io.to(['role:guest', 'role:tv', 'role:admin']).emit('activity', item);
+  }
+
+  toast(guest: Guest, msg: ToastMessage): void {
+    this.io.to(`guest:${guest.id}`).emit('toast', msg);
+  }
+
+  // ---------------------------------------------------------------- auth
+
+  issueAdminToken(): string {
+    const token = uid(24);
+    const tokens = [...this.core.adminTokens, token].slice(-20);
+    this.settings.update<CoreSettings>('core', { adminTokens: tokens });
+    return token;
+  }
+
+  isAdminToken(token: unknown): boolean {
+    return typeof token === 'string' && this.core.adminTokens.includes(token);
+  }
+
+  isAdminRequest(req: Request): boolean {
+    return isLocal(req.socket.remoteAddress, req.headers) || this.isAdminToken(req.get('x-admin-token'));
+  }
+
+  private authenticate(socket: Socket, next: (err?: Error) => void): void {
+    const auth = (socket.handshake.auth ?? {}) as Record<string, unknown>;
+    const local = isLocal(socket.handshake.address, socket.handshake.headers);
+    socket.data.local = local;
+    if (auth.role === 'admin' || auth.role === 'tv') {
+      if (!local && !this.isAdminToken(auth.adminToken)) return next(new Error('ADMIN_AUTH'));
+      socket.data.role = auth.role;
+      return next();
+    }
+    socket.data.role = 'guest';
+    socket.data.guestId = this.session.byToken(auth.token)?.id;
+    next();
+  }
+
+  // ---------------------------------------------------------------- sockets
+
+  private onConnection(socket: Socket): void {
+    const role = socket.data.role as Role;
+    let calls = 0;
+    const resetCalls = setInterval(() => (calls = 0), 1000);
+
+    if (role === 'guest') {
+      const guest = socket.data.guestId ? this.session.guests.get(socket.data.guestId) : undefined;
+      if (guest) this.bindGuest(socket, guest);
+      else this.makeVisitor(socket);
+    } else {
+      socket.join(`role:${role}`);
+      this.sendSnapshot(socket, role);
+    }
+
+    socket.on('rpc', async (req: RpcRequest, ack: (r: RpcResponse) => void) => {
+      if (typeof ack !== 'function') return;
+      if (++calls > RPC_PER_SECOND) return ack({ ok: false, error: 'Slow down a little' });
+      try {
+        ack({ ok: true, data: await this.handleRpc(socket, req) });
+      } catch (err) {
+        if (err instanceof HbError) ack({ ok: false, error: err.message });
+        else {
+          log.error('rpc', `${req?.module}.${req?.method}`, err);
+          ack({ ok: false, error: 'Something went wrong' });
+        }
+      }
+    });
+
+    socket.on('disconnect', () => {
+      clearInterval(resetCalls);
+      this.unbindGuest(socket);
+    });
+  }
+
+  private async handleRpc(socket: Socket, req: RpcRequest): Promise<unknown> {
+    const role = socket.data.role as Role;
+    const m = this.modules.get(req?.module);
+    if (!m) throw new HbError('Unknown feature');
+    const method = String(req.method);
+
+    if (role === 'admin') {
+      const h = m.admin.get(method);
+      if (!h) throw new HbError(`Unknown admin action ${m.def.id}.${method}`);
+      return h(req.args ?? {}, { local: !!socket.data.local });
+    }
+    if (role === 'tv') {
+      const h = m.tv.get(method);
+      if (!h) throw new HbError('Unknown action');
+      return h(req.args ?? {}, { local: !!socket.data.local });
+    }
+
+    const guest = socket.data.guestId ? this.session.guests.get(socket.data.guestId) : undefined;
+    if (!guest) {
+      const h = m.def.id === 'core' ? this.visitorHandlers.get(method) : undefined;
+      if (!h) throw new HbError('Please join the session first');
+      return h(req.args ?? {}, socket, (g) => this.bindGuest(socket, g));
+    }
+    const h = m.guest.get(method);
+    if (!h) throw new HbError('Unknown action');
+    if (!this.isEnabled(m.def.id)) throw new HbError(`${m.def.name} is turned off right now`);
+    return h(req.args ?? {}, guest);
+  }
+
+  private makeVisitor(socket: Socket): void {
+    socket.join('role:visitor');
+    const c = this.core;
+    const state: VisitorState = { appName: c.appName, theme: c.theme, currency: c.currency };
+    socket.emit('visitor', state);
+    socket.emit('need-join', { codeRequired: c.requireCode });
+  }
+
+  private bindGuest(socket: Socket, guest: Guest): void {
+    this.unbindGuest(socket);
+    socket.leave('role:visitor');
+    socket.data.guestId = guest.id;
+    socket.join(['role:guest', `guest:${guest.id}`]);
+    let set = this.guestSockets.get(guest.id);
+    if (!set) this.guestSockets.set(guest.id, (set = new Set()));
+    set.add(socket);
+    this.session.setOnline(guest, 1);
+    socket.emit('me', this.session.me(guest));
+    this.sendSnapshot(socket, 'guest');
+  }
+
+  private unbindGuest(socket: Socket): void {
+    const id = socket.data.guestId as string | undefined;
+    if (!id) return;
+    socket.data.guestId = undefined;
+    socket.leave('role:guest');
+    socket.leave(`guest:${id}`);
+    const set = this.guestSockets.get(id);
+    if (set?.delete(socket)) {
+      const guest = this.session.guests.get(id);
+      if (guest) this.session.setOnline(guest, -1);
+    }
+  }
+
+  /** Disconnect a guest from their account and send them back to the join screen */
+  kickGuest(guest: Guest, reason: string): void {
+    for (const socket of this.guestSockets.get(guest.id) ?? []) {
+      this.unbindGuest(socket);
+      socket.emit('kicked', { reason });
+      this.makeVisitor(socket);
+    }
+    this.guestSockets.delete(guest.id);
+  }
+
+  private onSessionReset(): void {
+    for (const sockets of this.guestSockets.values()) {
+      for (const socket of sockets) {
+        socket.data.guestId = undefined;
+        socket.leave('role:guest');
+        socket.rooms.forEach((r) => r.startsWith('guest:') && socket.leave(r));
+        socket.emit('kicked', { reason: 'A new session has started' });
+        this.makeVisitor(socket);
+      }
+    }
+    this.guestSockets.clear();
+    this.activity.length = 0;
+    this.takeover = null;
+    this.bus.emit('session-reset');
+    this.publishAll();
+  }
+
+  // ---------------------------------------------------------------- urls & lifecycle
+
+  get lanUrl(): string {
+    const all = Object.values(networkInterfaces()).flat();
+    const ip =
+      all.find((i) => i && i.family === 'IPv4' && !i.internal && i.address.startsWith('192.168.'))?.address ??
+      all.find((i) => i && i.family === 'IPv4' && !i.internal)?.address ??
+      'localhost';
+    return `http://${ip}:${this.port}`;
+  }
+
+  get baseUrl(): string {
+    return this.tunnel.url ?? this.lanUrl;
+  }
+
+  /** Where the tunnel forwards to (the Vite dev server in development) */
+  get tunnelTarget(): string {
+    return process.env.HB_TUNNEL_TARGET ?? `http://localhost:${this.port}`;
+  }
+
+  /** Serve the built web apps (production). In development Vite serves them. */
+  serveWeb(): void {
+    if (!existsSync(WEB_DIST)) {
+      log.warn('web', 'No build found in dist/web: run "npm run build" (or use "npm run dev")');
+      return;
+    }
+    this.app.use(express.static(WEB_DIST, { index: 'index.html', maxAge: '1h' }));
+    this.app.get('/tv', (_req, res) => res.sendFile(join(WEB_DIST, 'tv.html')));
+    this.app.get('/admin', (_req, res) => res.sendFile(join(WEB_DIST, 'admin.html')));
+  }
+
+  async listen(): Promise<void> {
+    await new Promise<void>((resolve) => this.server.listen(this.port, '0.0.0.0', resolve));
+    log.info('hub', `Listening on http://localhost:${this.port} and ${this.lanUrl}`);
+  }
+
+  async stop(): Promise<void> {
+    this.tunnel.stop();
+    for (const m of this.modules.values()) {
+      try {
+        await m.def.stop?.();
+      } catch (err) {
+        log.error(m.def.id, 'stop failed', err);
+      }
+    }
+    this.session.flush();
+    this.settings.flush();
+  }
+}
