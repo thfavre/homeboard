@@ -3,6 +3,7 @@
   import type { SpotifyState, Track } from '$shared/spotify.ts';
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
+  import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { clock } from '$lib/time.ts';
   import Cover from './Cover.svelte';
   import NowPlayingMini from './NowPlayingMini.svelte';
@@ -47,9 +48,7 @@
     if (ok) added = new Set([...added, t.uri]);
   }
 
-  function skip() {
-    if (confirm(`Skip "${mod?.now?.title}"?`)) attempt(() => rpc('spotify', 'skip'), 'Skipped');
-  }
+  const skip = () => attempt(() => rpc('spotify', 'skip'), 'Skipped');
 </script>
 
 {#if mod && !mod.connected}
@@ -59,9 +58,11 @@
     <NowPlayingMini />
 
     {#if mod.allowSkip && mod.now}
-      <button class="btn block" onclick={skip}>
-        <SkipForward size={18} /> Skip this song {#if economy && skipCost}&middot; <Money amount={skipCost} />{/if}
-      </button>
+      <TwoStepButton class="block" onconfirm={skip}>
+        <SkipForward size={18} /> Skip this song
+        {#if economy && skipCost}<span class="sep">&middot;</span><Money amount={skipCost} />{/if}
+        {#snippet armed()}<SkipForward size={18} /> Tap again to skip{/snippet}
+      </TwoStepButton>
     {/if}
 
     <form
@@ -185,6 +186,9 @@
   }
   .by {
     font-size: 0.8rem;
+  }
+  .sep {
+    margin: 0 0.1rem;
   }
   .center {
     text-align: center;

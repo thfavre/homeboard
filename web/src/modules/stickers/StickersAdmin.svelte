@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Synced } from '$lib/synced.svelte.ts';
+  import { ask } from '$lib/dialog.svelte.ts';
   import { Trash2, Upload, X } from '@lucide/svelte';
   import type { StickersState } from '$shared/stickers.ts';
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
@@ -7,8 +9,8 @@
   import StickerView from './StickerView.svelte';
 
   const mod = $derived(hb.modules.stickers as StickersState | undefined);
-  let minutes = $state(String((hb.modules.stickers?.durationSec ?? 120) / 60));
-  let max = $state(String(hb.modules.stickers?.maxActive ?? 10));
+  const minutes = new Synced(() => (hb.modules.stickers ? hb.modules.stickers.durationSec / 60 : undefined), 2);
+  const max = new Synced(() => (hb.modules.stickers?.maxActive ? hb.modules.stickers.maxActive : undefined), 10);
   let uploadName = $state('');
   let fileInput = $state<HTMLInputElement>();
 
@@ -47,12 +49,32 @@
     <div class="grid2">
       <label class="field">
         <span>Time on screen (minutes)</span>
-        <input class="input" type="number" min="0.5" step="0.5" bind:value={minutes} onblur={() => set({ durationSec: Number(minutes) * 60 })} />
+        <input class="input" type="number" min="0.5" step="0.5" bind:value={minutes.value} onfocus={minutes.start} onblur={() => { set({ durationSec: Number(minutes.value) * 60 }); minutes.end(); }} />
       </label>
-      <label class="field">
-        <span>Max on screen at once</span>
-        <input class="input" type="number" min="1" max="40" bind:value={max} onblur={() => set({ maxActive: Number(max) })} />
-      </label>
+      {#if mod.maxActive > 0}
+        <label class="field">
+          <span>Max on screen at once</span>
+          <input
+            class="input"
+            type="number"
+            min="1"
+            max="100"
+            bind:value={max.value}
+            onfocus={max.start}
+            onblur={() => {
+              set({ maxActive: Math.max(1, Number(max.value)) });
+              max.end();
+            }}
+          />
+        </label>
+      {/if}
+    </div>
+    <div class="line">
+      <div>
+        <strong>Limit stickers on screen</strong>
+        <p class="faint small">When off, guests can send as many as they want.</p>
+      </div>
+      <Toggle checked={mod.maxActive > 0} label="Limit stickers" onchange={(v) => set({ maxActive: v ? max.value || 10 : 0 })} />
     </div>
     <div class="line">
       <div>
@@ -70,7 +92,7 @@
           <div class="art"><StickerView sticker={s} /></div>
           <span class="truncate small">{s.name}</span>
           {#if s.kind === 'image'}
-            <button class="btn ghost small del" aria-label="Delete" onclick={() => confirm(`Delete ${s.name}?`) && attempt(() => rpc('stickers', 'deleteCustom', { id: s.id }))}>
+            <button class="btn ghost small del" aria-label="Delete" onclick={async () => (await ask({ title: `Delete ${s.name}?`, confirm: 'Delete', danger: true })) && attempt(() => rpc('stickers', 'deleteCustom', { id: s.id }))}>
               <Trash2 size={15} />
             </button>
           {/if}

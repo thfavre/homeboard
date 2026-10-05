@@ -26,11 +26,12 @@ export interface SpotifyState {
     clientId: string;
     redirectUri: string;
     account: string | null;
-    premium: boolean;
     device: string | null;
     volume: number | null;
     allowExplicit: boolean;
     duck: boolean;
+    /** Music volume while a sound plays, in % of the normal volume */
+    duckPercent: number;
     error: string | null;
   };
 }

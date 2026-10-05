@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from '$lib/dialog.svelte.ts';
   import { onDestroy } from 'svelte';
   import { Trash2 } from '@lucide/svelte';
   import { CANVAS_SIZES, type CanvasState } from '$shared/canvas.ts';
@@ -21,13 +22,17 @@
   });
   onDestroy(() => board.destroy());
 
-  function clear() {
-    if (confirm('Erase the whole canvas?')) attempt(() => rpc('canvas', 'clear'), 'Canvas cleared');
+  async function clear() {
+    if (await ask({ title: 'Erase the whole canvas?', message: 'Everything guests painted is lost.', confirm: 'Erase', danger: true }))
+      attempt(() => rpc('canvas', 'clear'), 'Canvas cleared');
   }
 
-  function resize(value: string) {
-    const [width, height] = value.split('x').map(Number);
-    if (confirm('Changing the size erases the canvas. Continue?')) attempt(() => rpc('canvas', 'setSize', { width, height }));
+  async function resize(e: Event & { currentTarget: HTMLSelectElement }) {
+    const select = e.currentTarget;
+    const [width, height] = select.value.split('x').map(Number);
+    if (await ask({ title: 'Change the canvas size?', message: 'This erases the canvas.', confirm: 'Change size', danger: true })) {
+      attempt(() => rpc('canvas', 'setSize', { width, height }));
+    } else if (mod) select.value = `${mod.width}x${mod.height}`;
   }
 </script>
 
@@ -40,7 +45,7 @@
   <Section title="Settings">
     <label class="field">
       <span>Size (pixels)</span>
-      <select class="input" value="{mod.width}x{mod.height}" onchange={(e) => resize(e.currentTarget.value)}>
+      <select class="input" value="{mod.width}x{mod.height}" onchange={resize}>
         {#each CANVAS_SIZES as s}<option value="{s.width}x{s.height}">{s.label}</option>{/each}
       </select>
     </label>

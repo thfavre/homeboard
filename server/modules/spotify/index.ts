@@ -7,15 +7,20 @@ interface SpotifySettings {
   clientId: string;
   refreshToken: string;
   account: string | null;
-  premium: boolean;
   allowExplicit: boolean;
   allowSkip: boolean;
   /** Lower the music while a soundboard sound plays */
   duck: boolean;
+  /** Music volume during a sound, in % of the normal volume */
+  duckPercent: number;
 }
 
 const API = 'https://api.spotify.com/v1';
-const SCOPES = 'user-read-playback-state user-modify-playback-state user-read-currently-playing user-read-private';
+const SCOPES = 'user-read-playback-state user-modify-playback-state user-read-currently-playing';
+/** Development mode apps may not ask for more than 10 search results (since March 2026) */
+const SEARCH_LIMIT = 10;
+/** Safety net: the music comes back even if the TV never reports the end of a sound */
+const DUCK_MAX_MS = 30_000;
 const POLL_MS = 3000;
 const QUEUE_POLL_MS = 12_000;
 const TRACK_URI = /^spotify:track:[A-Za-z0-9]{22}$/;
@@ -43,7 +48,7 @@ export default defineModule<SpotifySettings>({
   id: 'spotify',
   name: 'Music',
   description: 'Guests add songs to your Spotify queue; the TV shows what is playing',
-  settings: { clientId: '', refreshToken: '', account: null, premium: false, allowExplicit: true, allowSkip: true, duck: true },
+  settings: { clientId: '', refreshToken: '', account: null, allowExplicit: true, allowSkip: true, duck: true, duckPercent: 30 },
 
   setup(ctx) {
     const { hub } = ctx;
@@ -106,7 +111,13 @@ export default defineModule<SpotifySettings>({
       if (res.status === 429) throw new HbError('Spotify is busy, try again in a few seconds');
       if (res.status === 204 || res.headers.get('content-length') === '0') return null;
       const text = await res.text();
-      const data = text ? JSON.parse(text) : null;
+      // Some player endpoints answer success with a body that is not JSON
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = null;
+      }
       if (!res.ok) {
         const reason = data?.error?.reason;
         if (reason === 'NO_ACTIVE_DEVICE' || res.status === 404) throw new HbError('Spotify is not playing on any device right now');
@@ -129,7 +140,7 @@ export default defineModule<SpotifySettings>({
         });
         pendingAuth = null;
         const me = await api('GET', '/me');
-        ctx.settings.update({ account: me?.display_name ?? me?.id ?? 'Spotify', premium: me?.product === 'premium' });
+        ctx.settings.update({ account: me?.display_name ?? me?.id ?? 'Spotify' });
         error = null;
         ctx.publish();
         void poll();
@@ -164,6 +175,7 @@ export default defineModule<SpotifySettings>({
         }
         device = p?.device?.name ?? null;
         volume = p?.device?.volume_percent ?? null;
+        if (restoreTo !== null) await restore();
         if (now?.uri !== before || Date.now() - lastQueuePoll > QUEUE_POLL_MS) await pollQueue();
         error = null;
       } catch (err) {
@@ -171,28 +183,58 @@ export default defineModule<SpotifySettings>({
       }
       ctx.publish();
     };
-    setInterval(poll, POLL_MS);
-    void poll();
 
     // ------------------------------------------------------------ ducking
+    //
+    // While soundboard sounds play, the music is lowered. The TV reports when each
+    // sound ends; the volume goes back up once none is playing. Restoring is retried
+    // until Spotify confirms it, because the volume API sometimes fails silently.
 
-    let ducked: { volume: number; timer: NodeJS.Timeout } | null = null;
-    ctx.bus.on('soundboard:play', async ({ durationMs }: { durationMs: number }) => {
-      if (!ctx.settings.get().duck || !connected() || !now?.isPlaying || volume === null) return;
-      try {
-        if (ducked) clearTimeout(ducked.timer);
-        else await api('PUT', `/me/player/volume?volume_percent=${Math.round(volume * 0.35)}`);
-        const original = ducked?.volume ?? volume;
-        ducked = {
-          volume: original,
-          timer: setTimeout(() => {
-            ducked = null;
-            api('PUT', `/me/player/volume?volume_percent=${original}`).catch(() => {});
-          }, durationMs),
-        };
-      } catch {
-        // Some devices do not support volume control
+    let duck: { original: number; plays: Set<string>; failsafe: NodeJS.Timeout } | null = null;
+    let restoreTo: number | null = null;
+    let restoreTries = 0;
+
+    const setVolume = (v: number) => api('PUT', `/me/player/volume?volume_percent=${v}`);
+
+    const restore = async () => {
+      if (restoreTo === null || duck) return;
+      if (volume === restoreTo || restoreTries >= 6) {
+        if (volume !== restoreTo) ctx.log.warn(`Could not put the volume back to ${restoreTo}%`);
+        restoreTo = null;
+        return;
       }
+      restoreTries += 1;
+      await setVolume(restoreTo).catch(() => {});
+    };
+
+    const endDuck = () => {
+      if (!duck) return;
+      clearTimeout(duck.failsafe);
+      restoreTo = duck.original;
+      restoreTries = 0;
+      duck = null;
+      void restore().then(() => setTimeout(poll, 700));
+    };
+
+    ctx.bus.on('soundboard:play', async ({ id }: { id: string }) => {
+      const s = ctx.settings.get();
+      if (!duck) {
+        const original = restoreTo ?? volume;
+        if (!s.duck || !connected() || !now?.isPlaying || original === null) return;
+        duck = { original, plays: new Set(), failsafe: setTimeout(endDuck, DUCK_MAX_MS) };
+        restoreTo = null;
+        setVolume(Math.round((original * s.duckPercent) / 100)).catch(() => {});
+      }
+      duck.plays.add(id);
+      clearTimeout(duck.failsafe);
+      duck.failsafe = setTimeout(endDuck, DUCK_MAX_MS);
+    });
+
+    ctx.bus.on('soundboard:ended', ({ id }: { id: string }) => {
+      if (!duck) return;
+      duck.plays.delete(id);
+      // A short pause so back-to-back sounds do not make the music pump
+      if (!duck.plays.size) setTimeout(() => duck && !duck.plays.size && endDuck(), 400);
     });
 
     // ------------------------------------------------------------ state
@@ -213,11 +255,12 @@ export default defineModule<SpotifySettings>({
                 clientId: s.clientId,
                 redirectUri,
                 account: s.account,
-                premium: s.premium,
                 device,
-                volume,
+                // While the music is lowered, show the volume it goes back to
+                volume: duck?.original ?? restoreTo ?? volume,
                 allowExplicit: s.allowExplicit,
                 duck: s.duck,
+                duckPercent: s.duckPercent,
                 error,
               },
             }
@@ -235,7 +278,7 @@ export default defineModule<SpotifySettings>({
       const key = q.toLowerCase();
       const cached = searchCache.get(key);
       if (cached && Date.now() - cached.at < 60_000) return cached.tracks;
-      const r = await api('GET', `/search?type=track&limit=12&market=from_token&q=${encodeURIComponent(q)}`);
+      const r = await api('GET', `/search?type=track&limit=${SEARCH_LIMIT}&market=from_token&q=${encodeURIComponent(q)}`);
       let tracks: Track[] = (r?.tracks?.items ?? []).filter(Boolean).map(toTrack);
       if (!ctx.settings.get().allowExplicit) tracks = tracks.filter((t) => !t.explicit);
       searchCache.set(key, { at: Date.now(), tracks });
@@ -324,7 +367,13 @@ export default defineModule<SpotifySettings>({
     ctx.onAdmin('pause', () => control('PUT', '/me/player/pause'));
     ctx.onAdmin('next', () => control('POST', '/me/player/next'));
     ctx.onAdmin('previous', () => control('POST', '/me/player/previous'));
-    ctx.onAdmin('volume', (args) => control('PUT', `/me/player/volume?volume_percent=${Math.round(Math.min(100, Math.max(0, num(args.volume, 50))))}`));
+    ctx.onAdmin('volume', async (args) => {
+      const v = Math.round(Math.min(100, Math.max(0, num(args.volume, 50))));
+      if (duck) duck.original = v;
+      else restoreTo = null;
+      volume = v;
+      await control('PUT', `/me/player/volume?volume_percent=${v}`);
+    });
 
     ctx.onAdmin('setOptions', (args) => {
       const s = ctx.settings.get();
@@ -332,10 +381,14 @@ export default defineModule<SpotifySettings>({
         allowExplicit: args.allowExplicit !== undefined ? !!args.allowExplicit : s.allowExplicit,
         allowSkip: args.allowSkip !== undefined ? !!args.allowSkip : s.allowSkip,
         duck: args.duck !== undefined ? !!args.duck : s.duck,
+        duckPercent: args.duckPercent !== undefined ? Math.round(Math.min(90, Math.max(0, num(args.duckPercent, 30)))) : s.duckPercent,
       });
       ctx.publish();
     });
 
     ctx.onSessionReset(() => requests.clear());
+
+    setInterval(poll, POLL_MS);
+    void poll();
   },
 });

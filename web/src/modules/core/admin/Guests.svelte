@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from '$lib/dialog.svelte.ts';
   import { ChevronDown, Minus, Plus, UserX } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
@@ -22,8 +23,8 @@
   const give = (guestId: string, sign: 1 | -1) =>
     attempt(() => rpc('core', 'give', { guestId, amount: amount * sign, reason }), sign > 0 ? 'Sent' : 'Taken');
 
-  function kick(guestId: string, name: string) {
-    if (confirm(`Remove ${name} from the session? Their balance is lost.`)) attempt(() => rpc('core', 'kick', { guestId }), 'Removed');
+  async function kick(guestId: string, name: string) {
+    if (await ask({ title: `Remove ${name}?`, message: 'They leave the session and their balance is lost.', confirm: 'Remove', danger: true })) attempt(() => rpc('core', 'kick', { guestId }), 'Removed');
   }
 </script>
 

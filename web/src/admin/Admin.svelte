@@ -3,6 +3,7 @@
   import type { Component } from 'svelte';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Toasts from '$lib/ui/Toasts.svelte';
+  import DialogHost from '$lib/ui/DialogHost.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import { applyTheme } from '../themes/index.ts';
   import { clientModules } from '../modules/index.ts';
@@ -56,6 +57,7 @@
 </script>
 
 <Toasts />
+<DialogHost />
 
 {#if hb.authError}
   <Login />
@@ -85,6 +87,9 @@
         </button>
         <h1 class="truncate">{section.title}</h1>
         <span class="spacer"></span>
+        {#if hb.core.join?.codeRequired}
+          <button class="code-pill mono" title="Session code" onclick={() => select('live')}>{hb.core.join.code}</button>
+        {/if}
         {#if !hb.connected}<span class="pill danger">Offline</span>{/if}
         {#if feature}
           <span class="dim state">{feature.enabled ? 'On' : 'Off'}</span>
@@ -207,6 +212,16 @@
   }
   .state {
     font-size: 0.85rem;
+  }
+  .code-pill {
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 0.12em;
   }
   .off {
     padding: 0.8rem 1rem;

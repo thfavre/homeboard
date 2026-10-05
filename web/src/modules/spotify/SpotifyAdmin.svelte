@@ -1,15 +1,18 @@
 <script lang="ts">
+  import { ask } from '$lib/dialog.svelte.ts';
   import { Copy, ExternalLink, Pause, Play, SkipBack, SkipForward, Unplug } from '@lucide/svelte';
   import type { SpotifyState } from '$shared/spotify.ts';
   import { hb, rpc, attempt, toast } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import Cover from './Cover.svelte';
+  import { Synced } from '$lib/synced.svelte.ts';
 
   const mod = $derived(hb.modules.spotify as SpotifyState | undefined);
   const a = $derived(mod?.admin);
-  let clientId = $state(hb.modules.spotify?.admin?.clientId ?? '');
-  let volume = $state(hb.modules.spotify?.admin?.volume ?? 50);
+  const clientId = new Synced(() => hb.modules.spotify?.admin?.clientId, '');
+  const volume = new Synced(() => hb.modules.spotify?.admin?.volume, 50);
+  const duckPercent = new Synced(() => hb.modules.spotify?.admin?.duckPercent, 30);
 
   async function connect() {
     const url = await attempt(() => rpc<string>('spotify', 'authUrl'));
@@ -30,7 +33,7 @@
   {#if mod.connected}
     <Section title="Playback" hint={a.device ? `Playing on ${a.device}` : 'Start playing on a device (PC, phone or speaker) so guests can add songs.'}>
       {#snippet actions()}
-        <span class="pill success">{a.account}{a.premium ? '' : ' (not Premium)'}</span>
+        <span class="pill success">{a.account}</span>
       {/snippet}
       {#if mod.now}
         <div class="np">
@@ -52,8 +55,18 @@
       </div>
       {#if a.volume !== null}
         <label class="field">
-          <span>Volume {volume}%</span>
-          <input type="range" min="0" max="100" bind:value={volume} onchange={() => control('volume', { volume })} />
+          <span>Volume {volume.value}%</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            bind:value={volume.value}
+            onpointerdown={volume.start}
+            onchange={() => {
+              control('volume', { volume: volume.value });
+              volume.end(4000);
+            }}
+          />
         </label>
       {/if}
     </Section>
@@ -80,11 +93,29 @@
         </div>
         <Toggle checked={a.duck} label="Lower music" onchange={(v) => set({ duck: v })} />
       </div>
+      {#if a.duck}
+        <label class="field">
+          <span>Music volume during sounds: {duckPercent.value}% of normal</span>
+          <input
+            type="range"
+            min="0"
+            max="90"
+            step="5"
+            bind:value={duckPercent.value}
+            onpointerdown={duckPercent.start}
+            onchange={() => {
+              set({ duckPercent: duckPercent.value });
+              duckPercent.end();
+            }}
+          />
+          <span class="scale faint"><span>Silent</span><span>Barely lower</span></span>
+        </label>
+      {/if}
     </Section>
 
     <Section title="Account">
       <div>
-        <button class="btn danger small" onclick={() => confirm('Disconnect Spotify?') && control('disconnect')}><Unplug size={16} /> Disconnect</button>
+        <button class="btn danger small" onclick={async () => (await ask({ title: 'Disconnect Spotify?', message: 'Guests cannot add songs until you connect again.', confirm: 'Disconnect', danger: true })) && control('disconnect')}><Unplug size={16} /> Disconnect</button>
       </div>
     </Section>
   {:else}
@@ -101,8 +132,8 @@
         <li>
           Paste the app <strong>Client ID</strong> here:
           <div class="row">
-            <input class="input mono" bind:value={clientId} placeholder="32 characters" />
-            <button class="btn" onclick={() => attempt(() => rpc('spotify', 'setClientId', { clientId }), 'Saved')}>Save</button>
+            <input class="input mono" bind:value={clientId.value} onfocus={clientId.start} onblur={() => clientId.end()} placeholder="32 characters" />
+            <button class="btn" onclick={() => attempt(() => rpc('spotify', 'setClientId', { clientId: clientId.value }), 'Saved')}>Save</button>
           </div>
         </li>
         <li>
@@ -161,6 +192,12 @@
     font-size: 0.82rem;
     word-break: break-all;
     text-align: left;
+  }
+  .scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    font-weight: 400;
   }
   input[type='range'] {
     width: 100%;

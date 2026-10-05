@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Synced } from '$lib/synced.svelte.ts';
   import type { PriceInfo, EarnRuleInfo } from '$shared/protocol.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -20,9 +21,9 @@
   const prices = $derived(group<PriceInfo>(admin.prices));
   const earn = $derived(group<EarnRuleInfo>(admin.earnRules));
 
-  let currencyName = $state(hb.core?.currency.name ?? '');
-  let currencySymbol = $state(hb.core?.currency.symbol ?? '');
-  let passive = $state(String(hb.core?.admin?.passiveMinutes ?? 5));
+  const currencyName = new Synced(() => hb.core?.currency.name, '');
+  const currencySymbol = new Synced(() => hb.core?.currency.symbol, '');
+  const passive = new Synced(() => hb.core?.admin?.passiveMinutes, 5);
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('core', 'setGeneral', args));
 </script>
@@ -38,17 +39,17 @@
   <div class="grid2">
     <label class="field">
       <span>Currency name</span>
-      <input class="input" bind:value={currencyName} maxlength="24" onblur={() => set({ currency: { name: currencyName } })} />
+      <input class="input" maxlength="24" bind:value={currencyName.value} onfocus={currencyName.start} onblur={() => { set({ currency: { name: currencyName.value } }); currencyName.end(); }} />
     </label>
     <label class="field">
       <span>Symbol</span>
-      <input class="input" bind:value={currencySymbol} maxlength="4" onblur={() => set({ currency: { symbol: currencySymbol } })} />
+      <input class="input" maxlength="4" bind:value={currencySymbol.value} onfocus={currencySymbol.start} onblur={() => { set({ currency: { symbol: currencySymbol.value } }); currencySymbol.end(); }} />
     </label>
   </div>
   <div class="grid2">
     <label class="field">
       <span>Passive income every (minutes, 0 = off)</span>
-      <input class="input" type="number" min="0" max="120" bind:value={passive} onblur={() => set({ passiveMinutes: Number(passive) })} />
+      <input class="input" type="number" min="0" max="120" bind:value={passive.value} onfocus={passive.start} onblur={() => { set({ passiveMinutes: Number(passive.value) }); passive.end(); }} />
     </label>
     <label class="field">
       <span>TV leaderboard</span>

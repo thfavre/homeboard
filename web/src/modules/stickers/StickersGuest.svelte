@@ -7,7 +7,7 @@
 
   const mod = $derived(hb.modules.stickers as StickersState | undefined);
   const cost = $derived(price('stickers.sticker'));
-  const full = $derived(!!mod && mod.active.length >= mod.maxActive);
+  const full = $derived(!!mod && mod.maxActive > 0 && mod.active.length >= mod.maxActive);
   let text = $state('');
   let busy = $state(false);
 
@@ -27,7 +27,9 @@
       Your sticker bounces around the TV for {minutes} min.
       {#if hb.core?.economyEnabled && cost}Each one costs <Money amount={cost} />.{/if}
     </p>
-    <p class="faint status">{mod.active.length} of {mod.maxActive} on screen{#if full}, wait for one to leave{/if}</p>
+    <p class="faint status">
+      {mod.maxActive > 0 ? `${mod.active.length} of ${mod.maxActive} on screen` : `${mod.active.length} on screen`}{full ? ', wait for one to leave' : ''}
+    </p>
 
     <div class="grid">
       {#each mod.catalog as s (s.id)}

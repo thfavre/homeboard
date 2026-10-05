@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Synced } from '$lib/synced.svelte.ts';
+  import { ask } from '$lib/dialog.svelte.ts';
   import { Pencil, Play, Plus, RotateCcw, SkipForward, Square, Trash2 } from '@lucide/svelte';
   import type { WledEffect, WledState } from '$shared/wled.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
@@ -7,8 +9,8 @@
   import { effectSwatch } from './swatch.ts';
 
   const mod = $derived(hb.modules.wled as WledState | undefined);
-  let duration = $state(String(hb.modules.wled?.durationSec ?? 30));
-  let brightness = $state(String(hb.modules.wled?.brightness ?? 255));
+  const duration = new Synced(() => hb.modules.wled?.durationSec, 30);
+  const brightness = new Synced(() => hb.modules.wled?.brightness, 255);
 
   // Device form
   let devForm = $state<{ id?: string; host: string; name: string } | null>(null);
@@ -73,7 +75,7 @@
           <p class="faint small mono">{d.host}{d.leds ? ` · ${d.leds} LEDs` : ''}{d.online ? '' : ' · offline'}</p>
         </div>
         <button class="btn ghost small" aria-label="Edit" onclick={() => (devForm = { id: d.id, host: d.host, name: d.name })}><Pencil size={15} /></button>
-        <button class="btn ghost small" aria-label="Remove" onclick={() => confirm(`Remove ${d.name}?`) && attempt(() => rpc('wled', 'removeDevice', { id: d.id }))}>
+        <button class="btn ghost small" aria-label="Remove" onclick={async () => (await ask({ title: `Remove ${d.name}?`, confirm: 'Remove', danger: true })) && attempt(() => rpc('wled', 'removeDevice', { id: d.id }))}>
           <Trash2 size={15} />
         </button>
       </div>
@@ -107,14 +109,14 @@
           <span class="grow truncate">{e.name}</span>
           <button class="btn ghost small" aria-label="Test" onclick={() => attempt(() => rpc('wled', 'test', { effectId: e.id }))}><Play size={15} /></button>
           <button class="btn ghost small" aria-label="Edit" onclick={() => edit(e)}><Pencil size={15} /></button>
-          <button class="btn ghost small" aria-label="Delete" onclick={() => confirm(`Delete ${e.name}?`) && attempt(() => rpc('wled', 'removeEffect', { id: e.id }))}>
+          <button class="btn ghost small" aria-label="Delete" onclick={async () => (await ask({ title: `Delete ${e.name}?`, confirm: 'Delete', danger: true })) && attempt(() => rpc('wled', 'removeEffect', { id: e.id }))}>
             <Trash2 size={15} />
           </button>
         </div>
       {/each}
     </div>
     <div>
-      <button class="btn ghost small" onclick={() => confirm('Restore the default effect list?') && attempt(() => rpc('wled', 'resetEffects'))}>
+      <button class="btn ghost small" onclick={async () => (await ask({ title: 'Restore the default effects?', message: 'Your own effects are removed.', confirm: 'Restore' })) && attempt(() => rpc('wled', 'resetEffects'))}>
         <RotateCcw size={15} /> Restore defaults
       </button>
     </div>
@@ -172,11 +174,11 @@
     <div class="grid2">
       <label class="field">
         <span>Effect length (seconds)</span>
-        <input class="input" type="number" min="5" max="600" bind:value={duration} onblur={() => set({ durationSec: Number(duration) })} />
+        <input class="input" type="number" min="5" max="600" bind:value={duration.value} onfocus={duration.start} onblur={() => { set({ durationSec: Number(duration.value) }); duration.end(); }} />
       </label>
       <label class="field">
         <span>Brightness during effects (0 = keep current)</span>
-        <input class="input" type="number" min="0" max="255" bind:value={brightness} onblur={() => set({ brightness: Number(brightness) })} />
+        <input class="input" type="number" min="0" max="255" bind:value={brightness.value} onfocus={brightness.start} onblur={() => { set({ brightness: Number(brightness.value) }); brightness.end(); }} />
       </label>
     </div>
   </Section>

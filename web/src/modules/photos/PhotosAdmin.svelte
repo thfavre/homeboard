@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Synced } from '$lib/synced.svelte.ts';
+  import { choose } from '$lib/dialog.svelte.ts';
   import { Repeat, SkipForward, Trash2 } from '@lucide/svelte';
   import type { Photo, PhotosState } from '$shared/photos.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
@@ -6,12 +8,18 @@
   import { ago } from '$lib/time.ts';
 
   const mod = $derived(hb.modules.photos as PhotosState | undefined);
-  let seconds = $state(String(hb.modules.photos?.displaySec ?? 12));
-  let maxQueue = $state(String(hb.modules.photos?.maxQueue ?? 20));
+  const seconds = new Synced(() => hb.modules.photos?.displaySec, 12);
+  const maxQueue = new Synced(() => hb.modules.photos?.maxQueue, 20);
 
-  function remove(p: Photo) {
-    if (!confirm(`Remove this photo from ${p.guest.name}?`)) return;
-    const refund = confirm(`Give ${p.guest.name} their money back?`);
+  async function remove(p: Photo) {
+    const refund = await choose({
+      title: `Remove this photo from ${p.guest.name}?`,
+      options: [
+        { label: 'Remove', value: false, kind: 'default' },
+        { label: 'Remove and refund', value: true, kind: 'danger' },
+      ],
+    });
+    if (refund === null) return;
     attempt(() => rpc('photos', 'remove', { id: p.id, refund }), refund ? 'Removed and refunded' : 'Removed');
   }
 
@@ -64,11 +72,11 @@
     <div class="grid2">
       <label class="field">
         <span>Seconds on screen</span>
-        <input class="input" type="number" min="3" max="120" bind:value={seconds} onblur={() => set({ displaySec: Number(seconds) })} />
+        <input class="input" type="number" min="3" max="120" bind:value={seconds.value} onfocus={seconds.start} onblur={() => { set({ displaySec: Number(seconds.value) }); seconds.end(); }} />
       </label>
       <label class="field">
         <span>Max photos waiting</span>
-        <input class="input" type="number" min="1" max="100" bind:value={maxQueue} onblur={() => set({ maxQueue: Number(maxQueue) })} />
+        <input class="input" type="number" min="1" max="100" bind:value={maxQueue.value} onfocus={maxQueue.start} onblur={() => { set({ maxQueue: Number(maxQueue.value) }); maxQueue.end(); }} />
       </label>
     </div>
   </Section>

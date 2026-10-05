@@ -71,8 +71,9 @@ export class Session extends EventEmitter {
     this.emit('guests-changed');
   }
 
-  newCode(): void {
-    this.file.data.code = sessionCode();
+  /** Set the join code, or pick a random one */
+  newCode(code?: string): void {
+    this.file.data.code = code ?? sessionCode();
     this.save();
   }
 

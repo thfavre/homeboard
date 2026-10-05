@@ -4,6 +4,7 @@
   import { hb } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import Toasts from '$lib/ui/Toasts.svelte';
+  import DialogHost from '$lib/ui/DialogHost.svelte';
   import { applyTheme } from '../themes/index.ts';
   import { activeModules, moduleById } from '../modules/index.ts';
   import Join from './Join.svelte';
@@ -38,6 +39,7 @@
 </script>
 
 <Toasts />
+<DialogHost />
 
 {#if hb.needJoin}
   <Join />

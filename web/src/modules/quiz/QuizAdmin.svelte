@@ -1,15 +1,17 @@
 <script lang="ts">
+  import { Synced } from '$lib/synced.svelte.ts';
+  import { ask } from '$lib/dialog.svelte.ts';
   import { Play, SkipForward, Square } from '@lucide/svelte';
   import type { QuizState } from '$shared/quiz.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
 
   const q = $derived(hb.modules.quiz as QuizState | undefined);
-  const s = hb.modules.quiz?.settings ?? { questions: 10, timeSec: 20, category: 0, difficulty: '' };
-  let questions = $state(s.questions);
-  let timeSec = $state(s.timeSec);
-  let category = $state(s.category);
-  let difficulty = $state(s.difficulty);
+  const settings = () => (hb.modules.quiz as QuizState | undefined)?.settings;
+  const questions = new Synced(() => settings()?.questions, 10);
+  const timeSec = new Synced(() => settings()?.timeSec, 20);
+  const category = new Synced(() => settings()?.category, 0);
+  const difficulty = new Synced(() => settings()?.difficulty, '' as string);
   let categories = $state<{ id: number; name: string }[]>([]);
   let starting = $state(false);
 
@@ -19,7 +21,7 @@
 
   async function start() {
     starting = true;
-    await attempt(() => rpc('quiz', 'start', { questions, timeSec, category, difficulty }));
+    await attempt(() => rpc('quiz', 'start', { questions: questions.value, timeSec: timeSec.value, category: category.value, difficulty: difficulty.value }));
     starting = false;
   }
 
@@ -39,22 +41,22 @@
       <div class="grid2">
         <label class="field">
           <span>Questions</span>
-          <input class="input" type="number" min="3" max="30" bind:value={questions} />
+          <input class="input" type="number" min="3" max="30" bind:value={questions.value} onfocus={questions.start} />
         </label>
         <label class="field">
           <span>Seconds per question</span>
-          <input class="input" type="number" min="5" max="60" bind:value={timeSec} />
+          <input class="input" type="number" min="5" max="60" bind:value={timeSec.value} onfocus={timeSec.start} />
         </label>
         <label class="field">
           <span>Category</span>
-          <select class="input" bind:value={category}>
+          <select class="input" bind:value={category.value} onfocus={category.start}>
             <option value={0}>Any category</option>
             {#each categories as c}<option value={c.id}>{c.name}</option>{/each}
           </select>
         </label>
         <label class="field">
           <span>Difficulty</span>
-          <select class="input" bind:value={difficulty}>
+          <select class="input" bind:value={difficulty.value} onfocus={difficulty.start}>
             <option value="">Any</option>
             <option value="easy">Easy</option>
             <option value="medium">Medium</option>
@@ -78,7 +80,7 @@
       {#if q.question}<p class="question">{q.question.text}</p>{/if}
       <div class="row">
         <button class="btn" onclick={() => attempt(() => rpc('quiz', 'next'))}><SkipForward size={18} /> {q.phase === 'final' ? 'Close' : 'Next step'}</button>
-        <button class="btn danger" onclick={() => confirm('Stop the quiz? No rewards are given.') && attempt(() => rpc('quiz', 'stop'))}>
+        <button class="btn danger" onclick={async () => (await ask({ title: 'Stop the quiz?', message: 'No rewards are given.', confirm: 'Stop quiz', danger: true })) && attempt(() => rpc('quiz', 'stop'))}>
           <Square size={18} /> Stop
         </button>
       </div>

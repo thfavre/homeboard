@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from '$lib/dialog.svelte.ts';
   import { LogOut, RefreshCw, Smartphone, TriangleAlert } from '@lucide/svelte';
   import { hb, rpc, attempt, adminLogout } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -17,8 +18,8 @@
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('core', 'setGeneral', args));
 
-  function newSession() {
-    if (confirm('Start a new session? All guests, balances and history are cleared.')) {
+  async function newSession() {
+    if (await ask({ title: 'Start a new session?', message: 'All guests, balances and history are cleared.', confirm: 'Start new session', danger: true })) {
       attempt(() => rpc('core', 'newSession'), 'New session started');
     }
   }

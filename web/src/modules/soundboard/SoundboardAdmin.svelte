@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Synced } from '$lib/synced.svelte.ts';
+  import { ask } from '$lib/dialog.svelte.ts';
   import { Play, Trash2, Upload } from '@lucide/svelte';
   import type { SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
@@ -6,8 +8,8 @@
   import Toggle from '$lib/ui/Toggle.svelte';
 
   const mod = $derived(hb.modules.soundboard as SoundboardState | undefined);
-  let volume = $state(Math.round((hb.modules.soundboard?.volume ?? 0.8) * 100));
-  let cooldown = $state(String(hb.modules.soundboard?.cooldownSec ?? 4));
+  const volume = new Synced(() => (hb.modules.soundboard ? Math.round(hb.modules.soundboard.volume * 100) : undefined), 80);
+  const cooldown = new Synced(() => hb.modules.soundboard?.cooldownSec, 4);
   let name = $state('');
   let fileInput = $state<HTMLInputElement>();
 
@@ -26,12 +28,22 @@
 {#if mod}
   <Section title="Settings" hint="Sounds play on the TV page, so the PC must send its audio to the TV.">
     <label class="field">
-      <span>Volume {volume}%</span>
-      <input type="range" min="0" max="100" bind:value={volume} onchange={() => set({ volume: volume / 100 })} />
+      <span>Volume {volume.value}%</span>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        bind:value={volume.value}
+        onpointerdown={volume.start}
+        onchange={() => {
+          set({ volume: volume.value / 100 });
+          volume.end();
+        }}
+      />
     </label>
     <label class="field">
       <span>Pause between two sounds (seconds)</span>
-      <input class="input" type="number" min="0" max="120" bind:value={cooldown} onblur={() => set({ cooldownSec: Number(cooldown) })} />
+      <input class="input" type="number" min="0" max="120" bind:value={cooldown.value} onfocus={cooldown.start} onblur={() => { set({ cooldownSec: Number(cooldown.value) }); cooldown.end(); }} />
     </label>
   </Section>
 
@@ -50,7 +62,7 @@
       <div class="line">
         <button class="btn ghost small" aria-label="Test" onclick={() => test(s.id)}><Play size={15} /></button>
         <span class="grow">{s.name}</span>
-        <button class="btn ghost small" aria-label="Delete" onclick={() => confirm(`Delete ${s.name}?`) && attempt(() => rpc('soundboard', 'deleteCustom', { id: s.id }))}>
+        <button class="btn ghost small" aria-label="Delete" onclick={async () => (await ask({ title: `Delete ${s.name}?`, confirm: 'Delete', danger: true })) && attempt(() => rpc('soundboard', 'deleteCustom', { id: s.id }))}>
           <Trash2 size={15} />
         </button>
       </div>

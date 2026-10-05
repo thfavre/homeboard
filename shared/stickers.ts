@@ -35,6 +35,7 @@ export interface StickersState {
   catalog: StickerDef[];
   active: ActiveSticker[];
   durationSec: number;
+  /** 0 = no limit */
   maxActive: number;
   allowText: boolean;
 }

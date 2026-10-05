@@ -2,7 +2,7 @@
   import { Volume2, VolumeX } from '@lucide/svelte';
   import { fly } from 'svelte/transition';
   import type { PlayEvent } from '$shared/soundboard.ts';
-  import { onEvent } from '$lib/client.svelte.ts';
+  import { onEvent, rpc } from '$lib/client.svelte.ts';
   import { audioBlocked, playSound, unlockAudio } from './player.ts';
 
   let blocked = $state(audioBlocked());
@@ -16,7 +16,9 @@
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
     const off = onEvent<PlayEvent>('soundboard', 'play', (e) => {
-      void playSound(e.sound, e.volume).then(() => (blocked = audioBlocked()));
+      blocked = audioBlocked();
+      // Tell the server when the sound is over, so the music comes back up
+      void playSound(e.sound, e.volume).finally(() => rpc('soundboard', 'ended', { id: e.id }).catch(() => {}));
       const key = ++seq;
       playing = { ...e, key };
       setTimeout(() => playing?.key === key && (playing = null), 3000);

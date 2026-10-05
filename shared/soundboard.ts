@@ -29,6 +29,7 @@ export interface SoundboardState {
 }
 
 export interface PlayEvent {
+  id: string;
   sound: Sound;
   volume: number;
   by: string;

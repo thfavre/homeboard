@@ -1,15 +1,16 @@
 <script lang="ts">
+  import { Synced } from '$lib/synced.svelte.ts';
   import { Check } from '@lucide/svelte';
   import { THEMES } from '$shared/themes.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
 
-  let appName = $state(hb.core?.appName ?? '');
+  const appName = new Synced(() => hb.core?.appName, '');
   const set = (args: Record<string, unknown>) => attempt(() => rpc('core', 'setGeneral', args));
 </script>
 
 <Section title="Name" hint="Shown on the TV and on guest phones.">
-  <input class="input" bind:value={appName} maxlength="40" onblur={() => set({ appName })} />
+  <input class="input" maxlength="40" bind:value={appName.value} onfocus={appName.start} onblur={() => { set({ appName: appName.value }); appName.end(); }} />
 </Section>
 
 <Section title="Theme" hint="Applies to the TV, guests and this screen.">

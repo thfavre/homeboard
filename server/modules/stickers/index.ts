@@ -13,6 +13,7 @@ interface CustomSticker {
 
 interface StickerSettings {
   durationSec: number;
+  /** 0 = no limit */
   maxActive: number;
   allowText: boolean;
   custom: CustomSticker[];
@@ -59,7 +60,7 @@ export default defineModule<StickerSettings>({
 
     ctx.onGuest('place', (args, guest) => {
       const s = ctx.settings.get();
-      if (active.length >= s.maxActive) throw new HbError('The screen is full of stickers. Try again in a moment.');
+      if (s.maxActive > 0 && active.length >= s.maxActive) throw new HbError('The screen is full of stickers. Try again in a moment.');
       let sticker: StickerDef | null = null;
       let text: string | undefined;
       if (args.text !== undefined) {
@@ -94,7 +95,7 @@ export default defineModule<StickerSettings>({
       const s = ctx.settings.get();
       ctx.settings.update({
         durationSec: args.durationSec !== undefined ? clamp(num(args.durationSec, 120), 10, 3600) : s.durationSec,
-        maxActive: args.maxActive !== undefined ? clamp(num(args.maxActive, 10), 1, 40) : s.maxActive,
+        maxActive: args.maxActive !== undefined ? clamp(Math.round(num(args.maxActive, 10)), 0, 100) : s.maxActive,
         allowText: args.allowText !== undefined ? !!args.allowText : s.allowText,
       });
       ctx.publish();
