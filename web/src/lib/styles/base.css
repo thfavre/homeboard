@@ -185,6 +185,22 @@ img {
   border-color: var(--accent);
 }
 
+/* The open list of a <select> cannot be see-through: give it the theme colors */
+select {
+  color-scheme: var(--scheme, dark);
+}
+
+select option,
+select optgroup {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+select option:checked {
+  background-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
 textarea.input {
   padding: 0.7rem 0.95rem;
   min-height: 5rem;
