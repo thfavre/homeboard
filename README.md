@@ -65,7 +65,8 @@ restart. Balances are kept on the server, so guests just join again with their n
 
 ### Quiz
 
-Questions come from Open Trivia DB (random, by category and difficulty) or from custom quizzes
+Questions come from Open Trivia DB (by category and difficulty), from The Trivia API (search any of
+about 1400 topics such as Harry Potter, football or Switzerland), or from custom quizzes
 (made by the host or by guests, with an optional picture per question, kept between parties).
 A host-started quiz waits up to 60 seconds for players; pressing Ready makes it start sooner
 (15 seconds once half are ready, right away when everyone is). A guest-started quiz is started by

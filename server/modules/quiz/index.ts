@@ -12,6 +12,7 @@ import {
   type QuizPlayer,
   type QuizSettings,
   type QuizSource,
+  type QuizTopic,
   type QuizState,
 } from '../../../shared/quiz.ts';
 import type { Charge } from '../../core/economy.ts';
@@ -76,7 +77,7 @@ export default defineModule<QuizSettings>({
     // ------------------------------------------------------------ game state
     let phase: QuizPhase = 'idle';
     let title = '';
-    let source: 'trivia' | 'custom' = 'trivia';
+    let source: 'trivia' | 'topic' | 'custom' = 'trivia';
     let owner: { id: string; name: string } | null = null;
     let lobbyMode: 'owner' | 'ready' = 'ready';
     let ready = new Set<string>();
@@ -144,6 +145,66 @@ export default defineModule<QuizSettings>({
         await new Promise((r) => setTimeout(r, 5200));
       }
       throw new HbError('Could not get questions, try again in a few seconds');
+    };
+
+    // ------------------------------------------------------------ topics (The Trivia API)
+    //
+    // Open Trivia DB only has broad categories. The Trivia API has about 1400 topics
+    // (tags) such as "harry_potter" or "switzerland", which guests can search.
+
+    const TRIVIA_API = 'https://the-trivia-api.com/v2';
+    let topics: QuizTopic[] | null = null;
+
+    const prettyTopic = (tag: string) =>
+      tag
+        .trim()
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/(^|\s)(\S)/g, (_m, space: string, c: string) => space + c.toUpperCase());
+
+    const loadTopics = async (): Promise<QuizTopic[]> => {
+      if (topics) return topics;
+      const tags: string[] = await fetchJson(`${TRIVIA_API}/tags`).catch(() => {
+        throw new HbError('Could not reach the topic list, try again');
+      });
+      // "harry potter" and "harry_potter" are the same topic: query both spellings
+      const byLabel = new Map<string, QuizTopic>();
+      for (const tag of tags) {
+        if (typeof tag !== 'string' || !tag.trim()) continue;
+        const label = prettyTopic(tag);
+        const key = label.toLowerCase();
+        const t = byLabel.get(key) ?? { label, tags: [] };
+        t.tags.push(tag);
+        byLabel.set(key, t);
+      }
+      topics = [...byLabel.values()].sort((a, b) => a.label.localeCompare(b.label));
+      return topics;
+    };
+
+    const searchTopics = async (q: unknown): Promise<QuizTopic[]> => {
+      const text = String(q ?? '').trim().toLowerCase();
+      const all = await loadTopics();
+      if (!text) return [];
+      const starts = all.filter((t) => t.label.toLowerCase().startsWith(text));
+      const contains = all.filter((t) => !t.label.toLowerCase().startsWith(text) && t.label.toLowerCase().includes(text));
+      return [...starts, ...contains].slice(0, 40);
+    };
+
+    const loadTopic = async (topic: QuizTopic, s: QuizSettings): Promise<Question[]> => {
+      const ask = async (difficulty: string) => {
+        const params = new URLSearchParams({ limit: String(Math.min(50, s.questions)), tags: topic.tags.join(',') });
+        if (difficulty) params.set('difficulties', difficulty);
+        const list: any[] = await fetchJson(`${TRIVIA_API}/questions?${params}`);
+        return list.filter((q) => q?.question?.text && q.correctAnswer && Array.isArray(q.incorrectAnswers));
+      };
+      let list = await ask(s.difficulty);
+      // Small topics often have nothing in one difficulty: take any difficulty then
+      if (!list.length && s.difficulty) list = await ask('');
+      if (!list.length) throw new HbError(`No questions found about "${topic.label}". Try another topic.`);
+      return list.map((q) => {
+        const answers = shuffle([q.correctAnswer, ...q.incorrectAnswers.slice(0, 3)]);
+        return { text: q.question.text, answers, correct: answers.indexOf(q.correctAnswer), category: topic.label, difficulty: q.difficulty ?? '' };
+      });
     };
 
     const customQuestions = (quiz: CustomQuiz): Question[] =>
@@ -317,6 +378,12 @@ export default defineModule<QuizSettings>({
         source = 'custom';
         timeSec = clamp(Math.round(num(src.timeSec, 20)), 5, 120);
         load = Promise.resolve(customQuestions(quiz));
+      } else if (src.kind === 'topic') {
+        const s = cleanSettings(src.settings);
+        title = src.topic.label;
+        source = 'topic';
+        timeSec = s.timeSec;
+        load = loadTopic(src.topic, s);
       } else {
         const s = cleanSettings(src.settings);
         ctx.settings.update(s);
@@ -355,10 +422,15 @@ export default defineModule<QuizSettings>({
       };
     };
 
-    const parseSource = (args: any): QuizSource =>
-      args?.source === 'custom'
-        ? { kind: 'custom', quizId: String(args.quizId ?? ''), timeSec: num(args.timeSec, 20) }
-        : { kind: 'trivia', settings: cleanSettings(args) };
+    const parseSource = (args: any): QuizSource => {
+      if (args?.source === 'custom') return { kind: 'custom', quizId: String(args.quizId ?? ''), timeSec: num(args.timeSec, 20) };
+      if (args?.source === 'topic') {
+        const tags = (Array.isArray(args.topic?.tags) ? args.topic.tags : []).filter((t: unknown) => typeof t === 'string' && t.length <= 60).slice(0, 6);
+        if (!tags.length) throw new HbError('Pick a topic');
+        return { kind: 'topic', topic: { label: cleanName(args.topic.label, 60) || tags[0], tags }, settings: cleanSettings(args) };
+      }
+      return { kind: 'trivia', settings: cleanSettings(args) };
+    };
 
     // ------------------------------------------------------------ custom quizzes
 
@@ -560,6 +632,7 @@ export default defineModule<QuizSettings>({
     });
 
     ctx.onGuest('categories', () => loadCategories());
+    ctx.onGuest('topics', (args) => searchTopics(args.q));
     ctx.onGuest('saveCustom', (args, guest) => saveQuiz(args.quiz, { name: guest.name, id: guest.id }));
     ctx.onGuest('getCustom', (args, guest) => getQuiz(args.id, guest));
     ctx.onGuest('deleteCustom', (args, guest) => {
@@ -621,6 +694,7 @@ export default defineModule<QuizSettings>({
       return categories;
     };
     ctx.onAdmin('categories', () => loadCategories());
+    ctx.onAdmin('topics', (args) => searchTopics(args.q));
     ctx.onAdmin('saveCustom', (args) => saveQuiz(args.quiz, null));
     ctx.onAdmin('getCustom', (args) => getQuiz(args.id, null));
     ctx.onAdmin('deleteCustom', (args) => {

@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { serverNow } from '$lib/client.svelte.ts';
   /** Seconds left until `until`, updated every half second */
   let { until }: { until: number } = $props();
-  let now = $state(Date.now());
+  let now = $state(serverNow());
   $effect(() => {
-    const t = setInterval(() => (now = Date.now()), 500);
+    const t = setInterval(() => (now = serverNow()), 500);
     return () => clearInterval(t);
   });
 </script>

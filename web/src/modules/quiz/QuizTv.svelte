@@ -37,7 +37,7 @@
       <div class="lobby" in:fade>
         <div class="intro">
           <span class="eyebrow">{q.owner ? `${q.owner.name} started a quiz` : 'Get your phones ready'}</span>
-          <h1 class="big">{q.source === 'custom' ? q.title : 'Quiz time'}</h1>
+          <h1 class="big">{q.source === 'trivia' ? 'Quiz time' : q.title}</h1>
           <p class="dim lead">
             {q.total} questions. Answer on your phone, faster right answers score more.
             {q.lobbyMode === 'owner' ? `${q.owner?.name} starts it when everyone is in.` : `Press Ready on your phone to start sooner (${readyCount} of ${q.playerCount} ready).`}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Minus, Pause, Pencil, Play, Plus, SkipForward, Square, Trash2 } from '@lucide/svelte';
-  import type { CustomQuiz, QuizDraft, QuizState } from '$shared/quiz.ts';
+  import type { CustomQuiz, QuizDraft, QuizState, QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import { Synced } from '$lib/synced.svelte.ts';
@@ -15,7 +15,18 @@
   const category = new Synced(() => settings()?.category, 0);
   const difficulty = new Synced(() => settings()?.difficulty, '' as string);
 
-  let source = $state<'trivia' | 'custom'>('trivia');
+  let source = $state<'trivia' | 'topic' | 'custom'>('trivia');
+  let topicQuery = $state('');
+  let topicResults = $state<QuizTopic[]>([]);
+  let topic = $state<QuizTopic | null>(null);
+  let topicTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function onTopicInput() {
+    if (topicTimer) clearTimeout(topicTimer);
+    topicTimer = setTimeout(async () => {
+      topicResults = topicQuery.trim().length < 2 ? [] : await rpc<QuizTopic[]>('quiz', 'topics', { q: topicQuery }).catch(() => []);
+    }, 300);
+  }
   let chosen = $state<string | null>(null);
   let categories = $state<{ id: number; name: string }[]>([]);
   let starting = $state(false);
@@ -31,7 +42,9 @@
     const args =
       source === 'custom'
         ? { source: 'custom', quizId: chosen, timeSec: timeSec.value }
-        : { source: 'trivia', questions: questions.value, timeSec: timeSec.value, category: category.value, difficulty: difficulty.value };
+        : source === 'topic'
+          ? { source: 'topic', topic, questions: questions.value, timeSec: timeSec.value, difficulty: difficulty.value }
+          : { source: 'trivia', questions: questions.value, timeSec: timeSec.value, category: category.value, difficulty: difficulty.value };
     await attempt(() => rpc('quiz', 'start', args));
     starting = false;
   }
@@ -71,22 +84,38 @@
   {#if q.phase === 'idle'}
     <Section title="Start a quiz" hint="The quiz takes over the TV and every phone. Guests can also start one from their phone.">
       <div class="tabs">
-        <button class:active={source === 'trivia'} onclick={() => (source = 'trivia')}>Random (Open Trivia DB)</button>
+        <button class:active={source === 'trivia'} onclick={() => (source = 'trivia')}>By category</button>
+        <button class:active={source === 'topic'} onclick={() => (source = 'topic')}>Search a topic</button>
         <button class:active={source === 'custom'} onclick={() => (source = 'custom')}>Custom quiz</button>
       </div>
-      {#if source === 'trivia'}
+      {#if source === 'topic'}
+        <label class="field">
+          <span>Topic: <strong>{topic ? topic.label : 'none yet'}</strong></span>
+          <input class="input" bind:value={topicQuery} oninput={onTopicInput} placeholder="Harry Potter, football, cats, Switzerland..." />
+        </label>
+        <div class="topics">
+          {#each topicResults as t (t.label)}
+            <button class="chip" class:active={topic?.label === t.label} onclick={() => (topic = t)}>{t.label}</button>
+          {:else}
+            <p class="faint small">{topicQuery.trim().length < 2 ? 'Type at least 2 letters' : 'No topic found'}</p>
+          {/each}
+        </div>
+      {/if}
+      {#if source !== 'custom'}
         <div class="grid2">
           <label class="field">
             <span>Questions</span>
             <input class="input" type="number" min="3" max="30" bind:value={questions.value} onfocus={questions.start} />
           </label>
-          <label class="field">
-            <span>Category</span>
-            <select class="input" bind:value={category.value} onfocus={category.start}>
-              <option value={0}>Any category</option>
-              {#each categories as c}<option value={c.id}>{c.name}</option>{/each}
-            </select>
-          </label>
+          {#if source === 'trivia'}
+            <label class="field">
+              <span>Category</span>
+              <select class="input" bind:value={category.value} onfocus={category.start}>
+                <option value={0}>Any category</option>
+                {#each categories as c}<option value={c.id}>{c.name}</option>{/each}
+              </select>
+            </label>
+          {/if}
           <label class="field">
             <span>Difficulty</span>
             <select class="input" bind:value={difficulty.value} onfocus={difficulty.start}>
@@ -111,7 +140,7 @@
         <input class="input" type="number" min="5" max="120" bind:value={timeSec.value} onfocus={timeSec.start} />
       </label>
       <div>
-        <button class="btn primary" disabled={starting || (source === 'custom' && !chosen)} onclick={start}>
+        <button class="btn primary" disabled={starting || (source === 'custom' && !chosen) || (source === 'topic' && !topic)} onclick={start}>
           <Play size={18} />
           {starting ? 'Starting...' : 'Start quiz'}
         </button>
@@ -203,7 +232,7 @@
 <style>
   .tabs {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     padding: 0.25rem;
     border-radius: var(--radius-sm);
     background: var(--surface-2);
@@ -220,6 +249,27 @@
   }
   .tabs button.active {
     background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .topics {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 0.35rem;
+    height: 7rem;
+    overflow-y: auto;
+  }
+  .chip {
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    font-weight: 600;
+    font-size: 0.8rem;
+  }
+  .chip.active {
+    background: var(--accent);
+    border-color: transparent;
     color: var(--accent-contrast);
   }
   .grid2 {

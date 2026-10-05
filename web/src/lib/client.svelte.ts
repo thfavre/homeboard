@@ -58,6 +58,33 @@ export const hb = $state({
 });
 
 let socket: Socket | null = null;
+
+/**
+ * Difference between the server clock and this device's clock (ms). Timers come from the
+ * server as timestamps; a phone whose clock is off would otherwise show different countdowns.
+ */
+let clockOffset = 0;
+
+/** Current time on the server's clock */
+export function serverNow(): number {
+  return Date.now() + clockOffset;
+}
+
+async function syncClock(s: Socket): Promise<void> {
+  let best = Infinity;
+  for (let i = 0; i < 4; i++) {
+    const sent = Date.now();
+    const server = await new Promise<number | null>((resolve) => s.timeout(3000).emit('clock', (err: Error | null, t: number) => resolve(err ? null : t)));
+    const received = Date.now();
+    if (server === null) continue;
+    const rtt = received - sent;
+    // Keep the fastest round trip: it gives the most precise estimate
+    if (rtt < best) {
+      best = rtt;
+      clockOffset = server + rtt / 2 - received;
+    }
+  }
+}
 const listeners = new Map<string, Set<(data: any) => void>>();
 let toastSeq = 0;
 
@@ -72,6 +99,7 @@ export function connect(role: Role): void {
   socket.on('connect', () => {
     hb.connected = true;
     hb.authError = false;
+    if (socket) void syncClock(socket);
   });
   socket.on('disconnect', () => (hb.connected = false));
   socket.on('connect_error', (err) => {
