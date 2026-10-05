@@ -9,7 +9,7 @@
   import StickerView from './StickerView.svelte';
 
   const mod = $derived(hb.modules.stickers as StickersState | undefined);
-  const minutes = new Synced(() => (hb.modules.stickers ? hb.modules.stickers.durationSec / 60 : undefined), 2);
+  const minutes = new Synced(() => (hb.modules.stickers ? Math.round((hb.modules.stickers.durationSec / 60) * 100) / 100 : undefined), 2);
   const max = new Synced(() => (hb.modules.stickers?.maxActive ? hb.modules.stickers.maxActive : undefined), 10);
   let uploadName = $state('');
   let fileInput = $state<HTMLInputElement>();

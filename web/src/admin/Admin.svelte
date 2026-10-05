@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, Coins, EyeOff, KeyRound, Menu, Palette, ToggleRight, Users, X } from '@lucide/svelte';
+  import { Activity, Coins, EyeOff, KeyRound, Menu, Palette, Users, X } from '@lucide/svelte';
   import type { Component } from 'svelte';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Toasts from '$lib/ui/Toasts.svelte';
@@ -11,7 +11,6 @@
   import ModulePrices from './ModulePrices.svelte';
   import Live from '../modules/core/admin/Live.svelte';
   import Guests from '../modules/core/admin/Guests.svelte';
-  import Features from '../modules/core/admin/Features.svelte';
   import Economy from '../modules/core/admin/Economy.svelte';
   import Appearance from '../modules/core/admin/Appearance.svelte';
   import Access from '../modules/core/admin/Access.svelte';
@@ -29,7 +28,6 @@
   const sections: Section[] = [
     { id: 'live', title: 'Live', icon: Activity, component: Live },
     { id: 'guests', title: 'Guests', icon: Users, component: Guests },
-    { id: 'features', title: 'Features', icon: ToggleRight, component: Features },
     { id: 'economy', title: 'Economy', icon: Coins, component: Economy },
     ...clientModules
       .filter((m) => m.admin)
@@ -56,7 +54,8 @@
     window.scrollTo(0, 0);
   }
 
-  const featureOn = (id: string) => hb.core?.features.find((f) => f.id === id)?.enabled;
+  const featureOf = (id: string | undefined) => (id ? hb.core?.features.find((f) => f.id === id) : undefined);
+  const toggleFeature = (id: string, enabled: boolean) => attempt(() => rpc('core', 'setFeature', { id, enabled }));
 </script>
 
 <Toasts />
@@ -74,11 +73,17 @@
         <span class="pill">Host</span>
       </div>
       {#each sections as s (s.id)}
-        <button class="nav-item" class:active={s.id === current} onclick={() => select(s.id)}>
-          <s.icon size={18} />
-          <span class="truncate">{s.title}</span>
-          {#if s.module}<span class="dot" class:on={featureOn(s.module)}></span>{/if}
-        </button>
+        {@const f = featureOf(s.module)}
+        <!-- The name opens the page (even when off); the switch only turns the feature on or off -->
+        <div class="nav-row" class:active={s.id === current} class:off={f && !f.enabled}>
+          <button class="nav-item" onclick={() => select(s.id)}>
+            <s.icon size={18} />
+            <span class="truncate">{s.title}</span>
+          </button>
+          {#if f}
+            <span class="nav-toggle"><Toggle checked={f.enabled} label="{f.name} on or off" onchange={(v) => toggleFeature(f.id, v)} /></span>
+          {/if}
+        </div>
       {/each}
     </nav>
     <button class="scrim" aria-label="Close menu" onclick={() => (menuOpen = false)}></button>
@@ -119,7 +124,7 @@
   .admin {
     min-height: 100dvh;
     display: grid;
-    grid-template-columns: 15rem 1fr;
+    grid-template-columns: 16.5rem 1fr;
   }
   nav {
     position: sticky;
@@ -148,38 +153,52 @@
     background-clip: text;
     color: transparent;
   }
+  .nav-row {
+    display: flex;
+    align-items: center;
+    border-radius: var(--radius-sm);
+  }
+  .nav-row:hover {
+    background: var(--surface-2);
+  }
+  .nav-row.active {
+    background: var(--surface-3);
+  }
   .nav-item {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 0.7rem;
     padding: 0.6rem 0.7rem;
-    border-radius: var(--radius-sm);
     border: 0;
     background: none;
     color: var(--text-dim);
     font-weight: 500;
     text-align: left;
   }
-  .nav-item:hover {
-    background: var(--surface-2);
-  }
-  .nav-item.active {
-    background: var(--surface-3);
+  .active .nav-item {
     color: var(--text);
   }
-  .nav-item span.truncate {
-    flex: 1;
+  .off .nav-item {
+    color: var(--text-faint);
   }
-  .dot {
-    width: 0.45rem;
-    height: 0.45rem;
-    border-radius: 50%;
-    background: var(--text-faint);
-    opacity: 0.5;
+  .nav-toggle {
+    flex: none;
+    display: flex;
+    padding-right: 0.45rem;
   }
-  .dot.on {
-    background: var(--success);
-    opacity: 1;
+  .nav-toggle :global(.toggle) {
+    width: 2.3rem;
+    height: 1.35rem;
+  }
+  .nav-toggle :global(.knob) {
+    width: 0.95rem;
+    height: 0.95rem;
+    left: 0.17rem;
+  }
+  .nav-toggle :global(.on .knob) {
+    left: calc(100% - 1.12rem);
   }
   .scrim {
     display: none;
