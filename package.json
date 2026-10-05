@@ -6,7 +6,8 @@
     "dev": "concurrently -k -n server,web -c cyan,magenta \"tsx watch --clear-screen=false server/index.ts --dev\" \"vite\"",
     "build": "vite build",
     "start": "tsx server/index.ts",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "party": "vite build && tsx server/index.ts --kiosk"
   },
   "keywords": [],
   "author": "",

@@ -1,4 +1,5 @@
 import { Hub } from './core/hub.ts';
+import { openTvKiosk } from './core/kiosk.ts';
 import { log } from './core/util.ts';
 import { modules } from './modules/index.ts';
 
@@ -13,6 +14,7 @@ log.info('hub', `TV:    http://localhost:${PORT}/tv`);
 log.info('hub', `Admin: http://localhost:${PORT}/admin  (password: ${hub.core.adminPassword})`);
 
 if (hub.core.tunnel && process.env.HB_TUNNEL !== '0') void hub.tunnel.start(hub.tunnelTarget);
+if (process.argv.includes('--kiosk')) openTvKiosk(`http://localhost:${PORT}/tv`);
 
 let stopping = false;
 const shutdown = async () => {
