@@ -152,7 +152,12 @@
       {#if hb.core?.economyEnabled && unit}Each pixel costs <Money amount={unit} />.{/if}
     </p>
 
-    <div class="viewport card" class:moving={mode === 'move'} bind:this={viewport}>
+    <div
+      class="viewport card"
+      class:moving={mode === 'move'}
+      style:height="min(58dvh, {Math.ceil(mod.height * scale) + 2}px)"
+      bind:this={viewport}
+    >
       <div
         class="paper"
         class:grid={scale >= 6}
@@ -205,7 +210,6 @@
     font-size: 0.9rem;
   }
   .viewport {
-    height: min(58dvh, 34rem);
     overflow: auto;
     padding: 0;
     border-radius: var(--radius-sm);

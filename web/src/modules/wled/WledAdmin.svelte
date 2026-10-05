@@ -70,7 +70,7 @@
         <span class="status" class:on={d.online}></span>
         <div class="grow">
           <strong>{d.name}</strong>
-          <p class="faint small mono">{d.host}{#if d.leds} &middot; {d.leds} LEDs{/if}{#if !d.online} &middot; offline{/if}</p>
+          <p class="faint small mono">{d.host}{d.leds ? ` · ${d.leds} LEDs` : ''}{d.online ? '' : ' · offline'}</p>
         </div>
         <button class="btn ghost small" aria-label="Edit" onclick={() => (devForm = { id: d.id, host: d.host, name: d.name })}><Pencil size={15} /></button>
         <button class="btn ghost small" aria-label="Remove" onclick={() => confirm(`Remove ${d.name}?`) && attempt(() => rpc('wled', 'removeDevice', { id: d.id }))}>

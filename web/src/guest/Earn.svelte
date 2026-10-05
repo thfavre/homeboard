@@ -13,7 +13,7 @@
     rpc<LedgerEntry[]>('core', 'history').then((h) => (history = h)).catch(() => {});
   });
 
-  const icons: Record<string, typeof Gift> = { core: Clock };
+  const icons: Record<string, typeof Gift> = { 'core.join': Gift, 'core.passive': Clock };
   const currency = $derived(hb.core?.currency);
 </script>
 
@@ -26,7 +26,7 @@
 
   <div class="rules">
     {#each hb.core?.earn ?? [] as r (r.key)}
-      {@const Icon = icons[r.module] ?? Trophy}
+      {@const Icon = icons[r.key] ?? Trophy}
       <div class="rule card">
         <span class="icon"><Icon size={20} /></span>
         <div class="text">
@@ -37,12 +37,12 @@
       </div>
     {/each}
     <div class="rule card">
-      <span class="icon"><Gift size={20} /></span>
+      <span class="icon"><Sparkles size={20} /></span>
       <div class="text">
         <strong>Host surprises</strong>
         <span class="dim">The host can make it rain or hand out bonuses at any time. Stay close.</span>
       </div>
-      <span class="value"><Sparkles size={18} /></span>
+      <span class="value faint">?</span>
     </div>
   </div>
 

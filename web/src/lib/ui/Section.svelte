@@ -25,7 +25,7 @@
     align-items: flex-start;
     gap: 1rem;
   }
-  header > div {
+  header > div:first-child {
     flex: 1;
     min-width: 0;
   }
@@ -37,6 +37,7 @@
     margin-top: 0.2rem;
   }
   .actions {
+    flex: none;
     display: flex;
     gap: 0.5rem;
   }

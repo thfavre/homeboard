@@ -67,7 +67,7 @@
       <span class="eyebrow">{moduleName(mod)}</span>
       {#each items as p (p.key)}
         <div class="line">
-          <span>{p.label}{#if p.unit}<span class="faint"> / {p.unit}</span>{/if}</span>
+          <span>{p.label}{#if p.unit}<span class="faint">{` / ${p.unit}`}</span>{/if}</span>
           <AmountInput value={p.amount} oncommit={(v) => attempt(() => rpc('core', 'setPrice', { key: p.key, amount: v }))} />
         </div>
       {/each}

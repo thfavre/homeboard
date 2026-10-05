@@ -7,11 +7,12 @@ import stickers from './stickers/index.ts';
 import photos from './photos/index.ts';
 import wled from './wled/index.ts';
 import soundboard from './soundboard/index.ts';
+import quiz from './quiz/index.ts';
 
 /**
  * Client side of every module. Keep the ids in sync with server/modules/index.ts.
  */
-export const clientModules: ClientModule[] = [core, spotify, canvas, stickers, photos, wled, soundboard];
+export const clientModules: ClientModule[] = [core, spotify, canvas, stickers, photos, wled, soundboard, quiz];
 
 export function activeModules(): ClientModule[] {
   return clientModules.filter((m) => m.id === 'core' || enabled(m.id));

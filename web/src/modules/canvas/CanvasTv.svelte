@@ -37,9 +37,10 @@
 <div class="card panel">
   <div class="label">
     <span class="eyebrow">Pixel canvas</span>
-    <span class="hint">Paint from your phone{#if hb.core?.economyEnabled}
-        &middot; <Money amount={price('canvas.pixel')} /> per pixel{/if}</span
-    >
+    <span class="hint">
+      Paint from your phone
+      {#if hb.core?.economyEnabled}<span class="sep">&middot;</span><Money amount={price('canvas.pixel')} /> per pixel{/if}
+    </span>
   </div>
   <div class="frame" bind:this={frame}>
     {#if mod}
@@ -71,8 +72,14 @@
     justify-content: space-between;
   }
   .hint {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
     color: var(--text-dim);
     font-size: 0.95rem;
+  }
+  .sep {
+    margin: 0 0.2rem;
   }
   .frame {
     min-height: 0;

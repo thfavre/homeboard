@@ -67,7 +67,7 @@ export default defineModule<CanvasSettings>({
       ctx.publish();
     };
 
-    ctx.price({ key: 'canvas.pixel', label: 'Paint a pixel', unit: 'pixel', default: 10 });
+    ctx.price({ key: 'canvas.pixel', label: 'Painting', unit: 'pixel', default: 10 });
 
     ctx.state((role): CanvasState & { clearOnNewSession?: boolean } => ({
       width,
