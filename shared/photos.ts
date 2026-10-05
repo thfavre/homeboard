@@ -2,7 +2,7 @@ export interface Photo {
   id: string;
   url: string;
   caption: string;
-  guest: { name: string; color: string };
+  guest: { id?: string; name: string; color: string };
   at: number;
 }
 

@@ -1,10 +1,14 @@
+import { existsSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import QRCode from 'qrcode';
+import { AVATAR_EFFECTS, type AvatarParams } from '../../../shared/avatar.ts';
+import { ensureDir } from '../../core/paths.ts';
 import type { CoreState, Currency, JoinResult, LeaderboardMode, PublicGuest } from '../../../shared/protocol.ts';
 import { THEMES } from '../../../shared/themes.ts';
 import type { CoreSettings } from '../../core/hub.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
-import { HbError, cleanName, clamp, num } from '../../core/util.ts';
+import { HbError, cleanName, clamp, num, uid } from '../../core/util.ts';
 
 const TICK_SECONDS = 15;
 const MAX_JOIN_FAILURES = 8;
@@ -98,6 +102,7 @@ export default defineModule({
         guestsOnline: guests.filter((g) => g.online).length,
         takeover: hub.takeover,
         privacy: c.privacy,
+        avatars: Object.fromEntries([...session.guests.values()].filter((g) => g.avatar).map((g) => [g.id, g.avatar!.url])),
         activity: hub.activityFor(role),
       };
       if (role === 'tv' || role === 'admin') state.join = joinInfo();
@@ -141,6 +146,125 @@ export default defineModule({
         ctx.activity('{name} joined the party', { guest });
       }
       return { token: guest.token, me: session.me(guest), returning };
+    });
+
+    // ------------------------------------------------------------ avatars
+    //
+    // The phone sends the original selfie (kept private, to edit it again later)
+    // and the finished picture (public, shown everywhere).
+
+    const avatarMedia = ctx.mediaDir('avatars');
+    const originals = ensureDir(join(ctx.dataDir, 'avatars'));
+
+    const decodeJpeg = (dataUrl: unknown, maxBytes: number): Buffer => {
+      const m = /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(String(dataUrl ?? ''));
+      if (!m) throw new HbError('Send a picture');
+      const buf = Buffer.from(m[2], 'base64');
+      if (buf.length < 200 || buf.length > maxBytes) throw new HbError('This picture is too big');
+      return buf;
+    };
+
+    const cleanParams = (p: any): AvatarParams => ({
+      effect: AVATAR_EFFECTS.some((e) => e.id === p?.effect) ? p.effect : 'none',
+      strength: clamp(num(p?.strength, 0.6), 0, 1),
+      cx: clamp(num(p?.cx, 0.5), 0, 1),
+      cy: clamp(num(p?.cy, 0.5), 0, 1),
+      emoji: typeof p?.emoji === 'string' && p.emoji.length <= 16 ? p.emoji : null,
+      ex: clamp(num(p?.ex, 0.5), 0, 1),
+      ey: clamp(num(p?.ey, 0.5), 0, 1),
+      esize: clamp(num(p?.esize, 0.3), 0.08, 0.8),
+    });
+
+    const deleteAvatar = (g: Guest) => {
+      if (!g.avatar) return;
+      for (const f of [join(avatarMedia, g.avatar.file), join(originals, g.avatar.original)]) {
+        try {
+          unlinkSync(f);
+        } catch {
+          // already gone
+        }
+      }
+      g.avatar = undefined;
+    };
+
+    ctx.http.post('/avatar', (req, res) => {
+      const guest = ctx.guestFromRequest(req);
+      try {
+        if (!guest) throw new HbError('Please join the session first');
+        const rendered = decodeJpeg(req.body?.rendered, 600_000);
+        // A new photo comes with its original; editing effects or emoji keeps the old one
+        const original = req.body?.original ? decodeJpeg(req.body.original, 1_500_000) : null;
+        if (!original && !guest.avatar) throw new HbError('Take a picture first');
+        const params = cleanParams(req.body?.params);
+
+        const file = `${guest.id}-${uid(4)}.jpg`;
+        writeFileSync(join(avatarMedia, file), rendered);
+        let originalFile = guest.avatar?.original ?? '';
+        if (original) {
+          originalFile = `${guest.id}-${uid(4)}.jpg`;
+          writeFileSync(join(originals, originalFile), original);
+        }
+        const old = guest.avatar;
+        guest.avatar = { url: ctx.mediaUrl(`avatars/${file}`), file, original: originalFile, params };
+        // Remove the previous files that are not used anymore
+        if (old) {
+          try {
+            unlinkSync(join(avatarMedia, old.file));
+          } catch {
+            // already gone
+          }
+          if (old.original !== originalFile) {
+            try {
+              unlinkSync(join(originals, old.original));
+            } catch {
+              // already gone
+            }
+          }
+        }
+        session.changed(guest);
+        ctx.publish();
+        res.json({ url: guest.avatar.url });
+      } catch (err) {
+        if (err instanceof HbError) res.status(400).json({ error: err.message });
+        else {
+          ctx.log.error(err);
+          res.status(500).json({ error: 'Could not save the picture' });
+        }
+      }
+    });
+
+    /** The original selfie, only for its owner (to change the effect or emoji) */
+    ctx.http.get('/avatar/original', (req, res) => {
+      const guest = ctx.session.byToken(req.get('x-guest-token'));
+      if (!guest?.avatar?.original) {
+        res.status(404).end();
+        return;
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.sendFile(join(originals, guest.avatar.original));
+    });
+
+    ctx.onGuest('removeAvatar', (_args, guest) => {
+      deleteAvatar(guest);
+      session.changed(guest);
+      ctx.publish();
+      return true;
+    });
+
+    ctx.onAdmin('removeGuestAvatar', (args) => {
+      const guest = session.byId(args.guestId);
+      deleteAvatar(guest);
+      session.changed(guest);
+      ctx.publish();
+      ctx.toast(guest, { text: 'The host removed your picture', kind: 'info' });
+      return true;
+    });
+
+    ctx.onSessionReset(() => {
+      for (const dir of [avatarMedia, originals]) {
+        if (!existsSync(dir)) continue;
+        for (const f of readdirSync(dir)) rmSync(join(dir, f), { force: true });
+      }
     });
 
     // ------------------------------------------------------------ guest actions

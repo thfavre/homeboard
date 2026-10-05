@@ -69,7 +69,12 @@
             />
             <button class="btn small" disabled={newPin.length !== 4} onclick={() => setPin(g.id)}>Set PIN</button>
           </div>
-          <div><button class="btn danger small" onclick={() => kick(g.id, g.name)}><UserX size={16} /> Remove from session</button></div>
+          <div class="row wrap">
+            <button class="btn small" disabled={!g.avatar} onclick={() => attempt(() => rpc('core', 'removeGuestAvatar', { guestId: g.id }), 'Picture removed')}>
+              Remove picture
+            </button>
+            <button class="btn danger small" onclick={() => kick(g.id, g.name)}><UserX size={16} /> Remove from session</button>
+          </div>
     </div>
   </Sheet>
 {/if}
@@ -78,7 +83,7 @@
   {#each guests as g (g.id)}
     <div class="guest">
       <button class="head" onclick={() => toggle(g.id, g.name)}>
-        <Avatar name={g.name} color={g.color} />
+        <Avatar name={g.name} color={g.color} id={g.id} />
         <div class="who">
           <span class="name truncate">{g.name}</span>
           <span class="faint meta">

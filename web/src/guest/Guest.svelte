@@ -11,6 +11,9 @@
   import Home from './Home.svelte';
   import Earn from './Earn.svelte';
   import Profile from './Profile.svelte';
+  import AvatarFlow from './AvatarFlow.svelte';
+  import { Camera } from '@lucide/svelte';
+  import { avatarFlow } from './avatar.svelte.ts';
 
   type Tab = 'home' | 'earn' | 'me';
   let tab = $state<Tab>('home');
@@ -40,6 +43,29 @@
 
 <Toasts />
 <DialogHost />
+
+{#if avatarFlow.mode}
+  <AvatarFlow mode={avatarFlow.mode} onclose={() => (avatarFlow.mode = null)} />
+{/if}
+
+{#if hb.offerAvatar && hb.me && !hb.me.avatar && !hb.needJoin}
+  <div class="offer-wrap">
+    <div class="offer card">
+      <span class="offer-icon"><Camera size={28} /></span>
+      <h2>Add your face?</h2>
+      <p class="dim">Take a selfie, give yourself a big head or a swirl, and add an emoji. It shows next to your name on the TV.</p>
+      <button
+        class="btn primary block"
+        onclick={() => {
+          hb.offerAvatar = false;
+          avatarFlow.mode = 'new';
+        }}>Take a selfie</button
+      >
+      <button class="btn ghost block" onclick={() => (hb.offerAvatar = false)}>Not now</button>
+      <p class="faint small">You can do it later from your profile.</p>
+    </div>
+  </div>
+{/if}
 
 {#if hb.needJoin}
   <Join />
@@ -92,6 +118,41 @@
 {/if}
 
 <style>
+  .offer-wrap {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: grid;
+    place-items: center;
+    padding: 1.25rem;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+  }
+  .offer {
+    width: min(24rem, 100%);
+    padding: 1.6rem;
+    display: grid;
+    gap: 0.8rem;
+    text-align: center;
+    justify-items: center;
+    background: var(--bg);
+    background-image: linear-gradient(var(--surface), var(--surface));
+  }
+  .offer-icon {
+    display: grid;
+    place-items: center;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 1.3rem;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+  }
+  .offer p {
+    font-size: 0.92rem;
+  }
+  .offer .small {
+    font-size: 0.8rem;
+  }
   .splash {
     min-height: 100dvh;
     display: grid;

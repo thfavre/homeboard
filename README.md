@@ -63,6 +63,16 @@ the host can set a new one from the Guests screen if someone forgets it.
 Because the free tunnel URL changes when the server restarts, phones forget the account after a
 restart. Balances are kept on the server, so guests just join again with their name and PIN.
 
+### Selfie avatars
+
+After joining, guests are offered to take a selfie (camera only, not the photo library: the live
+camera in the page over https, or the phone camera app otherwise). They can give themselves a big
+head, tiny head, swirl, long or wide face, waves or pixels (tap the face to aim the effect), and
+drag one emoji anywhere on the picture. The picture replaces their initials everywhere: leaderboard,
+quiz, photos, activity feed, host screens. From their profile they can change the effects, retake
+or remove it; the host can remove it too. The original selfie stays private on the PC (only its
+owner can load it, to edit), and every picture is deleted with a new session.
+
 ### Spotify setup (one time)
 
 Needs Spotify Premium. In the admin, open **Music** and follow the steps: create an app on the

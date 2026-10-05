@@ -17,7 +17,7 @@
       {#each rows as g, i (g.id)}
         <li animate:flip={{ duration: 500 }} class:first={i === 0}>
           <span class="rank mono">{i + 1}</span>
-          <Avatar name={g.name} color={g.color} size="2rem" />
+          <Avatar name={g.name} color={g.color} id={g.id} size="2rem" />
           <span class="name truncate">{g.name}</span>
           <Money amount={g[key]} />
         </li>

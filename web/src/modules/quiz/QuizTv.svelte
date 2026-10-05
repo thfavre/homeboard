@@ -48,7 +48,7 @@
           <p class="dim lead">{q.total} questions. Answer on your phone, faster right answers score more.</p>
           <div class="players">
             {#each q.players as p (p.id)}
-              <span class="player" in:scale><Avatar name={p.name} color={p.color} size="2.4rem" />{p.name}</span>
+              <span class="player" in:scale><Avatar name={p.name} color={p.color} id={p.id} size="2.4rem" />{p.name}</span>
             {/each}
           </div>
         </div>
@@ -97,7 +97,7 @@
           {#each q.players.slice(0, 8) as p, i (p.id)}
             <li class="card" animate:flip={{ duration: 600 }}>
               <span class="rank mono">{i + 1}</span>
-              <Avatar name={p.name} color={p.color} size="2.6rem" />
+              <Avatar name={p.name} color={p.color} id={p.id} size="2.6rem" />
               <span class="name truncate">{p.name}</span>
               {#if p.delta}<span class="delta mono">+{p.delta}</span>{/if}
               <span class="score mono">{p.score}</span>
@@ -113,7 +113,7 @@
             {@const p = podium[rank]}
             {#if p}
               <div class="step s{rank + 1}" in:fly={{ y: 80, delay: (2 - rank) * 400 + 200, duration: 600 }}>
-                <Avatar name={p.name} color={p.color} size={rank === 0 ? '6rem' : '4.5rem'} />
+                <Avatar name={p.name} color={p.color} id={p.id} size={rank === 0 ? '6rem' : '4.5rem'} />
                 <strong class="truncate">{p.name}</strong>
                 <span class="mono dim">{p.score} pts</span>
                 {#if p.reward && hb.core?.economyEnabled}<span class="reward"><Money amount={p.reward} sign /></span>{/if}

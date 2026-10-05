@@ -80,7 +80,7 @@ interface StoredActivity {
   at: number;
   module: string;
   template: string;
-  guest?: { name: string; color: string };
+  guest?: { id: string; name: string; color: string };
   amount?: number;
   sensitive?: boolean;
 }
@@ -125,7 +125,8 @@ export class Hub {
     this.economy = new Economy(this.settings, this.session);
     this.io = new Server(this.server, { maxHttpBufferSize: 2e6, pingInterval: 10000, pingTimeout: 8000 });
 
-    this.app.use('/api', express.json({ limit: '1mb' }));
+    // Avatars are sent as two small JPEGs in JSON
+    this.app.use('/api', express.json({ limit: '4mb' }));
     this.app.post('/api/admin/login', (req, res) => {
       if (req.body?.password !== this.core.adminPassword) {
         res.status(401).json({ error: 'Wrong password' });
@@ -142,6 +143,10 @@ export class Hub {
         setHeaders: (res) => res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'"),
       }),
     );
+    // A removed upload is a plain 404, not an error in the console
+    this.app.use('/media', (_err: unknown, _req: Request, res: express.Response, _next: express.NextFunction) => {
+      res.status(404).end();
+    });
 
     this.io.use((socket, next) => this.authenticate(socket, next));
     this.io.on('connection', (socket) => this.onConnection(socket));
@@ -319,7 +324,7 @@ export class Hub {
       at: Date.now(),
       module,
       template: text,
-      guest: opts.guest ? { name: opts.guest.name, color: opts.guest.color } : undefined,
+      guest: opts.guest ? { id: opts.guest.id, name: opts.guest.name, color: opts.guest.color } : undefined,
       amount: opts.amount,
       sensitive: opts.sensitive,
     };

@@ -2,6 +2,7 @@ import { scryptSync, timingSafeEqual } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import type { AdminGuest, LedgerEntry, Me, PublicGuest } from '../../shared/protocol.ts';
+import type { AvatarParams } from '../../shared/avatar.ts';
 import { JsonFile } from './jsonFile.ts';
 import { DATA_DIR } from './paths.ts';
 import { HbError, cleanName, sessionCode, uid } from './util.ts';
@@ -17,6 +18,8 @@ export interface Guest {
    */
   pin?: string | { salt: string; hash: string };
   color: string;
+  /** Selfie: public picture, private original (to edit again) and how it was made */
+  avatar?: { url: string; file: string; original: string; params: AvatarParams };
   balance: number;
   earned: number;
   spent: number;
@@ -234,11 +237,11 @@ export class Session extends EventEmitter {
   }
 
   me(g: Guest): Me {
-    return { id: g.id, name: g.name, color: g.color, balance: g.balance, earned: g.earned, spent: g.spent, hasPin: !!g.pin, pin: typeof g.pin === 'string' ? g.pin : null };
+    return { id: g.id, name: g.name, color: g.color, balance: g.balance, earned: g.earned, spent: g.spent, hasPin: !!g.pin, pin: typeof g.pin === 'string' ? g.pin : null, avatar: g.avatar?.url, avatarParams: g.avatar?.params };
   }
 
   publicGuest(g: Guest): PublicGuest {
-    return { id: g.id, name: g.name, color: g.color, balance: g.balance, spent: g.spent, earned: g.earned, online: g.sockets > 0 };
+    return { id: g.id, name: g.name, color: g.color, avatar: g.avatar?.url, balance: g.balance, spent: g.spent, earned: g.earned, online: g.sockets > 0 };
   }
 
   adminGuest(g: Guest): AdminGuest {

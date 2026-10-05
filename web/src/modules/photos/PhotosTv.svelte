@@ -47,7 +47,7 @@
             {#if p.caption}<p class="caption">{p.caption}</p>{/if}
             {#if showNames('photoNames')}
               <div class="by">
-                <Avatar name={p.guest.name} color={p.guest.color} size="1.9rem" />
+                <Avatar name={p.guest.name} color={p.guest.color} id={p.guest.id} size="1.9rem" />
                 <span>{p.guest.name}</span>
               </div>
             {/if}

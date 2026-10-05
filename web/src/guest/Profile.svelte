@@ -1,12 +1,20 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Eye, EyeOff } from '@lucide/svelte';
+  import { Camera, Eye, EyeOff, Sparkles, Trash2 } from '@lucide/svelte';
+  import { ask } from '$lib/dialog.svelte.ts';
+  import { avatarFlow } from './avatar.svelte.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
 
   let name = $state(hb.me?.name ?? '');
   const changed = $derived(name.trim() !== hb.me?.name);
+
+  async function removePicture() {
+    if (await ask({ title: 'Remove your picture?', message: 'Your initials are shown instead.', confirm: 'Remove', danger: true })) {
+      attempt(() => rpc('core', 'removeAvatar'), 'Picture removed');
+    }
+  }
 
   let pin = $state('');
   let showPin = $state(false);
@@ -38,11 +46,23 @@
 {#if hb.me}
   <div class="profile">
     <div class="card who">
-      <Avatar name={hb.me.name} color={hb.me.color} size="4rem" />
-      <div>
-        <h2>{hb.me.name}</h2>
-        {#if hb.core?.economyEnabled}
-          <p class="dim stats">Earned <Money amount={hb.me.earned} /> &middot; Spent <Money amount={hb.me.spent} /></p>
+      <div class="who-top">
+        <Avatar name={hb.me.name} color={hb.me.color} src={hb.me.avatar} size="5rem" />
+        <div>
+          <h2>{hb.me.name}</h2>
+          {#if hb.core?.economyEnabled}
+            <p class="dim stats">Earned <Money amount={hb.me.earned} /> &middot; Spent <Money amount={hb.me.spent} /></p>
+          {/if}
+        </div>
+      </div>
+      <!-- Same buttons row with or without a picture, so nothing moves -->
+      <div class="pic-actions">
+        {#if hb.me.avatar}
+          <button class="btn small" onclick={() => (avatarFlow.mode = 'edit')}><Sparkles size={16} /> Effects</button>
+          <button class="btn small" onclick={() => (avatarFlow.mode = 'new')}><Camera size={16} /> Retake</button>
+          <button class="btn small danger" onclick={removePicture}><Trash2 size={16} /> Remove</button>
+        {:else}
+          <button class="btn small primary" onclick={() => (avatarFlow.mode = 'new')}><Camera size={16} /> Take a selfie</button>
         {/if}
       </div>
     </div>
@@ -105,10 +125,19 @@
     gap: 1rem;
   }
   .who {
+    display: grid;
+    gap: 1rem;
+    padding: 1.2rem;
+  }
+  .who-top {
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 1.2rem;
+  }
+  .pic-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
   .who h2 {
     font-size: 1.5rem;

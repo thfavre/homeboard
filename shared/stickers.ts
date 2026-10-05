@@ -27,7 +27,7 @@ export interface ActiveSticker {
   /** Catalog sticker, or null for a text sticker */
   sticker: StickerDef | null;
   text?: string;
-  guest: { name: string; color: string };
+  guest: { id?: string; name: string; color: string };
   until: number;
 }
 

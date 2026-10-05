@@ -1,6 +1,8 @@
 // Types shared between the server and the web clients.
 // Money amounts are always integers in hundredths of the currency unit (1.5 => 150).
 
+import type { AvatarParams } from './avatar.ts';
+
 export type Role = 'guest' | 'tv' | 'admin';
 
 export interface Currency {
@@ -37,6 +39,8 @@ export interface PublicGuest {
   id: string;
   name: string;
   color: string;
+  /** Selfie avatar URL, when the guest made one */
+  avatar?: string;
   balance: number;
   spent: number;
   earned: number;
@@ -59,6 +63,9 @@ export interface Me {
   hasPin: boolean;
   /** Only sent to the guest themselves. Null when unknown (set before PINs were readable). */
   pin: string | null;
+  avatar?: string;
+  /** How the avatar was made, to edit it again */
+  avatarParams?: AvatarParams;
 }
 
 export interface ActivityItem {
@@ -66,7 +73,7 @@ export interface ActivityItem {
   at: number;
   module: string;
   text: string;
-  guest?: { name: string; color: string };
+  guest?: { id: string; name: string; color: string };
   amount?: number;
 }
 
@@ -104,6 +111,8 @@ export interface CoreState {
   leaderboardMode: LeaderboardMode;
   leaderboard: PublicGuest[];
   privacy: PrivacySettings;
+  /** Avatar URL of every guest who has one, by guest id */
+  avatars: Record<string, string>;
   guestsOnline: number;
   takeover: string | null;
   activity: ActivityItem[];

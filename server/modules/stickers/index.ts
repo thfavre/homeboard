@@ -76,7 +76,7 @@ export default defineModule<StickerSettings>({
         id: uid(6),
         sticker,
         text,
-        guest: { name: guest.name, color: guest.color },
+        guest: { id: guest.id, name: guest.name, color: guest.color },
         until: Date.now() + s.durationSec * 1000,
       };
       active = [...active, item];

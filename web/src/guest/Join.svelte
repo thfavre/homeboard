@@ -47,6 +47,7 @@
     try {
       const r = await join({ code: code.trim(), name, pin });
       if (r.returning) toast({ text: `Welcome back, ${r.me.name}`, kind: 'success' });
+      else hb.offerAvatar = true;
       // Do not keep an old code in the address bar for the next visit
       if (codeFromLink) history.replaceState(null, '', location.pathname);
     } catch (err) {

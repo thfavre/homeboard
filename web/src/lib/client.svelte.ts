@@ -49,6 +49,8 @@ export const hb = $state({
   me: null as Me | null,
   visitor: null as VisitorState | null,
   needJoin: false,
+  /** Just joined: offer to take a selfie */
+  offerAvatar: false,
   codeRequired: true,
   kickedReason: '',
   activity: [] as ActivityItem[],
@@ -212,6 +214,27 @@ export async function upload<T = unknown>(module: string, path: string, body: Bl
 
 /** Whether the TV may show who did something (privacy settings from the host) */
 export const showNames = (key: 'photoNames' | 'stickerNames' | 'songNames' | 'effectNames') => hb.core?.privacy?.[key] ?? true;
+
+/** POST JSON to a module endpoint as the current guest */
+export async function postJson<T = unknown>(module: string, path: string, body: unknown): Promise<T> {
+  const token = storageGet(STORAGE.guestToken);
+  const res = await fetch(`/api/m/${module}/${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(token ? { 'x-guest-token': token } : {}) },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? 'Something went wrong');
+  return data as T;
+}
+
+/** GET a file from a module endpoint as the current guest */
+export async function getBlob(module: string, path: string): Promise<Blob> {
+  const token = storageGet(STORAGE.guestToken);
+  const res = await fetch(`/api/m/${module}/${path}`, { headers: token ? { 'x-guest-token': token } : {} });
+  if (!res.ok) throw new Error('Could not load it');
+  return res.blob();
+}
 
 /** Shortcuts */
 export const enabled = (id: string) => !!hb.core?.features.find((f) => f.id === id)?.enabled;

@@ -107,7 +107,7 @@ export default defineModule<PhotoSettings>({
           file,
           url: ctx.mediaUrl(file),
           caption,
-          guest: { name: guest.name, color: guest.color },
+          guest: { id: guest.id, name: guest.name, color: guest.color },
           guestId: guest.id,
           at: Date.now(),
           paid: charge.amount,
