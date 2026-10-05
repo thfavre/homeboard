@@ -14,7 +14,14 @@ log.info('hub', `TV:    http://localhost:${PORT}/tv`);
 log.info('hub', `Admin: http://localhost:${PORT}/admin  (password: ${hub.core.adminPassword})`);
 
 if (hub.core.tunnel && process.env.HB_TUNNEL !== '0') void hub.tunnel.start(hub.tunnelTarget);
-if (process.argv.includes('--kiosk')) openTvKiosk(`http://localhost:${PORT}/tv`);
+// A TV window left open from a previous run reconnects within a few seconds:
+// only open a new one if none came back, so there are never two TVs playing sounds
+if (process.argv.includes('--kiosk')) {
+  setTimeout(() => {
+    if (hub.tvCount > 0) log.info('kiosk', 'A TV window is already open, not opening another one');
+    else openTvKiosk(`http://localhost:${PORT}/tv`);
+  }, 4000);
+}
 
 let stopping = false;
 const shutdown = async () => {

@@ -165,7 +165,7 @@
                 color={current.guest.color}
                 id={current.guest.id}
                 src={current.guest.avatar}
-                size="4.2rem"
+                size="7rem"
               />
             {/if}
 
@@ -179,7 +179,7 @@
                 color={current.guest.color}
                 id={current.guest.id}
                 src={current.guest.avatar}
-                size="4.2rem"
+                size="7rem"
               />
             {/if}
           </div>
@@ -197,7 +197,7 @@
     top: 50%;
     transform: translateY(-50%);
     z-index: 47;
-    padding: 1.5rem 0;
+    padding: 0.35rem 0;
     background: color-mix(in srgb, var(--bg) 82%, transparent);
     backdrop-filter: blur(28px);
     -webkit-backdrop-filter: blur(28px);
@@ -242,7 +242,7 @@
 
   .marquee-text {
     font-family: var(--font-display);
-    font-size: 2.8rem;
+    font-size: 3.8rem;
     font-weight: 700;
     letter-spacing: -0.01em;
     color: var(--text);

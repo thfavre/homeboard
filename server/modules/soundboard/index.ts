@@ -48,7 +48,7 @@ export default defineModule<SoundboardSettings>({
       const event: PlayEvent = { id: uid(6), sound, volume: ctx.settings.get().volume, by };
       // Lets other modules (Spotify) lower the music until the TV reports the end
       ctx.bus.emit('soundboard:play', { id: event.id });
-      ctx.emit('tv', 'play', event);
+      ctx.emit('tv-audio', 'play', event);
     };
 
     ctx.onTv('ended', (args) => {

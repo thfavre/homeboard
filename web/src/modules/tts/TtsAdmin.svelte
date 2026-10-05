@@ -99,7 +99,7 @@
     </label>
 
     <label class="field">
-      <span>Pause between announcements (seconds)</span>
+      <span>Pause between two shoutouts (seconds)</span>
       <input
         class="input"
         type="number"

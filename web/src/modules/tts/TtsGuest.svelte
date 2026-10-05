@@ -1,7 +1,7 @@
 <script lang="ts">
   import { EyeOff, Megaphone, Volume2 } from '@lucide/svelte';
   import type { TtsState } from '$shared/tts.ts';
-  import { hb, rpc, attempt, price, serverNow } from '$lib/client.svelte.ts';
+  import { hb, rpc, attempt, price, toast } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
 
@@ -10,14 +10,6 @@
   let text = $state('');
   let anonymous = $state(false);
   let busy = $state(false);
-  let now = $state(serverNow());
-
-  $effect(() => {
-    const t = setInterval(() => (now = serverNow()), 250);
-    return () => clearInterval(t);
-  });
-
-  const wait = $derived(mod ? Math.max(0, Math.ceil((mod.cooldownUntil - now) / 1000)) : 0);
 
   const flatCost = $derived(price('tts.message'));
   const charCost = $derived(price('tts.char'));
@@ -40,10 +32,11 @@
     const trimmed = text.trim();
     if (!trimmed) return;
     busy = true;
-    const ok = await attempt(() => rpc('tts', 'say', { text: trimmed, anonymous }), 'Announced on TV!');
+    const r = await attempt(() => rpc<{ position: number }>('tts', 'say', { text: trimmed, anonymous }));
     busy = false;
-    if (ok) {
+    if (r) {
       text = '';
+      toast({ text: r.position ? `In line: ${r.position} before yours` : 'On the TV now', kind: 'success' });
     }
   }
 </script>
@@ -118,11 +111,11 @@
         </div>
 
         <!-- Always the same line, so the button never moves -->
-        <p class="status" class:warn={wait > 0} class:danger={wait <= 0 && !canAfford && cleanLen > 0}>
-          {#if wait > 0}
-            Another announcement is playing. Ready in <strong>{wait}s</strong>
-          {:else if !canAfford && cleanLen > 0}
+        <p class="status" class:danger={!canAfford && cleanLen > 0}>
+          {#if !canAfford && cleanLen > 0}
             Not enough {hb.core?.currency.name ?? 'coins'}: <Money amount={totalCost - (hb.me?.balance ?? 0)} /> missing
+          {:else if mod.waiting}
+            {mod.waiting} {mod.waiting === 1 ? 'shoutout' : 'shoutouts'} before yours
           {:else}
             Ready to announce
           {/if}
@@ -132,7 +125,7 @@
         <button
           type="submit"
           class="btn primary block submit-btn"
-          disabled={busy || wait > 0 || !cleanLen || !canAfford}
+          disabled={busy || !cleanLen || !canAfford}
         >
           <Megaphone size={19} />
           <span>
@@ -300,9 +293,6 @@
     text-align: center;
     font-size: 0.85rem;
     color: var(--text-faint);
-  }
-  .status.warn {
-    color: var(--warning);
   }
   .status.danger {
     color: var(--danger);

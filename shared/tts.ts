@@ -13,8 +13,10 @@ export interface TtsState {
   flatPrice: number;
   pricePerChar: number;
   maxLength: number;
+  /** Pause between two shoutouts, in seconds */
   cooldownSec: number;
-  cooldownUntil: number;
+  /** Shoutouts playing or waiting in line */
+  waiting: number;
 }
 
 export interface TtsEvent {

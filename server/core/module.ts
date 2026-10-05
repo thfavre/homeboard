@@ -5,7 +5,11 @@ import type { EarnDef, Economy, PriceDef } from './economy.ts';
 import type { Guest, Session } from './session.ts';
 import type { Hub } from './hub.ts';
 
-export type Target = Role | 'all' | { guest: string };
+/**
+ * 'tv-audio' reaches only one TV window (the most recently opened), so a sound or a
+ * shoutout is never played twice when two TV windows are open.
+ */
+export type Target = Role | 'all' | 'tv-audio' | { guest: string };
 
 export type GuestHandler = (args: any, guest: Guest) => unknown | Promise<unknown>;
 export interface Caller {

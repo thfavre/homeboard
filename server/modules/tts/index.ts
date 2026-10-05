@@ -1,7 +1,28 @@
 import type { TtsEvent, TtsSettings, TtsState } from '../../../shared/tts.ts';
+import type { Charge } from '../../core/economy.ts';
 import { defineModule } from '../../core/module.ts';
 import { HbError, clamp, num, uid } from '../../core/util.ts';
 
+interface Queued {
+  event: TtsEvent;
+  /** What the guest paid, refunded if the shoutout is dropped */
+  charge: Charge | null;
+}
+
+const MAX_QUEUE = 20;
+/** Extra time the TV gets to report the end before the next shoutout starts anyway */
+const FAILSAFE_MS = 5000;
+
+const cleanText = (raw: unknown) =>
+  String(raw ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * Shoutouts: guests type a message, the TV reads it out loud and scrolls it.
+ * Messages wait in a queue and play one after the other, with the configured pause between them.
+ */
 export default defineModule<TtsSettings>({
   id: 'tts',
   name: 'Text-to-Speech',
@@ -14,9 +35,11 @@ export default defineModule<TtsSettings>({
   },
 
   setup(ctx) {
-    let cooldownUntil = 0;
+    let queue: Queued[] = [];
+    let playing: Queued | null = null;
+    let failsafe: NodeJS.Timeout | null = null;
+    let pauseTimer: NodeJS.Timeout | null = null;
 
-    // Register prices in economy
     // Only one of the two prices is used, depending on the pricing mode
     ctx.price({ key: 'tts.message', label: 'Shoutout', default: 200, active: () => ctx.settings.get().pricingMode === 'flat' });
     ctx.price({ key: 'tts.char', label: 'Shoutout', unit: 'character', default: 5, active: () => ctx.settings.get().pricingMode === 'per_char' });
@@ -30,132 +53,123 @@ export default defineModule<TtsSettings>({
         pricePerChar: ctx.economy.price('tts.char'),
         maxLength: s.maxLength,
         cooldownSec: s.cooldownSec,
-        cooldownUntil,
+        waiting: queue.length + (playing ? 1 : 0),
       };
     });
 
-    const triggerTts = (
-      text: string,
-      guest?: { id: string; name: string; color: string; avatar?: string },
-      anonymous = false,
-    ) => {
-      const s = ctx.settings.get();
-      // Estimated duration: ~12 chars per second + reading & scroll margin
-      const durationMs = Math.max(5000, Math.round((text.length / 12) * 1000) + 2000);
-      const event: TtsEvent = {
-        id: uid(6),
-        text,
-        volume: s.volume,
-        by: anonymous ? 'Anonymous' : (guest?.name ?? 'Guest'),
-        anonymous,
-        guest: anonymous ? undefined : guest,
-        durationMs,
-      };
+    // ------------------------------------------------------------ queue
 
-      // Lower Spotify background music while TTS is active
-      ctx.bus.emit('soundboard:play', { id: event.id });
-      ctx.emit('tv', 'tts', event);
+    const makeEvent = (text: string, guest: TtsEvent['guest'], anonymous: boolean): TtsEvent => ({
+      id: uid(6),
+      text,
+      volume: ctx.settings.get().volume,
+      by: anonymous ? 'Anonymous' : (guest?.name ?? 'Guest'),
+      anonymous,
+      guest: anonymous ? undefined : guest,
+      // About 12 characters per second, plus time to read and scroll
+      durationMs: Math.max(5000, Math.round((text.length / 12) * 1000) + 2000),
+    });
 
-      // Failsafe in case TV is closed or loses connection while playing
-      setTimeout(() => {
-        ctx.bus.emit('soundboard:ended', { id: event.id });
-      }, durationMs + 3000);
-
-      return event;
+    /** Play the next shoutout, unless one is playing or the pause is running */
+    const pump = () => {
+      if (playing || pauseTimer || !queue.length) return;
+      playing = queue.shift()!;
+      const id = playing.event.id;
+      // Lower the music while it speaks (same as soundboard sounds)
+      ctx.bus.emit('soundboard:play', { id });
+      ctx.emit('tv-audio', 'tts', playing.event);
+      // If no TV reports the end (closed, disconnected), move on anyway
+      failsafe = setTimeout(() => finished(id), playing.event.durationMs + FAILSAFE_MS);
+      ctx.publish();
     };
 
-    ctx.onTv('ended', (args) => {
-      ctx.bus.emit('soundboard:ended', { id: String(args.id) });
-    });
+    const finished = (id: string) => {
+      if (playing?.event.id !== id) return;
+      if (failsafe) clearTimeout(failsafe);
+      failsafe = null;
+      playing = null;
+      ctx.bus.emit('soundboard:ended', { id });
+      // The pause between two announcements
+      pauseTimer = setTimeout(() => {
+        pauseTimer = null;
+        pump();
+      }, ctx.settings.get().cooldownSec * 1000);
+      ctx.publish();
+    };
+
+    /** Returns how many shoutouts play before this one (0: right away) */
+    const enqueue = (item: Queued): number => {
+      const ahead = queue.length + (playing ? 1 : 0);
+      queue.push(item);
+      pump();
+      ctx.publish();
+      return ahead;
+    };
+
+    /** Drop everything waiting (refunded) and stop listening for the current one */
+    const clear = () => {
+      for (const q of queue) if (q.charge) ctx.economy.refund(q.charge);
+      queue = [];
+      if (playing) finished(playing.event.id);
+      if (pauseTimer) clearTimeout(pauseTimer);
+      pauseTimer = null;
+      ctx.publish();
+    };
+
+    ctx.onTv('ended', (args) => finished(String(args.id)));
+
+    // ------------------------------------------------------------ guests
 
     ctx.onGuest('say', (args, guest) => {
       const s = ctx.settings.get();
-      const rawText = String(args?.text ?? '')
-        .replace(/[\u0000-\u001f\u007f]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (!rawText) throw new HbError('Write something to say');
-      if (rawText.length > s.maxLength) {
-        throw new HbError(`Message too long (max ${s.maxLength} characters)`);
-      }
+      const text = cleanText(args?.text);
+      if (!text) throw new HbError('Write something to say');
+      if (text.length > s.maxLength) throw new HbError(`Message too long (max ${s.maxLength} characters)`);
+      if (queue.length >= MAX_QUEUE) throw new HbError('Lots of shoutouts are waiting. Try again in a minute.');
 
-      const wait = Math.ceil((cooldownUntil - Date.now()) / 1000);
-      if (wait > 0) {
-        throw new HbError(`Another message was just played. Try again in ${wait}s.`);
-      }
-
-      const snippet = rawText.length > 30 ? `${rawText.slice(0, 30)}...` : rawText;
       const anonymous = !!args?.anonymous;
-
-      // Charge guest according to current pricingMode
+      const snippet = text.length > 30 ? `${text.slice(0, 30)}...` : text;
       const charge =
         s.pricingMode === 'per_char'
-          ? ctx.economy.charge(guest, 'tts.char', rawText.length, `TTS (${rawText.length} chars)`)
-          : ctx.economy.charge(guest, 'tts.message', 1, `TTS: "${snippet}"`);
+          ? ctx.economy.charge(guest, 'tts.char', text.length, `Shoutout (${text.length} characters)`)
+          : ctx.economy.charge(guest, 'tts.message', 1, `Shoutout: "${snippet}"`);
 
-      try {
-        const event = triggerTts(
-          rawText,
-          {
-            id: guest.id,
-            name: guest.name,
-            color: guest.color,
-            avatar: guest.avatar?.url,
-          },
-          anonymous,
-        );
-        // Next message only after this one is over (plus the configured pause)
-        cooldownUntil = Date.now() + event.durationMs + s.cooldownSec * 1000;
-
-        // The feed never repeats the message; {name} becomes "Someone" when the host hides names
-        if (anonymous) ctx.activity('Someone spoke');
-        else ctx.activity('{name} spoke', { guest });
-        ctx.publish();
-        return true;
-      } catch (err) {
-        ctx.economy.refund(charge);
-        throw err;
-      }
+      const position = enqueue({
+        event: makeEvent(text, { id: guest.id, name: guest.name, color: guest.color, avatar: guest.avatar?.url }, anonymous),
+        charge,
+      });
+      // The feed never repeats the message; {name} becomes "Someone" when the host hides names
+      if (anonymous) ctx.activity('Someone spoke');
+      else ctx.activity('{name} spoke', { guest });
+      return { position };
     });
 
+    // ------------------------------------------------------------ host
+
     ctx.onAdmin('test', (args) => {
-      const text = String(args?.text ?? 'Testing text to speech on the TV! Homeboard party sound is working great.')
-        .replace(/[\u0000-\u001f\u007f]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      const anonymous = !!args?.anonymous;
-      triggerTts(
-        text,
-        {
-          id: 'host',
-          name: 'Host',
-          color: '#ffaa00',
-        },
-        anonymous,
-      );
+      const text = cleanText(args?.text) || 'Testing text to speech on the TV.';
+      enqueue({ event: makeEvent(text, { id: 'host', name: 'Host', color: '#ffaa00' }, !!args?.anonymous), charge: null });
       return true;
     });
 
+    ctx.onAdmin('clear', () => clear());
+
     ctx.onAdmin('setOptions', (args) => {
-      const s = ctx.settings.get();
       const patch: Partial<TtsSettings> = {};
-      if (args.volume !== undefined) {
-        patch.volume = clamp(num(args.volume, 0.8), 0, 1);
-      }
-      if (args.pricingMode === 'flat' || args.pricingMode === 'per_char') {
-        patch.pricingMode = args.pricingMode;
-      }
-      if (args.maxLength !== undefined) {
-        patch.maxLength = clamp(Math.round(num(args.maxLength, 150)), 10, 1000);
-      }
-      if (args.cooldownSec !== undefined) {
-        patch.cooldownSec = clamp(Math.round(num(args.cooldownSec, 4)), 0, 120);
-      }
+      if (args.volume !== undefined) patch.volume = clamp(num(args.volume, 0.8), 0, 1);
+      if (args.pricingMode === 'flat' || args.pricingMode === 'per_char') patch.pricingMode = args.pricingMode;
+      if (args.maxLength !== undefined) patch.maxLength = clamp(Math.round(num(args.maxLength, 150)), 10, 1000);
+      if (args.cooldownSec !== undefined) patch.cooldownSec = clamp(Math.round(num(args.cooldownSec, 4)), 0, 120);
       ctx.settings.update(patch);
-      // The active price changed: refresh the price lists of the host screens
+      // The active price may have changed: refresh the price lists of the host screens
       ctx.hub.publish('core');
       ctx.publish();
       return true;
     });
+
+    ctx.onToggle((on) => {
+      if (!on) clear();
+    });
+    ctx.onSessionReset(() => clear());
   },
 });

@@ -114,6 +114,8 @@ export class Hub {
   private visitorHandlers = new Map<string, VisitorHandler>();
   private guestSockets = new Map<string, Set<Socket>>();
   private activitySeq = 0;
+  /** Open TV windows, oldest first */
+  private tvSockets: Socket[] = [];
   private shutdownHooks: { id: string; fn: () => void | Promise<void> }[] = [];
 
   constructor(readonly port: number) {
@@ -313,7 +315,8 @@ export class Hub {
 
   private emitEvent(to: Target, module: string, name: string, data: unknown): void {
     const msg = { module, name, data };
-    if (to === 'all') this.io.to(['role:guest', 'role:tv', 'role:admin']).emit('event', msg);
+    if (to === 'tv-audio') this.tvSockets.at(-1)?.emit('event', msg);
+    else if (to === 'all') this.io.to(['role:guest', 'role:tv', 'role:admin']).emit('event', msg);
     else if (typeof to === 'string') this.io.to(`role:${to}`).emit('event', msg);
     else this.io.to(`guest:${to.guest}`).emit('event', msg);
   }
@@ -406,6 +409,7 @@ export class Hub {
       else this.makeVisitor(socket);
     } else {
       socket.join(`role:${role}`);
+      if (role === 'tv') this.tvSockets.push(socket);
       this.sendSnapshot(socket, role);
     }
 
@@ -430,6 +434,7 @@ export class Hub {
 
     socket.on('disconnect', () => {
       clearInterval(resetCalls);
+      this.tvSockets = this.tvSockets.filter((s) => s !== socket);
       this.unbindGuest(socket);
     });
   }
@@ -533,6 +538,11 @@ export class Hub {
       all.find((i) => i && i.family === 'IPv4' && !i.internal)?.address ??
       'localhost';
     return `http://${ip}:${this.port}`;
+  }
+
+  /** Number of TV windows currently connected */
+  get tvCount(): number {
+    return this.tvSockets.length;
   }
 
   get baseUrl(): string {
