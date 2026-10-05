@@ -44,7 +44,7 @@ export interface PublicGuest {
 }
 
 export interface AdminGuest extends PublicGuest {
-  rejoinKey: string;
+  hasPin: boolean;
   joinedAt: number;
   lastSeen: number;
 }
@@ -56,7 +56,7 @@ export interface Me {
   balance: number;
   earned: number;
   spent: number;
-  rejoinKey: string;
+  hasPin: boolean;
 }
 
 export interface ActivityItem {
@@ -148,4 +148,6 @@ export interface ToastMessage {
 export interface JoinResult {
   token: string;
   me: Me;
+  /** True when an existing account was opened with its PIN */
+  returning: boolean;
 }

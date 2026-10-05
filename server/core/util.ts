@@ -7,13 +7,6 @@ export const uid = (bytes = 12) => randomBytes(bytes).toString('base64url');
 
 export const sessionCode = () => String(randomInt(0, 10000)).padStart(4, '0');
 
-export function rejoinKey(): string {
-  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ';
-  let out = '';
-  for (let i = 0; i < 4; i++) out += alphabet[randomInt(0, alphabet.length)];
-  return out;
-}
-
 /** Calls fn at most once per `ms`, always running the trailing call */
 export function throttle(fn: () => void, ms: number): () => void {
   let timer: NodeJS.Timeout | null = null;

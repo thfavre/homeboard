@@ -48,19 +48,19 @@ Environment variables: `PORT` (default 4300), `HB_TUNNEL=0` (no public tunnel),
 | **Soundboard** | Play a sound on the TV speakers | Volume, cooldown, upload sounds |
 | **Quiz** | Answer on the phone | Start (category, difficulty, length), skip, stop |
 
-Core features: session code, rejoin on another phone, live activity feed, leaderboard,
+Core features: session code, name + PIN to rejoin from another phone, live activity feed, leaderboard,
 money rain, gifts, kick, themes, and a full economy editor (currency name, every price and reward).
 
 ### How guests are recognized
 
-Each phone stores a private token when it joins. Closing the page or the browser is fine: the
-same phone comes back to the same account. On another phone or browser, the guest joins with
-the same name and their **rejoin key** (4 letters shown in their profile, and in the host Guests
-list).
+When joining, each guest picks a name and a 4-digit PIN (they are told not to reuse a real PIN).
+The phone then remembers them: closing the page or the browser is fine. On another phone or
+browser, they enter the **same name and PIN** to get their account back. PINs are stored hashed,
+and 5 wrong PINs lock that name for 5 minutes. Guests can change their PIN in their profile, and
+the host can set a new one from the Guests screen if someone forgets it.
 
-Because the free tunnel URL changes when the server restarts, phones only remember their
-account until the next restart. Balances are kept on the server, so guests can rejoin
-with their name and key.
+Because the free tunnel URL changes when the server restarts, phones forget the account after a
+restart. Balances are kept on the server, so guests just join again with their name and PIN.
 
 ### Spotify setup (one time)
 

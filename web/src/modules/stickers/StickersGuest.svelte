@@ -41,7 +41,7 @@
     </div>
 
     {#if mod.allowText}
-      <form
+      <form novalidate
         class="card write"
         onsubmit={(e) => {
           e.preventDefault();

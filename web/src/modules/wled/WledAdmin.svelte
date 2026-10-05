@@ -81,7 +81,7 @@
       </div>
     {/each}
     {#if devForm}
-      <form
+      <form novalidate
         class="form"
         onsubmit={(e) => {
           e.preventDefault();
@@ -122,7 +122,7 @@
     </div>
 
     {#if editing && catalog}
-      <form
+      <form novalidate
         class="form editor"
         onsubmit={(e) => {
           e.preventDefault();

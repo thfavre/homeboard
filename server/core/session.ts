@@ -1,15 +1,17 @@
+import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import type { AdminGuest, LedgerEntry, Me, PublicGuest } from '../../shared/protocol.ts';
 import { JsonFile } from './jsonFile.ts';
 import { DATA_DIR } from './paths.ts';
-import { HbError, cleanName, rejoinKey, sessionCode, uid } from './util.ts';
+import { HbError, cleanName, sessionCode, uid } from './util.ts';
 
 export interface Guest {
   id: string;
   name: string;
   token: string;
-  rejoinKey: string;
+  /** Hashed 4-digit PIN chosen by the guest, to log back in from another phone */
+  pin?: { salt: string; hash: string };
   color: string;
   balance: number;
   earned: number;
@@ -37,6 +39,25 @@ const GUEST_COLORS = [
 ];
 
 const LEDGER_SIZE = 500;
+const PIN_PATTERN = /^\d{4}$/;
+const MAX_PIN_FAILURES = 5;
+const PIN_LOCK_MS = 5 * 60_000;
+
+function hashPin(pin: string, salt = randomBytes(12).toString('base64')): { salt: string; hash: string } {
+  return { salt, hash: scryptSync(pin, salt, 32).toString('base64') };
+}
+
+function checkPin(pin: string, stored: { salt: string; hash: string }): boolean {
+  const a = Buffer.from(hashPin(pin, stored.salt).hash, 'base64');
+  const b = Buffer.from(stored.hash, 'base64');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export function validPin(pin: unknown): string {
+  const p = String(pin ?? '').trim();
+  if (!PIN_PATTERN.test(p)) throw new HbError('The PIN must be 4 digits');
+  return p;
+}
 
 function freshSession(): SessionData {
   return { id: uid(6), code: sessionCode(), startedAt: Date.now(), guests: [], ledger: [], ledgerSeq: 0 };
@@ -51,10 +72,15 @@ function freshSession(): SessionData {
 export class Session extends EventEmitter {
   private file = new JsonFile<SessionData>(join(DATA_DIR, 'session.json'), freshSession());
   guests = new Map<string, Guest>();
+  /** Wrong PIN attempts per guest, to slow down guessing */
+  private pinFailures = new Map<string, { count: number; until: number }>();
 
   constructor() {
     super();
-    for (const g of this.file.data.guests ?? []) this.guests.set(g.id, { ...g, sockets: 0 });
+    for (const g of this.file.data.guests ?? []) {
+      const { rejoinKey: _old, ...guest } = g as Guest & { rejoinKey?: string };
+      this.guests.set(g.id, { ...guest, sockets: 0 });
+    }
     this.file.save();
   }
 
@@ -92,16 +118,22 @@ export class Session extends EventEmitter {
     for (const g of this.guests.values()) if (g.name.toLowerCase() === n) return g;
   }
 
-  join(rawName: unknown): Guest {
+  /**
+   * New name: creates the account with this PIN.
+   * Existing name: logs back into it when the PIN matches.
+   */
+  join(rawName: unknown, rawPin: unknown): { guest: Guest; returning: boolean } {
     const name = cleanName(rawName);
     if (name.length < 2) throw new HbError('Please enter a name (at least 2 characters)');
-    if (this.byName(name)) throw new HbError('NAME_TAKEN');
+    const pin = validPin(rawPin);
+    const existing = this.byName(name);
+    if (existing) return { guest: this.login(existing, pin), returning: true };
     const now = Date.now();
     const guest: Guest = {
       id: uid(6),
       name,
       token: uid(18),
-      rejoinKey: rejoinKey(),
+      pin: hashPin(pin),
       color: GUEST_COLORS[this.guests.size % GUEST_COLORS.length],
       balance: 0,
       earned: 0,
@@ -114,18 +146,32 @@ export class Session extends EventEmitter {
     this.guests.set(guest.id, guest);
     this.changed(guest);
     this.emit('guests-changed');
+    return { guest, returning: false };
+  }
+
+  private login(guest: Guest, pin: string): Guest {
+    const fails = this.pinFailures.get(guest.id);
+    if (fails && fails.count >= MAX_PIN_FAILURES && Date.now() < fails.until) {
+      throw new HbError('Too many wrong PINs for this name. Wait 5 minutes or ask the host.');
+    }
+    if (!guest.pin || !checkPin(pin, guest.pin)) {
+      const count = (fails && Date.now() < fails.until ? fails.count : 0) + 1;
+      this.pinFailures.set(guest.id, { count, until: Date.now() + PIN_LOCK_MS });
+      throw new HbError(
+        guest.pin
+          ? `${guest.name} is already here. If it is you, check your PIN. Otherwise pick another name.`
+          : `${guest.name} is already here. Pick another name, or ask the host to set a PIN for you.`,
+      );
+    }
+    this.pinFailures.delete(guest.id);
+    // The token stays the same, so the first phone stays logged in too
     return guest;
   }
 
-  /** Reclaim an existing account from another device using its rejoin key */
-  rejoin(rawName: unknown, key: unknown): Guest {
-    const guest = this.byName(cleanName(rawName));
-    if (!guest || String(key ?? '').trim().toUpperCase() !== guest.rejoinKey) {
-      throw new HbError('Name and rejoin key do not match');
-    }
-    guest.token = uid(18);
+  setPin(guest: Guest, rawPin: unknown): void {
+    guest.pin = hashPin(validPin(rawPin));
+    this.pinFailures.delete(guest.id);
     this.changed(guest);
-    return guest;
   }
 
   rename(guest: Guest, rawName: unknown): void {
@@ -186,7 +232,7 @@ export class Session extends EventEmitter {
   }
 
   me(g: Guest): Me {
-    return { id: g.id, name: g.name, color: g.color, balance: g.balance, earned: g.earned, spent: g.spent, rejoinKey: g.rejoinKey };
+    return { id: g.id, name: g.name, color: g.color, balance: g.balance, earned: g.earned, spent: g.spent, hasPin: !!g.pin };
   }
 
   publicGuest(g: Guest): PublicGuest {
@@ -194,6 +240,6 @@ export class Session extends EventEmitter {
   }
 
   adminGuest(g: Guest): AdminGuest {
-    return { ...this.publicGuest(g), rejoinKey: g.rejoinKey, joinedAt: g.joinedAt, lastSeen: g.lastSeen };
+    return { ...this.publicGuest(g), hasPin: !!g.pin, joinedAt: g.joinedAt, lastSeen: g.lastSeen };
   }
 }

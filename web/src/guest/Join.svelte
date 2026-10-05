@@ -1,13 +1,14 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { hb, join, lastName } from '$lib/client.svelte.ts';
+  import { Eye, EyeOff, TriangleAlert } from '@lucide/svelte';
+  import { hb, join, lastName, toast } from '$lib/client.svelte.ts';
 
   const params = new URLSearchParams(location.search);
   const codeFromLink = !!params.get('c');
   let code = $state(params.get('c') ?? '');
   let name = $state(lastName());
-  let key = $state('');
-  let nameTaken = $state(false);
+  let pin = $state('');
+  let showPin = $state(false);
   let busy = $state(false);
   let error = $state('');
   // A code from the QR link is shown read-only until it turns out to be wrong
@@ -28,19 +29,29 @@
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
-    busy = true;
     error = '';
+    if (hb.codeRequired && !/^\d{4}$/.test(code.trim())) {
+      error = 'Enter the 4-digit session code shown on the TV.';
+      if (!editCode) changeCode();
+      return;
+    }
+    if (name.trim().length < 2) {
+      error = 'Enter your name (at least 2 characters).';
+      return;
+    }
+    if (!/^\d{4}$/.test(pin)) {
+      error = 'Choose a PIN of exactly 4 digits.';
+      return;
+    }
+    busy = true;
     try {
-      await join({ code, name, key: nameTaken && key ? key : undefined });
+      const r = await join({ code: code.trim(), name, pin });
+      if (r.returning) toast({ text: `Welcome back, ${r.me.name}`, kind: 'success' });
       // Do not keep an old code in the address bar for the next visit
       if (codeFromLink) history.replaceState(null, '', location.pathname);
     } catch (err) {
-      const msg = (err as Error).message;
-      if (msg === 'NAME_TAKEN') nameTaken = true;
-      else {
-        error = msg;
-        if (/session code/i.test(msg)) changeCode();
-      }
+      error = (err as Error).message;
+      if (/session code/i.test(error)) changeCode();
     } finally {
       busy = false;
     }
@@ -56,7 +67,7 @@
 
   {#if hb.kickedReason}<p class="notice card">{hb.kickedReason}</p>{/if}
 
-  <form class="card form" onsubmit={submit}>
+  <form novalidate class="card form" onsubmit={submit}>
     {#if hb.codeRequired}
       {#if editCode}
         <label class="field">
@@ -91,28 +102,42 @@
         placeholder="How should we call you?"
         autocomplete="nickname"
         required
-        oninput={() => (nameTaken = false)}
+        oninput={() => (error = '')}
       />
     </label>
 
-    {#if nameTaken}
-      <div class="taken">
-        <p><strong>{name}</strong> is already at the party.</p>
-        <p class="dim">
-          If that is you on another phone, enter your rejoin key (in your profile on the other phone, or ask the host). Otherwise pick
-          another name.
-        </p>
-        <label class="field">
-          <span>Rejoin key</span>
-          <input class="input mono key" bind:value={key} maxlength="4" placeholder="ABCD" autocomplete="off" />
-        </label>
+    <label class="field">
+      <span>Choose a 4-digit PIN</span>
+      <div class="pin-row">
+        <input
+          class="input mono pin"
+          type={showPin ? 'text' : 'password'}
+          bind:value={pin}
+          oninput={() => (pin = pin.replace(/\D/g, '').slice(0, 4))}
+          inputmode="numeric"
+          maxlength="4"
+          placeholder="0000"
+          autocomplete="off"
+          required
+        />
+        <button type="button" class="btn ghost eye" onclick={() => (showPin = !showPin)} aria-label={showPin ? 'Hide PIN' : 'Show PIN'}>
+          {#if showPin}<EyeOff size={18} />{:else}<Eye size={18} />{/if}
+        </button>
       </div>
-    {/if}
+    </label>
+
+    <div class="help">
+      <p>To come back from another phone or browser, enter the <strong>same name</strong> and this <strong>PIN</strong>.</p>
+      <p class="warn">
+        <TriangleAlert size={16} />
+        <span>Make up a new one. Do not use a PIN you use elsewhere (bank card, phone lock).</span>
+      </p>
+    </div>
 
     {#if error}<p class="error">{error}</p>{/if}
 
     <button class="btn primary block" disabled={busy || !hb.connected}>
-      {#if !hb.connected}Connecting...{:else if nameTaken && key}Rejoin{:else}Join{/if}
+      {#if !hb.connected}Connecting...{:else}Join{/if}
     </button>
   </form>
 </div>
@@ -165,17 +190,44 @@
     font-size: 1.1rem;
     letter-spacing: 0.25em;
   }
-  .key {
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
+  .pin-row {
+    position: relative;
   }
-  .taken {
+  .pin {
+    font-size: 1.3rem;
+    letter-spacing: 0.5em;
+    padding-right: 3rem;
+  }
+  .eye {
+    position: absolute;
+    right: 0.2rem;
+    top: 50%;
+    translate: 0 -50%;
+    padding: 0;
+    width: 2.6rem;
+    min-height: 2.4rem;
+    color: var(--text-dim);
+  }
+  .help {
     display: grid;
-    gap: 0.6rem;
-    font-size: 0.9rem;
-    padding: 0.9rem;
+    gap: 0.5rem;
+    padding: 0.8rem 0.9rem;
     border-radius: var(--radius-sm);
     background: var(--surface-2);
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+  .help strong {
+    color: var(--text);
+  }
+  .warn {
+    display: flex;
+    gap: 0.5rem;
+    color: var(--warning);
+  }
+  .warn :global(svg) {
+    flex: none;
+    margin-top: 0.1rem;
   }
   .error {
     color: var(--danger);

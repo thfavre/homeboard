@@ -6,6 +6,14 @@
   let name = $state(hb.me?.name ?? '');
   const changed = $derived(name.trim() !== hb.me?.name);
 
+  let pin = $state('');
+
+  async function savePin(e: SubmitEvent) {
+    e.preventDefault();
+    const ok = await attempt(() => rpc('core', 'setPin', { pin }), 'PIN changed');
+    if (ok) pin = '';
+  }
+
   async function save(e: SubmitEvent) {
     e.preventDefault();
     await attempt(() => rpc('core', 'rename', { name }), 'Name updated');
@@ -24,7 +32,7 @@
       </div>
     </div>
 
-    <form class="card box" onsubmit={save}>
+    <form novalidate class="card box" onsubmit={save}>
       <label class="field">
         <span>Display name</span>
         <input class="input" bind:value={name} maxlength="20" />
@@ -32,14 +40,28 @@
       <button class="btn primary" disabled={!changed}>Save</button>
     </form>
 
-    <div class="card box">
-      <span class="eyebrow">Rejoin key</span>
-      <div class="key mono">{hb.me.rejoinKey}</div>
+    <form novalidate class="card box" onsubmit={savePin}>
+      <span class="eyebrow">Your PIN</span>
       <p class="dim small">
-        Closing this page is fine: this phone remembers you. If you switch phone or browser, join with the same name and this key to get
-        your account back.
+        Closing this page is fine: this phone remembers you. On another phone or browser, join with the name <strong>{hb.me.name}</strong>
+        and your PIN.
       </p>
-    </div>
+      <label class="field">
+        <span>New PIN (4 digits)</span>
+        <input
+          class="input mono pin"
+          type="password"
+          bind:value={pin}
+          oninput={() => (pin = pin.replace(/\D/g, '').slice(0, 4))}
+          inputmode="numeric"
+          maxlength="4"
+          placeholder="0000"
+          autocomplete="off"
+        />
+      </label>
+      <p class="warn small">Do not use a PIN you use elsewhere (bank card, phone lock).</p>
+      <button class="btn" disabled={pin.length !== 4}>Change PIN</button>
+    </form>
   </div>
 {/if}
 
@@ -66,10 +88,12 @@
     display: grid;
     gap: 0.8rem;
   }
-  .key {
-    font-size: 2.2rem;
-    font-weight: 700;
-    letter-spacing: 0.3em;
+  .pin {
+    font-size: 1.3rem;
+    letter-spacing: 0.5em;
+  }
+  .warn {
+    color: var(--warning);
   }
   .small {
     font-size: 0.86rem;

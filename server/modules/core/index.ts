@@ -132,19 +132,14 @@ export default defineModule({
 
     hub.onVisitor('join', (args, socket, bind): JoinResult => {
       checkCode(socket.data, args.code);
-      const guest = session.join(args.name);
-      economy.reward(guest, 'core.join');
+      const { guest, returning } = session.join(args.name, args.pin);
       bind(guest);
-      hub.bus.emit('guest-joined', guest);
-      ctx.activity(`${guest.name} joined the party`, { guest });
-      return { token: guest.token, me: session.me(guest) };
-    });
-
-    hub.onVisitor('rejoin', (args, socket, bind): JoinResult => {
-      checkCode(socket.data, args.code);
-      const guest = session.rejoin(args.name, args.key);
-      bind(guest);
-      return { token: guest.token, me: session.me(guest) };
+      if (!returning) {
+        economy.reward(guest, 'core.join');
+        hub.bus.emit('guest-joined', guest);
+        ctx.activity(`${guest.name} joined the party`, { guest });
+      }
+      return { token: guest.token, me: session.me(guest), returning };
     });
 
     // ------------------------------------------------------------ guest actions
@@ -153,6 +148,11 @@ export default defineModule({
       const before = guest.name;
       session.rename(guest, args.name);
       ctx.activity(`${before} is now ${guest.name}`, { guest });
+    });
+
+    ctx.onGuest('setPin', (args, guest) => {
+      session.setPin(guest, args.pin);
+      return true;
     });
 
     ctx.onGuest('history', (_args, guest) => session.ledger.filter((e) => e.guestId === guest.id).slice(-40).reverse());
@@ -221,6 +221,12 @@ export default defineModule({
     });
 
     ctx.onAdmin('renameGuest', (args) => session.rename(session.byId(args.guestId), args.name));
+
+    /** For a guest who forgot their PIN */
+    ctx.onAdmin('setGuestPin', (args) => {
+      session.setPin(session.byId(args.guestId), args.pin);
+      return true;
+    });
 
     ctx.onAdmin('kick', (args) => {
       const guest: Guest = session.byId(args.guestId);

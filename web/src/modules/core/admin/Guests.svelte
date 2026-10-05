@@ -13,6 +13,13 @@
   let amount = $state(1000);
   let reason = $state('');
   let newName = $state('');
+  let newPin = $state('');
+
+  /** For a guest who forgot their PIN */
+  async function setPin(guestId: string) {
+    const ok = await attempt(() => rpc('core', 'setGuestPin', { guestId, pin: newPin }), 'PIN set');
+    if (ok) newPin = '';
+  }
 
   function toggle(id: string, name: string) {
     open = open === id ? null : id;
@@ -37,7 +44,7 @@
           <span class="name truncate">{g.name}</span>
           <span class="faint meta">
             {#if g.online}<span class="online">Online</span>{:else}Seen {ago(g.lastSeen)}{/if}
-            &middot; key <span class="mono">{g.rejoinKey}</span>
+            &middot; {g.hasPin ? 'PIN set' : 'no PIN'}
           </span>
         </div>
         <Money amount={g.balance} />
@@ -60,6 +67,19 @@
             <button class="btn small" onclick={() => attempt(() => rpc('core', 'renameGuest', { guestId: g.id, name: newName }), 'Renamed')}>
               Rename
             </button>
+          </div>
+          <div class="row wrap">
+            <input
+              class="input mono"
+              type="password"
+              bind:value={newPin}
+              oninput={() => (newPin = newPin.replace(/\D/g, '').slice(0, 4))}
+              inputmode="numeric"
+              maxlength="4"
+              placeholder="New PIN"
+              autocomplete="off"
+            />
+            <button class="btn small" disabled={newPin.length !== 4} onclick={() => setPin(g.id)}>Set PIN</button>
           </div>
           <div><button class="btn danger small" onclick={() => kick(g.id, g.name)}><UserX size={16} /> Remove from session</button></div>
         </div>

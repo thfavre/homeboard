@@ -65,7 +65,7 @@
       </TwoStepButton>
     {/if}
 
-    <form
+    <form novalidate
       class="search"
       onsubmit={(e) => {
         e.preventDefault();

@@ -159,12 +159,14 @@ export async function attempt<T>(fn: () => Promise<T>, success?: string): Promis
 
 // ------------------------------------------------------------------ guest session
 
-export async function join(args: { code: string; name: string; key?: string }): Promise<void> {
-  const result = await rpc<JoinResult>('core', args.key ? 'rejoin' : 'join', args);
+/** Join with a new name, or log back in with an existing name and its PIN */
+export async function join(args: { code: string; name: string; pin: string }): Promise<JoinResult> {
+  const result = await rpc<JoinResult>('core', 'join', args);
   storageSet(STORAGE.guestToken, result.token);
   storageSet(STORAGE.lastName, args.name);
   if (socket) socket.auth = authFor('guest');
   hb.kickedReason = '';
+  return result;
 }
 
 export const lastName = () => storageGet(STORAGE.lastName) ?? '';

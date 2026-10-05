@@ -21,7 +21,7 @@
 </script>
 
 <div class="login">
-  <form class="card" onsubmit={submit}>
+  <form novalidate class="card" onsubmit={submit}>
     <span class="icon"><LockKeyhole size={24} /></span>
     <h1>Host access</h1>
     <p class="dim">
