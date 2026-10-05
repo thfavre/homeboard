@@ -81,7 +81,7 @@ export default defineModule<StickerSettings>({
       };
       active = [...active, item];
       timers.set(item.id, setTimeout(() => remove(item.id), s.durationSec * 1000));
-      ctx.activity(text ? `${guest.name} wrote "${text}" on the TV` : `${guest.name} dropped a ${sticker!.name.toLowerCase()} sticker`, { guest });
+      ctx.activity(text ? `{name} wrote "${text}" on the TV` : `{name} dropped a ${sticker!.name.toLowerCase()} sticker`, { guest });
       ctx.publish();
       return true;
     });

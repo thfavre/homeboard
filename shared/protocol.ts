@@ -79,7 +79,19 @@ export interface LedgerEntry {
   reason: string;
 }
 
-export type LeaderboardMode = 'balance' | 'spent' | 'earned';
+export type LeaderboardMode = 'balance' | 'spent' | 'earned' | 'off';
+
+/** What the TV (and guest phones) may show about who did what. The host always sees everything. */
+export interface PrivacySettings {
+  /** Activity feed at the bottom of the TV */
+  activity: 'names' | 'anonymous' | 'off';
+  photoNames: boolean;
+  stickerNames: boolean;
+  /** "Requested by" on songs */
+  songNames: boolean;
+  /** Who started a light effect or a sound */
+  effectNames: boolean;
+}
 
 export interface CoreState {
   appName: string;
@@ -91,6 +103,7 @@ export interface CoreState {
   earn: EarnRuleInfo[];
   leaderboardMode: LeaderboardMode;
   leaderboard: PublicGuest[];
+  privacy: PrivacySettings;
   guestsOnline: number;
   takeover: string | null;
   activity: ActivityItem[];

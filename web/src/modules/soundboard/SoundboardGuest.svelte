@@ -28,7 +28,7 @@
       Sounds play through the TV speakers.
       {#if hb.core?.economyEnabled && cost}Each one costs <Money amount={cost} />.{/if}
     </p>
-    {#if wait}<p class="faint wait">Next sound available in {wait}s</p>{/if}
+    <p class="faint wait">{wait ? `Next sound available in ${wait}s` : 'Ready, pick a sound'}</p>
 
     <div class="grid">
       {#each mod.sounds as s, i (s.id)}
@@ -54,6 +54,7 @@
   .wait {
     font-size: 0.85rem;
     margin-top: -0.4rem;
+    min-height: 1.3em;
   }
   .grid {
     display: grid;

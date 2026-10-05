@@ -321,7 +321,7 @@ export default defineModule<SpotifySettings>({
         throw err;
       }
       requests.set(uri, { name: guest.name, color: guest.color });
-      ctx.activity(`${guest.name} queued ${track.title} by ${track.artists}`, { guest });
+      ctx.activity(`{name} queued ${track.title} by ${track.artists}`, { guest });
       await pollQueue().catch(() => {});
       ctx.publish();
       return true;
@@ -338,7 +338,7 @@ export default defineModule<SpotifySettings>({
         ctx.economy.refund(charge);
         throw err;
       }
-      ctx.activity(`${guest.name} skipped ${title}`, { guest });
+      ctx.activity(`{name} skipped ${title}`, { guest });
       setTimeout(poll, 600);
       return true;
     });

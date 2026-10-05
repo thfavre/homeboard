@@ -22,6 +22,10 @@
   } = $props();
 
   let armed = $state(false);
+  // Disarm when the button gets disabled
+  $effect(() => {
+    if (disabled) armed = false;
+  });
   let busy = $state(false);
   let timer: ReturnType<typeof setTimeout> | null = null;
 

@@ -60,7 +60,6 @@
         onchange={(v) => attempt(() => rpc('canvas', 'setOptions', { clearOnNewSession: v }))}
       />
     </div>
-    <p class="faint small">The price per pixel is in Economy.</p>
   </Section>
 {/if}
 

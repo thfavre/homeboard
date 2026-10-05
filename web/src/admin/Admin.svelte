@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, Coins, KeyRound, Menu, Palette, ToggleRight, Users, X } from '@lucide/svelte';
+  import { Activity, Coins, EyeOff, KeyRound, Menu, Palette, ToggleRight, Users, X } from '@lucide/svelte';
   import type { Component } from 'svelte';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Toasts from '$lib/ui/Toasts.svelte';
@@ -8,12 +8,14 @@
   import { applyTheme } from '../themes/index.ts';
   import { clientModules } from '../modules/index.ts';
   import Login from './Login.svelte';
+  import ModulePrices from './ModulePrices.svelte';
   import Live from '../modules/core/admin/Live.svelte';
   import Guests from '../modules/core/admin/Guests.svelte';
   import Features from '../modules/core/admin/Features.svelte';
   import Economy from '../modules/core/admin/Economy.svelte';
   import Appearance from '../modules/core/admin/Appearance.svelte';
   import Access from '../modules/core/admin/Access.svelte';
+  import Privacy from '../modules/core/admin/Privacy.svelte';
 
   interface Section {
     id: string;
@@ -34,6 +36,7 @@
       .sort((a, b) => a.admin!.order - b.admin!.order)
       .map((m) => ({ id: m.id, title: m.admin!.title, icon: m.admin!.icon, component: m.admin!.component, module: m.id })),
     { id: 'appearance', title: 'Appearance', icon: Palette, component: Appearance },
+    { id: 'privacy', title: 'Privacy', icon: EyeOff, component: Privacy },
     { id: 'access', title: 'Access', icon: KeyRound, component: Access },
   ];
 
@@ -89,7 +92,7 @@
         <span class="spacer"></span>
         {#if !hb.connected}<span class="pill danger">Offline</span>{/if}
         {#if feature}
-          <span class="dim state">{feature.enabled ? 'On' : 'Off'}</span>
+          <span class="dim state">{feature.enabled ? 'On' : 'Off, hidden from guests'}</span>
           <Toggle
             checked={feature.enabled}
             label="Enable {feature.name}"
@@ -97,11 +100,11 @@
           />
         {/if}
       </header>
-      {#if feature && !feature.enabled}
-        <p class="off card">{feature.name} is off. Guests do not see it. You can still configure it here.</p>
-      {/if}
       <main>
-        {#key section.id}<section.component />{/key}
+        {#key section.id}
+          {#if section.module}<ModulePrices module={section.module} />{/if}
+          <section.component />
+        {/key}
       </main>
     </div>
   </div>
@@ -209,12 +212,6 @@
   }
   .state {
     font-size: 0.85rem;
-  }
-  .off {
-    padding: 0.8rem 1rem;
-    margin-bottom: 1rem;
-    font-size: 0.9rem;
-    color: var(--warning);
   }
   main {
     display: grid;

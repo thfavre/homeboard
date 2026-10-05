@@ -1,14 +1,16 @@
 <script lang="ts">
   import { ask } from '$lib/dialog.svelte.ts';
-  import { ChevronDown, Minus, Plus, UserX } from '@lucide/svelte';
-  import { slide } from 'svelte/transition';
+  import { ChevronRight, Minus, Plus, UserX } from '@lucide/svelte';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
   import AmountInput from '$lib/ui/AmountInput.svelte';
+  import Sheet from '$lib/ui/Sheet.svelte';
   import { ago } from '$lib/time.ts';
 
-  const guests = $derived(hb.core?.admin?.guests ?? []);
+  // In joining order, so a new guest is added at the end and the list does not jump
+  const guests = $derived([...(hb.core?.admin?.guests ?? [])].sort((a, b) => a.joinedAt - b.joinedAt));
+  const openGuest = $derived(guests.find((g) => g.id === open));
   let open = $state<string | null>(null);
   let amount = $state(1000);
   let reason = $state('');
@@ -22,7 +24,7 @@
   }
 
   function toggle(id: string, name: string) {
-    open = open === id ? null : id;
+    open = id;
     newName = name;
     reason = '';
   }
@@ -35,24 +37,10 @@
   }
 </script>
 
-<div class="card list">
-  {#each guests as g (g.id)}
-    <div class="guest">
-      <button class="head" onclick={() => toggle(g.id, g.name)}>
-        <Avatar name={g.name} color={g.color} />
-        <div class="who">
-          <span class="name truncate">{g.name}</span>
-          <span class="faint meta">
-            {#if g.online}<span class="online">Online</span>{:else}Seen {ago(g.lastSeen)}{/if}
-            &middot; {g.hasPin ? 'PIN set' : 'no PIN'}
-          </span>
-        </div>
-        <Money amount={g.balance} />
-        <ChevronDown size={18} class={open === g.id ? 'chev up' : 'chev'} />
-      </button>
-
-      {#if open === g.id}
-        <div class="details" transition:slide={{ duration: 180 }}>
+{#if openGuest}
+  {@const g = openGuest}
+  <Sheet title={g.name} onclose={() => (open = null)}>
+    <div class="details">
           <div class="stats faint">Earned <Money amount={g.earned} /> &middot; Spent <Money amount={g.spent} /></div>
           <div class="row wrap">
             <AmountInput value={amount} oncommit={(v) => (amount = v)} />
@@ -82,8 +70,27 @@
             <button class="btn small" disabled={newPin.length !== 4} onclick={() => setPin(g.id)}>Set PIN</button>
           </div>
           <div><button class="btn danger small" onclick={() => kick(g.id, g.name)}><UserX size={16} /> Remove from session</button></div>
+    </div>
+  </Sheet>
+{/if}
+
+<div class="card list">
+  {#each guests as g (g.id)}
+    <div class="guest">
+      <button class="head" onclick={() => toggle(g.id, g.name)}>
+        <Avatar name={g.name} color={g.color} />
+        <div class="who">
+          <span class="name truncate">{g.name}</span>
+          <span class="faint meta">
+            {#if g.online}<span class="online">Online</span>{:else}Seen {ago(g.lastSeen)}{/if}
+            &middot; {g.hasPin ? 'PIN set' : 'no PIN'}
+          </span>
         </div>
-      {/if}
+        <Money amount={g.balance} />
+        <ChevronRight size={18} class="chev" />
+      </button>
+
+
     </div>
   {:else}
     <p class="empty">No guests yet. They join by scanning the code on the TV.</p>
@@ -128,13 +135,9 @@
     color: var(--text-faint);
     transition: transform 0.2s ease;
   }
-  .head :global(.chev.up) {
-    transform: rotate(180deg);
-  }
   .details {
     display: grid;
-    gap: 0.7rem;
-    padding: 0 1rem 1rem 4rem;
+    gap: 0.8rem;
   }
   .stats {
     font-size: 0.85rem;
@@ -149,10 +152,5 @@
   .row .input:not(.reason) {
     flex: 1;
     min-width: 8rem;
-  }
-  @media (max-width: 600px) {
-    .details {
-      padding-left: 1rem;
-    }
   }
 </style>

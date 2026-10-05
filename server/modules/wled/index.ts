@@ -216,7 +216,7 @@ export default defineModule<WledSettings>({
       const charge = ctx.economy.charge(guest, args.target === 'all' ? 'wled.all' : 'wled.one', 1, `Lights: ${job.effect.name}`);
       job.paid = charge.amount;
       const where = args.target === 'all' ? 'every light' : device(job.devices[0])?.name;
-      ctx.activity(`${guest.name} lit up ${where} with ${job.effect.name}`, { guest });
+      ctx.activity(`{name} lit up ${where} with ${job.effect.name}`, { guest });
       return enqueue(job);
     });
 

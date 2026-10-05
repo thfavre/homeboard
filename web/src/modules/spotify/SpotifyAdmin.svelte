@@ -28,22 +28,19 @@
 </script>
 
 {#if mod && a}
-  {#if a.error}<p class="card error">{a.error}</p>{/if}
-
   {#if mod.connected}
     <Section title="Playback" hint={a.device ? `Playing on ${a.device}` : 'Start playing on a device (PC, phone or speaker) so guests can add songs.'}>
       {#snippet actions()}
         <span class="pill success">{a.account}</span>
       {/snippet}
-      {#if mod.now}
-        <div class="np">
-          <Cover src={mod.now.image} size="4rem" />
-          <div class="grow">
-            <strong>{mod.now.title}</strong>
-            <p class="dim small">{mod.now.artists}</p>
-          </div>
+      <div class="np">
+        <Cover src={mod.now?.image ?? null} size="4rem" />
+        <div class="grow">
+          <strong class="truncate block">{mod.now ? mod.now.title : 'Nothing playing'}</strong>
+          <p class="dim small truncate">{mod.now ? mod.now.artists : 'Start music on a device'}</p>
+          <p class="small truncate status" class:bad={!!a.error}>{a.error ?? 'Connected'}</p>
         </div>
-      {/if}
+      </div>
       <div class="row">
         <button class="btn" aria-label="Previous" onclick={() => control('previous')}><SkipBack size={18} /></button>
         {#if mod.now?.isPlaying}
@@ -53,14 +50,14 @@
         {/if}
         <button class="btn" aria-label="Next" onclick={() => control('next')}><SkipForward size={18} /></button>
       </div>
-      {#if a.volume !== null}
-        <label class="field">
-          <span>Volume {volume.value}%</span>
+      <label class="field">
+          <span>Volume {a.volume === null ? '(not available on this device)' : `${volume.value}%`}</span>
           <input
             type="range"
             min="0"
             max="100"
             bind:value={volume.value}
+            disabled={a.volume === null}
             onpointerdown={volume.start}
             onchange={() => {
               control('volume', { volume: volume.value });
@@ -68,7 +65,6 @@
             }}
           />
         </label>
-      {/if}
     </Section>
 
     <Section title="Rules">
@@ -82,7 +78,7 @@
       <div class="line">
         <div>
           <strong>Guests can skip</strong>
-          <p class="faint small">Skipping costs money (price in Economy).</p>
+          <p class="faint small">Skipping costs money (price at the top of this page).</p>
         </div>
         <Toggle checked={mod.allowSkip} label="Guests can skip" onchange={(v) => set({ allowSkip: v })} />
       </div>
@@ -93,8 +89,7 @@
         </div>
         <Toggle checked={a.duck} label="Lower music" onchange={(v) => set({ duck: v })} />
       </div>
-      {#if a.duck}
-        <label class="field">
+      <label class="field" class:muted={!a.duck}>
           <span>Music volume during sounds: {duckPercent.value}% of normal</span>
           <input
             type="range"
@@ -102,6 +97,7 @@
             max="90"
             step="5"
             bind:value={duckPercent.value}
+            disabled={!a.duck}
             onpointerdown={duckPercent.start}
             onchange={() => {
               set({ duckPercent: duckPercent.value });
@@ -110,7 +106,6 @@
           />
           <span class="scale faint"><span>Silent</span><span>Barely lower</span></span>
         </label>
-      {/if}
     </Section>
 
     <Section title="Account">
@@ -146,10 +141,17 @@
 {/if}
 
 <style>
-  .error {
-    padding: 0.8rem 1rem;
+  .block {
+    display: block;
+  }
+  .status {
+    color: var(--success);
+  }
+  .status.bad {
     color: var(--danger);
-    font-size: 0.9rem;
+  }
+  .muted {
+    opacity: 0.45;
   }
   .np {
     display: flex;

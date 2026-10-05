@@ -6,19 +6,20 @@
 
   const TITLES = { balance: 'Richest guests', spent: 'Big spenders', earned: 'Top earners' } as const;
   const mode = $derived(hb.core?.leaderboardMode ?? 'balance');
+  const key = $derived(mode === 'off' ? 'balance' : mode);
   const rows = $derived((hb.core?.leaderboard ?? []).slice(0, 5));
 </script>
 
-{#if hb.core?.economyEnabled && rows.length}
+{#if hb.core?.economyEnabled && mode !== 'off' && rows.length}
   <div class="card board">
-    <span class="eyebrow">{TITLES[mode]}</span>
+    <span class="eyebrow">{TITLES[key]}</span>
     <ol>
       {#each rows as g, i (g.id)}
         <li animate:flip={{ duration: 500 }} class:first={i === 0}>
           <span class="rank mono">{i + 1}</span>
           <Avatar name={g.name} color={g.color} size="2rem" />
           <span class="name truncate">{g.name}</span>
-          <Money amount={g[mode]} />
+          <Money amount={g[key]} />
         </li>
       {/each}
     </ol>

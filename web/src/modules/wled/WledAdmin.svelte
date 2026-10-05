@@ -5,6 +5,7 @@
   import type { WledEffect, WledState } from '$shared/wled.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
+  import Sheet from '$lib/ui/Sheet.svelte';
   import Countdown from './Countdown.svelte';
   import { effectSwatch } from './swatch.ts';
 
@@ -41,26 +42,26 @@
 </script>
 
 {#if mod}
+  <!-- Always the same size, so the page does not move when effects start and stop -->
   <Section title="Now">
-    {#if mod.current}
-      <div class="line">
-        <span class="swatch" style:background={effectSwatch(mod.current.effect)}></span>
-        <div class="grow">
-          <strong>{mod.current.effect.name}</strong>
-          <p class="faint small">by {mod.current.guest.name} on {mod.current.devices.map(deviceName).join(', ')}</p>
-        </div>
-        <Countdown until={mod.current.until} />
+    <div class="line">
+      <span class="swatch" style:background={mod.current ? effectSwatch(mod.current.effect) : 'var(--surface-3)'}></span>
+      <div class="grow">
+        <strong class="truncate block">{mod.current ? mod.current.effect.name : 'No effect running'}</strong>
+        <p class="faint small truncate">
+          {mod.current ? `by ${mod.current.guest.name} on ${mod.current.devices.map(deviceName).join(', ')}` : 'Lights are doing their usual thing'}
+        </p>
       </div>
-      {#if mod.queue.length}<p class="dim small">{mod.queue.length} waiting</p>{/if}
-      <div class="row">
-        <button class="btn small" onclick={() => attempt(() => rpc('wled', 'skip'))}><SkipForward size={16} /> Next</button>
-        <button class="btn small danger" onclick={() => attempt(() => rpc('wled', 'stop', { refund: true }), 'Stopped, queue refunded')}>
-          <Square size={16} /> Stop all
-        </button>
-      </div>
-    {:else}
-      <p class="faint">No effect running. Lights are doing their usual thing.</p>
-    {/if}
+      {#if mod.current}<Countdown until={mod.current.until} />{/if}
+    </div>
+    <div class="row">
+      <button class="btn small" disabled={!mod.current} onclick={() => attempt(() => rpc('wled', 'skip'))}><SkipForward size={16} /> Next</button>
+      <button class="btn small danger" disabled={!mod.current} onclick={() => attempt(() => rpc('wled', 'stop', { refund: true }), 'Stopped, queue refunded')}>
+        <Square size={16} /> Stop all
+      </button>
+      <span class="spacer"></span>
+      <span class="faint small">{mod.queue.length ? `${mod.queue.length} waiting` : 'Nothing waiting'}</span>
+    </div>
   </Section>
 
   <Section title="Lights">
@@ -80,23 +81,27 @@
         </button>
       </div>
     {/each}
-    {#if devForm}
-      <form novalidate
+  </Section>
+
+  {#if devForm}
+    <Sheet title={devForm.id ? 'Edit light' : 'Add a light'} onclose={() => (devForm = null)}>
+      <form
+        novalidate
         class="form"
         onsubmit={(e) => {
           e.preventDefault();
           saveDevice();
         }}
       >
-        <input class="input" bind:value={devForm.host} placeholder="IP address, e.g. 192.168.1.50" required />
-        <input class="input" bind:value={devForm.name} placeholder="Name (read from WLED if empty)" />
+        <label class="field"><span>IP address</span><input class="input" bind:value={devForm.host} placeholder="192.168.1.50" /></label>
+        <label class="field"><span>Name</span><input class="input" bind:value={devForm.name} placeholder="Read from WLED if empty" /></label>
         <div class="row">
-          <button class="btn primary small">Save</button>
-          <button type="button" class="btn ghost small" onclick={() => (devForm = null)}>Cancel</button>
+          <button class="btn primary">Save</button>
+          <button type="button" class="btn ghost" onclick={() => (devForm = null)}>Cancel</button>
         </div>
       </form>
-    {/if}
-  </Section>
+    </Sheet>
+  {/if}
 
   <Section title="Effects guests can pick">
     {#snippet actions()}
@@ -121,9 +126,13 @@
       </button>
     </div>
 
-    {#if editing && catalog}
-      <form novalidate
-        class="form editor"
+  </Section>
+
+  {#if editing && catalog}
+    <Sheet title={editing.id ? `Edit ${editing.name}` : 'New effect'} onclose={() => (editing = null)}>
+      <form
+        novalidate
+        class="form"
         onsubmit={(e) => {
           e.preventDefault();
           saveEffect();
@@ -154,21 +163,17 @@
             {#each editing.colors as _, i}
               <input type="color" bind:value={editing.colors[i]} />
             {/each}
-            {#if editing.colors.length < 3}
-              <button type="button" class="btn ghost small" onclick={() => editing && (editing.colors = [...editing.colors, '#ff3366'])}>Add color</button>
-            {/if}
-            {#if editing.colors.length}
-              <button type="button" class="btn ghost small" onclick={() => editing && (editing.colors = editing.colors.slice(0, -1))}>Remove</button>
-            {/if}
+            <button type="button" class="btn ghost small" disabled={editing.colors.length >= 3} onclick={() => editing && (editing.colors = [...editing.colors, '#ff3366'])}>Add color</button>
+            <button type="button" class="btn ghost small" disabled={!editing.colors.length} onclick={() => editing && (editing.colors = editing.colors.slice(0, -1))}>Remove</button>
           </div>
         </div>
         <div class="row">
-          <button class="btn primary small">Save effect</button>
-          <button type="button" class="btn ghost small" onclick={() => (editing = null)}>Cancel</button>
+          <button class="btn primary">Save effect</button>
+          <button type="button" class="btn ghost" onclick={() => (editing = null)}>Cancel</button>
         </div>
       </form>
-    {/if}
-  </Section>
+    </Sheet>
+  {/if}
 
   <Section title="Settings">
     <div class="grid2">
@@ -221,10 +226,10 @@
   }
   .form {
     display: grid;
-    gap: 0.7rem;
-    padding: 1rem;
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
+    gap: 0.8rem;
+  }
+  .block {
+    display: block;
   }
   .grid2 {
     display: grid;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import type { SpotifyState } from '$shared/spotify.ts';
-  import { hb } from '$lib/client.svelte.ts';
+  import { hb, showNames } from '$lib/client.svelte.ts';
   import { clock } from '$lib/time.ts';
   import Cover from './Cover.svelte';
   import { progressOf, ticker } from './progress.svelte.ts';
@@ -25,7 +25,7 @@
         <span class="eyebrow">{now.isPlaying ? 'Now playing' : 'Paused'}</span>
         <p class="title">{now.title}</p>
         <p class="artist truncate">{now.artists}</p>
-        {#if now.requestedBy}
+        {#if now.requestedBy && showNames('songNames')}
           <span class="by" style:--c={now.requestedBy.color}>Requested by {now.requestedBy.name}</span>
         {/if}
         <div class="bar"><span style:width="{(pos / Math.max(1, now.durationMs)) * 100}%"></span></div>

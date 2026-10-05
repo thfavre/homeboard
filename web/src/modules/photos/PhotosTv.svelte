@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade, fly } from 'svelte/transition';
   import type { Photo, PhotosState } from '$shared/photos.ts';
-  import { hb } from '$lib/client.svelte.ts';
+  import { hb, showNames } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
 
   const mod = $derived(hb.modules.photos as PhotosState | undefined);
@@ -45,10 +45,12 @@
           <img src={p.url} alt={p.caption || 'Photo from ' + p.guest.name} />
           <figcaption>
             {#if p.caption}<p class="caption">{p.caption}</p>{/if}
-            <div class="by">
-              <Avatar name={p.guest.name} color={p.guest.color} size="1.9rem" />
-              <span>{p.guest.name}</span>
-            </div>
+            {#if showNames('photoNames')}
+              <div class="by">
+                <Avatar name={p.guest.name} color={p.guest.color} size="1.9rem" />
+                <span>{p.guest.name}</span>
+              </div>
+            {/if}
           </figcaption>
         </figure>
       {/each}

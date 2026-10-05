@@ -172,7 +172,7 @@ export default defineModule<QuizSettings>({
       }
       if (ranked[0]) {
         const winner = ctx.session.guests.get(ranked[0].id);
-        ctx.activity(`${ranked[0].name} won the quiz`, { guest: winner });
+        ctx.activity(winner ? '{name} won the quiz' : `${ranked[0].name} won the quiz`, { guest: winner, sensitive: !winner });
       }
       schedule(FINAL_MS, close);
     };

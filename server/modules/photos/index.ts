@@ -84,7 +84,7 @@ export default defineModule<PhotoSettings>({
         upcoming: queue.slice(0, 3).map(pub),
         displaySec: s.displaySec,
         maxQueue: s.maxQueue,
-        ...(role === 'admin' ? { queue: queue.map(pub), gallery: store.data.gallery.map(pub).reverse() } : {}),
+        ...(role === 'admin' ? { queue: queue.map(pub), gallery: store.data.gallery.map(pub) } : {}),
       };
     });
 
@@ -115,7 +115,7 @@ export default defineModule<PhotoSettings>({
         store.data.gallery.push(photo);
         store.save();
         enqueue(photo);
-        ctx.activity(`${guest.name} shared a photo`, { guest });
+        ctx.activity('{name} shared a photo', { guest });
         res.json({ id, position: queue.length });
       } catch (err) {
         if (err instanceof HbError) res.status(400).json({ error: err.message });

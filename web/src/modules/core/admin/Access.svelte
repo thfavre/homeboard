@@ -5,6 +5,8 @@
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import Qr from '$lib/ui/Qr.svelte';
+  import Secret from '$lib/ui/Secret.svelte';
+  import Sheet from '$lib/ui/Sheet.svelte';
 
   const admin = $derived(hb.core!.admin!);
   let pair = $state<{ url: string; qrSvg: string } | null>(null);
@@ -26,18 +28,22 @@
 </script>
 
 <Section title="Control from your phone" hint="Scan this with your phone to open the host screen there. Anyone who scans it becomes a host, so keep it private.">
-  {#if pair}
-    <div class="pair">
-      <Qr svg={pair.qrSvg} size="11rem" />
-      <p class="faint mono url">{pair.url.replace(/#.*/, '')}</p>
-    </div>
-  {/if}
   <div>
     <button class="btn primary" onclick={async () => (pair = (await attempt(() => rpc('core', 'pair'))) ?? null)}>
       <Smartphone size={18} /> Show pairing code
     </button>
   </div>
 </Section>
+
+{#if pair}
+  <Sheet title="Scan with your phone" onclose={() => (pair = null)}>
+    <div class="pair">
+      <Qr svg={pair.qrSvg} size="14rem" />
+      <p class="faint mono url">{pair.url.replace(/#.*/, '')}</p>
+      <p class="dim small">Anyone who scans this becomes a host, so keep it private.</p>
+    </div>
+  </Sheet>
+{/if}
 
 <Section title="Public link" hint="A free Cloudflare tunnel lets guests join from any network. The address changes when the server restarts.">
   <div class="line">
@@ -80,7 +86,7 @@
   <Section title="Admin password" hint="Visible only on the PC.">
     <div class="line">
       <span class="dim">Current</span>
-      <span class="mono">{password}</span>
+      <Secret value={password} label="password" />
     </div>
     <div class="row">
       <input class="input" bind:value={newPassword} placeholder="New password" />
@@ -105,8 +111,9 @@
 <style>
   .pair {
     display: grid;
-    justify-items: start;
-    gap: 0.6rem;
+    justify-items: center;
+    gap: 0.8rem;
+    text-align: center;
   }
   .url {
     font-size: 0.75rem;

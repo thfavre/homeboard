@@ -2,7 +2,7 @@
   import { Volume2, VolumeX } from '@lucide/svelte';
   import { fly } from 'svelte/transition';
   import type { PlayEvent } from '$shared/soundboard.ts';
-  import { onEvent, rpc } from '$lib/client.svelte.ts';
+  import { onEvent, rpc, showNames } from '$lib/client.svelte.ts';
   import { audioBlocked, playSound, unlockAudio } from './player.ts';
 
   let blocked = $state(audioBlocked());
@@ -41,7 +41,7 @@
   {#key playing.key}
     <div class="playing card" transition:fly={{ x: 40, duration: 300 }}>
       <span class="bars"><i></i><i></i><i></i><i></i></span>
-      <span><strong>{playing.sound.name}</strong> <span class="dim">{playing.by}</span></span>
+      <span><strong>{playing.sound.name}</strong>{#if showNames('effectNames')}<span class="dim">{` ${playing.by}`}</span>{/if}</span>
       <Volume2 size={18} />
     </div>
   {/key}

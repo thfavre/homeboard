@@ -52,9 +52,11 @@
       </aside>
     </main>
 
-    <footer>
-      {#each footer as w}<w.component />{/each}
-    </footer>
+    {#if footer.length}
+      <footer>
+        {#each footer as w}<w.component />{/each}
+      </footer>
+    {/if}
 
     {#each overlays as w}<w.component />{/each}
 

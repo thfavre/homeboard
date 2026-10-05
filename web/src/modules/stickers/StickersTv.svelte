@@ -1,7 +1,7 @@
 <script lang="ts">
   import { scale } from 'svelte/transition';
   import type { StickersState } from '$shared/stickers.ts';
-  import { hb } from '$lib/client.svelte.ts';
+  import { hb, showNames } from '$lib/client.svelte.ts';
   import StickerView from './StickerView.svelte';
 
   const active = $derived((hb.modules.stickers as StickersState | undefined)?.active ?? []);
@@ -69,7 +69,7 @@
     <div class="body" data-sticker={a.id}>
       <div class="inner" transition:scale={{ duration: 400, start: 0.3 }}>
         <div class:art={!!a.sticker}><StickerView sticker={a.sticker} text={a.text} /></div>
-        <span class="by" style:--c={a.guest.color}>{a.guest.name}</span>
+        {#if showNames('stickerNames')}<span class="by" style:--c={a.guest.color}>{a.guest.name}</span>{/if}
       </div>
     </div>
   {/each}

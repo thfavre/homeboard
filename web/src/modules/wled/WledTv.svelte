@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
   import type { WledState } from '$shared/wled.ts';
-  import { hb } from '$lib/client.svelte.ts';
+  import { hb, showNames } from '$lib/client.svelte.ts';
   import Countdown from './Countdown.svelte';
   import { effectSwatch } from './swatch.ts';
 
@@ -12,7 +12,7 @@
   {#key current.id}
     <div class="chip card" transition:fly={{ y: -30, duration: 400 }}>
       <span class="swatch" style:background={effectSwatch(current.effect)}></span>
-      <span><strong>{current.effect.name}</strong> <span class="dim">by {current.guest.name}</span></span>
+      <span><strong>{current.effect.name}</strong>{#if showNames('effectNames')}<span class="dim">{` by ${current.guest.name}`}</span>{/if}</span>
       <span class="time dim"><Countdown until={current.until} /></span>
     </div>
   {/key}

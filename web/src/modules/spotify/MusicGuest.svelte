@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Plus, Search, SkipForward } from '@lucide/svelte';
   import type { SpotifyState, Track } from '$shared/spotify.ts';
-  import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
+  import { hb, rpc, attempt, price, showNames } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { clock } from '$lib/time.ts';
@@ -57,8 +57,8 @@
   <div class="music">
     <NowPlayingMini />
 
-    {#if mod.allowSkip && mod.now}
-      <TwoStepButton class="block" onconfirm={skip}>
+    {#if mod.allowSkip}
+      <TwoStepButton class="block" disabled={!mod.now} onconfirm={skip}>
         <SkipForward size={18} /> Skip this song
         {#if economy && skipCost}<span class="sep">&middot;</span><Money amount={skipCost} />{/if}
         {#snippet armed()}<SkipForward size={18} /> Tap again to skip{/snippet}
@@ -112,7 +112,7 @@
               <span class="title truncate">{t.title}</span>
               <span class="artist truncate">{t.artists}</span>
             </div>
-            {#if t.requestedBy}<span class="faint by">{t.requestedBy.name}</span>{/if}
+            {#if t.requestedBy && showNames('songNames')}<span class="faint by">{t.requestedBy.name}</span>{/if}
           </div>
         {/each}
       </div>

@@ -53,7 +53,7 @@ export default defineModule<CanvasSettings>({
     const painted = new Map<string, { guest: Guest; count: number }>();
     setInterval(() => {
       for (const { guest, count } of painted.values()) {
-        ctx.activity(`${guest.name} painted ${count} ${count === 1 ? 'pixel' : 'pixels'}`, { guest });
+        ctx.activity(`{name} painted ${count} ${count === 1 ? 'pixel' : 'pixels'}`, { guest });
       }
       painted.clear();
     }, ACTIVITY_MS);

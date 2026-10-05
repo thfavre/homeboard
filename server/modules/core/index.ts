@@ -75,7 +75,7 @@ export default defineModule({
       return { url, code: session.code, qrSvg: qrCache.svg, codeRequired: core().requireCode };
     };
 
-    const sortKey: Record<LeaderboardMode, (g: PublicGuest) => number> = {
+    const sortKey: Record<Exclude<LeaderboardMode, 'off'>, (g: PublicGuest) => number> = {
       balance: (g) => g.balance,
       spent: (g) => g.spent,
       earned: (g) => g.earned,
@@ -94,10 +94,11 @@ export default defineModule({
         prices: economy.priceList((id) => hub.isEnabled(id)),
         earn: economy.earnList((id) => hub.isEnabled(id)),
         leaderboardMode: c.leaderboardMode,
-        leaderboard: guests.sort((a, b) => sortKey[c.leaderboardMode](b) - sortKey[c.leaderboardMode](a)).slice(0, 8),
+        leaderboard: c.leaderboardMode === 'off' ? [] : guests.sort((a, b) => sortKey[c.leaderboardMode as 'balance'](b) - sortKey[c.leaderboardMode as 'balance'](a)).slice(0, 8),
         guestsOnline: guests.filter((g) => g.online).length,
         takeover: hub.takeover,
-        activity: hub.activity.slice(0, 15),
+        privacy: c.privacy,
+        activity: hub.activityFor(role),
       };
       if (role === 'tv' || role === 'admin') state.join = joinInfo();
       if (role === 'admin') {
@@ -137,7 +138,7 @@ export default defineModule({
       if (!returning) {
         economy.reward(guest, 'core.join');
         hub.bus.emit('guest-joined', guest);
-        ctx.activity(`${guest.name} joined the party`, { guest });
+        ctx.activity('{name} joined the party', { guest });
       }
       return { token: guest.token, me: session.me(guest), returning };
     });
@@ -147,7 +148,7 @@ export default defineModule({
     ctx.onGuest('rename', (args, guest) => {
       const before = guest.name;
       session.rename(guest, args.name);
-      ctx.activity(`${before} is now ${guest.name}`, { guest });
+      ctx.activity(`${before} is now {name}`, { guest, sensitive: true });
     });
 
     ctx.onGuest('setPin', (args, guest) => {
@@ -176,8 +177,16 @@ export default defineModule({
       }
       if (args.economyEnabled !== undefined) patch.economyEnabled = !!args.economyEnabled;
       if (args.passiveMinutes !== undefined) patch.passiveMinutes = clamp(num(args.passiveMinutes, 5), 0, 120);
-      if (args.leaderboardMode !== undefined && ['balance', 'spent', 'earned'].includes(args.leaderboardMode)) {
+      if (args.leaderboardMode !== undefined && ['balance', 'spent', 'earned', 'off'].includes(args.leaderboardMode)) {
         patch.leaderboardMode = args.leaderboardMode;
+      }
+      if (args.privacy !== undefined) {
+        const p = { ...c.privacy };
+        if (['names', 'anonymous', 'off'].includes(args.privacy.activity)) p.activity = args.privacy.activity;
+        for (const k of ['photoNames', 'stickerNames', 'songNames', 'effectNames'] as const) {
+          if (args.privacy[k] !== undefined) p[k] = !!args.privacy[k];
+        }
+        patch.privacy = p;
       }
       if (args.qrIncludesCode !== undefined) patch.qrIncludesCode = !!args.qrIncludesCode;
       if (args.requireCode !== undefined) patch.requireCode = !!args.requireCode;

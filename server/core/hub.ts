@@ -9,6 +9,7 @@ import type {
   ActivityItem,
   Currency,
   LeaderboardMode,
+  PrivacySettings,
   Role,
   RpcRequest,
   RpcResponse,
@@ -33,6 +34,7 @@ export interface CoreSettings {
   earn: Record<string, number>;
   passiveMinutes: number;
   leaderboardMode: LeaderboardMode;
+  privacy: PrivacySettings;
   qrIncludesCode: boolean;
   requireCode: boolean;
   adminPassword: string;
@@ -50,6 +52,7 @@ const CORE_DEFAULTS: CoreSettings = {
   earn: {},
   passiveMinutes: 5,
   leaderboardMode: 'balance',
+  privacy: { activity: 'names', photoNames: true, stickerNames: true, songNames: true, effectNames: true },
   qrIncludesCode: true,
   requireCode: true,
   adminPassword: '',
@@ -70,6 +73,17 @@ interface LoadedModule {
 }
 
 const ROLES: Role[] = ['guest', 'tv', 'admin'];
+
+/** An activity line as stored: `{name}` is filled in for each audience */
+interface StoredActivity {
+  id: number;
+  at: number;
+  module: string;
+  template: string;
+  guest?: { name: string; color: string };
+  amount?: number;
+  sensitive?: boolean;
+}
 const RPC_PER_SECOND = 40;
 const ACTIVITY_SIZE = 40;
 
@@ -92,7 +106,7 @@ export class Hub {
   readonly server = createServer(this.app);
   readonly io: Server;
 
-  readonly activity: ActivityItem[] = [];
+  readonly activity: StoredActivity[] = [];
   takeover: string | null = null;
 
   private modules = new Map<string, LoadedModule>();
@@ -299,18 +313,44 @@ export class Hub {
     else this.io.to(`guest:${to.guest}`).emit('event', msg);
   }
 
-  addActivity(module: string, text: string, opts: { guest?: Guest; amount?: number } = {}): void {
-    const item: ActivityItem = {
+  addActivity(module: string, text: string, opts: { guest?: Guest; amount?: number; sensitive?: boolean } = {}): void {
+    const item: StoredActivity = {
       id: ++this.activitySeq,
       at: Date.now(),
       module,
-      text,
+      template: text,
       guest: opts.guest ? { name: opts.guest.name, color: opts.guest.color } : undefined,
       amount: opts.amount,
+      sensitive: opts.sensitive,
     };
     this.activity.unshift(item);
     if (this.activity.length > ACTIVITY_SIZE) this.activity.length = ACTIVITY_SIZE;
-    this.io.to(['role:guest', 'role:tv', 'role:admin']).emit('activity', item);
+    for (const role of ROLES) {
+      const line = this.renderActivity(item, role);
+      if (line) this.io.to(`role:${role}`).emit('activity', line);
+    }
+  }
+
+  /** The activity feed as a role may see it (the host always sees names) */
+  activityFor(role: Role, limit = 15): ActivityItem[] {
+    const out: ActivityItem[] = [];
+    for (const item of this.activity) {
+      if (out.length >= limit) break;
+      const line = this.renderActivity(item, role);
+      if (line) out.push(line);
+    }
+    return out;
+  }
+
+  private renderActivity(item: StoredActivity, role: Role): ActivityItem | null {
+    const mode = role === 'admin' ? 'names' : this.core.privacy.activity;
+    if (mode === 'off') return null;
+    const base = { id: item.id, at: item.at, module: item.module, amount: item.amount };
+    if (mode === 'names' || !item.guest) {
+      return { ...base, text: item.template.replaceAll('{name}', item.guest?.name ?? 'Someone'), guest: item.guest };
+    }
+    if (item.sensitive) return null;
+    return { ...base, text: item.template.replace(/^\{name\}/, 'Someone').replaceAll('{name}', 'someone') };
   }
 
   toast(guest: Guest, msg: ToastMessage): void {

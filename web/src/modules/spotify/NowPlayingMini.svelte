@@ -8,15 +8,16 @@
   const tick = ticker(1000);
 </script>
 
-{#if hb.modules.spotify?.connected && now}
+<!-- Shown as soon as Spotify is connected, even with nothing playing, so the page does not jump -->
+{#if hb.modules.spotify?.connected}
   <div class="card mini">
-    <Cover src={now.image} size="3.2rem" />
+    <Cover src={now?.image ?? null} size="3.2rem" />
     <div class="text">
-      <span class="eyebrow">{now.isPlaying ? 'Now playing' : 'Paused'}</span>
-      <span class="title truncate">{now.title}</span>
-      <span class="artist truncate">{now.artists}</span>
+      <span class="eyebrow">{now ? (now.isPlaying ? 'Now playing' : 'Paused') : 'Music'}</span>
+      <span class="title truncate">{now ? now.title : 'Nothing playing'}</span>
+      <span class="artist truncate">{now ? now.artists : 'Add a song to get things going'}</span>
     </div>
-    <div class="bar"><span style:width="{(progressOf(now, tick.now) / Math.max(1, now.durationMs)) * 100}%"></span></div>
+    <div class="bar"><span style:width="{now ? (progressOf(now, tick.now) / Math.max(1, now.durationMs)) * 100 : 0}%"></span></div>
   </div>
 {/if}
 

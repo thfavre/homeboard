@@ -27,7 +27,7 @@
       Your sticker bounces around the TV for {minutes} min.
       {#if hb.core?.economyEnabled && cost}Each one costs <Money amount={cost} />.{/if}
     </p>
-    <p class="faint status">
+    <p class="faint status truncate">
       {mod.maxActive > 0 ? `${mod.active.length} of ${mod.maxActive} on screen` : `${mod.active.length} on screen`}{full ? ', wait for one to leave' : ''}
     </p>
 

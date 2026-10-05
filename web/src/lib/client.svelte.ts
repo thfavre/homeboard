@@ -210,6 +210,9 @@ export async function upload<T = unknown>(module: string, path: string, body: Bl
   return data as T;
 }
 
+/** Whether the TV may show who did something (privacy settings from the host) */
+export const showNames = (key: 'photoNames' | 'stickerNames' | 'songNames' | 'effectNames') => hb.core?.privacy?.[key] ?? true;
+
 /** Shortcuts */
 export const enabled = (id: string) => !!hb.core?.features.find((f) => f.id === id)?.enabled;
 export const price = (key: string) => hb.core?.prices[key]?.amount ?? 0;

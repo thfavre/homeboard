@@ -76,7 +76,7 @@ export default defineModule<SoundboardSettings>({
       ctx.economy.charge(guest, 'soundboard.sound', 1, `Sound: ${sound.name}`);
       cooldownUntil = Date.now() + ctx.settings.get().cooldownSec * 1000;
       play(sound, guest.name);
-      ctx.activity(`${guest.name} played ${sound.name}`, { guest });
+      ctx.activity(`{name} played ${sound.name}`, { guest });
       ctx.publish();
       return true;
     });

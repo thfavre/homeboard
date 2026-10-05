@@ -64,11 +64,10 @@
           </select>
         </label>
       </div>
-      {#if q.error}<p class="error">{q.error}</p>{/if}
       <div>
         <button class="btn primary" disabled={starting} onclick={start}><Play size={18} /> {starting ? 'Loading questions...' : 'Start quiz'}</button>
       </div>
-      <p class="faint small">Rewards for right answers and the podium are set in Economy.</p>
+      {#if q.error}<p class="error">{q.error}</p>{/if}
     </Section>
   {:else}
     <Section title="Quiz running">

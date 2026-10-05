@@ -2,7 +2,7 @@
   import { flip } from 'svelte/animate';
   import { fade } from 'svelte/transition';
   import type { SpotifyState } from '$shared/spotify.ts';
-  import { hb } from '$lib/client.svelte.ts';
+  import { hb, showNames } from '$lib/client.svelte.ts';
   import Cover from './Cover.svelte';
 
   const queue = $derived(((hb.modules.spotify as SpotifyState | undefined)?.queue ?? []).slice(0, 4));
@@ -19,7 +19,7 @@
             <span class="title truncate">{t.title}</span>
             <span class="artist truncate">{t.artists}</span>
           </div>
-          {#if t.requestedBy}<span class="dot" style:background={t.requestedBy.color} title={t.requestedBy.name}></span>{/if}
+          {#if t.requestedBy && showNames('songNames')}<span class="dot" style:background={t.requestedBy.color} title={t.requestedBy.name}></span>{/if}
         </li>
       {/each}
     </ol>

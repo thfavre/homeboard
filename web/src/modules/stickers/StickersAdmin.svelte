@@ -28,10 +28,10 @@
 {#if mod}
   <Section title="On the TV now">
     {#snippet actions()}
-      {#if mod.active.length}
-        <button class="btn small danger" onclick={() => attempt(() => rpc('stickers', 'clear'))}>Clear all</button>
-      {/if}
+      <button class="btn small danger" disabled={!mod.active.length} onclick={() => attempt(() => rpc('stickers', 'clear'))}>Clear all</button>
     {/snippet}
+    <!-- Fixed height with its own scroll, so stickers coming and going never move the page -->
+    <div class="active-list">
     {#each mod.active as a (a.id)}
       <div class="line">
         <div class="mini">{#if a.sticker}<StickerView sticker={a.sticker} />{/if}</div>
@@ -41,8 +41,9 @@
         <button class="btn ghost small" aria-label="Remove" onclick={() => attempt(() => rpc('stickers', 'remove', { id: a.id }))}><X size={16} /></button>
       </div>
     {:else}
-      <p class="faint">No stickers right now.</p>
+      <p class="faint empty-line">No stickers right now.</p>
     {/each}
+    </div>
   </Section>
 
   <Section title="Settings">
@@ -112,6 +113,16 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+  }
+  .active-list {
+    height: 11rem;
+    overflow-y: auto;
+    display: grid;
+    align-content: start;
+    gap: 0.4rem;
+  }
+  .empty-line {
+    align-self: center;
   }
   .mini {
     width: 2rem;

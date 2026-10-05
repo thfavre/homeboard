@@ -57,8 +57,11 @@ export interface ModuleContext<S extends object = Record<string, never>> {
   price(def: PriceDef): void;
   earn(def: EarnDef): void;
 
-  /** Add a line to the activity feed shown on the TV */
-  activity(text: string, opts?: { guest?: Guest; amount?: number }): void;
+  /**
+   * Add a line to the activity feed. Write `{name}` where the guest's name goes:
+   * it becomes "Someone" when the host hides names. `sensitive` lines are not shown at all then.
+   */
+  activity(text: string, opts?: { guest?: Guest; amount?: number; sensitive?: boolean }): void;
   toast(guest: Guest, msg: ToastMessage): void;
 
   onSessionReset(fn: () => void): void;

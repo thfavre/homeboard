@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { WledState } from '$shared/wled.ts';
-  import { hb, rpc, attempt, price, toast } from '$lib/client.svelte.ts';
+  import { hb, rpc, attempt, price, toast, showNames } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import Countdown from './Countdown.svelte';
   import { effectSwatch } from './swatch.ts';
@@ -32,17 +32,22 @@
   <div class="lights">
     <p class="dim intro">Light up the room for {mod.durationSec} seconds. Effects play one after the other.</p>
 
-    {#if mod.current}
-      <div class="card now">
-        <span class="swatch" style:background={effectSwatch(mod.current.effect)}></span>
-        <div class="text">
-          <strong>{mod.current.effect.name}</strong>
-          <span class="faint">by {mod.current.guest.name} on {mod.current.devices.map(deviceName).join(', ')}</span>
-        </div>
-        <Countdown until={mod.current.until} />
+    <!-- Always the same size, so the effect list below does not move -->
+    <div class="card now">
+      <span class="swatch" style:background={mod.current ? effectSwatch(mod.current.effect) : 'var(--surface-3)'}></span>
+      <div class="text">
+        <strong class="truncate">{mod.current ? mod.current.effect.name : 'No effect right now'}</strong>
+        <span class="faint truncate">
+          {#if mod.current}
+            {showNames('effectNames') ? `by ${mod.current.guest.name} on ` : 'On '}{mod.current.devices.map(deviceName).join(', ')}
+          {:else}
+            Pick one below to start a light show
+          {/if}
+        </span>
+        <span class="faint waiting">{mod.queue.length ? `${mod.queue.length} waiting after this one` : 'Nothing waiting'}</span>
       </div>
-      {#if mod.queue.length}<p class="faint waiting">{mod.queue.length} waiting after this one</p>{/if}
-    {/if}
+      {#if mod.current}<Countdown until={mod.current.until} />{/if}
+    </div>
 
     {#if online.length === 0}
       <div class="card empty">The lights are offline right now.</div>
@@ -91,8 +96,7 @@
     font-size: 0.9rem;
   }
   .waiting {
-    font-size: 0.82rem;
-    margin-top: -0.4rem;
+    font-size: 0.78rem;
   }
   .swatch {
     flex: none;

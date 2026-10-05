@@ -80,7 +80,7 @@
     </div>
   </Section>
 
-  <Section title="All photos" hint="Photos are deleted when you start a new session.">
+  <Section title="All photos" hint="Oldest first, new photos are added at the end. They are deleted when you start a new session.">
     <div class="gallery">
       {#each mod.gallery ?? [] as p (p.id)}
         <div class="photo">

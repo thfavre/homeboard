@@ -57,6 +57,7 @@
         <option value="balance">Richest guests</option>
         <option value="spent">Big spenders</option>
         <option value="earned">Top earners</option>
+        <option value="off">Hidden</option>
       </select>
     </label>
   </div>
