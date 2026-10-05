@@ -230,9 +230,8 @@ export default defineModule({
 
     ctx.onAdmin('newSession', () => session.reset());
 
-    ctx.onAdmin('newCode', (args) => {
-      if (args.code !== undefined && !/^\d{4}$/.test(String(args.code))) throw new HbError('The code must be 4 digits');
-      session.newCode(args.code === undefined ? undefined : String(args.code));
+    ctx.onAdmin('newCode', () => {
+      session.newCode();
       ctx.publish();
     });
 

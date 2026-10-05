@@ -7,21 +7,10 @@
   import AmountInput from '$lib/ui/AmountInput.svelte';
   import Money from '$lib/ui/Money.svelte';
   import { ago } from '$lib/time.ts';
-  import { Synced } from '$lib/synced.svelte.ts';
 
   const core = $derived(hb.core!);
   const admin = $derived(core.admin!);
   let rain = $state(1000);
-  const code = new Synced(() => hb.core?.join?.code, '');
-
-  async function saveCode() {
-    const value = code.value.trim();
-    if (value !== core.join?.code) {
-      const ok = await attempt(() => rpc('core', 'newCode', { code: value }).then(() => true), 'Code changed');
-      if (!ok) code.value = core.join?.code ?? '';
-    }
-    code.end();
-  }
 
   const tunnelLabel = { off: 'Off', starting: 'Starting', up: 'Online', error: 'Error' } as const;
 </script>
@@ -32,23 +21,13 @@
       <Qr svg={core.join.qrSvg} size="7.5rem" />
       <div class="info">
         <span class="eyebrow">Session code</span>
-        <input
-          class="code mono"
-          inputmode="numeric"
-          maxlength="4"
-          aria-label="Session code"
-          bind:value={code.value}
-          onfocus={code.start}
-          onblur={saveCode}
-          onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-        />
+        <div class="code mono">{core.join.code}</div>
         <a class="url mono" href={core.join.url} target="_blank" rel="noreferrer">{core.join.url}</a>
         <div class="row">
           <button class="btn small" onclick={() => attempt(() => rpc('core', 'newCode'), 'New code')}>
-            <RefreshCw size={15} /> Random code
+            <RefreshCw size={15} /> New code
           </button>
         </div>
-        <p class="faint tip">Tap the code to type your own.</p>
       </div>
     {/if}
   </div>
@@ -134,28 +113,10 @@
     min-width: 0;
   }
   .code {
-    width: 9.5rem;
-    padding: 0.1rem 0.4rem;
-    margin-left: -0.4rem;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
     font-size: 2.6rem;
     font-weight: 700;
     letter-spacing: 0.15em;
-    line-height: 1.1;
-    outline: none;
-  }
-  .code:hover,
-  .code:focus {
-    border-color: var(--border-strong);
-    background: var(--input-bg);
-  }
-  .code:focus {
-    border-color: var(--accent);
-  }
-  .tip {
-    font-size: 0.75rem;
+    line-height: 1;
   }
   .url {
     font-size: 0.75rem;

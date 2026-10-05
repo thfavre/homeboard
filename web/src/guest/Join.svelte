@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { hb, join, lastName } from '$lib/client.svelte.ts';
 
   const params = new URLSearchParams(location.search);
@@ -9,6 +10,21 @@
   let nameTaken = $state(false);
   let busy = $state(false);
   let error = $state('');
+  // A code from the QR link is shown read-only until it turns out to be wrong
+  let editCode = $state(!codeFromLink);
+  let codeInput = $state<HTMLInputElement>();
+
+  async function changeCode(clear = true) {
+    editCode = true;
+    if (clear) code = '';
+    await tick();
+    codeInput?.focus();
+  }
+
+  // After a new session the code in the link is outdated
+  $effect(() => {
+    if (hb.kickedReason && codeFromLink && !editCode) changeCode();
+  });
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
@@ -16,10 +32,15 @@
     error = '';
     try {
       await join({ code, name, key: nameTaken && key ? key : undefined });
+      // Do not keep an old code in the address bar for the next visit
+      if (codeFromLink) history.replaceState(null, '', location.pathname);
     } catch (err) {
       const msg = (err as Error).message;
       if (msg === 'NAME_TAKEN') nameTaken = true;
-      else error = msg;
+      else {
+        error = msg;
+        if (/session code/i.test(msg)) changeCode();
+      }
     } finally {
       busy = false;
     }
@@ -36,11 +57,30 @@
   {#if hb.kickedReason}<p class="notice card">{hb.kickedReason}</p>{/if}
 
   <form class="card form" onsubmit={submit}>
-    {#if hb.codeRequired && !codeFromLink}
-      <label class="field">
-        <span>Session code (shown on the TV)</span>
-        <input class="input code mono" bind:value={code} inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off" required />
-      </label>
+    {#if hb.codeRequired}
+      {#if editCode}
+        <label class="field">
+          <span>Session code (shown on the TV)</span>
+          <input
+            class="input code mono"
+            bind:this={codeInput}
+            bind:value={code}
+            oninput={() => (error = '')}
+            inputmode="numeric"
+            maxlength="4"
+            placeholder="0000"
+            autocomplete="off"
+            required
+          />
+        </label>
+      {:else}
+        <div class="code-line">
+          <span class="dim">Session code</span>
+          <span class="mono value">{code}</span>
+          <span class="spacer"></span>
+          <button type="button" class="btn ghost small" onclick={() => changeCode(false)}>Change</button>
+        </div>
+      {/if}
     {/if}
     <label class="field">
       <span>Your name</span>
@@ -110,6 +150,20 @@
     letter-spacing: 0.5em;
     text-align: center;
     padding-left: 0.5em;
+  }
+  .code-line {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.35rem 0.4rem 0.35rem 0.95rem;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    font-size: 0.9rem;
+  }
+  .code-line .value {
+    font-weight: 700;
+    font-size: 1.1rem;
+    letter-spacing: 0.25em;
   }
   .key {
     letter-spacing: 0.3em;
