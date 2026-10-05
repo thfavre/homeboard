@@ -11,7 +11,7 @@
   let text = $state('');
   let busy = $state(false);
 
-  async function send(args: { id?: string; text?: string }, label: string) {
+  async function send(args: { id?: string; text?: string; face?: boolean }, label: string) {
     busy = true;
     const ok = await attempt(() => rpc('stickers', 'place', args), `${label} is on the TV`);
     busy = false;
@@ -32,6 +32,13 @@
     </p>
 
     <div class="grid">
+      {#if hb.me?.avatar}
+        <!-- Only with a selfie: send your own face bouncing -->
+        <button class="item card" disabled={busy || full} onclick={() => send({ face: true }, 'Your face')}>
+          <div class="art"><StickerView sticker={{ id: 'face', name: 'Your face', kind: 'face', src: hb.me.avatar }} /></div>
+          <span class="name">Your face</span>
+        </button>
+      {/if}
       {#each mod.catalog as s (s.id)}
         <button class="item card" disabled={busy || full} onclick={() => send({ id: s.id }, s.name)}>
           <div class="art"><StickerView sticker={s as StickerDef} /></div>

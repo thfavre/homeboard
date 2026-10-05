@@ -67,6 +67,10 @@ export default defineModule<StickerSettings>({
         if (!s.allowText) throw new HbError('Text stickers are turned off');
         text = cleanName(args.text, 24);
         if (!text) throw new HbError('Write something first');
+      } else if (args.face) {
+        // The guest's own selfie, when they made one
+        if (!guest.avatar) throw new HbError('Take a selfie first (in your profile)');
+        sticker = { id: 'face', name: 'Face', kind: 'face', src: guest.avatar.url };
       } else {
         sticker = catalog().find((c) => c.id === args.id) ?? null;
         if (!sticker) throw new HbError('Unknown sticker');
@@ -81,7 +85,10 @@ export default defineModule<StickerSettings>({
       };
       active = [...active, item];
       timers.set(item.id, setTimeout(() => remove(item.id), s.durationSec * 1000));
-      ctx.activity(text ? `{name} wrote "${text}" on the TV` : `{name} dropped a ${sticker!.name.toLowerCase()} sticker`, { guest });
+      ctx.activity(
+        text ? `{name} wrote "${text}" on the TV` : sticker!.kind === 'face' ? '{name} sent their face bouncing' : `{name} dropped a ${sticker!.name.toLowerCase()} sticker`,
+        { guest },
+      );
       ctx.publish();
       return true;
     });

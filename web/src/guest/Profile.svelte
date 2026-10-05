@@ -109,7 +109,7 @@
               {#if showPin}<EyeOff size={20} />{:else}<Eye size={20} />{/if}
             </button>
           {:else}
-            <span class="dim small">Set a new PIN to be able to see it here.</span>
+            <span class="dim small">Your PIN was chosen before it could be shown here. Change it once and it will appear, with the eye to reveal it.</span>
           {/if}
           <span class="spacer"></span>
           <button class="btn" onclick={startEdit}>Change</button>

@@ -147,7 +147,7 @@ export default defineModule<QuizSettings>({
     };
 
     const customQuestions = (quiz: CustomQuiz): Question[] =>
-      quiz.questions.map((q) => ({ text: q.text, answers: q.answers, correct: q.correct, category: quiz.title, difficulty: '', image: q.image }));
+      quiz.questions.map((q) => ({ text: q.text, answers: q.answers, correct: q.correct, category: '', difficulty: '', image: q.image }));
 
     // ------------------------------------------------------------ timer
 

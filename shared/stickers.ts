@@ -17,7 +17,8 @@ export const BUILTIN_STICKERS = [
 export interface StickerDef {
   id: string;
   name: string;
-  kind: 'builtin' | 'image';
+  /** 'face': the guest's own selfie */
+  kind: 'builtin' | 'image' | 'face';
   /** Image URL for uploaded stickers */
   src?: string;
 }

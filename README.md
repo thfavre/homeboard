@@ -42,11 +42,11 @@ Environment variables: `PORT` (default 4300), `HB_TUNNEL=0` (no public tunnel),
 | --- | --- | --- |
 | **Music** (Spotify) | Search and queue songs, skip | Connect account, playback controls, explicit filter |
 | **Pixel canvas** | Paint pixel by pixel (r/place style) | Clear, resize |
-| **Stickers** | Built-in vector stickers or text, bouncing for X minutes | Duration, limit, upload your own |
+| **Stickers** | Built-in vector stickers, text, or their own face, bouncing for X minutes | Duration, limit, upload your own |
 | **Photos** | Photo with caption shown big on the TV | Remove (with refund), replay, duration |
 | **Lights** (WLED) | Pick an effect, on all lights or one | Devices, effect editor, test, stop |
 | **Soundboard** | Play a sound on the TV speakers | Volume, cooldown, upload sounds |
-| **Quiz** | Answer on the phone | Start (category, difficulty, length), skip, stop |
+| **Quiz** | Answer; start a quiz (random trivia or custom) for a fee; create custom quizzes | Start, pause, live time per question, custom quiz library with pictures |
 
 Core features: session code, name + PIN to rejoin from another phone, live activity feed, leaderboard,
 money rain, gifts, kick, themes, and a full economy editor (currency name, every price and reward).
@@ -62,6 +62,16 @@ the host can set a new one from the Guests screen if someone forgets it.
 
 Because the free tunnel URL changes when the server restarts, phones forget the account after a
 restart. Balances are kept on the server, so guests just join again with their name and PIN.
+
+### Quiz
+
+Questions come from Open Trivia DB (random, by category and difficulty) or from custom quizzes
+(made by the host or by guests, with an optional picture per question, kept between parties).
+A host-started quiz waits up to 60 seconds for players; pressing Ready makes it start sooner
+(15 seconds once half are ready, right away when everyone is). A guest-started quiz is started by
+that guest, or by itself after 60 seconds. The host can pause and change the time per question
+live. At the end, for 20 seconds: the winner drives their picture with a joystick and spins it,
+2nd and 3rd have a small effect, and everyone else can make their picture peek in from the side.
 
 ### Selfie avatars
 

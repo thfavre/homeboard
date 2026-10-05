@@ -157,7 +157,6 @@
     grid-template-rows: auto 1fr;
     justify-items: center;
     gap: 2rem;
-    overflow: hidden;
   }
   .big {
     font-size: 5rem;
