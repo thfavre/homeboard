@@ -8,6 +8,11 @@ currency that guests earn by hanging out and playing.
 Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable from any network
 (guests do not need your Wi-Fi), so there is no hosting to pay for.
 
+# Future ideas
+- screamer
+- blind test
+- playing gifs
+
 ## Quick start
 
 ```bash
