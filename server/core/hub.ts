@@ -481,7 +481,8 @@ export class Hub {
 
   /** Where the tunnel forwards to (the Vite dev server in development) */
   get tunnelTarget(): string {
-    return process.env.HB_TUNNEL_TARGET ?? `http://localhost:${this.port}`;
+    if (process.env.HB_TUNNEL_TARGET) return process.env.HB_TUNNEL_TARGET;
+    return process.argv.includes('--dev') ? 'http://localhost:5173' : `http://localhost:${this.port}`;
   }
 
   /** Serve the built web apps (production). In development Vite serves them. */

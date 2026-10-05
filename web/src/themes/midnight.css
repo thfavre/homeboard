@@ -1,0 +1,33 @@
+/* Midnight: deep blue-black, soft violet glow, warm coral highlights */
+:root,
+[data-theme='midnight'] {
+  --scheme: dark;
+  --bg: #08090f;
+  --bg-image:
+    radial-gradient(60% 50% at 85% 0%, rgba(124, 92, 255, 0.16), transparent 70%),
+    radial-gradient(50% 45% at 0% 100%, rgba(255, 112, 89, 0.1), transparent 70%);
+  --surface: rgba(22, 24, 36, 0.72);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-3: rgba(255, 255, 255, 0.09);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text: #f1f1f6;
+  --text-dim: #a6a8bd;
+  --text-faint: #6c6f87;
+  --accent: #8b7cff;
+  --accent-2: #ff7a5c;
+  --accent-contrast: #0b0a18;
+  --gradient: linear-gradient(120deg, #8b7cff 0%, #c879ff 45%, #ff7a5c 100%);
+  --success: #4fd1a5;
+  --danger: #ff6b7d;
+  --warning: #ffc861;
+  --coin: #ffc861;
+  --coin-2: #ff9c3a;
+  --radius: 22px;
+  --radius-sm: 12px;
+  --blur: 18px;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 20px 50px -24px rgba(0, 0, 0, 0.8);
+  --font-body: 'Inter Variable', system-ui, sans-serif;
+  --font-display: 'Space Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
+}

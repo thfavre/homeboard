@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Party dashboard for the TV, controlled from phones",
   "scripts": {
-    "dev": "concurrently -k -n server,web -c cyan,magenta \"tsx watch --clear-screen=false server/index.ts\" \"vite\"",
+    "dev": "concurrently -k -n server,web -c cyan,magenta \"tsx watch --clear-screen=false server/index.ts --dev\" \"vite\"",
     "build": "vite build",
     "start": "tsx server/index.ts",
     "check": "svelte-check --tsconfig ./tsconfig.json"

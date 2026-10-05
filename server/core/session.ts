@@ -55,6 +55,7 @@ export class Session extends EventEmitter {
   constructor() {
     super();
     for (const g of this.file.data.guests ?? []) this.guests.set(g.id, { ...g, sockets: 0 });
+    this.file.save();
   }
 
   get id() { return this.file.data.id; }

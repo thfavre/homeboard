@@ -1,0 +1,33 @@
+/* Aurora: teal and green light over a dark sky */
+[data-theme='aurora'] {
+  --scheme: dark;
+  --bg: #050b10;
+  --bg-image:
+    radial-gradient(70% 60% at 20% -10%, rgba(42, 245, 170, 0.18), transparent 70%),
+    radial-gradient(60% 50% at 100% 20%, rgba(56, 132, 255, 0.18), transparent 70%),
+    radial-gradient(50% 50% at 60% 120%, rgba(190, 90, 255, 0.14), transparent 70%);
+  --surface: rgba(10, 26, 32, 0.66);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-3: rgba(255, 255, 255, 0.09);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --border: rgba(160, 255, 230, 0.08);
+  --border-strong: rgba(160, 255, 230, 0.16);
+  --text: #eafaf6;
+  --text-dim: #9cc4bc;
+  --text-faint: #5f8780;
+  --accent: #3cf0b4;
+  --accent-2: #5aa8ff;
+  --accent-contrast: #02140e;
+  --gradient: linear-gradient(120deg, #3cf0b4 0%, #5aa8ff 55%, #be5aff 100%);
+  --success: #3cf0b4;
+  --danger: #ff6b8b;
+  --warning: #ffd36b;
+  --coin: #ffd36b;
+  --coin-2: #ffa63d;
+  --radius: 20px;
+  --radius-sm: 12px;
+  --blur: 20px;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 20px 50px -24px rgba(0, 0, 0, 0.9);
+  --font-body: 'Inter Variable', system-ui, sans-serif;
+  --font-display: 'Space Grotesk Variable', 'Inter Variable', system-ui, sans-serif;
+}
