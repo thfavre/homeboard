@@ -112,7 +112,7 @@
             onkeydown={(e) => (e.key === ' ' || e.key === 'Enter') && (anonymous = !anonymous)}
           >
             <span class="anon-heading">Send anonymously</span>
-            <span class="anon-sub">Only display text, hide your head picture</span>
+            <span class="anon-sub">Hides your name and your picture on the TV</span>
           </div>
           <Toggle checked={anonymous} label="Anonymous" onchange={(v) => (anonymous = v)} />
         </div>

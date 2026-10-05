@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
   import type { TtsEvent } from '$shared/tts.ts';
-  import { onEvent, rpc, showNames } from '$lib/client.svelte.ts';
+  import { onEvent, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
 
   let current = $state<(TtsEvent & { key: number; durationMs: number }) | null>(null);
@@ -159,7 +159,7 @@
           style:--dur="{current.durationMs}ms"
         >
           <div class="marquee-content">
-            {#if !current.anonymous && current.guest && showNames('effectNames')}
+            {#if !current.anonymous && current.guest}
               <Avatar
                 name={current.guest.name}
                 color={current.guest.color}
@@ -173,7 +173,7 @@
               {current.text}
             </span>
 
-            {#if !current.anonymous && current.guest && showNames('effectNames')}
+            {#if !current.anonymous && current.guest}
               <Avatar
                 name={current.guest.name}
                 color={current.guest.color}

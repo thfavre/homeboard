@@ -107,11 +107,9 @@ export default defineModule<TtsSettings>({
         // Next message only after this one is over (plus the configured pause)
         cooldownUntil = Date.now() + event.durationMs + s.cooldownSec * 1000;
 
-        if (anonymous) {
-          ctx.activity(`Someone said: "${snippet}"`);
-        } else {
-          ctx.activity(`{name} said: "${snippet}"`, { guest });
-        }
+        // The feed never repeats the message; {name} becomes "Someone" when the host hides names
+        if (anonymous) ctx.activity('Someone spoke');
+        else ctx.activity('{name} spoke', { guest });
         ctx.publish();
         return true;
       } catch (err) {
