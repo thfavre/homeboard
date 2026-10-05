@@ -26,7 +26,8 @@
     image?: string;
   }
 
-  const blank = (): Draft => ({ text: '', answers: ['', '', '', ''], correct: 0 });
+  // No answer is ticked until the author picks the right one (-1 = none yet)
+  const blank = (): Draft => ({ text: '', answers: ['', '', '', ''], correct: -1 });
   const start = untrack(() => initial);
   let title = $state(start?.title ?? '');
   let questions = $state<Draft[]>(
@@ -64,7 +65,8 @@
     for (const [i, q] of questions.entries()) {
       if (!q.text.trim()) return toast({ text: `Question ${i + 1} has no text`, kind: 'error' });
       if (q.answers.filter((a) => a.trim()).length < 2) return toast({ text: `Question ${i + 1} needs at least 2 answers`, kind: 'error' });
-      if (!q.answers[q.correct]?.trim()) return toast({ text: `Question ${i + 1}: mark the right answer`, kind: 'error' });
+      if (q.correct < 0) return toast({ text: `Question ${i + 1}: tap the circle next to the right answer`, kind: 'error' });
+      if (!q.answers[q.correct]?.trim()) return toast({ text: `Question ${i + 1}: the answer marked as right is empty`, kind: 'error' });
     }
     onsave({ id: start?.id, title, questions: $state.snapshot(questions) });
   }
@@ -108,7 +110,7 @@
           </label>
         {/each}
       </div>
-      <p class="faint small">Tick the right answer.</p>
+      <p class="faint small">Tap the circle next to the right answer.</p>
     </div>
   {/each}
 
