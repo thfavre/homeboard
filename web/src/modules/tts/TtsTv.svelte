@@ -1,9 +1,7 @@
 <script lang="ts">
-  import { cubicOut } from 'svelte/easing';
-  import { fly, fade } from 'svelte/transition';
-  import { Megaphone, Volume2 } from '@lucide/svelte';
+  import { fade } from 'svelte/transition';
   import type { TtsEvent } from '$shared/tts.ts';
-  import { onEvent, rpc, showNames } from '$lib/client.svelte.ts';
+  import { onEvent, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
 
   let current = $state<(TtsEvent & { key: number; fromX: number; toX: number; durationMs: number }) | null>(null);
@@ -12,7 +10,7 @@
   let processing = false;
 
   let viewportEl = $state<HTMLDivElement>();
-  let textEl = $state<HTMLSpanElement>();
+  let contentEl = $state<HTMLDivElement>();
   let activeUtterance: SpeechSynthesisUtterance | null = null;
 
   function speak(text: string, volume: number): Promise<void> {
@@ -70,33 +68,32 @@
       const item = queue.shift()!;
       const key = ++seq;
 
-      // Initial measurement placeholder
-      const estimatedMs = Math.max(5000, Math.round((item.text.length / 12) * 1000) + 1500);
+      const estimatedSpeechMs = Math.max(5000, Math.round((item.text.length / 12) * 1000) + 1500);
 
-      // Measure viewport and text after mounting
-      const Wc = viewportEl ? viewportEl.clientWidth : 900;
-      // Approximate text width: ~18px per character at 2rem display font
-      const estimatedWt = Math.max(200, item.text.length * 20);
-      const totalDist = Wc + estimatedWt;
-      // Scroll speed ~130px per sec
-      const scrollDurationMs = Math.max(5000, Math.round((totalDist / 130) * 1000));
-      const durationMs = Math.max(estimatedMs, scrollDurationMs);
+      // Measure viewport and content
+      const Wc = viewportEl ? viewportEl.clientWidth : (typeof window !== 'undefined' ? window.innerWidth : 1920);
+      // Rough placeholder width
+      const estimatedContentW = Math.max(250, item.text.length * 28 + (item.anonymous ? 0 : 200));
+      const totalDist = Wc + estimatedContentW;
+      const scrollMs = Math.max(5000, Math.round((totalDist / 180) * 1000));
+      const durationMs = Math.max(estimatedSpeechMs, scrollMs);
 
+      // Scroll from left to right: from -contentWidth to +Wc
       current = {
         ...item,
         key,
-        fromX: Wc,
-        toX: -estimatedWt,
+        fromX: -estimatedContentW,
+        toX: Wc,
         durationMs,
       };
 
-      // Allow tick for DOM to update and measure exact text width if possible
+      // Allow tick for DOM to measure exact content width
       await new Promise((r) => setTimeout(r, 60));
-      if (textEl && viewportEl && current?.key === key) {
+      if (contentEl && viewportEl && current?.key === key) {
         const exactWc = viewportEl.clientWidth;
-        const exactWt = textEl.scrollWidth;
-        current.fromX = exactWc;
-        current.toX = -exactWt;
+        const exactContentW = contentEl.offsetWidth;
+        current.fromX = -exactContentW;
+        current.toX = exactWc;
       }
 
       // Play audio and wait for both speech & scroll
@@ -105,8 +102,8 @@
 
       await Promise.all([speechPromise, scrollPromise]);
 
-      // Small pause after finished
-      await new Promise((r) => setTimeout(r, 800));
+      // Brief reading pause after scrolling past
+      await new Promise((r) => setTimeout(r, 600));
 
       // Report ended to server so Spotify restores volume
       void rpc('tts', 'ended', { id: item.id }).catch(() => {});
@@ -115,7 +112,7 @@
         current = null;
       }
 
-      // Small gap between queued messages
+      // Gap between queued messages
       if (queue.length > 0) {
         await new Promise((r) => setTimeout(r, 500));
       }
@@ -125,7 +122,6 @@
   }
 
   $effect(() => {
-    // Unlock speech synthesis if blocked
     const unlock = () => {
       if ('speechSynthesis' in window && window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
@@ -153,34 +149,9 @@
 {#if current}
   {#key current.key}
     <div
-      class="tts-banner"
-      transition:fly={{ y: 60, duration: 400, easing: cubicOut }}
+      class="tts-strip"
+      transition:fade={{ duration: 350 }}
     >
-      <div class="banner-left">
-        {#if current.guest}
-          <Avatar
-            name={current.guest.name}
-            color={current.guest.color}
-            id={current.guest.id}
-            size="3.2rem"
-          />
-        {/if}
-        <div class="sender-info">
-          <div class="pill-row">
-            <span class="tts-pill">
-              <Megaphone size={13} />
-              <span>SHOUTOUT</span>
-            </span>
-            <span class="bars"><i></i><i></i><i></i><i></i></span>
-          </div>
-          {#if showNames('effectNames')}
-            <span class="sender-name truncate">{current.by}</span>
-          {/if}
-        </div>
-      </div>
-
-      <div class="divider"></div>
-
       <div class="marquee-viewport" bind:this={viewportEl}>
         <div
           class="marquee-track"
@@ -188,176 +159,96 @@
           style:--to="{current.toX}px"
           style:--dur="{current.durationMs}ms"
         >
-          <span class="marquee-text" bind:this={textEl}>
-            {current.text}
-          </span>
+          <div class="marquee-content" bind:this={contentEl}>
+            {#if !current.anonymous && current.guest}
+              <Avatar
+                name={current.guest.name}
+                color={current.guest.color}
+                id={current.guest.id}
+                size="4.2rem"
+              />
+            {/if}
+
+            <span class="marquee-text">
+              {current.text}
+            </span>
+
+            {#if !current.anonymous && current.guest}
+              <Avatar
+                name={current.guest.name}
+                color={current.guest.color}
+                id={current.guest.id}
+                size="4.2rem"
+              />
+            {/if}
+          </div>
         </div>
       </div>
-
-      <div
-        class="progress-line"
-        style:--dur="{current.durationMs}ms"
-      ></div>
     </div>
   {/key}
 {/if}
 
 <style>
-  .tts-banner {
+  .tts-strip {
     position: fixed;
-    left: 2rem;
-    right: 2rem;
-    bottom: 4.8rem;
+    left: 0;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
     z-index: 47;
-    display: flex;
-    align-items: center;
-    gap: 1.4rem;
-    padding: 0.9rem 1.6rem 1.1rem;
-    border-radius: 1.4rem;
-    background: color-mix(in srgb, var(--card) 90%, transparent);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1.5px solid color-mix(in srgb, var(--accent) 50%, var(--border));
+    padding: 1.5rem 0;
+    background: color-mix(in srgb, var(--card) 86%, transparent);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border-top: 2px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+    border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, var(--border));
     box-shadow:
-      0 20px 60px -15px rgba(0, 0, 0, 0.8),
-      0 0 35px -5px color-mix(in srgb, var(--accent) 35%, transparent);
+      0 0 60px 15px rgba(0, 0, 0, 0.75),
+      0 0 35px -5px color-mix(in srgb, var(--accent) 25%, transparent);
     overflow: hidden;
-  }
-
-  .banner-left {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    flex-shrink: 0;
-  }
-
-  .sender-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    max-width: 14rem;
-  }
-
-  .pill-row {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-
-  .tts-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.15rem 0.55rem;
-    border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    background: color-mix(in srgb, var(--accent) 25%, transparent);
-    color: var(--accent);
-    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  }
-
-  .sender-name {
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 1.25rem;
-    line-height: 1.1;
-    color: var(--text);
-  }
-
-  .bars {
-    display: flex;
-    align-items: flex-end;
-    gap: 3px;
-    height: 1rem;
-  }
-
-  .bars i {
-    width: 3.5px;
-    border-radius: 2px;
-    background: var(--accent);
-    animation: eq 0.6s ease-in-out infinite alternate;
-  }
-
-  .bars i:nth-child(2) {
-    animation-delay: 0.15s;
-  }
-  .bars i:nth-child(3) {
-    animation-delay: 0.3s;
-  }
-  .bars i:nth-child(4) {
-    animation-delay: 0.45s;
-  }
-
-  @keyframes eq {
-    from {
-      height: 20%;
-    }
-    to {
-      height: 100%;
-    }
-  }
-
-  .divider {
-    width: 1.5px;
-    height: 2.8rem;
-    background: color-mix(in srgb, var(--border) 80%, transparent);
-    flex-shrink: 0;
+    pointer-events: none;
   }
 
   .marquee-viewport {
-    flex: 1;
-    min-width: 0;
+    width: 100%;
     overflow: hidden;
     position: relative;
-    mask-image: linear-gradient(90deg, transparent 0%, black 2.5%, black 97.5%, transparent 100%);
-    -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 2.5%, black 97.5%, transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0%, black 4%, black 96%, transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 4%, black 96%, transparent 100%);
   }
 
   .marquee-track {
     display: inline-block;
     white-space: nowrap;
     will-change: transform;
-    animation: scroll-marquee var(--dur) linear forwards;
+    animation: scroll-left-to-right var(--dur) linear forwards;
+  }
+
+  .marquee-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 2.2rem;
+    white-space: nowrap;
   }
 
   .marquee-text {
     font-family: var(--font-display);
-    font-size: 2.1rem;
+    font-size: 2.8rem;
     font-weight: 700;
     letter-spacing: -0.01em;
     color: var(--text);
-    text-shadow: 0 0 24px color-mix(in srgb, var(--accent) 25%, transparent);
+    text-shadow: 0 0 30px color-mix(in srgb, var(--accent) 30%, transparent);
     display: inline-block;
   }
 
-  @keyframes scroll-marquee {
+  @keyframes scroll-left-to-right {
     0% {
       transform: translateX(var(--from));
     }
     100% {
       transform: translateX(var(--to));
-    }
-  }
-
-  .progress-line {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    height: 3.5px;
-    width: 100%;
-    background: var(--gradient, var(--accent));
-    transform-origin: left;
-    animation: progress-shrink var(--dur) linear forwards;
-  }
-
-  @keyframes progress-shrink {
-    from {
-      transform: scaleX(1);
-    }
-    to {
-      transform: scaleX(0);
     }
   }
 </style>

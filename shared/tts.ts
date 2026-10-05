@@ -22,7 +22,8 @@ export interface TtsEvent {
   text: string;
   volume: number;
   by: string;
-  guest: {
+  anonymous?: boolean;
+  guest?: {
     id: string;
     name: string;
     color: string;

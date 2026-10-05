@@ -33,16 +33,21 @@ export default defineModule<TtsSettings>({
       };
     });
 
-    const triggerTts = (text: string, guest: { id: string; name: string; color: string; avatar?: string }) => {
+    const triggerTts = (
+      text: string,
+      guest?: { id: string; name: string; color: string; avatar?: string },
+      anonymous = false,
+    ) => {
       const s = ctx.settings.get();
-      // Estimated duration: ~13 chars per second + padding
-      const durationMs = Math.max(4500, Math.round((text.length / 13) * 1000) + 1500);
+      // Estimated duration: ~12 chars per second + padding
+      const durationMs = Math.max(5000, Math.round((text.length / 12) * 1000) + 1500);
       const event: TtsEvent = {
         id: uid(6),
         text,
         volume: s.volume,
-        by: guest.name,
-        guest,
+        by: anonymous ? 'Anonymous' : (guest?.name ?? 'Guest'),
+        anonymous,
+        guest: anonymous ? undefined : guest,
         durationMs,
       };
 
@@ -72,6 +77,7 @@ export default defineModule<TtsSettings>({
       }
 
       const snippet = rawText.length > 30 ? `${rawText.slice(0, 30)}...` : rawText;
+      const anonymous = !!args?.anonymous;
 
       // Charge guest according to current pricingMode
       if (s.pricingMode === 'per_char') {
@@ -81,25 +87,38 @@ export default defineModule<TtsSettings>({
       }
 
       cooldownUntil = Date.now() + s.cooldownSec * 1000;
-      triggerTts(rawText, {
-        id: guest.id,
-        name: guest.name,
-        color: guest.color,
-        avatar: guest.avatar?.url,
-      });
+      triggerTts(
+        rawText,
+        {
+          id: guest.id,
+          name: guest.name,
+          color: guest.color,
+          avatar: guest.avatar?.url,
+        },
+        anonymous,
+      );
 
-      ctx.activity(`{name} said: "${snippet}"`, { guest });
+      if (anonymous) {
+        ctx.activity(`Someone said: "${snippet}"`);
+      } else {
+        ctx.activity(`{name} said: "${snippet}"`, { guest });
+      }
       ctx.publish();
       return true;
     });
 
     ctx.onAdmin('test', (args) => {
       const text = String(args?.text ?? 'Testing text to speech on the TV! Homeboard party sound is working great.').trim();
-      triggerTts(text, {
-        id: 'host',
-        name: 'Host',
-        color: '#ffaa00',
-      });
+      const anonymous = !!args?.anonymous;
+      triggerTts(
+        text,
+        {
+          id: 'host',
+          name: 'Host',
+          color: '#ffaa00',
+        },
+        anonymous,
+      );
       return true;
     });
 

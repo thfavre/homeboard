@@ -5,6 +5,7 @@
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import AmountInput from '$lib/ui/AmountInput.svelte';
+  import Toggle from '$lib/ui/Toggle.svelte';
 
   const mod = $derived(hb.modules.tts as TtsState | undefined);
 
@@ -16,6 +17,7 @@
   const charCost = $derived(price('tts.char'));
 
   let testText = $state('Testing text to speech on the TV! Homeboard party sound is working great.');
+  let testAnonymous = $state(false);
   let previewing = $state(false);
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('tts', 'setOptions', args));
@@ -26,7 +28,7 @@
   }
 
   function testOnTv() {
-    attempt(() => rpc('tts', 'test', { text: testText }), 'Playing on TV');
+    attempt(() => rpc('tts', 'test', { text: testText, anonymous: testAnonymous }), 'Playing on TV');
   }
 
   function previewLocally() {
@@ -153,6 +155,13 @@
   <Section title="Test announcement" hint="Test the voice and scrolling banner on the TV.">
     <div class="field">
       <input class="input" bind:value={testText} placeholder="Enter a test message..." maxlength="200" />
+    </div>
+    <div class="line">
+      <div>
+        <span>Test as anonymous</span>
+        <p class="faint small">Only show the text without head pictures</p>
+      </div>
+      <Toggle checked={testAnonymous} label="Anonymous" onchange={(v) => (testAnonymous = v)} />
     </div>
     <div class="test-actions">
       <button class="btn primary" onclick={testOnTv}>

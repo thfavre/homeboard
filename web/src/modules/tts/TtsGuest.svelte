@@ -3,10 +3,12 @@
   import type { TtsState } from '$shared/tts.ts';
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
+  import Toggle from '$lib/ui/Toggle.svelte';
 
   const mod = $derived(hb.modules.tts as TtsState | undefined);
 
   let text = $state('');
+  let anonymous = $state(false);
   let busy = $state(false);
   let now = $state(Date.now());
 
@@ -50,7 +52,7 @@
     const trimmed = text.trim();
     if (!trimmed) return;
     busy = true;
-    const ok = await attempt(() => rpc('tts', 'say', { text: trimmed }), 'Announced on TV!');
+    const ok = await attempt(() => rpc('tts', 'say', { text: trimmed, anonymous }), 'Announced on TV!');
     busy = false;
     if (ok) {
       text = '';
@@ -109,6 +111,14 @@
           rows="3"
           placeholder="Type what you want the TV to say..."
         ></textarea>
+      </div>
+
+      <div class="anon-row">
+        <div>
+          <span class="anon-label">Send anonymously</span>
+          <p class="faint small">Only show the text without your face or name</p>
+        </div>
+        <Toggle checked={anonymous} label="Anonymous" onchange={(v) => (anonymous = v)} />
       </div>
 
       {#if PROMPTS.length}
@@ -213,6 +223,19 @@
     font-size: 1.05rem;
     line-height: 1.4;
     padding: 0.75rem 0.85rem;
+  }
+  .anon-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.4rem 0.1rem;
+    border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .anon-label {
+    font-size: 0.95rem;
+    font-weight: 600;
   }
   .prompts {
     display: grid;
