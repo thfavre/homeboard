@@ -68,7 +68,13 @@
   {#each active as a (a.id)}
     <div class="body" data-sticker={a.id}>
       <div class="inner" transition:scale={{ duration: 400, start: 0.3 }}>
-        <div class:art={!!a.sticker}><StickerView sticker={a.sticker} text={a.text} /></div>
+        <!-- A face sticker follows the guest's current picture (it may have been retaken) -->
+        <div class:art={!!a.sticker}>
+          <StickerView
+            sticker={a.sticker?.kind === 'face' ? { ...a.sticker, src: (a.guest.id && hb.core?.avatars?.[a.guest.id]) || a.sticker.src } : a.sticker}
+            text={a.text}
+          />
+        </div>
         {#if showNames('stickerNames')}<span class="by" style:--c={a.guest.color}>{a.guest.name}</span>{/if}
       </div>
     </div>

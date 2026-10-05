@@ -147,9 +147,9 @@
         <button class="chip" class:active={params.effect === fx.id} onclick={() => (params.effect = fx.id)}>{fx.name}</button>
       {/each}
     </div>
-    <label class="slider" class:off={params.effect === 'none'}>
+    <label class="slider" class:off={params.effect === 'none' || params.effect === 'mirror'}>
       <span>Strength</span>
-      <input type="range" min="0.1" max="1" step="0.05" bind:value={params.strength} disabled={params.effect === 'none'} />
+      <input type="range" min="0.1" max="1" step="0.05" bind:value={params.strength} disabled={params.effect === 'none' || params.effect === 'mirror'} />
     </label>
   </div>
 

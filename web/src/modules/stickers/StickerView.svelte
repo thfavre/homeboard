@@ -7,6 +7,8 @@
 
 {#if sticker?.kind === 'builtin'}
   <BuiltinSticker id={sticker.id} />
+{:else if sticker?.kind === 'face'}
+  <img class="face" src={sticker.src} alt={sticker.name} draggable="false" />
 {:else if sticker?.kind === 'image'}
   <img src={sticker.src} alt={sticker.name} draggable="false" />
 {:else if text}
@@ -19,6 +21,13 @@
     height: 100%;
     object-fit: contain;
     filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.35));
+  }
+  .face {
+    border-radius: 50%;
+    border: 4px solid #fff;
+    object-fit: cover;
+    box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.6);
+    filter: none;
   }
   .text {
     display: inline-block;
