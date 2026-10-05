@@ -228,7 +228,7 @@
     align-items: center;
     white-space: nowrap;
     will-change: transform;
-    animation: scroll-left-to-right var(--dur) linear forwards;
+    animation: scroll-right-to-left var(--dur) linear forwards;
   }
 
   .marquee-content {
@@ -254,12 +254,13 @@
     flex-shrink: 0;
   }
 
-  @keyframes scroll-left-to-right {
+  /* Enters from the right and leaves on the left, like reading */
+  @keyframes scroll-right-to-left {
     0% {
-      transform: translateX(-100%);
+      transform: translateX(100vw);
     }
     100% {
-      transform: translateX(100vw);
+      transform: translateX(-100%);
     }
   }
 </style>
