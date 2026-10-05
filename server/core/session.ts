@@ -1,4 +1,4 @@
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { scryptSync, timingSafeEqual } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import type { AdminGuest, LedgerEntry, Me, PublicGuest } from '../../shared/protocol.ts';
@@ -10,8 +10,12 @@ export interface Guest {
   id: string;
   name: string;
   token: string;
-  /** Hashed 4-digit PIN chosen by the guest, to log back in from another phone */
-  pin?: { salt: string; hash: string };
+  /**
+   * 4-digit PIN chosen by the guest, to log back in from another phone.
+   * Kept readable so the guest can see it in their profile (they are told not to reuse a real PIN).
+   * Older sessions stored a hash instead: still accepted to log in, but cannot be shown.
+   */
+  pin?: string | { salt: string; hash: string };
   color: string;
   balance: number;
   earned: number;
@@ -43,13 +47,11 @@ const PIN_PATTERN = /^\d{4}$/;
 const MAX_PIN_FAILURES = 5;
 const PIN_LOCK_MS = 5 * 60_000;
 
-function hashPin(pin: string, salt = randomBytes(12).toString('base64')): { salt: string; hash: string } {
-  return { salt, hash: scryptSync(pin, salt, 32).toString('base64') };
-}
-
-function checkPin(pin: string, stored: { salt: string; hash: string }): boolean {
-  const a = Buffer.from(hashPin(pin, stored.salt).hash, 'base64');
-  const b = Buffer.from(stored.hash, 'base64');
+function checkPin(pin: string, stored: NonNullable<Guest['pin']>): boolean {
+  const [a, b] =
+    typeof stored === 'string'
+      ? [Buffer.from(pin), Buffer.from(stored)]
+      : [scryptSync(pin, stored.salt, 32), Buffer.from(stored.hash, 'base64')];
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
@@ -133,7 +135,7 @@ export class Session extends EventEmitter {
       id: uid(6),
       name,
       token: uid(18),
-      pin: hashPin(pin),
+      pin,
       color: GUEST_COLORS[this.guests.size % GUEST_COLORS.length],
       balance: 0,
       earned: 0,
@@ -169,7 +171,7 @@ export class Session extends EventEmitter {
   }
 
   setPin(guest: Guest, rawPin: unknown): void {
-    guest.pin = hashPin(validPin(rawPin));
+    guest.pin = validPin(rawPin);
     this.pinFailures.delete(guest.id);
     this.changed(guest);
   }
@@ -232,7 +234,7 @@ export class Session extends EventEmitter {
   }
 
   me(g: Guest): Me {
-    return { id: g.id, name: g.name, color: g.color, balance: g.balance, earned: g.earned, spent: g.spent, hasPin: !!g.pin };
+    return { id: g.id, name: g.name, color: g.color, balance: g.balance, earned: g.earned, spent: g.spent, hasPin: !!g.pin, pin: typeof g.pin === 'string' ? g.pin : null };
   }
 
   publicGuest(g: Guest): PublicGuest {

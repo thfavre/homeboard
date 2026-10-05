@@ -57,6 +57,8 @@ export interface Me {
   earned: number;
   spent: number;
   hasPin: boolean;
+  /** Only sent to the guest themselves. Null when unknown (set before PINs were readable). */
+  pin: string | null;
 }
 
 export interface ActivityItem {
