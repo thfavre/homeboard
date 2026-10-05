@@ -1,4 +1,4 @@
-export type QuizPhase = 'idle' | 'loading' | 'lobby' | 'question' | 'reveal' | 'scores' | 'final';
+export type QuizPhase = 'idle' | 'loading' | 'lobby' | 'countdown' | 'question' | 'reveal' | 'scores' | 'final';
 
 export const ANSWER_STYLES = [
   { shape: 'triangle', color: '#ff4d6d' },
@@ -6,6 +6,11 @@ export const ANSWER_STYLES = [
   { shape: 'circle', color: '#f5b83d' },
   { shape: 'square', color: '#2ec4a0' },
 ] as const;
+
+/** Longest a lobby waits before the quiz starts by itself */
+export const LOBBY_MAX_SEC = 60;
+/** Length of the end screen, where the podium can play */
+export const FINAL_SEC = 20;
 
 export interface QuizPlayer {
   id: string;
@@ -19,27 +24,88 @@ export interface QuizPlayer {
   reward?: number;
 }
 
-export interface QuizState {
-  phase: QuizPhase;
-  index: number;
-  total: number;
-  category: string;
-  difficulty: string;
-  question: { text: string; answers: string[] } | null;
-  /** When the current phase ends (ms timestamp), or null when it waits for the host */
-  endsAt: number | null;
-  answered: string[];
-  playerCount: number;
-  reveal: { correct: number; counts: number[] } | null;
-  players: QuizPlayer[];
-  error: string | null;
-  /** Admin only */
-  settings?: QuizSettings;
-}
-
 export interface QuizSettings {
   questions: number;
   timeSec: number;
   category: number;
   difficulty: '' | 'easy' | 'medium' | 'hard';
+}
+
+/** Where the questions come from */
+export type QuizSource = { kind: 'trivia'; settings: QuizSettings } | { kind: 'custom'; quizId: string; timeSec: number };
+
+export interface CustomQuestion {
+  text: string;
+  /** 2 to 4 answers */
+  answers: string[];
+  correct: number;
+  image?: string;
+}
+
+export interface CustomQuiz {
+  id: string;
+  title: string;
+  author: string;
+  /** Guest who made it (they can edit it during the session); empty for the host */
+  authorId: string;
+  createdAt: number;
+  questions: CustomQuestion[];
+}
+
+/** A quiz being created or edited */
+export interface QuizDraft {
+  id?: string;
+  title: string;
+  questions: CustomQuestion[];
+}
+
+/** What everyone sees of the library: no answers */
+export interface LibraryItem {
+  id: string;
+  title: string;
+  author: string;
+  authorId: string;
+  count: number;
+  hasImages: boolean;
+}
+
+export interface QuizState {
+  phase: QuizPhase;
+  title: string;
+  source: 'trivia' | 'custom';
+  /** Guest who started the quiz: they press Start. Null when the host started it. */
+  owner: { id: string; name: string } | null;
+  /** 'owner': the owner starts it. 'ready': it starts sooner as players press Ready. */
+  lobbyMode: 'owner' | 'ready';
+  ready: string[];
+  index: number;
+  total: number;
+  timeSec: number;
+  category: string;
+  difficulty: string;
+  question: { text: string; answers: string[]; image?: string } | null;
+  /** When the current phase ends (ms timestamp), null while paused or waiting */
+  endsAt: number | null;
+  /** Length of the current phase, for countdown bars */
+  phaseMs: number;
+  paused: boolean;
+  /** Time left in the phase while paused */
+  pausedLeft: number;
+  answered: string[];
+  playerCount: number;
+  reveal: { correct: number; counts: number[] } | null;
+  players: QuizPlayer[];
+  /** Ids of the top 3 at the end */
+  podium: string[];
+  error: string | null;
+  settings: QuizSettings;
+  library: LibraryItem[];
+}
+
+export interface QuizFx {
+  id: string;
+  kind: 'spin' | 'hop' | 'wiggle' | 'peek';
+  /** For peek: the edge it comes from and where along it (0..1) */
+  side?: 'left' | 'right' | 'top' | 'bottom';
+  pos?: number;
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Circular countdown until `endsAt` */
-  let { endsAt, totalMs, size = '5rem' }: { endsAt: number | null; totalMs: number; size?: string } = $props();
+  let { endsAt, totalMs, size = '5rem', pausedLeft = 0 }: { endsAt: number | null; totalMs: number; size?: string; pausedLeft?: number } = $props();
   let now = $state(Date.now());
   $effect(() => {
     let frame = requestAnimationFrame(function loop() {
@@ -9,7 +9,8 @@
     });
     return () => cancelAnimationFrame(frame);
   });
-  const left = $derived(endsAt ? Math.max(0, endsAt - now) : 0);
+  // While paused there is no end time: show the time that was left
+  const left = $derived(endsAt ? Math.max(0, endsAt - now) : pausedLeft);
   const ratio = $derived(totalMs ? left / totalMs : 0);
   const C = 2 * Math.PI * 45;
 </script>

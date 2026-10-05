@@ -23,6 +23,9 @@
   } = $props();
 
   // Starts from the saved settings, then the editor owns them
+  // A new order every time, so people try different effects (Normal stays first)
+  const effects = [AVATAR_EFFECTS[0], ...AVATAR_EFFECTS.slice(1).sort(() => Math.random() - 0.5)];
+
   let params = $state<AvatarParams>({ ...DEFAULT_AVATAR_PARAMS, ...(untrack(() => initial) ?? {}) });
   let canvas = $state<HTMLCanvasElement>();
   let source: ImageData | null = null;
@@ -57,12 +60,19 @@
 
   $effect(() => {
     // Track every setting
-    void [params.effect, params.strength, params.cx, params.cy, params.emoji, params.ex, params.ey, params.esize];
+    void [params.effect, params.strength, params.cx, params.cy, params.emoji, params.ex, params.ey, params.esize, params.erot];
     draw();
   });
 
-  // Pointer: drag the emoji when grabbing it, otherwise aim the effect
+  // Pointers: one finger drags the emoji (or aims the effect), two fingers pinch the emoji
   let dragging: 'emoji' | 'effect' | null = null;
+  const pointers = new Map<number, { x: number; y: number }>();
+  let pinch: { dist: number; angle: number; size: number; rot: number } | null = null;
+
+  const between = () => {
+    const [a, b] = [...pointers.values()];
+    return { dist: Math.hypot(b.x - a.x, b.y - a.y), angle: Math.atan2(b.y - a.y, b.x - a.x) };
+  };
   const pos = (e: PointerEvent) => {
     const r = canvas!.getBoundingClientRect();
     return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
@@ -70,16 +80,30 @@
 
   function down(e: PointerEvent) {
     const p = pos(e);
-    const nearEmoji = params.emoji && Math.hypot(p.x - params.ex, p.y - params.ey) < params.esize * 0.7;
-    dragging = nearEmoji ? 'emoji' : params.effect !== 'none' && params.effect !== 'wave' && params.effect !== 'pixel' ? 'effect' : null;
-    if (!dragging) return;
     canvas!.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, p);
+    if (pointers.size === 2 && params.emoji) {
+      const g = between();
+      pinch = { ...g, size: params.esize, rot: params.erot };
+      dragging = null;
+      return;
+    }
+    const nearEmoji = params.emoji && Math.hypot(p.x - params.ex, p.y - params.ey) < params.esize * 0.7;
+    dragging = nearEmoji ? 'emoji' : aimable ? 'effect' : null;
+    if (!dragging) return;
     move(e);
   }
 
   function move(e: PointerEvent) {
-    if (!dragging) return;
     const p = pos(e);
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
+    if (pinch && pointers.size === 2) {
+      const g = between();
+      params.esize = Math.min(0.9, Math.max(0.08, (pinch.size * g.dist) / Math.max(0.01, pinch.dist)));
+      params.erot = pinch.rot + (g.angle - pinch.angle);
+      return;
+    }
+    if (!dragging) return;
     if (dragging === 'emoji') {
       params.ex = p.x;
       params.ey = p.y;
@@ -89,23 +113,37 @@
     }
   }
 
+  function up(e: PointerEvent) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (!pointers.size) dragging = null;
+  }
+
+  /** Computer without touch: wheel resizes the emoji, Shift + wheel rotates it */
+  function wheel(e: WheelEvent) {
+    if (!params.emoji) return;
+    e.preventDefault();
+    if (e.shiftKey) params.erot += e.deltaY > 0 ? 0.12 : -0.12;
+    else params.esize = Math.min(0.9, Math.max(0.08, params.esize * (e.deltaY > 0 ? 0.92 : 1.08)));
+  }
+
   const aimable = $derived(params.effect !== 'none' && params.effect !== 'wave' && params.effect !== 'pixel');
 </script>
 
 <div class="editor">
   <div class="preview">
-    <canvas bind:this={canvas} onpointerdown={down} onpointermove={move} onpointerup={() => (dragging = null)} onpointercancel={() => (dragging = null)}></canvas>
+    <canvas bind:this={canvas} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onwheel={wheel}></canvas>
     {#if !ready}<p class="loading">Loading...</p>{/if}
   </div>
   <p class="faint tip">
-    {aimable ? 'Tap your face to aim the effect.' : 'Pick an effect and an emoji.'}
-    {params.emoji ? ' Drag the emoji to move it.' : ''}
+    {aimable ? (params.effect === 'mirror' ? 'Tap where the mirror line goes.' : 'Tap your face to aim the effect.') : 'Pick an effect and an emoji.'}
+    {params.emoji ? ' Drag the emoji, pinch it to resize and turn it.' : ''}
   </p>
 
   <div class="group">
     <span class="eyebrow">Effect</span>
     <div class="chips">
-      {#each AVATAR_EFFECTS as fx (fx.id)}
+      {#each effects as fx (fx.id)}
         <button class="chip" class:active={params.effect === fx.id} onclick={() => (params.effect = fx.id)}>{fx.name}</button>
       {/each}
     </div>
@@ -123,10 +161,6 @@
         <button class="emoji" class:active={params.emoji === em} onclick={() => (params.emoji = em)}>{em}</button>
       {/each}
     </div>
-    <label class="slider" class:off={!params.emoji}>
-      <span>Size</span>
-      <input type="range" min="0.12" max="0.6" step="0.01" bind:value={params.esize} disabled={!params.emoji} />
-    </label>
   </div>
 
   <div class="actions">
@@ -178,10 +212,8 @@
   }
   .chips {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.4rem;
-    overflow-x: auto;
-    padding-bottom: 0.2rem;
-    scrollbar-width: none;
   }
   .chip {
     flex: none;

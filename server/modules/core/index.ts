@@ -172,7 +172,8 @@ export default defineModule({
       emoji: typeof p?.emoji === 'string' && p.emoji.length <= 16 ? p.emoji : null,
       ex: clamp(num(p?.ex, 0.5), 0, 1),
       ey: clamp(num(p?.ey, 0.5), 0, 1),
-      esize: clamp(num(p?.esize, 0.3), 0.08, 0.8),
+      esize: clamp(num(p?.esize, 0.3), 0.08, 0.9),
+      erot: clamp(num(p?.erot, 0), -Math.PI * 4, Math.PI * 4),
     });
 
     const deleteAvatar = (g: Guest) => {

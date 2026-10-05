@@ -8,6 +8,7 @@ export const AVATAR_EFFECTS = [
   { id: 'wide', name: 'Wide face' },
   { id: 'wave', name: 'Wavy' },
   { id: 'pixel', name: 'Pixel' },
+  { id: 'mirror', name: 'Mirror' },
 ] as const;
 
 export type AvatarEffect = (typeof AVATAR_EFFECTS)[number]['id'];
@@ -36,6 +37,8 @@ export interface AvatarParams {
   ey: number;
   /** Emoji size, fraction of the picture width */
   esize: number;
+  /** Emoji rotation, radians */
+  erot: number;
 }
 
 export const DEFAULT_AVATAR_PARAMS: AvatarParams = {
@@ -47,4 +50,5 @@ export const DEFAULT_AVATAR_PARAMS: AvatarParams = {
   ex: 0.72,
   ey: 0.25,
   esize: 0.3,
+  erot: 0,
 };

@@ -1,0 +1,294 @@
+<script lang="ts">
+  import { untrack } from 'svelte';
+  import { Pencil, Play, Search, Trash2 } from '@lucide/svelte';
+  import type { CustomQuiz, QuizDraft, QuizState } from '$shared/quiz.ts';
+  import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
+  import { ask } from '$lib/dialog.svelte.ts';
+  import Money from '$lib/ui/Money.svelte';
+  import QuizEditor from './QuizEditor.svelte';
+
+  /** Guest panel: start a quiz (random trivia or a custom one) or create a custom quiz */
+  const q = $derived(hb.modules.quiz as QuizState | undefined);
+  const cost = $derived(price('quiz.start'));
+
+  let tab = $state<'trivia' | 'custom' | 'create'>('trivia');
+  // Start from the host's last settings
+  const initial = untrack(() => q?.settings);
+  let questions = $state(initial?.questions ?? 10);
+  let timeSec = $state(initial?.timeSec ?? 20);
+  let difficulty = $state<string>('');
+  let category = $state(0);
+  let search = $state('');
+  let categories = $state<{ id: number; name: string }[]>([]);
+  let chosen = $state<string | null>(null);
+  let editing = $state<CustomQuiz | null | 'new'>(null);
+  let busy = $state(false);
+
+  rpc<{ id: number; name: string }[]>('quiz', 'categories')
+    .then((c) => (categories = c))
+    .catch(() => {});
+
+  const shown = $derived(categories.filter((c) => c.name.toLowerCase().includes(search.trim().toLowerCase())));
+  const categoryName = $derived(category ? (categories.find((c) => c.id === category)?.name ?? '') : 'Any category');
+
+  async function start() {
+    busy = true;
+    const args =
+      tab === 'custom' ? { source: 'custom', quizId: chosen, timeSec } : { source: 'trivia', questions, timeSec, category, difficulty };
+    await attempt(() => rpc('quiz', 'start', args));
+    busy = false;
+  }
+
+  async function edit(id: string) {
+    const quiz = await attempt(() => rpc<CustomQuiz>('quiz', 'getCustom', { id }));
+    if (quiz) {
+      editing = quiz;
+      tab = 'create';
+    }
+  }
+
+  async function remove(id: string, title: string) {
+    if (await ask({ title: `Delete "${title}"?`, confirm: 'Delete', danger: true })) attempt(() => rpc('quiz', 'deleteCustom', { id }), 'Quiz deleted');
+  }
+
+  async function saved(quiz: QuizDraft) {
+    busy = true;
+    const item = await attempt(() => rpc<{ id: string }>('quiz', 'saveCustom', { quiz }), 'Quiz saved');
+    busy = false;
+    if (item) {
+      editing = null;
+      chosen = item.id;
+      tab = 'custom';
+    }
+  }
+
+  const DIFFICULTIES = [
+    { id: '', label: 'Any' },
+    { id: 'easy', label: 'Easy' },
+    { id: 'medium', label: 'Medium' },
+    { id: 'hard', label: 'Hard' },
+  ];
+</script>
+
+{#if q}
+  <div class="start">
+    <div class="tabs">
+      <button class:active={tab === 'trivia'} onclick={() => (tab = 'trivia')}>Random</button>
+      <button class:active={tab === 'custom'} onclick={() => (tab = 'custom')}>Custom</button>
+      <button
+        class:active={tab === 'create'}
+        onclick={() => {
+          tab = 'create';
+          editing ??= 'new';
+        }}>Create</button
+      >
+    </div>
+
+    {#if tab === 'create'}
+      {#key editing}
+        <QuizEditor
+          initial={editing && editing !== 'new' ? editing : null}
+          {busy}
+          onsave={saved}
+          oncancel={() => {
+            editing = null;
+            tab = 'custom';
+          }}
+        />
+      {/key}
+    {:else}
+      {#if tab === 'trivia'}
+        <p class="dim intro">Questions from Open Trivia DB (in English).</p>
+        <div class="card box">
+          <label class="field">
+            <span>Category: <strong>{categoryName}</strong></span>
+            <div class="search">
+              <Search size={16} />
+              <input class="input" bind:value={search} placeholder="Search a category" />
+            </div>
+          </label>
+          <div class="cats">
+            <button class="chip" class:active={category === 0} onclick={() => (category = 0)}>Any</button>
+            {#each shown as c (c.id)}
+              <button class="chip" class:active={category === c.id} onclick={() => (category = c.id)}>{c.name.replace(/^(Entertainment|Science): /, '')}</button>
+            {/each}
+          </div>
+          <div class="field">
+            <span class="label">Difficulty</span>
+            <div class="row wrap">
+              {#each DIFFICULTIES as d}
+                <button class="chip" class:active={difficulty === d.id} onclick={() => (difficulty = d.id)}>{d.label}</button>
+              {/each}
+            </div>
+          </div>
+          <label class="field">
+            <span>Questions: {questions}</span>
+            <input type="range" min="3" max="30" bind:value={questions} />
+          </label>
+        </div>
+      {:else}
+        <div class="card list">
+          {#each q.library as item (item.id)}
+            <div class="item" class:active={chosen === item.id}>
+              <button class="pick" onclick={() => (chosen = item.id)}>
+                <span class="radio"></span>
+                <span class="text">
+                  <strong class="truncate">{item.title}</strong>
+                  <span class="faint small">{item.count} {item.count === 1 ? 'question' : 'questions'} &middot; by {item.author}</span>
+                </span>
+              </button>
+              {#if item.authorId === hb.me?.id}
+                <button class="btn ghost small" aria-label="Edit" onclick={() => edit(item.id)}><Pencil size={15} /></button>
+                <button class="btn ghost small" aria-label="Delete" onclick={() => remove(item.id, item.title)}><Trash2 size={15} /></button>
+              {/if}
+            </div>
+          {:else}
+            <p class="empty">No custom quiz yet. Create one!</p>
+          {/each}
+        </div>
+      {/if}
+
+      <div class="card box">
+        <label class="field">
+          <span>Seconds per question: {timeSec}</span>
+          <input type="range" min="5" max="60" step="5" bind:value={timeSec} />
+        </label>
+        <button class="btn primary block" disabled={busy || q.phase !== 'idle' || (tab === 'custom' && !chosen)} onclick={start}>
+          <Play size={18} />
+          {q.phase !== 'idle' ? 'A quiz is running' : 'Start the quiz'}
+          {#if hb.core?.economyEnabled && cost}<span class="sep">&middot;</span><Money amount={cost} />{/if}
+        </button>
+        <p class="faint small center">You start it when everyone is in (60 seconds at most).</p>
+      </div>
+    {/if}
+  </div>
+{/if}
+
+<style>
+  .start {
+    display: grid;
+    gap: 0.9rem;
+  }
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+  }
+  .tabs button {
+    padding: 0.55rem;
+    border: 0;
+    border-radius: calc(var(--radius-sm) - 3px);
+    background: none;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+  .tabs button.active {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .intro {
+    font-size: 0.88rem;
+  }
+  .box {
+    padding: 1rem;
+    display: grid;
+    gap: 0.9rem;
+  }
+  .search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    color: var(--text-faint);
+  }
+  .search :global(svg) {
+    position: absolute;
+    left: 0.8rem;
+  }
+  .search .input {
+    padding-left: 2.3rem;
+  }
+  /* Fixed height so filtering does not move the rest of the page */
+  .cats {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 0.35rem;
+    height: 9.5rem;
+    overflow-y: auto;
+  }
+  .chip {
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    font-weight: 600;
+    font-size: 0.8rem;
+  }
+  .chip.active {
+    background: var(--accent);
+    border-color: transparent;
+    color: var(--accent-contrast);
+  }
+  .label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-dim);
+  }
+  .wrap {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  input[type='range'] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .list {
+    padding: 0.3rem;
+  }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    border-radius: var(--radius-sm);
+  }
+  .item.active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .pick {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.7rem;
+    border: 0;
+    background: none;
+    text-align: left;
+  }
+  .radio {
+    flex: none;
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 50%;
+    border: 2px solid var(--border-strong);
+  }
+  .active .radio {
+    border: 5px solid var(--accent);
+  }
+  .text {
+    min-width: 0;
+    display: grid;
+  }
+  .small {
+    font-size: 0.8rem;
+  }
+  .sep {
+    margin: 0 0.1rem;
+  }
+  .center {
+    text-align: center;
+  }
+</style>

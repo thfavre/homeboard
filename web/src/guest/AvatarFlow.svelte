@@ -59,8 +59,8 @@
 <div class="flow" transition:fade={{ duration: 150 }}>
   <div class="inner">
     <header>
-      <h2>{step === 'camera' ? 'Take a selfie' : 'Make it fun'}</h2>
-      <p class="dim">{step === 'camera' ? 'Center your face in the circle.' : 'It shows next to your name on the TV.'}</p>
+      <h2>{step === 'camera' ? 'Take a selfie' : 'Your picture'}</h2>
+      <p class="dim">{step === 'camera' ? 'Center your face in the circle.' : 'Add an effect and an emoji if you like. It shows next to your name on the TV.'}</p>
     </header>
 
     {#if step === 'camera'}

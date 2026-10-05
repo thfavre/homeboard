@@ -78,6 +78,9 @@ export function applyEffect(src: ImageData, p: AvatarParams): ImageData {
       if (p.effect === 'wave') {
         sx = x + Math.sin(y / 18) * 14 * a;
         sy = y + Math.sin(x / 22) * 10 * a;
+      } else if (p.effect === 'mirror') {
+        // The left side of the face is reflected onto the right side
+        if (x > cx) sx = 2 * cx - x;
       } else if (t < 1) {
         // Smooth falloff so the edge of the effect blends in
         const fall = (1 - t) * (1 - t);
@@ -119,7 +122,9 @@ export function drawEmoji(ctx: CanvasRenderingContext2D, p: AvatarParams, size: 
   ctx.textBaseline = 'middle';
   ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
   ctx.shadowBlur = px * 0.08;
-  ctx.fillText(p.emoji, p.ex * size, p.ey * size);
+  ctx.translate(p.ex * size, p.ey * size);
+  ctx.rotate(p.erot ?? 0);
+  ctx.fillText(p.emoji, 0, 0);
   ctx.restore();
 }
 
