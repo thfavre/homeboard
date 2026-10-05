@@ -27,23 +27,22 @@
 </script>
 
 {#if mod}
+  <!-- Fixed size, so the page below never moves when the photo on the TV changes -->
   <Section title="On the TV now">
-    {#if mod.current}
-      <div class="now">
-        <img src={mod.current.url} alt="" />
-        <div class="info">
-          <strong>{mod.current.guest.name}</strong>
-          {#if mod.current.caption}<span class="dim">{mod.current.caption}</span>{/if}
-          <div class="row">
-            <button class="btn small" onclick={() => attempt(() => rpc('photos', 'skip'))}><SkipForward size={16} /> Next</button>
-            <button class="btn small danger" onclick={() => mod.current && remove(mod.current)}><Trash2 size={16} /> Remove</button>
-          </div>
+    <div class="now">
+      <div class="thumb">
+        {#if mod.current}<img src={mod.current.url} alt="" />{:else}<span class="faint">Nothing</span>{/if}
+      </div>
+      <div class="info">
+        <strong class="truncate">{mod.current ? mod.current.guest.name : 'No photo on screen'}</strong>
+        <span class="dim caption">{mod.current?.caption ?? ''}</span>
+        <span class="faint small">{mod.queue?.length ? `${mod.queue.length} waiting` : 'Nothing waiting'}</span>
+        <div class="row">
+          <button class="btn small" disabled={!mod.current} onclick={() => attempt(() => rpc('photos', 'skip'))}><SkipForward size={16} /> Next</button>
+          <button class="btn small danger" disabled={!mod.current} onclick={() => mod.current && remove(mod.current)}><Trash2 size={16} /> Remove</button>
         </div>
       </div>
-    {:else}
-      <p class="faint">No photo on screen.</p>
-    {/if}
-    {#if mod.queue?.length}<p class="dim">{mod.queue.length} waiting</p>{/if}
+    </div>
   </Section>
 
   <Section title="All photos" hint="Photos are deleted when you start a new session.">
@@ -86,15 +85,42 @@
   .now {
     display: flex;
     gap: 1rem;
-    align-items: flex-start;
+    height: 9rem;
   }
-  .now img {
+  .thumb {
+    flex: none;
     width: 9rem;
+    height: 9rem;
+    display: grid;
+    place-items: center;
     border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    overflow: hidden;
+    font-size: 0.85rem;
+  }
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
   .info {
+    flex: 1;
+    min-width: 0;
     display: grid;
-    gap: 0.4rem;
+    grid-template-rows: auto 1fr auto auto;
+    gap: 0.3rem;
+  }
+  .caption {
+    font-size: 0.88rem;
+    line-height: 1.3;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .small {
+    font-size: 0.8rem;
   }
   .gallery {
     display: grid;
