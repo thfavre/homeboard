@@ -37,7 +37,11 @@
             <span class="tagline">{f.tagline}</span>
           </span>
           {#if f.priceKey && hb.core?.economyEnabled}
-            <span class="price"><Money amount={price(f.priceKey)} free /></span>
+            {@const pInfo = hb.core.prices[f.priceKey]}
+            <span class="price">
+              <Money amount={price(f.priceKey)} free />
+              {#if pInfo?.unit}<span class="dim small">{` / ${pInfo.unit}`}</span>{/if}
+            </span>
           {/if}
           <ChevronRight size={18} class="chev" />
         </button>
