@@ -1,56 +1,58 @@
 <script lang="ts">
   import { fade, fly } from 'svelte/transition';
-  import type { PhotosState } from '$shared/photos.ts';
+  import type { Photo, PhotosState } from '$shared/photos.ts';
   import { hb } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
 
   const mod = $derived(hb.modules.photos as PhotosState | undefined);
   const current = $derived(mod?.current ?? null);
-  const upcoming = $derived(mod?.upcoming ?? []);
-  const tilt = $derived(current ? ((current.id.charCodeAt(0) % 7) - 3) * 0.7 : 0);
 
-  /** Position of each photo waiting in the pile, from the top of the pile down */
-  const PILE = [
-    { x: '1.6rem', y: '-1.1rem', r: '5deg' },
-    { x: '-1.8rem', y: '-1.7rem', r: '-6deg' },
-    { x: '2.6rem', y: '-2.4rem', r: '9deg' },
-  ];
-  const pile = $derived(
-    upcoming
-      .slice(0, PILE.length)
-      .map((p, i) => ({ photo: p, pos: PILE[i] }))
-      .reverse(),
-  );
+  /** Bottom of the pile first, so the photo on screen is drawn last (on top) */
+  const pile = $derived(current ? [...(mod?.upcoming ?? []).slice(0, 3)].reverse().concat(current) : []);
+
+  /**
+   * Each photo keeps the same tilt and offset for its whole life, so the pile
+   * does not move when the top photo leaves: the next one just lights up.
+   */
+  function pose(p: Photo) {
+    let h = 0;
+    for (const c of p.id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return {
+      r: `${((h % 13) - 6) * 1.1}deg`,
+      x: `${(((h >> 4) % 5) - 2) * 0.9}rem`,
+      y: `${(((h >> 8) % 5) - 2) * 0.6}rem`,
+    };
+  }
 </script>
 
 {#if current}
   <div class="scrim" transition:fade={{ duration: 400 }}></div>
   <div class="stage">
     <div class="pile">
-      {#each pile as { photo, pos } (photo.id)}
-        <div class="card back" style:--x={pos.x} style:--y={pos.y} style:--r={pos.r} transition:fade={{ duration: 300 }}>
-          <img src={photo.url} alt="" />
-        </div>
-      {/each}
-
-      {#key current.id}
-        <figure class="card front" style:--tilt="{tilt}deg" in:fly={{ y: 120, duration: 600, opacity: 0 }} out:fade={{ duration: 300 }}>
-          <div class="timer" style:animation-duration="{Math.max(0, current.until - Date.now())}ms"></div>
-          <img src={current.url} alt={current.caption || 'Photo from ' + current.guest.name} />
+      {#each pile as p (p.id)}
+        {@const pos = pose(p)}
+        {@const top = p.id === current.id}
+        <figure
+          class="card"
+          class:waiting={!top}
+          style:--r={pos.r}
+          style:--x={pos.x}
+          style:--y={pos.y}
+          in:fade={{ duration: 500 }}
+          out:fly={{ y: -80, duration: 500 }}
+        >
+          {#if top}<div class="timer" style:animation-duration="{Math.max(0, current.until - Date.now())}ms"></div>{/if}
+          <img src={p.url} alt={p.caption || 'Photo from ' + p.guest.name} />
           <figcaption>
-            {#if current.caption}<p class="caption">{current.caption}</p>{/if}
+            {#if p.caption}<p class="caption">{p.caption}</p>{/if}
             <div class="by">
-              <Avatar name={current.guest.name} color={current.guest.color} size="1.9rem" />
-              <span>{current.guest.name}</span>
+              <Avatar name={p.guest.name} color={p.guest.color} size="1.9rem" />
+              <span>{p.guest.name}</span>
             </div>
           </figcaption>
         </figure>
-      {/key}
+      {/each}
     </div>
-
-    {#if mod && mod.queued > 0}
-      <span class="waiting" transition:fade>{mod.queued} more {mod.queued === 1 ? 'photo' : 'photos'} waiting</span>
-    {/if}
   </div>
 {/if}
 
@@ -75,49 +77,31 @@
     z-index: 31;
     display: grid;
     place-items: center;
-    align-content: center;
-    gap: 2.2rem;
     pointer-events: none;
     container-type: size;
   }
-  /* The front photo sets the size; the waiting ones sit behind it at the same size */
+  /* Every photo sits in the same cell, centered, with its own size and shape */
   .pile {
-    position: relative;
     display: grid;
   }
-  .front {
-    grid-area: 1 / 1;
-  }
   .card {
+    grid-area: 1 / 1;
+    place-self: center;
+    position: relative;
     margin: 0;
+    padding: 1.1rem 1.1rem 0;
     background: #fbfaf7;
     color: #1d1b16;
     border-radius: 0.6rem;
     box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.85);
-  }
-  .back {
-    position: absolute;
-    inset: 0;
-    padding: 1.1rem 1.1rem 4.5rem;
+    overflow: hidden;
     transform: translate(var(--x), var(--y)) rotate(var(--r));
-    transition: transform 0.6s ease;
-    overflow: hidden;
+    transition: filter 0.7s ease;
   }
-  .back img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 0.25rem;
-    filter: brightness(0.8) saturate(0.85);
+  .waiting {
+    filter: brightness(0.32) saturate(0.7);
   }
-  .front {
-    position: relative;
-    z-index: 2;
-    padding: 1.1rem 1.1rem 0;
-    transform: rotate(var(--tilt));
-    overflow: hidden;
-  }
-  .front img {
+  img {
     display: block;
     max-height: min(58vh, calc(100cqh - 20rem));
     max-width: calc(100cqw - 14rem);
@@ -154,15 +138,6 @@
     background: var(--accent);
     transform-origin: left;
     animation: shrink linear forwards;
-  }
-  .waiting {
-    padding: 0.45rem 1.1rem;
-    border-radius: 999px;
-    background: var(--surface);
-    border: 1px solid var(--border-strong);
-    font-weight: 600;
-    font-size: 1rem;
-    backdrop-filter: blur(10px);
   }
   @keyframes shrink {
     to {
