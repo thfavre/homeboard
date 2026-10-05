@@ -64,6 +64,8 @@ export interface ModuleContext<S extends object = Record<string, never>> {
   onSessionReset(fn: () => void): void;
   onToggle(fn: (enabled: boolean) => void): void;
   onGuestJoined(fn: (guest: Guest) => void): void;
+  /** Called (and awaited) when the server stops */
+  onShutdown(fn: () => void | Promise<void>): void;
 
   /** Share an API with other modules, and use theirs */
   provide<T>(name: string, api: T): void;
@@ -83,8 +85,6 @@ export interface ModuleDef<S extends object = Record<string, never>> {
   /** Default persistent settings */
   settings?: S;
   setup(ctx: ModuleContext<S>): void | Promise<void>;
-  /** Called on shutdown */
-  stop?(): void | Promise<void>;
 }
 
 export function defineModule<S extends object = Record<string, never>>(def: ModuleDef<S>): ModuleDef<S> {

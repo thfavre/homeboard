@@ -100,6 +100,7 @@ export class Hub {
   private visitorHandlers = new Map<string, VisitorHandler>();
   private guestSockets = new Map<string, Set<Socket>>();
   private activitySeq = 0;
+  private shutdownHooks: { id: string; fn: () => void | Promise<void> }[] = [];
 
   constructor(readonly port: number) {
     this.bus.setMaxListeners(100);
@@ -243,6 +244,7 @@ export class Hub {
       onSessionReset: (fn) => this.bus.on('session-reset', fn),
       onToggle: (fn) => this.bus.on(`toggle:${id}`, fn),
       onGuestJoined: (fn) => this.bus.on('guest-joined', fn),
+      onShutdown: (fn) => this.shutdownHooks.push({ id, fn }),
       provide: (name, api) => this.services.set(name, api),
       use: <T>(name: string) => this.services.get(name) as T | undefined,
       takeover: {
@@ -511,13 +513,15 @@ export class Hub {
 
   async stop(): Promise<void> {
     this.tunnel.stop();
-    for (const m of this.modules.values()) {
-      try {
-        await m.def.stop?.();
-      } catch (err) {
-        log.error(m.def.id, 'stop failed', err);
-      }
-    }
+    await Promise.all(
+      this.shutdownHooks.map(async (h) => {
+        try {
+          await h.fn();
+        } catch (err) {
+          log.error(h.id, 'shutdown failed', err);
+        }
+      }),
+    );
     this.session.flush();
     this.settings.flush();
   }
