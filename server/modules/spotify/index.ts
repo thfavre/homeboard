@@ -15,12 +15,16 @@ interface SpotifySettings {
   duckPercent: number;
 }
 
-const API = 'https://api.spotify.com/v1';
+// Overridable so tests can run against a fake Spotify
+const API = process.env.HB_SPOTIFY_API ?? 'https://api.spotify.com/v1';
+const ACCOUNTS = process.env.HB_SPOTIFY_ACCOUNTS ?? 'https://accounts.spotify.com';
 const SCOPES = 'user-read-playback-state user-modify-playback-state user-read-currently-playing';
 /** Development mode apps may not ask for more than 10 search results (since March 2026) */
 const SEARCH_LIMIT = 10;
 /** Safety net: the music comes back even if the TV never reports the end of a sound */
 const DUCK_MAX_MS = 30_000;
+/** How long Spotify may keep reporting the previous volume after a change */
+const VOLUME_SETTLE_MS = 3500;
 const POLL_MS = 3000;
 const QUEUE_POLL_MS = 12_000;
 const TRACK_URI = /^spotify:track:[A-Za-z0-9]{22}$/;
@@ -70,7 +74,7 @@ export default defineModule<SpotifySettings>({
     // ------------------------------------------------------------ auth
 
     const tokenRequest = async (params: Record<string, string>) => {
-      const res = await fetch('https://accounts.spotify.com/api/token', {
+      const res = await fetch(`${ACCOUNTS}/api/token`, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ client_id: ctx.settings.get().clientId, ...params }),
@@ -174,7 +178,8 @@ export default defineModule<SpotifySettings>({
           now = null;
         }
         device = p?.device?.name ?? null;
-        volume = p?.device?.volume_percent ?? null;
+        // Right after we change the volume, Spotify still reports the old value for a moment
+        if (Date.now() >= volumeSettleAt) volume = p?.device?.volume_percent ?? null;
         if (restoreTo !== null) await restore();
         if (now?.uri !== before || Date.now() - lastQueuePoll > QUEUE_POLL_MS) await pollQueue();
         error = null;
@@ -187,24 +192,39 @@ export default defineModule<SpotifySettings>({
     // ------------------------------------------------------------ ducking
     //
     // While soundboard sounds play, the music is lowered. The TV reports when each
-    // sound ends; the volume goes back up once none is playing. Restoring is retried
-    // until Spotify confirms it, because the volume API sometimes fails silently.
+    // sound ends; the volume goes back up once none is playing. The restore is always
+    // sent, then checked against what Spotify reports and sent again until it matches.
 
     let duck: { original: number; plays: Set<string>; failsafe: NodeJS.Timeout } | null = null;
     let restoreTo: number | null = null;
     let restoreTries = 0;
+    /** Until then, the volume reported by Spotify may be out of date */
+    let volumeSettleAt = 0;
 
-    const setVolume = (v: number) => api('PUT', `/me/player/volume?volume_percent=${v}`);
+    /** Change the volume and remember it, without waiting for Spotify to report it */
+    const setVolume = async (v: number) => {
+      volume = v;
+      volumeSettleAt = Date.now() + VOLUME_SETTLE_MS;
+      await api('PUT', `/me/player/volume?volume_percent=${v}`);
+    };
 
     const restore = async () => {
       if (restoreTo === null || duck) return;
-      if (volume === restoreTo || restoreTries >= 6) {
-        if (volume !== restoreTo) ctx.log.warn(`Could not put the volume back to ${restoreTo}%`);
-        restoreTo = null;
-        return;
+      if (restoreTries > 0) {
+        // Wait until Spotify reports the result of the last attempt
+        if (Date.now() < volumeSettleAt) return;
+        if (volume === restoreTo) {
+          restoreTo = null;
+          return;
+        }
+        if (restoreTries >= 6) {
+          ctx.log.warn(`Could not put the volume back to ${restoreTo}% (Spotify reports ${volume}%)`);
+          restoreTo = null;
+          return;
+        }
       }
       restoreTries += 1;
-      await setVolume(restoreTo).catch(() => {});
+      await setVolume(restoreTo).catch((err) => ctx.log.warn('Volume restore failed:', (err as Error).message));
     };
 
     const endDuck = () => {
@@ -213,17 +233,18 @@ export default defineModule<SpotifySettings>({
       restoreTo = duck.original;
       restoreTries = 0;
       duck = null;
-      void restore().then(() => setTimeout(poll, 700));
+      void restore().then(() => setTimeout(poll, VOLUME_SETTLE_MS + 200));
     };
 
     ctx.bus.on('soundboard:play', async ({ id }: { id: string }) => {
       const s = ctx.settings.get();
       if (!duck) {
+        // If the previous restore is still on its way, that is the real normal volume
         const original = restoreTo ?? volume;
         if (!s.duck || !connected() || !now?.isPlaying || original === null) return;
         duck = { original, plays: new Set(), failsafe: setTimeout(endDuck, DUCK_MAX_MS) };
         restoreTo = null;
-        setVolume(Math.round((original * s.duckPercent) / 100)).catch(() => {});
+        setVolume(Math.round((original * s.duckPercent) / 100)).catch((err) => ctx.log.warn('Could not lower the music:', (err as Error).message));
       }
       duck.plays.add(id);
       clearTimeout(duck.failsafe);
@@ -348,7 +369,7 @@ export default defineModule<SpotifySettings>({
         code_challenge_method: 'S256',
         code_challenge: challenge,
       });
-      return `https://accounts.spotify.com/authorize?${params}`;
+      return `${ACCOUNTS}/authorize?${params}`;
     });
 
     ctx.onAdmin('disconnect', () => {
@@ -369,10 +390,14 @@ export default defineModule<SpotifySettings>({
     ctx.onAdmin('previous', () => control('POST', '/me/player/previous'));
     ctx.onAdmin('volume', async (args) => {
       const v = Math.round(Math.min(100, Math.max(0, num(args.volume, 50))));
-      if (duck) duck.original = v;
-      else restoreTo = null;
-      volume = v;
-      await control('PUT', `/me/player/volume?volume_percent=${v}`);
+      // During a sound, the new volume is applied when the music comes back up
+      if (duck) {
+        duck.original = v;
+        return;
+      }
+      restoreTo = null;
+      await setVolume(v);
+      setTimeout(poll, VOLUME_SETTLE_MS + 200);
     });
 
     ctx.onAdmin('setOptions', (args) => {
