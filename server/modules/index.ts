@@ -1,8 +1,11 @@
 import type { ModuleDef } from '../core/module.ts';
 import core from './core/index.ts';
+import canvas from './canvas/index.ts';
+import stickers from './stickers/index.ts';
+import photos from './photos/index.ts';
 
 /**
  * All modules, in load order. To add a feature: create server/modules/<id>/index.ts
  * with defineModule(), add it here, and register its UI in web/src/modules/index.ts.
  */
-export const modules: ModuleDef<any>[] = [core];
+export const modules: ModuleDef<any>[] = [core, canvas, stickers, photos];

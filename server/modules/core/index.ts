@@ -256,6 +256,7 @@ export default defineModule({
       const password = String(args.password ?? '').trim();
       if (password.length < 4) throw new HbError('At least 4 characters');
       hub.settings.update<CoreSettings>('core', { adminPassword: password, adminTokens: args.logoutAll ? [] : core().adminTokens });
+      return true;
     });
 
     ctx.onAdmin('restartTunnel', () => {

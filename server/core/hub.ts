@@ -118,7 +118,15 @@ export class Hub {
       }
       res.json({ token: this.issueAdminToken() });
     });
-    this.app.use('/media', express.static(MEDIA_DIR, { maxAge: '1h', fallthrough: false }));
+    this.app.use(
+      '/media',
+      express.static(MEDIA_DIR, {
+        maxAge: '1h',
+        fallthrough: false,
+        // Uploaded files (SVG included) can never run scripts
+        setHeaders: (res) => res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'"),
+      }),
+    );
 
     this.io.use((socket, next) => this.authenticate(socket, next));
     this.io.on('connection', (socket) => this.onConnection(socket));
