@@ -15,6 +15,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - spin the wheel
 - 1vs1 someone on the TV (like a game show (and put some coins?))
 - gift for a condition? Like we can see somewhere that doing X gives a gift.
+- MyInstants Sound for soundboard (or any other free sound API)
 
 ## Quick start
 
