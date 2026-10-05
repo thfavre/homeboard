@@ -17,8 +17,9 @@ export default defineModule<TtsSettings>({
     let cooldownUntil = 0;
 
     // Register prices in economy
-    ctx.price({ key: 'tts.message', label: 'TTS message', default: 200 });
-    ctx.price({ key: 'tts.char', label: 'TTS (per character)', unit: 'character', default: 5 });
+    // Only one of the two prices is used, depending on the pricing mode
+    ctx.price({ key: 'tts.message', label: 'Shoutout', default: 200, active: () => ctx.settings.get().pricingMode === 'flat' });
+    ctx.price({ key: 'tts.char', label: 'Shoutout', unit: 'character', default: 5, active: () => ctx.settings.get().pricingMode === 'per_char' });
 
     ctx.state((): TtsState => {
       const s = ctx.settings.get();
@@ -153,6 +154,8 @@ export default defineModule<TtsSettings>({
         patch.cooldownSec = clamp(Math.round(num(args.cooldownSec, 4)), 0, 120);
       }
       ctx.settings.update(patch);
+      // The active price changed: refresh the price lists of the host screens
+      ctx.hub.publish('core');
       ctx.publish();
       return true;
     });

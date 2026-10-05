@@ -25,6 +25,8 @@ export interface PriceInfo {
   label: string;
   unit?: string;
   amount: number;
+  /** False when a module setting makes this price unused right now */
+  active?: boolean;
 }
 
 export interface EarnRuleInfo {

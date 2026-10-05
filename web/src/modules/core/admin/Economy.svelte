@@ -18,7 +18,7 @@
     return [...map.entries()];
   }
 
-  const prices = $derived(group<PriceInfo>(admin.prices));
+  const prices = $derived(group<PriceInfo>(admin.prices.filter((p) => p.active !== false)));
   const earn = $derived(group<EarnRuleInfo>(admin.earnRules));
 
   const currencyName = new Synced(() => hb.core?.currency.name, '');

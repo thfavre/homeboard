@@ -93,11 +93,6 @@
           ></textarea>
 
           <div class="char-bar">
-            {#if isPerChar && cleanLen > 0 && hb.core?.economyEnabled}
-              <span class="cost-hint">{cleanLen} chars · <Money amount={totalCost} /></span>
-            {:else}
-              <span></span>
-            {/if}
             <span class="counter" class:warn={text.length >= maxLen - 10}>
               {text.length}/{maxLen}
             </span>
@@ -236,15 +231,11 @@
   }
   .char-bar {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     padding: 0 0.2rem;
     font-size: 0.78rem;
     color: var(--text-dim);
-  }
-  .cost-hint {
-    font-weight: 600;
-    color: var(--accent);
   }
   .counter {
     font-family: var(--font-display);

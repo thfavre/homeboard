@@ -10,7 +10,7 @@
   let { module }: { module: string } = $props();
 
   const admin = $derived(hb.core?.admin);
-  const prices = $derived(admin?.prices.filter((p) => p.module === module) ?? []);
+  const prices = $derived(admin?.prices.filter((p) => p.module === module && p.active !== false) ?? []);
   const rewards = $derived(admin?.earnRules.filter((r) => r.module === module) ?? []);
 </script>
 

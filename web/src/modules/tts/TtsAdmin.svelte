@@ -12,7 +12,6 @@
   const cooldown = new Synced(() => mod?.cooldownSec, 4);
   const maxLength = new Synced(() => mod?.maxLength, 150);
 
-
   let testText = $state('Testing text to speech on the TV! Homeboard party sound is working great.');
   let testAnonymous = $state(false);
   let previewing = $state(false);
@@ -43,7 +42,47 @@
 </script>
 
 {#if mod}
-  <Section title="Settings" hint="The TV speaks messages out loud and scrolls the text across the screen.">
+  <Section title="How guests pay" hint="The price itself is set in Prices and rewards, at the top of this page.">
+    <div class="modes">
+      <button
+        type="button"
+        class="mode-card card"
+        class:active={mod.pricingMode === 'flat'}
+        onclick={() => setMode('flat')}
+      >
+        <span class="mode-title">Same price for every message</span>
+        <span class="dim small">Every shoutout costs the same</span>
+      </button>
+
+      <button
+        type="button"
+        class="mode-card card"
+        class:active={mod.pricingMode === 'per_char'}
+        onclick={() => setMode('per_char')}
+      >
+        <span class="mode-title">Price per character</span>
+        <span class="dim small">Longer shoutouts cost more</span>
+      </button>
+    </div>
+
+    <label class="field">
+        <span>Maximum message length (characters)</span>
+        <input
+          class="input"
+          type="number"
+          min="10"
+          max="500"
+          bind:value={maxLength.value}
+          onfocus={maxLength.start}
+          onblur={() => {
+            set({ maxLength: Number(maxLength.value) });
+            maxLength.end();
+          }}
+        />
+      </label>
+  </Section>
+
+  <Section title="Sound" hint="The TV reads shoutouts out loud and scrolls them across the screen.">
     <label class="field">
       <span>Volume {volume.value}%</span>
       <input
@@ -74,47 +113,6 @@
         }}
       />
     </label>
-  </Section>
-
-  <Section title="Pricing & Length" hint="Choose whether guests pay a flat price per message or pay per character.">
-    <div class="modes">
-      <button
-        type="button"
-        class="mode-card card"
-        class:active={mod.pricingMode === 'flat'}
-        onclick={() => setMode('flat')}
-      >
-        <span class="mode-title">Fixed price</span>
-        <span class="dim small">One set price per message, capped at a maximum length</span>
-      </button>
-
-      <button
-        type="button"
-        class="mode-card card"
-        class:active={mod.pricingMode === 'per_char'}
-        onclick={() => setMode('per_char')}
-      >
-        <span class="mode-title">Price per character</span>
-        <span class="dim small">Cost scales with length (longer messages cost more)</span>
-      </button>
-    </div>
-
-    <p class="faint small">The amounts are in "Prices and rewards" at the top of this page.</p>
-    <label class="field">
-        <span>Maximum message length (characters)</span>
-        <input
-          class="input"
-          type="number"
-          min="10"
-          max="500"
-          bind:value={maxLength.value}
-          onfocus={maxLength.start}
-          onblur={() => {
-            set({ maxLength: Number(maxLength.value) });
-            maxLength.end();
-          }}
-        />
-      </label>
   </Section>
 
   <Section title="Test announcement" hint="Test the voice and scrolling banner on the TV.">

@@ -10,6 +10,8 @@ export interface PriceDef {
   unit?: string;
   /** Default price in hundredths */
   default: number;
+  /** False while a setting of the module makes this price unused (hidden from the host) */
+  active?: () => boolean;
 }
 
 export interface EarnDef {
@@ -99,7 +101,14 @@ export class Economy {
 
   /** Configured prices, regardless of economy on/off */
   adminPriceList(): PriceInfo[] {
-    return [...this.prices.values()].map((p) => ({ key: p.key, module: p.module, label: p.label, unit: p.unit, amount: this.price(p.key) }));
+    return [...this.prices.values()].map((p) => ({
+      key: p.key,
+      module: p.module,
+      label: p.label,
+      unit: p.unit,
+      amount: this.price(p.key),
+      active: p.active?.() ?? true,
+    }));
   }
 
   earnList(moduleEnabled: (id: string) => boolean): EarnRuleInfo[] {
