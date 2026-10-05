@@ -81,7 +81,7 @@
       if (!player) return;
       const key = ++seq;
       peeks = [...peeks, { ...fx, key, player }];
-      setTimeout(() => (peeks = peeks.filter((p) => p.key !== key)), 1800);
+      setTimeout(() => (peeks = peeks.filter((p) => p.key !== key)), 3200);
     }
   }
 
@@ -305,10 +305,12 @@
     }
   }
   /* A picture slides in from an edge, looks at the screen, and leaves */
+  /* Slides in slowly, stays a moment, slides back out */
   .peek {
     position: fixed;
     z-index: 6;
-    animation: 1.8s ease-in-out forwards;
+    animation-duration: 3.2s;
+    animation-fill-mode: forwards;
   }
   .peek.left {
     left: 0;
@@ -331,43 +333,67 @@
     animation-name: peek-bottom;
   }
   @keyframes peek-left {
-    0%,
+    0% {
+      transform: translate(-110%, -50%) rotate(30deg);
+      animation-timing-function: cubic-bezier(0.25, 0.8, 0.35, 1);
+    }
+    35% {
+      transform: translate(-35%, -50%) rotate(30deg);
+    }
+    65% {
+      transform: translate(-35%, -50%) rotate(30deg);
+      animation-timing-function: cubic-bezier(0.55, 0, 0.75, 0.2);
+    }
     100% {
       transform: translate(-110%, -50%) rotate(30deg);
     }
-    25%,
-    75% {
-      transform: translate(-35%, -50%) rotate(30deg);
-    }
   }
   @keyframes peek-right {
-    0%,
+    0% {
+      transform: translate(110%, -50%) rotate(-30deg);
+      animation-timing-function: cubic-bezier(0.25, 0.8, 0.35, 1);
+    }
+    35% {
+      transform: translate(35%, -50%) rotate(-30deg);
+    }
+    65% {
+      transform: translate(35%, -50%) rotate(-30deg);
+      animation-timing-function: cubic-bezier(0.55, 0, 0.75, 0.2);
+    }
     100% {
       transform: translate(110%, -50%) rotate(-30deg);
     }
-    25%,
-    75% {
-      transform: translate(35%, -50%) rotate(-30deg);
-    }
   }
   @keyframes peek-top {
-    0%,
+    0% {
+      transform: translate(-50%, -110%) rotate(180deg);
+      animation-timing-function: cubic-bezier(0.25, 0.8, 0.35, 1);
+    }
+    35% {
+      transform: translate(-50%, -35%) rotate(180deg);
+    }
+    65% {
+      transform: translate(-50%, -35%) rotate(180deg);
+      animation-timing-function: cubic-bezier(0.55, 0, 0.75, 0.2);
+    }
     100% {
       transform: translate(-50%, -110%) rotate(180deg);
     }
-    25%,
-    75% {
-      transform: translate(-50%, -35%) rotate(180deg);
-    }
   }
   @keyframes peek-bottom {
-    0%,
+    0% {
+      transform: translate(-50%, 110%);
+      animation-timing-function: cubic-bezier(0.25, 0.8, 0.35, 1);
+    }
+    35% {
+      transform: translate(-50%, 35%);
+    }
+    65% {
+      transform: translate(-50%, 35%);
+      animation-timing-function: cubic-bezier(0.55, 0, 0.75, 0.2);
+    }
     100% {
       transform: translate(-50%, 110%);
-    }
-    25%,
-    75% {
-      transform: translate(-50%, 35%);
     }
   }
   .endbar {

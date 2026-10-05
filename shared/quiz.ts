@@ -79,6 +79,8 @@ export interface LibraryItem {
 }
 
 export interface QuizState {
+  /** Changes with every quiz, so phones can tell two quizzes apart */
+  runId: string;
   phase: QuizPhase;
   title: string;
   source: 'trivia' | 'topic' | 'custom';

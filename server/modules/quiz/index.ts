@@ -76,6 +76,7 @@ export default defineModule<QuizSettings>({
 
     // ------------------------------------------------------------ game state
     let phase: QuizPhase = 'idle';
+    let runId = '';
     let title = '';
     let source: 'trivia' | 'topic' | 'custom' = 'trivia';
     let owner: { id: string; name: string } | null = null;
@@ -360,6 +361,7 @@ export default defineModule<QuizSettings>({
       if (!ctx.enabled()) throw new HbError('The quiz is turned off');
       if (phase !== 'idle') throw new HbError('A quiz is already running');
       ctx.takeover.start();
+      runId = uid(6);
       phase = 'loading';
       error = null;
       owner = by ? { id: by.id, name: by.name } : null;
@@ -532,6 +534,7 @@ export default defineModule<QuizSettings>({
       const q = questions[index];
       const showQuestion = phase === 'question' || phase === 'reveal';
       return {
+        runId,
         phase,
         title,
         source,

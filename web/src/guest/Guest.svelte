@@ -6,7 +6,7 @@
   import Toasts from '$lib/ui/Toasts.svelte';
   import DialogHost from '$lib/ui/DialogHost.svelte';
   import { applyTheme } from '../themes/index.ts';
-  import { activeModules, moduleById } from '../modules/index.ts';
+  import { activeModules, clientModules } from '../modules/index.ts';
   import Join from './Join.svelte';
   import Home from './Home.svelte';
   import Earn from './Earn.svelte';
@@ -22,7 +22,26 @@
   $effect(() => applyTheme(hb.core?.theme ?? hb.visitor?.theme));
 
   const featureModule = $derived(feature ? activeModules().find((m) => m.id === feature && m.guest) : undefined);
-  const takeover = $derived(moduleById(hb.core?.takeover)?.guestTakeover);
+  const takeoverModule = $derived(
+    clientModules.find((m) => {
+      if (!m.guestTakeover) return false;
+      const live = hb.core?.takeover === m.id;
+      return m.showGuestTakeover ? m.showGuestTakeover(live) : live;
+    }),
+  );
+  const takeover = $derived(takeoverModule?.guestTakeover);
+
+  // When a full-screen view closes, leave that feature's panel too
+  // (the guest who started a quiz goes back home, not to the quiz form)
+  let lastTakeover: string | null = null;
+  $effect(() => {
+    const id = takeoverModule?.id ?? null;
+    if (lastTakeover && !id && feature === lastTakeover) {
+      feature = null;
+      tab = 'home';
+    }
+    lastTakeover = id;
+  });
 
   // Leave a panel when its feature gets turned off
   $effect(() => {

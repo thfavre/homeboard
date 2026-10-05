@@ -7,8 +7,19 @@
   import Money from '$lib/ui/Money.svelte';
   import Shape from './Shape.svelte';
   import Joystick from './Joystick.svelte';
+  import { quizResult, closeQuizScreen } from './result.svelte.ts';
 
-  const q = $derived(hb.modules.quiz as QuizState | undefined);
+  const live = $derived(hb.modules.quiz as QuizState | undefined);
+  // While the results stay on screen after the quiz, show the last final state
+  const q = $derived(live && live.phase !== 'idle' ? live : (quizResult.snapshot ?? live));
+  const over = $derived(q?.phase === 'final' && live?.phase !== 'final');
+
+  // Keep the final state, and remember when the results started
+  $effect(() => {
+    if (live?.phase !== 'final') return;
+    if (quizResult.snapshot?.runId !== live.runId) quizResult.finalAt = (live.endsAt ?? serverNow()) - live.phaseMs;
+    quizResult.snapshot = live;
+  });
   const meId = $derived(hb.me?.id);
   const me = $derived(q?.players.find((p) => p.id === meId));
   const rank = $derived(me ? (q?.players.indexOf(me) ?? -1) + 1 : 0);
@@ -24,9 +35,10 @@
   // Seconds left in the current phase
   let now = $state(serverNow());
   $effect(() => {
-    const t = setInterval(() => (now = serverNow()), 250);
+    const t = setInterval(() => (now = serverNow()), 100);
     return () => clearInterval(t);
   });
+  const canClose = $derived(now - quizResult.finalAt >= 3000);
   const left = $derived(q ? Math.max(0, Math.ceil(((q.endsAt ?? now + q.pausedLeft) - now) / 1000)) : 0);
 
   async function answer(choice: number) {
@@ -88,6 +100,7 @@
           <p class="dim">{q.answered.length} of {q.playerCount} answered</p>
         </div>
       {:else}
+        <div class="timebar"><span style:width="{Math.min(100, (((q.endsAt ? q.endsAt - now : q.pausedLeft) / Math.max(1, q.phaseMs)) * 100))}%"></span></div>
         {#if q.question.image}<img class="qimg" src={q.question.image} alt="" />{/if}
         <p class="qtext">{q.question.text}</p>
         <div class="pad" class:two={q.question.answers.length === 2}>
@@ -134,7 +147,9 @@
           </div>
         </div>
 
-        {#if podiumRank === 0}
+        {#if over}
+          <p class="dim center-text">The quiz is over.</p>
+        {:else if podiumRank === 0}
           <p class="dim center-text">Move your picture on the TV and make it spin!</p>
           <Joystick onmove={move} />
           <button class="btn primary spin" onclick={celebrate}><Sparkles size={26} /> Spin</button>
@@ -145,6 +160,13 @@
         {:else if me}
           <button class="btn small-fx" onclick={celebrate}>Say hi on the TV</button>
         {/if}
+
+        <!-- Same place before and after it appears, so nothing moves -->
+        <div class="close-slot">
+          {#if canClose}
+            <button class="btn block" in:fade onclick={closeQuizScreen}>Close</button>
+          {/if}
+        </div>
       </div>
     {/if}
   </div>
@@ -287,5 +309,21 @@
   }
   .small-fx {
     font-size: 0.9rem;
+  }
+  .close-slot {
+    align-self: stretch;
+    min-height: 2.75rem;
+  }
+  .timebar {
+    height: 0.4rem;
+    border-radius: 999px;
+    background: var(--surface-3);
+    overflow: hidden;
+  }
+  .timebar span {
+    display: block;
+    height: 100%;
+    background: var(--gradient);
+    transition: width 0.1s linear;
   }
 </style>

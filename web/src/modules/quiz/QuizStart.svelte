@@ -1,17 +1,18 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { Pencil, Play, Search, Trash2 } from '@lucide/svelte';
+  import { Pencil, Play, Plus, Search, Trash2 } from '@lucide/svelte';
   import type { CustomQuiz, QuizDraft, QuizState, QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import QuizEditor from './QuizEditor.svelte';
+  import Sheet from '$lib/ui/Sheet.svelte';
 
   /** Guest panel: start a quiz (random trivia or a custom one) or create a custom quiz */
   const q = $derived(hb.modules.quiz as QuizState | undefined);
   const cost = $derived(price('quiz.start'));
 
-  let tab = $state<'trivia' | 'custom' | 'create'>('trivia');
+  let tab = $state<'trivia' | 'custom'>('trivia');
   // Start from the host's last settings
   const initial = untrack(() => q?.settings);
   let questions = $state(initial?.questions ?? 10);
@@ -73,7 +74,6 @@
     const quiz = await attempt(() => rpc<CustomQuiz>('quiz', 'getCustom', { id }));
     if (quiz) {
       editing = quiz;
-      tab = 'create';
     }
   }
 
@@ -105,28 +105,14 @@
     <div class="tabs">
       <button class:active={tab === 'trivia'} onclick={() => (tab = 'trivia')}>Trivia</button>
       <button class:active={tab === 'custom'} onclick={() => (tab = 'custom')}>Custom</button>
-      <button
-        class:active={tab === 'create'}
-        onclick={() => {
-          tab = 'create';
-          editing ??= 'new';
-        }}>Create</button
-      >
     </div>
 
-    {#if tab === 'create'}
-      {#key editing}
-        <QuizEditor
-          initial={editing && editing !== 'new' ? editing : null}
-          {busy}
-          onsave={saved}
-          oncancel={() => {
-            editing = null;
-            tab = 'custom';
-          }}
-        />
-      {/key}
-    {:else}
+    {#if editing}
+      <Sheet title={editing === 'new' ? 'Create a quiz' : `Edit ${editing.title}`} onclose={() => (editing = null)}>
+        <QuizEditor initial={editing === 'new' ? null : editing} {busy} onsave={saved} oncancel={() => (editing = null)} />
+      </Sheet>
+    {/if}
+
       {#if tab === 'trivia'}
         <div class="modes">
           <button class:active={mode === 'category'} onclick={() => (mode = 'category')}>By category</button>
@@ -179,6 +165,7 @@
           </label>
         </div>
       {:else}
+        <button class="btn block create" onclick={() => (editing = 'new')}><Plus size={18} /> Create a quiz</button>
         <div class="card list">
           {#each q.library as item (item.id)}
             <div class="item" class:active={chosen === item.id}>
@@ -195,7 +182,7 @@
               {/if}
             </div>
           {:else}
-            <p class="empty">No custom quiz yet. Create one!</p>
+            <p class="empty">No custom quiz yet. Create the first one!</p>
           {/each}
         </div>
       {/if}
@@ -216,7 +203,6 @@
         </button>
         <p class="faint small center">You start it when everyone is in (60 seconds at most).</p>
       </div>
-    {/if}
   </div>
 {/if}
 
@@ -227,7 +213,7 @@
   }
   .tabs {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr 1fr;
     padding: 0.25rem;
     border-radius: var(--radius-sm);
     background: var(--surface-2);

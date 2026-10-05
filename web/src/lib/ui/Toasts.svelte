@@ -23,7 +23,8 @@
     width: min(28rem, calc(100% - 1.5rem));
     display: grid;
     gap: 0.5rem;
-    z-index: 1000;
+    /* Above every sheet, dialog and full-screen view, so errors are always readable */
+    z-index: 5000;
     pointer-events: none;
   }
   .toast {

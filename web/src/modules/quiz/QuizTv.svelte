@@ -60,7 +60,7 @@
       </div>
     {:else if q.phase === 'countdown'}
       <div class="center count" in:fade>
-        <span class="eyebrow">Get ready</span>
+        <h1 class="big">Get ready</h1>
         <Ring endsAt={q.endsAt} totalMs={phaseTotal} pausedLeft={q.pausedLeft} size="16rem" />
       </div>
     {:else if (q.phase === 'question' || q.phase === 'reveal') && q.question}
@@ -322,7 +322,9 @@
   }
   .count {
     font-size: 6rem;
-    gap: 1.5rem;
+    gap: 3rem;
+    place-content: center;
+    justify-items: center;
   }
   .with-image {
     display: grid;

@@ -39,6 +39,12 @@ export interface ClientModule {
   tvTakeover?: Component;
   /** Full screen on guest phones while the module holds the takeover */
   guestTakeover?: Component;
+  /**
+   * Decide whether the phone shows guestTakeover, given whether the server takeover is live.
+   * Lets a module keep its screen after it ended (results) or let the guest close it early.
+   * Default: shown exactly while the takeover is live.
+   */
+  showGuestTakeover?: (live: boolean) => boolean;
   /** Small card on the guest home screen */
   guestHome?: { order: number; component: Component };
   /** Tile on the guest home screen that opens a full panel */
