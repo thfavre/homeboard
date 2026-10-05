@@ -80,6 +80,7 @@ export default defineModule<PhotoSettings>({
       return {
         current: current ? { ...pub(current), until: current.until } : null,
         queued: queue.length,
+        upcoming: queue.slice(0, 3).map(pub),
         displaySec: s.displaySec,
         maxQueue: s.maxQueue,
         ...(role === 'admin' ? { queue: queue.map(pub), gallery: store.data.gallery.map(pub).reverse() } : {}),

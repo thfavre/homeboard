@@ -79,12 +79,16 @@
     text-align: center;
   }
   .tv {
+    /* Overlays use these to cover only the main area */
+    --tv-pad-x: 2rem;
+    --tv-side: 27rem;
+    --tv-gap: 1.2rem;
     position: relative;
     height: 100vh;
     display: grid;
     grid-template-rows: auto 1fr auto;
-    gap: 1.2rem;
-    padding: 1.6rem 2rem 1.6rem;
+    gap: var(--tv-gap);
+    padding: 1.6rem var(--tv-pad-x) 1.6rem;
     overflow: hidden;
   }
   header {
@@ -110,8 +114,8 @@
   main {
     min-height: 0;
     display: grid;
-    grid-template-columns: 1fr 27rem;
-    gap: 1.2rem;
+    grid-template-columns: 1fr var(--tv-side);
+    gap: var(--tv-gap);
   }
   .main {
     min-height: 0;
