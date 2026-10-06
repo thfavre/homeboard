@@ -17,6 +17,21 @@ export interface Sound {
   name: string;
   kind: 'synth' | 'file';
   src?: string;
+  /** Added from MyInstants (admin view only) */
+  myinstants?: boolean;
+}
+
+/** A sound found on MyInstants. `mp3` is its file name on myinstants.com. */
+export interface MiSound {
+  id: string;
+  title: string;
+  mp3: string;
+}
+
+export interface MiPage {
+  items: MiSound[];
+  page: number;
+  hasNext: boolean;
 }
 
 export interface SoundboardState {
@@ -24,6 +39,10 @@ export interface SoundboardState {
   volume: number;
   cooldownUntil: number;
   cooldownSec: number;
+  /** Guests can search MyInstants and play any sound from it */
+  guestSearch: boolean;
+  /** Searched sounds are cut after this many seconds (0 = no limit) */
+  searchMaxSec: number;
   /** Admin only: every built-in, including disabled ones */
   builtins?: { id: string; name: string; enabled: boolean }[];
 }
@@ -33,4 +52,6 @@ export interface PlayEvent {
   sound: Sound;
   volume: number;
   by: string;
+  /** Stop the sound after this many seconds */
+  maxSec?: number;
 }

@@ -3,13 +3,17 @@ import { join } from 'node:path';
 import express from 'express';
 import { SYNTH_SOUNDS, type PlayEvent, type Sound, type SoundboardState } from '../../../shared/soundboard.ts';
 import { defineModule } from '../../core/module.ts';
+import type { Guest } from '../../core/session.ts';
 import { HbError, clamp, cleanName, num, uid } from '../../core/util.ts';
+import { cleanMp3, downloadMp3, pruneCache, searchMyInstants } from './myinstants.ts';
 
 interface SoundboardSettings {
   volume: number;
   cooldownSec: number;
   disabledBuiltins: string[];
-  custom: { id: string; name: string; file: string }[];
+  custom: { id: string; name: string; file: string; myinstants?: boolean }[];
+  guestSearch: boolean;
+  searchMaxSec: number;
 }
 
 const AUDIO_TYPES: Record<string, string> = {
@@ -30,22 +34,24 @@ export default defineModule<SoundboardSettings>({
   id: 'soundboard',
   name: 'Soundboard',
   description: 'Guests play sound effects through the TV speakers',
-  settings: { volume: 0.8, cooldownSec: 4, disabledBuiltins: [], custom: [] },
+  settings: { volume: 0.8, cooldownSec: 4, disabledBuiltins: [], custom: [], guestSearch: false, searchMaxSec: 10 },
 
   setup(ctx) {
     const media = ctx.mediaDir();
+    // Sounds guests found on MyInstants, downloaded on demand
+    const cache = ctx.mediaDir('myinstants');
     let cooldownUntil = 0;
 
-    const sounds = (): Sound[] => {
+    const sounds = (admin = false): Sound[] => {
       const s = ctx.settings.get();
       return [
         ...SYNTH_SOUNDS.filter((b) => !s.disabledBuiltins.includes(b.id)).map((b) => ({ id: b.id, name: b.name, kind: 'synth' as const })),
-        ...s.custom.map((c) => ({ id: c.id, name: c.name, kind: 'file' as const, src: ctx.mediaUrl(c.file) })),
+        ...s.custom.map((c) => ({ id: c.id, name: c.name, kind: 'file' as const, src: ctx.mediaUrl(c.file), ...(admin && c.myinstants ? { myinstants: true } : {}) })),
       ];
     };
 
-    const play = (sound: Sound, by: string) => {
-      const event: PlayEvent = { id: uid(6), sound, volume: ctx.settings.get().volume, by };
+    const play = (sound: Sound, by: string, maxSec?: number) => {
+      const event: PlayEvent = { id: uid(6), sound, volume: ctx.settings.get().volume, by, ...(maxSec ? { maxSec } : {}) };
       // Lets other modules (Spotify) lower the music until the TV reports the end
       ctx.bus.emit('soundboard:play', { id: event.id, source: 'soundboard' });
       ctx.emit('tv-audio', 'play', event);
@@ -60,25 +66,85 @@ export default defineModule<SoundboardSettings>({
     ctx.state((role): SoundboardState => {
       const s = ctx.settings.get();
       return {
-        sounds: sounds(),
+        sounds: sounds(role === 'admin'),
         volume: s.volume,
         cooldownUntil,
         cooldownSec: s.cooldownSec,
+        guestSearch: s.guestSearch,
+        searchMaxSec: s.searchMaxSec,
         ...(role === 'admin' ? { builtins: SYNTH_SOUNDS.map((b) => ({ id: b.id, name: b.name, enabled: !s.disabledBuiltins.includes(b.id) })) } : {}),
       };
     });
 
+    const checkCooldown = () => {
+      const wait = Math.ceil((cooldownUntil - Date.now()) / 1000);
+      if (wait > 0) throw new HbError(`Another sound just played. Try again in ${wait}s.`);
+    };
+
+    const guestPlays = (sound: Sound, guest: Guest, maxSec?: number) => {
+      checkCooldown();
+      ctx.economy.charge(guest, 'soundboard.sound', 1, `Sound: ${sound.name}`);
+      cooldownUntil = Date.now() + ctx.settings.get().cooldownSec * 1000;
+      play(sound, guest.name, maxSec);
+      ctx.activity(`{name} played ${sound.name}`, { guest });
+      ctx.publish();
+    };
+
     ctx.onGuest('play', (args, guest) => {
       const sound = sounds().find((x) => x.id === args.id);
       if (!sound) throw new HbError('Unknown sound');
-      const wait = Math.ceil((cooldownUntil - Date.now()) / 1000);
-      if (wait > 0) throw new HbError(`Another sound just played. Try again in ${wait}s.`);
-      ctx.economy.charge(guest, 'soundboard.sound', 1, `Sound: ${sound.name}`);
-      cooldownUntil = Date.now() + ctx.settings.get().cooldownSec * 1000;
-      play(sound, guest.name);
-      ctx.activity(`{name} played ${sound.name}`, { guest });
-      ctx.publish();
+      guestPlays(sound, guest);
       return true;
+    });
+
+    // ---------------------------------------------------------------- MyInstants
+
+    const guestSearchOn = () => {
+      if (!ctx.settings.get().guestSearch) throw new HbError('The host turned off sound search');
+    };
+
+    /** Download a MyInstants sound into the cache and return its local URL */
+    const cached = async (mp3: unknown) => {
+      const file = await downloadMp3(cleanMp3(mp3), cache);
+      pruneCache(cache);
+      return ctx.mediaUrl(`myinstants/${encodeURIComponent(file)}`);
+    };
+
+    ctx.onGuest('search', (args) => {
+      guestSearchOn();
+      return searchMyInstants(args.q, args.page);
+    });
+    ctx.onAdmin('search', (args) => searchMyInstants(args.q, args.page));
+
+    ctx.onGuest('preview', (args) => {
+      guestSearchOn();
+      return cached(args.mp3);
+    });
+    ctx.onAdmin('preview', (args) => cached(args.mp3));
+
+    ctx.onGuest('playSearch', async (args, guest) => {
+      guestSearchOn();
+      checkCooldown();
+      const src = await cached(args.mp3);
+      const sound: Sound = { id: `mi:${cleanMp3(args.mp3)}`, name: cleanName(args.title, 30) || 'Sound', kind: 'file', src };
+      guestPlays(sound, guest, ctx.settings.get().searchMaxSec || undefined);
+      return true;
+    });
+
+    ctx.onAdmin('playSearch', async (args) => {
+      const src = await cached(args.mp3);
+      play({ id: `mi:${cleanMp3(args.mp3)}`, name: cleanName(args.title, 30) || 'Sound', kind: 'file', src }, 'Host');
+    });
+
+    /** Put a MyInstants sound on the board for everyone (kept on disk, works offline) */
+    ctx.onAdmin('addFromSearch', async (args) => {
+      const mp3 = cleanMp3(args.mp3);
+      const id = uid(6);
+      const file = await downloadMp3(mp3, media, `${id}.mp3`);
+      const name = cleanName(args.title, 30) || 'Sound';
+      ctx.settings.update({ custom: [...ctx.settings.get().custom, { id, name, file, myinstants: true }] });
+      ctx.publish();
+      return id;
     });
 
     ctx.onAdmin('test', (args) => {
@@ -92,6 +158,8 @@ export default defineModule<SoundboardSettings>({
       ctx.settings.update({
         volume: args.volume !== undefined ? clamp(num(args.volume, 0.8), 0, 1) : s.volume,
         cooldownSec: args.cooldownSec !== undefined ? clamp(num(args.cooldownSec, 4), 0, 120) : s.cooldownSec,
+        guestSearch: args.guestSearch !== undefined ? !!args.guestSearch : s.guestSearch,
+        searchMaxSec: args.searchMaxSec !== undefined ? clamp(Math.round(num(args.searchMaxSec, 10)), 0, 60) : s.searchMaxSec,
       });
       ctx.publish();
     });

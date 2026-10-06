@@ -18,7 +18,7 @@
     const off = onEvent<PlayEvent>('soundboard', 'play', (e) => {
       blocked = audioBlocked();
       // Tell the server when the sound is over, so the music comes back up
-      void playSound(e.sound, e.volume).finally(() => rpc('soundboard', 'ended', { id: e.id }).catch(() => {}));
+      void playSound(e.sound, e.volume, e.maxSec).finally(() => rpc('soundboard', 'ended', { id: e.id }).catch(() => {}));
       const key = ++seq;
       playing = { ...e, key };
       setTimeout(() => playing?.key === key && (playing = null), 3000);

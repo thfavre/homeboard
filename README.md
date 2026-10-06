@@ -15,7 +15,6 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - spin the wheel
 - 1vs1 someone on the TV (like a game show (and put some coins?))
 - gift for a condition? Like we can see somewhere that doing X gives a gift.
-- MyInstants Sound for soundboard (or any other free sound API)
 
 ## Quick start
 
@@ -54,7 +53,7 @@ Environment variables: `PORT` (default 4300), `HB_TUNNEL=0` (no public tunnel),
 | **Stickers** | Built-in vector stickers, text, or their own face, bouncing for X minutes | Duration, limit, upload your own |
 | **Photos** | Photo with caption shown big on the TV | Remove (with refund), replay, duration |
 | **Lights** (WLED) | Pick an effect, on all lights or one | Devices, effect editor, test, stop |
-| **Soundboard** | Play a sound on the TV speakers | Volume, cooldown, upload sounds |
+| **Soundboard** | Play a sound on the TV speakers, or search MyInstants | Volume, cooldown, upload sounds, add sounds from MyInstants, let guests search MyInstants (with a length limit) |
 | **Quiz** | Answer; start a quiz (random trivia or custom) for a fee; create custom quizzes | Start, pause, live time per question, custom quiz library with pictures |
 
 Core features: session code, name + PIN to rejoin from another phone, live activity feed, leaderboard,

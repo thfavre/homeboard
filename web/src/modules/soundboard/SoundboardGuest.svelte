@@ -1,13 +1,16 @@
 <script lang="ts">
-  import { AudioLines } from '@lucide/svelte';
+  import { AudioLines, Play } from '@lucide/svelte';
   import type { SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, price, serverNow } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
+  import MiSearch from './MiSearch.svelte';
 
   const mod = $derived(hb.modules.soundboard as SoundboardState | undefined);
   const cost = $derived(price('soundboard.sound'));
   let now = $state(serverNow());
   let last = $state<string | null>(null);
+  let tab = $state<'board' | 'search'>('board');
+  let sending = $state<string | null>(null);
 
   $effect(() => {
     const t = setInterval(() => (now = serverNow()), 250);
@@ -20,6 +23,12 @@
     const ok = await attempt(() => rpc('soundboard', 'play', { id }), `${name} is playing`);
     if (ok) last = id;
   }
+
+  async function playSearch(mp3: string, title: string) {
+    sending = mp3;
+    await attempt(() => rpc('soundboard', 'playSearch', { mp3, title }), `${title} is playing`);
+    sending = null;
+  }
 </script>
 
 {#if mod}
@@ -30,6 +39,21 @@
     </p>
     <p class="faint wait">{wait ? `Next sound available in ${wait}s` : 'Ready, pick a sound'}</p>
 
+    {#if mod.guestSearch}
+      <div class="tabs">
+        <button class:active={tab === 'board'} onclick={() => (tab = 'board')}>Board</button>
+        <button class:active={tab === 'search'} onclick={() => (tab = 'search')}>Search MyInstants</button>
+      </div>
+    {/if}
+
+    {#if mod.guestSearch && tab === 'search'}
+      {#if mod.searchMaxSec}<p class="faint hint">Long sounds stop after {mod.searchMaxSec}s on the TV. Tap the headphones to listen on your phone first.</p>{/if}
+      <MiSearch>
+        {#snippet actions(s)}
+          <button class="btn small" disabled={wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)}><Play size={15} /> Play</button>
+        {/snippet}
+      </MiSearch>
+    {:else}
     <div class="grid">
       {#each mod.sounds as s, i (s.id)}
         <button class="sound card" class:last={last === s.id} disabled={wait > 0} onclick={() => play(s.id, s.name)} style:--h={(i * 47) % 360}>
@@ -40,6 +64,7 @@
         <div class="card empty">No sounds available.</div>
       {/each}
     </div>
+    {/if}
   </div>
 {/if}
 
@@ -55,6 +80,30 @@
     font-size: 0.85rem;
     margin-top: -0.4rem;
     min-height: 1.3em;
+  }
+  .tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+  }
+  .tabs button {
+    padding: 0.5rem;
+    border: 0;
+    border-radius: calc(var(--radius-sm) - 3px);
+    background: none;
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 0.88rem;
+  }
+  .tabs button.active {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .hint {
+    font-size: 0.82rem;
   }
   .grid {
     display: grid;
