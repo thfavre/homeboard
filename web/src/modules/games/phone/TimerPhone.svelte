@@ -24,11 +24,12 @@
 
 <div class="timer">
   {#if before}
-    <span class="eyebrow">Get ready</span>
+    <span class="eyebrow">Your target</span>
+    <span class="target mono">{(v.target / 1000).toFixed(2)} s</span>
     <span class="count mono">{Math.ceil(((v.startAt ?? 0) - now.value) / 1000)}</span>
-    <p class="dim">Tap STOP when you think 10.00 seconds have passed.</p>
+    <p class="dim">Tap STOP when you think {v.target / 1000} seconds have passed.</p>
   {:else if !stopped}
-    <span class="eyebrow running">Counting in your head...</span>
+    <span class="eyebrow running">Count to {v.target / 1000} in your head...</span>
     <button class="stop" onpointerdown={(e) => (e.preventDefault(), stop())}>
       <Hand size={44} />
       STOP
@@ -52,6 +53,11 @@
     font-size: 6rem;
     font-weight: 700;
     line-height: 1;
+  }
+  .target {
+    font-size: 2.6rem;
+    font-weight: 700;
+    color: var(--accent);
   }
   .running {
     animation: hb-pulse 1.4s ease-in-out infinite;

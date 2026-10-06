@@ -118,11 +118,21 @@ export default defineModule<GamesSettings>({
       if (ctx.hub.takeover && ctx.hub.takeover !== ctx.id) throw new HbError('Something else is on the TV right now');
     };
 
-    const refundAll = (charges: Charge[], why: string) => {
+    /**
+     * Give money back with one notification per guest: a fee and a stake come back together,
+     * and "money back" is only added when they paid something.
+     * `alsoTell`: guests told `why` even when they paid nothing (players of a cancelled game).
+     */
+    const refundAll = (charges: Charge[], why: string, alsoTell: string[] = []) => {
+      const back = new Map<string, number>(alsoTell.map((id) => [id, 0]));
       for (const c of charges) {
         if (!c.amount || !ctx.session.guests.has(c.guest.id)) continue;
         ctx.economy.refund(c);
-        ctx.toast(c.guest, { text: why, amount: c.amount, kind: 'info' });
+        back.set(c.guest.id, (back.get(c.guest.id) ?? 0) + c.amount);
+      }
+      for (const [id, amount] of back) {
+        const guest = ctx.session.guests.get(id);
+        if (guest) ctx.toast(guest, amount ? { text: `${why}, money back`, amount, kind: 'info' } : { text: why, kind: 'info' });
       }
     };
 
@@ -154,7 +164,7 @@ export default defineModule<GamesSettings>({
 
     const cancel = (why: string, refund = true) => {
       if (!match) return;
-      if (refund && match.phase !== 'result') refundAll(match.charges, why);
+      if (refund && match.phase !== 'result') refundAll(match.charges, why, match.players.map((p) => p.id));
       close();
     };
 
@@ -266,7 +276,7 @@ export default defineModule<GamesSettings>({
     const dropInvite = (inv: Invite, why: string | null) => {
       clearTimeout(inv.timer);
       invites.delete(inv.id);
-      if (why) refundAll(inv.charges, why);
+      if (why) refundAll(inv.charges, why, [inv.from.id]);
       ctx.publish();
     };
 
@@ -303,8 +313,7 @@ export default defineModule<GamesSettings>({
         charges: [fee, bet],
         timer: setTimeout(() => {
           if (!invites.has(inv.id)) return;
-          ctx.toast(guest, { text: `${opponent.name} did not answer`, kind: 'info' });
-          dropInvite(inv, 'Challenge expired, money back');
+          dropInvite(inv, `${opponent.name} did not answer your challenge`);
         }, INVITE_MS),
       };
       invites.set(inv.id, inv);
@@ -318,8 +327,7 @@ export default defineModule<GamesSettings>({
       if (!inv || inv.to.id !== guest.id) throw new HbError('This challenge is gone');
       const from = ctx.session.guests.get(inv.from.id);
       if (!args?.accept || !from) {
-        if (from) ctx.toast(from, { text: `${guest.name} declined your challenge`, kind: 'info' });
-        dropInvite(inv, 'Challenge declined, money back');
+        dropInvite(inv, `${guest.name} declined your challenge`);
         return true;
       }
       tvFree();
@@ -339,7 +347,7 @@ export default defineModule<GamesSettings>({
     ctx.onGuest('cancelInvite', (args, guest) => {
       const inv = invites.get(String(args?.id ?? ''));
       if (!inv || inv.from.id !== guest.id) return false;
-      dropInvite(inv, 'Challenge cancelled, money back');
+      dropInvite(inv, 'Challenge cancelled');
       return true;
     });
 
@@ -357,7 +365,7 @@ export default defineModule<GamesSettings>({
         try {
           charges.push(ctx.economy.pay(starter, stake, `${gameInfo(game)!.name}: entry`));
         } catch (err) {
-          refundAll(charges, 'Money back');
+          for (const c of charges) ctx.economy.refund(c);
           throw err;
         }
       }
@@ -366,7 +374,7 @@ export default defineModule<GamesSettings>({
         deadline(m, LOBBY_MS);
         later(m, LOBBY_MS, () => beginRoom(m));
       } catch (err) {
-        refundAll(charges, 'Money back');
+        for (const c of charges) ctx.economy.refund(c);
         throw err;
       }
       ctx.activity(starter ? `{name} started ${gameInfo(game)!.name}, join from your phone` : `${gameInfo(game)!.name} is starting, join from your phone`, { guest: starter ?? undefined });
@@ -375,7 +383,7 @@ export default defineModule<GamesSettings>({
     const beginRoom = (m: Match) => {
       if (m.phase !== 'lobby') return;
       if (m.players.length < 2) {
-        cancel('Not enough players joined, money back');
+        cancel('Nobody else joined, game cancelled');
         return;
       }
       intro(m);
@@ -401,13 +409,13 @@ export default defineModule<GamesSettings>({
       const m = match;
       if (!m || m.mode !== 'room' || m.phase !== 'lobby') throw new HbError('The game has started');
       if (m.starter?.id === guest.id) {
-        cancel(`${guest.name} cancelled the game, money back`);
+        cancel(`${guest.name} cancelled the game`);
         return true;
       }
       m.players = m.players.filter((p) => p.id !== guest.id);
       const mine = m.charges.filter((c) => c.guest.id === guest.id);
       m.charges = m.charges.filter((c) => c.guest.id !== guest.id);
-      refundAll(mine, 'Left the game, money back');
+      refundAll(mine, 'You left the game');
       ctx.publish();
       return true;
     });
@@ -434,10 +442,10 @@ export default defineModule<GamesSettings>({
     ctx.onAdmin('begin', () => {
       if (match?.phase === 'lobby') beginRoom(match);
     });
-    ctx.onAdmin('stop', () => cancel('The host stopped the game, money back'));
+    ctx.onAdmin('stop', () => cancel('The host stopped the game'));
     ctx.onAdmin('cancelInvite', (args) => {
       const inv = invites.get(String(args?.id ?? ''));
-      if (inv) dropInvite(inv, 'The host cancelled the challenge, money back');
+      if (inv) dropInvite(inv, 'The host cancelled your challenge');
     });
     ctx.onAdmin('setSettings', (args) => {
       const s = ctx.settings.get();
@@ -480,8 +488,8 @@ export default defineModule<GamesSettings>({
     ctx.session.on('guests-changed', () => ctx.publish());
 
     const stopAll = (refund: boolean) => {
-      for (const inv of [...invites.values()]) dropInvite(inv, refund ? 'Challenge cancelled, money back' : null);
-      cancel('The game was stopped, money back', refund);
+      for (const inv of [...invites.values()]) dropInvite(inv, refund ? 'Your challenge was cancelled' : null);
+      cancel('The game was stopped', refund);
     };
     ctx.onToggle((on) => {
       if (!on) stopAll(true);

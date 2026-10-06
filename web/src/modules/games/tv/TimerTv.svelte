@@ -13,7 +13,8 @@
 </script>
 
 <div class="timer">
-  <span class="eyebrow">Target: 10.00 seconds</span>
+  <span class="eyebrow">Target</span>
+  <span class="target mono">{(v.target / 1000).toFixed(2)} s</span>
   <div class="clock mono" class:hidden={!before && elapsed > 1000}>
     {#if before}
       {Math.ceil(((v.startAt ?? 0) - now.value) / 1000)}
@@ -23,7 +24,7 @@
       ??.??
     {/if}
   </div>
-  <p class="dim lead">{before ? 'Get ready...' : 'Stop at 10.00 seconds. The clock is hidden.'}</p>
+  <p class="dim lead">{before ? 'Get ready...' : `Stop at ${v.target / 1000} seconds. The clock is hidden.`}</p>
 
   <div class="players">
     {#each m.players as p (p.id)}
@@ -48,6 +49,11 @@
   }
   .eyebrow {
     font-size: 1.2rem;
+  }
+  .target {
+    font-size: 4.5rem;
+    font-weight: 700;
+    color: var(--accent);
   }
   .clock {
     font-size: 13rem;

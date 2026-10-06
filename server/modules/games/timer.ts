@@ -1,15 +1,18 @@
-import { BLIND_TARGET_MS, type TimerView } from '../../../shared/games.ts';
+import { randomInt } from 'node:crypto';
+import { BLIND_TARGET_SEC, type TimerView } from '../../../shared/games.ts';
 import { HbError, num } from '../../core/util.ts';
 import { best, type GameFactory } from './engine.ts';
 
-const COUNTDOWN_MS = 3000;
-/** Nobody can stop after this */
-const MAX_MS = 20_000;
+/** Long enough to read the target before GO */
+const COUNTDOWN_MS = 5000;
+/** Nobody can stop later than this after the target */
+const OVERTIME_MS = 10_000;
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(2)} s`;
 
-/** Blind Timer: stop the hidden clock as close as possible to 10.00 seconds */
+/** Blind Timer: stop the hidden clock as close as possible to a random target time */
 export const blindTimer: GameFactory = (m) => {
+  const target = randomInt(BLIND_TARGET_SEC.min, BLIND_TARGET_SEC.max + 1) * 1000;
   let startAt: number | null = null;
   const times = new Map<string, number>();
   let over = false;
@@ -17,14 +20,14 @@ export const blindTimer: GameFactory = (m) => {
   const end = () => {
     if (over) return;
     over = true;
-    const diff = (id: string) => (times.has(id) ? Math.abs(times.get(id)! - BLIND_TARGET_MS) : null);
+    const diff = (id: string) => (times.has(id) ? Math.abs(times.get(id)! - target) : null);
     const order = [...m.players].sort((a, b) => (diff(a.id) ?? Infinity) - (diff(b.id) ?? Infinity));
     m.finish({
       winners: best(m.players, diff, false),
       lines: order.map((p) => {
         const t = times.get(p.id);
         if (t === undefined) return { id: p.id, label: 'No stop', detail: 'Did not tap in time' };
-        const d = t - BLIND_TARGET_MS;
+        const d = t - target;
         return { id: p.id, label: seconds(t), detail: d === 0 ? 'Perfect' : `${d > 0 ? '+' : '-'}${(Math.abs(d) / 1000).toFixed(2)} s` };
       }),
     });
@@ -33,8 +36,8 @@ export const blindTimer: GameFactory = (m) => {
   return {
     start() {
       startAt = Date.now() + COUNTDOWN_MS;
-      m.deadline(COUNTDOWN_MS + MAX_MS);
-      m.later(COUNTDOWN_MS + MAX_MS, end);
+      m.deadline(COUNTDOWN_MS + target + OVERTIME_MS);
+      m.later(COUNTDOWN_MS + target + OVERTIME_MS, end);
     },
 
     input(id, args) {
@@ -53,6 +56,7 @@ export const blindTimer: GameFactory = (m) => {
 
     view(): TimerView {
       return {
+        target,
         startAt,
         stopped: [...times.keys()],
         ...(over ? { times: Object.fromEntries(m.players.map((p) => [p.id, times.get(p.id) ?? null])) } : {}),

@@ -18,8 +18,8 @@ export const GAMES: GameInfo[] = [
   {
     id: 'timer',
     name: 'Blind Timer',
-    tagline: 'Stop the clock at exactly 10 seconds, without seeing it',
-    rules: 'The timer starts on GO and disappears. Tap STOP when you think 10.00 seconds have passed. Closest wins.',
+    tagline: 'Stop the clock at the target time, without seeing it',
+    rules: 'A target time between 8 and 30 seconds is drawn. The timer starts on GO and is hidden: tap STOP when you think the target time has passed. Closest wins.',
     modes: ['duel', 'room'],
   },
   {
@@ -72,7 +72,8 @@ export const GAME_COLORS = [
 ] as const;
 export type GameColor = (typeof GAME_COLORS)[number]['id'];
 
-export const BLIND_TARGET_MS = 10_000;
+/** Blind Timer target: a whole number of seconds drawn for each game */
+export const BLIND_TARGET_SEC = { min: 8, max: 30 };
 
 export interface GamePlayer {
   id: string;
@@ -150,6 +151,8 @@ export interface GamesSettings {
 // ------------------------------------------------------------ per game views
 
 export interface TimerView {
+  /** Time to stop at (ms) */
+  target: number;
   /** Server time when the timer started */
   startAt: number | null;
   /** Ids of the players who stopped */

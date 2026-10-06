@@ -39,13 +39,18 @@
       <div class="center" in:fade>
         <span class="eyebrow">You are in</span>
         <h1>{info?.name}</h1>
-        <p class="dim">{m.players.length} {m.players.length === 1 ? 'player' : 'players'} so far. Starts in {secondsLeft(m.endsAt, now.value)}s.</p>
+        <p class="dim">
+          {#if m.players.length < 2}
+            You are the only one so far. It needs at least 2 players, or it is cancelled in {secondsLeft(m.endsAt, now.value)}s.
+          {:else}
+            {m.players.length} players so far. Starts in {secondsLeft(m.endsAt, now.value)}s.
+          {/if}
+        </p>
         <div class="faces">
           {#each m.players as p (p.id)}<Avatar name={p.name} color={p.color} id={p.id} size="2.4rem" />{/each}
         </div>
         {#if m.starter?.id === me}
           <button class="btn primary big" disabled={busy || m.players.length < 2} onclick={() => act('begin')}>Start now</button>
-          {#if m.players.length < 2}<p class="faint small">Waiting for at least one more player.</p>{/if}
           <button class="btn ghost" disabled={busy} onclick={() => act('leave')}>Cancel the game</button>
         {:else}
           <button class="btn ghost" disabled={busy} onclick={() => act('leave')}>Leave</button>
