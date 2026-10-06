@@ -86,36 +86,33 @@
           </div>
         </div>
       </div>
-    {:else if m.phase === 'play'}
+    {:else if m.phase === 'play' || (m.result && ui.tvResult)}
+      <!-- One block for both, so the game's screen stays mounted into its result instead of replaying its reveal -->
       <div class="stage"><Game {m} /></div>
     {:else if m.result}
       {@const r = m.result}
-      {#if ui.tvResult}
-        <div class="stage"><Game {m} /></div>
-      {:else}
-        <div class="result" in:fade>
-          <h1 class="big headline">{r.headline}</h1>
-          <ol class="lines">
-            {#each r.lines as line, i (line.id)}
-              {@const p = nameOf(line.id)}
-              {@const won = r.winners.includes(line.id)}
-              {#if p}
-                <li class="card" class:won in:scale={{ delay: 300 + i * 150, start: 0.9 }}>
-                  <span class="rank mono">{i + 1}</span>
-                  <Avatar name={p.name} color={p.color} id={p.id} size="3.2rem" />
-                  <span class="who">
-                    <strong class="truncate">{p.name}</strong>
-                    {#if line.detail}<span class="dim">{line.detail}</span>{/if}
-                  </span>
-                  {#if won}<Crown size="1.8rem" class="crown" />{/if}
-                  <span class="mono label">{line.label}</span>
-                  {#if economy && r.payouts[line.id] > 0}<span class="gain"><Money amount={r.payouts[line.id]} sign /></span>{/if}
-                </li>
-              {/if}
-            {/each}
-          </ol>
-        </div>
-      {/if}
+      <div class="result" in:fade>
+        <h1 class="big headline">{r.headline}</h1>
+        <ol class="lines">
+          {#each r.lines as line, i (line.id)}
+            {@const p = nameOf(line.id)}
+            {@const won = r.winners.includes(line.id)}
+            {#if p}
+              <li class="card" class:won in:scale={{ delay: 300 + i * 150, start: 0.9 }}>
+                <span class="rank mono">{i + 1}</span>
+                <Avatar name={p.name} color={p.color} id={p.id} size="3.2rem" />
+                <span class="who">
+                  <strong class="truncate">{p.name}</strong>
+                  {#if line.detail}<span class="dim">{line.detail}</span>{/if}
+                </span>
+                {#if won}<Crown size="1.8rem" class="crown" />{/if}
+                <span class="mono label">{line.label}</span>
+                {#if economy && r.payouts[line.id] > 0}<span class="gain"><Money amount={r.payouts[line.id]} sign /></span>{/if}
+              </li>
+            {/if}
+          {/each}
+        </ol>
+      </div>
     {/if}
   </div>
 {/if}
