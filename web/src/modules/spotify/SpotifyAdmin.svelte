@@ -1,10 +1,12 @@
 <script lang="ts">
   import { ask } from '$lib/dialog.svelte.ts';
-  import { Copy, ExternalLink, Pause, Play, SkipBack, SkipForward, Unplug } from '@lucide/svelte';
-  import type { SpotifyState } from '$shared/spotify.ts';
+  import { ArrowDown, ArrowUp, Copy, ExternalLink, ListMusic, Lock, Pause, Play, SkipBack, SkipForward, Trash2, Unplug } from '@lucide/svelte';
+  import type { SpotifyState, Track } from '$shared/spotify.ts';
   import { hb, rpc, attempt, toast } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
+  import Sheet from '$lib/ui/Sheet.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
+  import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import Cover from './Cover.svelte';
   import Ducking from './Ducking.svelte';
   import { Synced } from '$lib/synced.svelte.ts';
@@ -25,7 +27,28 @@
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('spotify', 'setOptions', args));
   const control = (method: string, args?: unknown) => attempt(() => rpc('spotify', method, args));
+
+  const queue = $derived(a?.queue ?? []);
+  /** Guest songs still waiting in Homeboard: only these can be moved or removed */
+  const held = $derived(queue.filter((t) => t.qid));
+  let showQueue = $state(false);
+
+  const move = (qid: string, to: number) => control('queueMove', { qid, to });
+  async function remove(qid: string) {
+    const text = await attempt(() => rpc<string>('spotify', 'queueRemove', { qid }));
+    if (text) toast({ text, kind: 'success' });
+  }
 </script>
+
+{#snippet song(t: Track)}
+  <Cover src={t.image} size="2.6rem" radius="0.45rem" />
+  <div class="grow">
+    <strong class="truncate block">{t.title}</strong>
+    <p class="dim small truncate">
+      {t.artists}{#if t.requestedBy}<span class="by">{' · '}<span class="dot" style:background={t.requestedBy.color}></span>{t.requestedBy.name}</span>{/if}
+    </p>
+  </div>
+{/snippet}
 
 {#if mod && a}
   {#if mod.connected}
@@ -65,7 +88,46 @@
             }}
           />
         </label>
+      {#if queue.length}
+        <div class="upnext">
+          <span class="eyebrow">Up next</span>
+          <div class="item">
+            {@render song(queue[0])}
+            <button class="btn small" onclick={() => (showQueue = true)}><ListMusic size={16} /> Queue{held.length ? ` (${held.length})` : ''}</button>
+          </div>
+        </div>
+      {/if}
     </Section>
+
+    {#if showQueue}
+      <Sheet title="Queue" onclose={() => (showQueue = false)}>
+        <p class="faint small">Guest songs wait here until about 20 seconds before they play, so you can move or remove them. Removing one refunds the guest. Songs marked with a lock are already in Spotify and cannot be changed.</p>
+        {#if queue.length}
+          <ol class="queue">
+            {#each queue as t, i (t.qid ?? `${t.uri}-${i}`)}
+              {@const h = held.findIndex((x) => x.qid === t.qid)}
+              <li class="item" class:locked={!t.qid}>
+                {@render song(t)}
+                {#if t.qid}
+                  <div class="tools">
+                    <button class="btn ghost small" aria-label="Move up" disabled={h === 0} onclick={() => move(t.qid!, h - 1)}><ArrowUp size={15} /></button>
+                    <button class="btn ghost small" aria-label="Move down" disabled={h === held.length - 1} onclick={() => move(t.qid!, h + 1)}><ArrowDown size={15} /></button>
+                    <TwoStepButton class="ghost small del" onconfirm={() => remove(t.qid!)}>
+                      <Trash2 size={15} />
+                      {#snippet armed()}Remove{/snippet}
+                    </TwoStepButton>
+                  </div>
+                {:else}
+                  <span class="lock" title="Already in Spotify"><Lock size={14} /></span>
+                {/if}
+              </li>
+            {/each}
+          </ol>
+        {:else}
+          <p class="dim">The queue is empty.</p>
+        {/if}
+      </Sheet>
+    {/if}
 
     <Section title="Rules">
       <div class="line">
@@ -169,6 +231,53 @@
     font-size: 0.82rem;
     word-break: break-all;
     text-align: left;
+  }
+  .upnext {
+    display: grid;
+    gap: 0.45rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--border);
+  }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .by {
+    white-space: nowrap;
+  }
+  .dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    margin-right: 0.25rem;
+    vertical-align: 0.05em;
+  }
+  .queue {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.6rem;
+  }
+  .queue .locked {
+    opacity: 0.6;
+  }
+  .tools {
+    flex: none;
+    display: flex;
+    gap: 0.15rem;
+  }
+  .tools :global(.btn) {
+    padding-inline: 0.5rem;
+  }
+  .lock {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    color: var(--text-faint);
   }
   input[type='range'] {
     width: 100%;

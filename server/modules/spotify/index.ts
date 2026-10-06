@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { DuckSetting, DuckSource, NowPlaying, SpotifyState, Track } from '../../../shared/spotify.ts';
+import type { Charge } from '../../core/economy.ts';
 import { defineModule } from '../../core/module.ts';
 import { HbError, num } from '../../core/util.ts';
 
@@ -31,6 +32,17 @@ const VOLUME_SETTLE_MS = 3500;
 const POLL_MS = 3000;
 const QUEUE_POLL_MS = 12_000;
 const TRACK_URI = /^spotify:track:[A-Za-z0-9]{22}$/;
+/** Hand the next held song to Spotify this long before the current one ends */
+const HAND_OVER_MS = 20_000;
+/** Songs in the queue sent to guests and the TV */
+const PUBLIC_QUEUE = 6;
+
+/** A song Homeboard holds until it is time to hand it to Spotify */
+interface HeldTrack extends Track {
+  qid: string;
+  /** What the guest paid, refunded if the admin removes the song */
+  charge?: Charge;
+}
 
 function toTrack(item: any): Track {
   const images: any[] = item?.album?.images ?? [];
@@ -63,7 +75,17 @@ export default defineModule<SpotifySettings>({
     let accessToken = '';
     let expiresAt = 0;
     let now: NowPlaying | null = null;
-    let queue: Track[] = [];
+    /** Spotify's own queue: songs handed over and the rest of the playlist. Cannot be changed. */
+    let spotifyQueue: Track[] = [];
+    /**
+     * Guest songs not handed to Spotify yet. Spotify cannot move or remove queued songs,
+     * so they are given to it one at a time, shortly before the current song ends.
+     */
+    let held: HeldTrack[] = [];
+    /** Songs handed over that are still waiting in Spotify's queue */
+    const handedOver = new Set<string>();
+    /** The song during which the next one was handed over (one per song) */
+    let handedDuring: string | null = null;
     let device: string | null = null;
     let volume: number | null = null;
     let error: string | null = null;
@@ -164,10 +186,41 @@ export default defineModule<SpotifySettings>({
     const pollQueue = async () => {
       lastQueuePoll = Date.now();
       const q = await api('GET', '/me/player/queue');
-      queue = (q?.queue ?? [])
+      spotifyQueue = (q?.queue ?? [])
         .filter((i: any) => i?.type === 'track')
-        .slice(0, 6)
         .map((i: any) => ({ ...toTrack(i), requestedBy: requests.get(i.uri) }));
+      for (const uri of handedOver) if (!spotifyQueue.some((t) => t.uri === uri)) handedOver.delete(uri);
+    };
+
+    /** Play order: songs already handed over, then the held ones, then the playlist */
+    const fullQueue = (): Track[] => {
+      let last = -1;
+      spotifyQueue.forEach((t, i) => handedOver.has(t.uri) && (last = i));
+      const mine = held.map(({ charge: _, ...t }) => t);
+      return [...spotifyQueue.slice(0, last + 1), ...mine, ...spotifyQueue.slice(last + 1)];
+    };
+
+    /** Give the first held song to Spotify, which plays it after the current one */
+    const handOver = async () => {
+      const t = held[0];
+      if (!t) return;
+      await api('POST', `/me/player/queue?uri=${encodeURIComponent(t.uri)}`);
+      held = held.filter((h) => h !== t);
+      handedOver.add(t.uri);
+      handedDuring = now?.uri ?? null;
+      await pollQueue().catch(() => {});
+    };
+
+    /** Near the end of a song, hand the next held one over (once per song) */
+    const feed = async () => {
+      if (!held.length || !now || handedDuring === now.uri) return;
+      if (now.durationMs - now.progressMs > HAND_OVER_MS) return;
+      await handOver().catch((err) => ctx.log.warn('Could not hand the next song to Spotify:', (err as Error).message));
+    };
+
+    /** Before a skip, so the next held song plays instead of the playlist */
+    const handOverNow = async () => {
+      if (held.length && handedDuring !== now?.uri) await handOver();
     };
 
     const poll = async () => {
@@ -185,6 +238,7 @@ export default defineModule<SpotifySettings>({
         if (Date.now() >= volumeSettleAt) volume = p?.device?.volume_percent ?? null;
         if (restoreTo !== null) await restore();
         if (now?.uri !== before || Date.now() - lastQueuePoll > QUEUE_POLL_MS) await pollQueue();
+        await feed();
         error = null;
       } catch (err) {
         error = (err as Error).message;
@@ -298,7 +352,7 @@ export default defineModule<SpotifySettings>({
       return {
         connected: connected(),
         now,
-        queue,
+        queue: fullQueue().slice(0, PUBLIC_QUEUE),
         allowSkip: s.allowSkip,
         ...(role === 'admin'
           ? {
@@ -312,6 +366,7 @@ export default defineModule<SpotifySettings>({
                 allowExplicit: s.allowExplicit,
                 ducking: s.ducking,
                 error,
+                queue: fullQueue(),
               },
             }
           : {}),
@@ -341,17 +396,15 @@ export default defineModule<SpotifySettings>({
       if (!TRACK_URI.test(uri)) throw new HbError('Unknown song');
       const track = toTrack(await api('GET', `/tracks/${uri.split(':')[2]}?market=from_token`));
       if (track.explicit && !ctx.settings.get().allowExplicit) throw new HbError('Explicit songs are turned off');
-      if (queue.some((t) => t.uri === uri) || now?.uri === uri) throw new HbError('This song is already playing or queued');
+      if (held.some((t) => t.uri === uri) || spotifyQueue.some((t) => t.uri === uri) || now?.uri === uri) throw new HbError('This song is already playing or queued');
+      if (!device) throw new HbError('Spotify is not playing on any device right now');
       const charge = ctx.economy.charge(guest, 'spotify.queue', 1, `Song: ${track.title}`);
-      try {
-        await api('POST', `/me/player/queue?uri=${encodeURIComponent(uri)}`);
-      } catch (err) {
-        ctx.economy.refund(charge);
-        throw err;
-      }
-      requests.set(uri, { name: guest.name, color: guest.color });
+      const requestedBy = { name: guest.name, color: guest.color };
+      requests.set(uri, requestedBy);
+      held.push({ ...track, requestedBy, qid: randomBytes(6).toString('base64url'), charge });
       ctx.activity(`{name} queued ${track.title} by ${track.artists}`, { guest });
-      await pollQueue().catch(() => {});
+      // The current song may already be about to end
+      await feed();
       ctx.publish();
       return true;
     });
@@ -362,6 +415,7 @@ export default defineModule<SpotifySettings>({
       const title = now.title;
       const charge = ctx.economy.charge(guest, 'spotify.skip', 1, `Skipped ${title}`);
       try {
+        await handOverNow();
         await api('POST', '/me/player/next');
       } catch (err) {
         ctx.economy.refund(charge);
@@ -405,7 +459,10 @@ export default defineModule<SpotifySettings>({
       ctx.settings.update({ refreshToken: '', account: null });
       accessToken = '';
       now = null;
-      queue = [];
+      spotifyQueue = [];
+      for (const t of held) if (t.charge) ctx.economy.refund(t.charge);
+      held = [];
+      handedOver.clear();
       ctx.publish();
     });
 
@@ -415,7 +472,10 @@ export default defineModule<SpotifySettings>({
     };
     ctx.onAdmin('play', () => control('PUT', '/me/player/play'));
     ctx.onAdmin('pause', () => control('PUT', '/me/player/pause'));
-    ctx.onAdmin('next', () => control('POST', '/me/player/next'));
+    ctx.onAdmin('next', async () => {
+      await handOverNow();
+      await control('POST', '/me/player/next');
+    });
     ctx.onAdmin('previous', () => control('POST', '/me/player/previous'));
     ctx.onAdmin('volume', async (args) => {
       const v = Math.round(Math.min(100, Math.max(0, num(args.volume, 50))));
@@ -427,6 +487,31 @@ export default defineModule<SpotifySettings>({
       restoreTo = null;
       await setVolume(v);
       setTimeout(poll, VOLUME_SETTLE_MS + 200);
+    });
+
+    const heldIndex = (qid: unknown) => {
+      const i = held.findIndex((t) => t.qid === qid);
+      if (i < 0) throw new HbError('This song is no longer waiting, Spotify already has it');
+      return i;
+    };
+
+    /** Move a held song to another place among the held songs */
+    ctx.onAdmin('queueMove', (args) => {
+      const from = heldIndex(args.qid);
+      const to = Math.round(Math.min(held.length - 1, Math.max(0, num(args.to, from))));
+      const [t] = held.splice(from, 1);
+      held.splice(to, 0, t);
+      ctx.publish();
+      return true;
+    });
+
+    /** Remove a held song and give the guest their money back */
+    ctx.onAdmin('queueRemove', (args) => {
+      const [t] = held.splice(heldIndex(args.qid), 1);
+      if (t.charge) ctx.economy.refund(t.charge);
+      requests.delete(t.uri);
+      ctx.publish();
+      return t.charge?.amount ? `${t.title} removed, ${t.requestedBy?.name ?? 'the guest'} got refunded` : `${t.title} removed`;
     });
 
     /** Music level while soundboard sounds or shoutouts play */
@@ -451,7 +536,11 @@ export default defineModule<SpotifySettings>({
       ctx.publish();
     });
 
-    ctx.onSessionReset(() => requests.clear());
+    ctx.onSessionReset(() => {
+      requests.clear();
+      // The songs stay queued, but the guests who paid for them are gone
+      held = held.map(({ charge: _, requestedBy: __, ...t }) => t);
+    });
 
     setInterval(poll, POLL_MS);
     void poll();

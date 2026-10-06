@@ -7,6 +7,8 @@ export interface Track {
   durationMs: number;
   explicit: boolean;
   requestedBy?: { name: string; color: string };
+  /** Set on songs Homeboard still holds: the admin can move or remove them */
+  qid?: string;
 }
 
 export interface NowPlaying extends Track {
@@ -40,5 +42,7 @@ export interface SpotifyState {
     allowExplicit: boolean;
     ducking: Record<DuckSource, DuckSetting>;
     error: string | null;
+    /** The whole queue in play order (the public one is cut short) */
+    queue: Track[];
   };
 }
