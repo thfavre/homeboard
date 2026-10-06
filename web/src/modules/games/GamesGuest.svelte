@@ -20,7 +20,8 @@
   const s = $derived(gamesState());
   const economy = $derived(!!hb.core?.economyEnabled);
   const list = $derived(GAMES.filter((g) => g.modes.includes(mode) && s?.settings.enabled.includes(g.id)));
-  const others = $derived((s?.online ?? []).filter((p) => p.id !== hb.me?.id));
+  // Richest first: the ones who can match a big bet
+  const others = $derived((s?.online ?? []).filter((p) => p.id !== hb.me?.id).sort((a, b) => b.balance - a.balance));
   const opponentName = $derived(others.find((p) => p.id === opponent)?.name);
   const stake = $derived(economy ? Math.max(0, parseAmount(stakeText || '0')) : 0);
   const fee = $derived(price(mode === 'duel' ? 'games.duel' : 'games.room'));
@@ -37,6 +38,11 @@
     error = '';
     if (mode === 'duel' && !opponent) {
       error = 'Pick someone to challenge';
+      return;
+    }
+    const target = others.find((p) => p.id === opponent);
+    if (mode === 'duel' && economy && target && stake > target.balance) {
+      error = `${target.name} only has ${formatAmount(target.balance)}: lower your bet or pick someone else`;
       return;
     }
     if (maxStake > 0 && stake > maxStake) {
@@ -92,9 +98,15 @@
         <span class="label">Who do you challenge?</span>
         <div class="people">
           {#each others as p (p.id)}
-            <button class="person" class:active={opponent === p.id} onclick={() => (opponent = p.id)}>
-              <Avatar name={p.name} color={p.color} id={p.id} size="2rem" />
-              <span class="truncate">{p.name}</span>
+            {@const short = economy && stake > p.balance}
+            <button class="person" class:active={opponent === p.id} class:short disabled={short} onclick={() => (opponent = p.id)}>
+              <Avatar name={p.name} color={p.color} id={p.id} size="2.2rem" />
+              <span class="who">
+                <span class="truncate">{p.name}</span>
+                {#if economy}
+                  <span class="bal">{#if short}Can't match{:else}<Money amount={p.balance} />{/if}</span>
+                {/if}
+              </span>
             </button>
           {:else}
             <p class="faint small">Nobody else is online right now.</p>
@@ -235,9 +247,9 @@
   }
   .people {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
     gap: 0.45rem;
-    max-height: 13rem;
+    max-height: 15rem;
     overflow-y: auto;
   }
   .person {
@@ -255,6 +267,20 @@
   .person.active {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .person.short {
+    opacity: 0.45;
+  }
+  .who {
+    display: grid;
+    min-width: 0;
+    text-align: left;
+    line-height: 1.2;
+  }
+  .bal {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-dim);
   }
   .sum {
     display: grid;

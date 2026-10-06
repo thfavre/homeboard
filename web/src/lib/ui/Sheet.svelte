@@ -48,13 +48,15 @@
     pointer-events: auto;
     width: min(32rem, 100%);
     max-height: calc(100dvh - 2.5rem);
-    display: grid;
-    grid-template-rows: auto 1fr;
+    /* Flex, not grid: the body must shrink to the max height and scroll (a grid row grew past it and got cut) */
+    display: flex;
+    flex-direction: column;
     background: var(--bg);
     background-image: linear-gradient(var(--surface), var(--surface));
     overflow: hidden;
   }
   header {
+    flex: none;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -70,7 +72,12 @@
     min-height: 2.4rem;
   }
   .body {
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Rows keep their full height: content that clips (overflow: hidden) was squashed to nothing */
+    grid-auto-rows: max-content;
     padding: 0.6rem 1.2rem 1.3rem;
     display: grid;
     gap: 0.8rem;

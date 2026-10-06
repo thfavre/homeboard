@@ -155,8 +155,8 @@ export interface GamesState {
   match: MatchState | null;
   /** WLED lights can show the game colors */
   lights: boolean;
-  /** Guests online, to pick an opponent */
-  online: GamePlayer[];
+  /** Guests online with their balance, to pick an opponent who can match the bet */
+  online: (GamePlayer & { balance: number })[];
   settings: GamesSettings;
 }
 

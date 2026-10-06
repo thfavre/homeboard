@@ -494,13 +494,14 @@ export default defineModule<GamesSettings>({
         invites: [...invites.values()].map(({ charges: _c, timer: _t, ...inv }) => inv),
         match: state,
         lights: lightsOn(),
-        online: role === 'tv' ? [] : [...ctx.session.guests.values()].filter((g) => g.sockets > 0).map(player),
+        online: role === 'tv' ? [] : [...ctx.session.guests.values()].filter((g) => g.sockets > 0).map((g) => ({ ...player(g), balance: g.balance })),
         settings: ctx.settings.get(),
       };
     });
 
-    // Opponents come and go: keep the "who is online" list fresh
+    // Opponents come and go and their balance changes: keep the list fresh (publish is throttled)
     ctx.session.on('guests-changed', () => ctx.publish());
+    ctx.session.on('guest-changed', () => ctx.publish());
 
     const stopAll = (refund: boolean) => {
       for (const inv of [...invites.values()]) dropInvite(inv, refund ? 'Your challenge was cancelled' : null);
