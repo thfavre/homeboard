@@ -139,6 +139,16 @@
     {/each}
     <div class="line">
       <span>
+        Scratch light
+        <span class="faint small">A WLED light that turns with the Perfect Circle record, following every scratch</span>
+      </span>
+      <select class="input light" value={s.settings.scratchLight} onchange={(e) => setSettings({ scratchLight: e.currentTarget.value })}>
+        <option value="">None</option>
+        {#each s.lightDevices ?? [] as d (d.id)}<option value={d.id}>{d.name}{d.online ? '' : ' (offline)'}</option>{/each}
+      </select>
+    </div>
+    <div class="line">
+      <span>
         Show the light colors on the TV too
         <span class="faint small">{s.lights ? 'Light Simon and Color Reflex use your WLED lights' : 'No light reachable: the TV always shows the colors'}</span>
       </span>
@@ -148,6 +158,10 @@
 {/if}
 
 <style>
+  .light {
+    width: auto;
+    min-width: 10rem;
+  }
   .players,
   .choices {
     display: flex;

@@ -28,6 +28,7 @@ import { colorReflex } from './reflex.ts';
 import { perfectCircle } from './circle.ts';
 import { bluff } from './bluff.ts';
 import { coinFlip } from './coin.ts';
+import { Turntable } from './turntable.ts';
 
 const FACTORIES: Record<GameId, GameFactory> = {
   timer: blindTimer,
@@ -81,13 +82,15 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '' },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
     let match: Match | null = null;
     let perk: Perk | null = null;
     let perkTimer: NodeJS.Timeout | null = null;
+    /** The scratch record on a light strip, while the scratch prize lasts */
+    let turntable: Turntable | null = null;
 
     ctx.price({ key: 'games.duel', label: 'Challenge someone to a duel', default: 5000 });
     ctx.price({ key: 'games.room', label: 'Start a game for the room', default: 5000 });
@@ -179,6 +182,8 @@ export default defineModule<GamesSettings>({
       perk = null;
       if (perkTimer) clearTimeout(perkTimer);
       perkTimer = null;
+      turntable?.stop();
+      turntable = null;
       if (p.kind === 'lights' && !keepLights) void lights()?.release();
       ctx.publish();
     };
@@ -195,6 +200,10 @@ export default defineModule<GamesSettings>({
       const base = { guest: winner, until: Date.now() + sec * 1000, totalMs: sec * 1000 };
       perk = outcome.perk.kind === 'lights' ? { ...base, kind: 'lights', color: null } : { ...base, kind: 'scratch', drawing: outcome.perk.drawing };
       perkTimer = setTimeout(() => endPerk(), sec * 1000);
+      const strip = lights()?.list().find((d) => d.id === s.scratchLight && d.online);
+      if (perk.kind === 'scratch' && strip) {
+        turntable = new Turntable(Math.min(490, strip.leds ?? 60), winner.color, (rgb) => lights()?.frame(strip.id, rgb));
+      }
       return true;
     };
 
@@ -526,6 +535,10 @@ export default defineModule<GamesSettings>({
         simonStart: args?.simonStart !== undefined ? Math.min(10, Math.max(1, Math.round(num(args.simonStart, 1)))) : s.simonStart,
         reflexPerkSec: args?.reflexPerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.reflexPerkSec, 60)))) : s.reflexPerkSec,
         circlePerkSec: args?.circlePerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.circlePerkSec, 60)))) : s.circlePerkSec,
+        scratchLight:
+          typeof args?.scratchLight === 'string' && (args.scratchLight === '' || lights()?.list().some((d) => d.id === args.scratchLight))
+            ? args.scratchLight
+            : s.scratchLight,
       });
       ctx.publish();
     });
@@ -560,6 +573,7 @@ export default defineModule<GamesSettings>({
         invites: [...invites.values()].map(({ charges: _c, timer: _t, ...inv }) => inv),
         match: state,
         perk,
+        ...(role === 'admin' ? { lightDevices: (lights()?.list() ?? []).map(({ id, name, online }) => ({ id, name, online })) } : {}),
         lights: lightsOn(),
         online: role === 'tv' ? [] : [...ctx.session.guests.values()].filter((g) => g.sockets > 0).map((g) => ({ ...player(g), balance: g.balance })),
         settings: ctx.settings.get(),
@@ -599,8 +613,10 @@ export default defineModule<GamesSettings>({
       if (perk?.kind !== 'scratch' || perk.guest.id !== guest.id) return false;
       // The record is in the side column: the winner's first touch ends the result screen
       if (match?.phase === 'result' && match.game === 'circle') close();
-      const angle = num(args?.angle, 0);
-      ctx.emit('tv', 'scratch', { angle: Number.isFinite(angle) ? clamp(angle, -1e6, 1e6) : 0, touching: !!args?.touching });
+      const raw = num(args?.angle, 0);
+      const angle = Number.isFinite(raw) ? clamp(raw, -1e6, 1e6) : 0;
+      ctx.emit('tv', 'scratch', { angle, touching: !!args?.touching });
+      turntable?.move(angle, !!args?.touching);
       return true;
     });
 

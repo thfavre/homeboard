@@ -1,3 +1,4 @@
+import { createSocket, type Socket } from 'node:dgram';
 import { join } from 'node:path';
 import { DEFAULT_WLED_EFFECTS, type WledDevice, type WledEffect, type WledJob, type WledState } from '../../../shared/wled.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
@@ -40,7 +41,19 @@ export interface LightsApi {
   color(hex: string | null): void;
   /** Give the lights back: previous state restored, queued effects resume */
   release(): Promise<void>;
+  /** The configured lights */
+  list(): { id: string; name: string; online: boolean; leds: number | null }[];
+  /**
+   * Live pixels on one light (RGB bytes, one triplet per LED), over WLED's UDP realtime protocol.
+   * Nothing to give back: the light goes back to what it was doing 2 s after the last frame.
+   */
+  frame(deviceId: string, rgb: Uint8Array): void;
 }
+
+/** WLED's UDP realtime port, and the DRGB protocol (up to 490 LEDs) */
+const REALTIME_PORT = 21324;
+const DRGB = 2;
+const REALTIME_TIMEOUT_SEC = 2;
 
 const POLL_MS = 20_000;
 const TIMEOUT_MS = 3000;
@@ -290,8 +303,28 @@ export default defineModule<WledSettings>({
       }
     };
 
+    let udp: Socket | null = null;
+    ctx.onShutdown(() => {
+      udp?.close();
+    });
+
     ctx.provide<LightsApi>('lights', {
       available: () => ctx.enabled() && devices().some((d) => health.get(d.id)?.online),
+      list: () => devices().map((d) => ({ id: d.id, name: d.name, online: !!health.get(d.id)?.online, leds: health.get(d.id)?.leds ?? null })),
+      frame: (deviceId, rgb) => {
+        const d = device(deviceId);
+        if (!ctx.enabled() || !d || !health.get(d.id)?.online) return;
+        if (!udp) {
+          udp = createSocket('udp4');
+          udp.on('error', (err) => ctx.log.warn('Realtime lights', err.message));
+        }
+        const packet = Buffer.alloc(2 + Math.min(rgb.length, 490 * 3));
+        packet[0] = DRGB;
+        packet[1] = REALTIME_TIMEOUT_SEC;
+        packet.set(rgb.subarray(0, packet.length - 2), 2);
+        // The host may carry the HTTP port: realtime has its own
+        udp.send(packet, REALTIME_PORT, d.host.replace(/:\d+$/, ''));
+      },
       claim: () => {
         if (held) return;
         held = true;

@@ -1,7 +1,8 @@
+import { RECORD_SPEED } from '$shared/games.ts';
 import { audioContext } from '../../soundboard/player.ts';
 
-/** 33 1/3 turns a minute, in radians a second: the record at this speed plays the sound at normal speed */
-export const NORMAL_SPEED = (100 / 3 / 60) * 2 * Math.PI;
+/** The record at this speed plays the sound at normal speed */
+export const NORMAL_SPEED = RECORD_SPEED;
 const LOOP_SEC = 2.4;
 
 /**

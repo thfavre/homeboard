@@ -160,6 +160,9 @@ export type Perk = { guest: GamePlayer; until: number; totalMs: number } & (
   | { kind: 'scratch'; drawing: CircleDrawing }
 );
 
+/** 33 1/3 turns a minute, in radians a second: the speed of the scratch record left alone */
+export const RECORD_SPEED = (100 / 3 / 60) * 2 * Math.PI;
+
 /** Scratch moves, phone to TV: the record angle (radians, unbounded) and whether a finger is on it */
 export interface ScratchMove {
   angle: number;
@@ -170,6 +173,8 @@ export interface GamesState {
   invites: DuelInvite[];
   match: MatchState | null;
   perk: Perk | null;
+  /** Admin only: the WLED lights, to pick the scratch light */
+  lightDevices?: { id: string; name: string; online: boolean }[];
   /** WLED lights can show the game colors */
   lights: boolean;
   /** Guests online with their balance, to pick an opponent who can match the bet */
@@ -194,6 +199,8 @@ export interface GamesSettings {
   reflexPerkSec: number;
   /** Seconds the Perfect Circle winner scratches their circle on the TV (0: off) */
   circlePerkSec: number;
+  /** WLED light that turns with the scratch record ('' = none) */
+  scratchLight: string;
   /** Colors in the first sequence of Light Simon */
   simonStart: number;
 }
