@@ -2,7 +2,6 @@ import { GAME_COLORS, type GameColor, type SimonView } from '../../../shared/gam
 import { HbError } from '../../core/util.ts';
 import { best, type GameFactory } from './engine.ts';
 
-const FIRST_LENGTH = 1;
 const MAX_ROUNDS = 25;
 const BETWEEN_MS = 2200;
 
@@ -10,6 +9,7 @@ const randomColor = (): GameColor => GAME_COLORS[Math.floor(Math.random() * GAME
 
 /** Light Simon: repeat the growing color sequence played by the lights */
 export const lightSimon: GameFactory = (m) => {
+  const firstLength = Math.max(1, m.settings.simonStart);
   const sequence: GameColor[] = [];
   let round = 0;
   let step: SimonView['step'] = 'between';
@@ -25,7 +25,7 @@ export const lightSimon: GameFactory = (m) => {
 
   const nextRound = () => {
     round += 1;
-    while (sequence.length < FIRST_LENGTH - 1 + round) sequence.push(randomColor());
+    while (sequence.length < firstLength - 1 + round) sequence.push(randomColor());
     done = new Set();
     failed = new Set();
     progress = new Map();

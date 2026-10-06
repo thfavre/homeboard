@@ -2,13 +2,13 @@ import { GAME_COLORS, type GameColor, type ReflexView } from '../../../shared/ga
 import { HbError } from '../../core/util.ts';
 import { best, type GameFactory } from './engine.ts';
 
-const ROUNDS = 5;
 const READY_MS = 1800;
 const GO_MS = 3000;
 const SHOW_MS = 2600;
 
 /** Color Reflex: tap the color the lights turn, before everyone else */
 export const colorReflex: GameFactory = (m) => {
+  const rounds = Math.max(1, m.settings.reflexRounds);
   let round = 0;
   let step: ReflexView['step'] = 'ready';
   let color: GameColor | null = null;
@@ -54,7 +54,7 @@ export const colorReflex: GameFactory = (m) => {
     m.deadline(null);
     m.publish();
     m.later(SHOW_MS, () => {
-      if (round < ROUNDS) return nextRound();
+      if (round < rounds) return nextRound();
       m.light(null);
       const order = [...m.players].sort((a, b) => scores.get(b.id)! - scores.get(a.id)! || (fastest.get(a.id) ?? 1e9) - (fastest.get(b.id) ?? 1e9));
       m.finish({
@@ -99,7 +99,7 @@ export const colorReflex: GameFactory = (m) => {
     view(role): ReflexView {
       return {
         round,
-        rounds: ROUNDS,
+        rounds,
         step,
         scores: Object.fromEntries(scores),
         out: [...out],

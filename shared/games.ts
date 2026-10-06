@@ -35,7 +35,7 @@ export const GAMES: GameInfo[] = [
     rules: 'Watch the lights, then tap the same colors in the same order. One more color every round. One mistake and you are out.',
     modes: ['duel', 'room'],
     lights: true,
-    steps: ['Watch the lights: one color to start', 'Tap them back in the same order', 'One more each round. One slip and you are out'],
+    steps: ['Watch the colors the lights play', 'Tap them back in the same order', 'One more each round. One slip and you are out'],
     colors: ['#8b7cff', '#3d8bff'],
   },
   {
@@ -45,7 +45,7 @@ export const GAMES: GameInfo[] = [
     rules: 'When the lights change color, tap that color on your phone. Fastest right tap wins the round. Tap too early or the wrong color and you miss the round.',
     modes: ['duel', 'room'],
     lights: true,
-    steps: ['The lights go dark... then change color', 'Tap that color before anyone else', 'Too early or wrong: you miss the round. 5 rounds'],
+    steps: ['The lights go dark... then change color', 'Tap that color before anyone else', 'Too early or wrong: you miss the round'],
     colors: ['#ffd23d', '#ff6a3d'],
   },
   {
@@ -171,6 +171,10 @@ export interface GamesSettings {
   timerRounds: number;
   /** Circles each player draws in Perfect Circle */
   circleCount: number;
+  /** Rounds of Color Reflex */
+  reflexRounds: number;
+  /** Colors in the first sequence of Light Simon */
+  simonStart: number;
 }
 
 // ------------------------------------------------------------ per game views

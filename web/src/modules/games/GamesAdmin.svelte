@@ -18,6 +18,13 @@
   const defaultPrize = () => hb.core?.admin?.earnRules.find((r) => r.key === 'games.win')?.amount ?? 0;
   let prize = $state<number | null>(null);
 
+  /** Number settings with a stepper (the server keeps them in the same range) */
+  const COUNTS = [
+    { key: 'timerRounds', label: 'Blind Timer rounds', max: 10 },
+    { key: 'circleCount', label: 'Perfect Circle: circles each', max: 10 },
+    { key: 'reflexRounds', label: 'Color Reflex rounds', max: 15 },
+    { key: 'simonStart', label: 'Light Simon: colors in the first round', max: 10 },
+  ] as const;
   const PHASES = { lobby: 'Waiting for players', intro: 'Showing the rules', play: 'Playing', result: 'Showing the result' } as const;
   const setSettings = (patch: object) => attempt(() => rpc('games', 'setSettings', patch));
 
@@ -100,14 +107,14 @@
         <AmountInput value={s.settings.maxStake} oncommit={(v) => setSettings({ maxStake: v })} />
       </div>
     {/if}
-    {#each [{ key: 'timerRounds', label: 'Blind Timer rounds' }, { key: 'circleCount', label: 'Perfect Circle: circles each' }] as const as r (r.key)}
+    {#each COUNTS as r (r.key)}
       {@const n = s.settings[r.key]}
       <div class="line">
-        <span>{r.label} <span class="faint small">1 to 10</span></span>
+        <span>{r.label} <span class="faint small">1 to {r.max}</span></span>
         <span class="stepper">
           <button class="btn small" disabled={n <= 1} onclick={() => setSettings({ [r.key]: n - 1 })}><Minus size={16} /></button>
           <strong class="mono">{n}</strong>
-          <button class="btn small" disabled={n >= 10} onclick={() => setSettings({ [r.key]: n + 1 })}><Plus size={16} /></button>
+          <button class="btn small" disabled={n >= r.max} onclick={() => setSettings({ [r.key]: n + 1 })}><Plus size={16} /></button>
         </span>
       </div>
     {/each}
