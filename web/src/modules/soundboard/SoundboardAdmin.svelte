@@ -1,21 +1,30 @@
 <script lang="ts">
   import { Synced } from '$lib/synced.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
-  import { Play, Trash2, Upload } from '@lucide/svelte';
+  import { Play, Plus, Trash2, Tv, Upload } from '@lucide/svelte';
   import type { SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import Ducking from '../spotify/Ducking.svelte';
+  import MiSearch from './MiSearch.svelte';
 
   const mod = $derived(hb.modules.soundboard as SoundboardState | undefined);
   const volume = new Synced(() => (hb.modules.soundboard ? Math.round(hb.modules.soundboard.volume * 100) : undefined), 80);
   const cooldown = new Synced(() => hb.modules.soundboard?.cooldownSec, 4);
+  const maxSec = new Synced(() => hb.modules.soundboard?.searchMaxSec, 10);
+  let adding = $state<string | null>(null);
   let name = $state('');
   let fileInput = $state<HTMLInputElement>();
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('soundboard', 'setOptions', args));
   const test = (id: string) => attempt(() => rpc('soundboard', 'test', { id }));
+
+  async function add(mp3: string, title: string) {
+    adding = mp3;
+    await attempt(() => rpc('soundboard', 'addFromSearch', { mp3, title }), `${title} added to the board`);
+    adding = null;
+  }
 
   async function onFile(e: Event) {
     const file = (e.currentTarget as HTMLInputElement).files?.[0];
@@ -63,7 +72,7 @@
     {#each mod.sounds.filter((s) => s.kind === 'file') as s (s.id)}
       <div class="line">
         <button class="btn ghost small" aria-label="Test" onclick={() => test(s.id)}><Play size={15} /></button>
-        <span class="grow">{s.name}</span>
+        <span class="grow">{s.name}{#if s.myinstants}<span class="tag">MyInstants</span>{/if}</span>
         <button class="btn ghost small" aria-label="Delete" onclick={async () => (await ask({ title: `Delete ${s.name}?`, confirm: 'Delete', danger: true })) && attempt(() => rpc('soundboard', 'deleteCustom', { id: s.id }))}>
           <Trash2 size={15} />
         </button>
@@ -77,6 +86,25 @@
       <input bind:this={fileInput} type="file" accept="audio/*" hidden onchange={onFile} />
     </div>
   </Section>
+
+  <Section title="MyInstants" hint="Pick sounds from myinstants.com for the board. They are downloaded, so they keep working without internet.">
+    <div class="line">
+      <span class="grow">Guests can search MyInstants<span class="faint sub">Any sound from the site, played on the TV at the usual price</span></span>
+      <Toggle checked={mod.guestSearch} label="Guests can search MyInstants" onchange={(v) => set({ guestSearch: v })} />
+    </div>
+    {#if mod.guestSearch}
+      <label class="field">
+        <span>Cut searched sounds after (seconds, 0 = never)</span>
+        <input class="input" type="number" min="0" max="60" bind:value={maxSec.value} onfocus={maxSec.start} onblur={() => { set({ searchMaxSec: Number(maxSec.value) }); maxSec.end(); }} />
+      </label>
+    {/if}
+    <MiSearch>
+      {#snippet actions(s)}
+        <button class="btn ghost small" aria-label="Play on the TV" onclick={() => attempt(() => rpc('soundboard', 'playSearch', { mp3: s.mp3, title: s.title }))}><Tv size={15} /></button>
+        <button class="btn small" aria-label="Add to the board" disabled={adding === s.mp3} onclick={() => add(s.mp3, s.title)}><Plus size={15} /> Add</button>
+      {/snippet}
+    </MiSearch>
+  </Section>
 {/if}
 
 <style>
@@ -87,6 +115,21 @@
   }
   .grow {
     flex: 1;
+  }
+  .sub {
+    display: block;
+    font-size: 0.8rem;
+  }
+  .tag {
+    margin-left: 0.5rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    font-weight: 600;
+    vertical-align: middle;
   }
   input[type='range'] {
     width: 100%;
