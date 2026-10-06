@@ -10,7 +10,7 @@ const SHOWN_POINTS = 160;
 /** Reveal: one circle every STEP_MS at most, the whole reveal within REVEAL_MAX_MS, then the totals */
 const STEP_MS = 1300;
 const REVEAL_MAX_MS = 16_000;
-const REVEAL_HOLD_MS = 3500;
+const REVEAL_HOLD_MS = 1500;
 
 type Pt = [number, number];
 

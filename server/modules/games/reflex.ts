@@ -10,7 +10,7 @@ const DONE_MS = 1400;
 /** Reveal: one time every STEP_MS at most, the whole reveal within REVEAL_MAX_MS, then the totals */
 const STEP_MS = 900;
 const REVEAL_MAX_MS = 15_000;
-const REVEAL_HOLD_MS = 3500;
+const REVEAL_HOLD_MS = 1500;
 
 /** Color Reflex: everyone taps the color of the lights as fast as they can; times stay secret until the reveal */
 export const colorReflex: GameFactory = (m) => {
