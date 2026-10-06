@@ -15,6 +15,8 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] spin the wheel
 - [ ] Sync Selfie: Take a selfie on the same signal as everyone else, then see the mosaic of all the faces on the TV.
 - [ ] Custom stickers
+- [ ] Add something that cost a lot, like 1000, and advertise it as a big thing, but it will just like stop the lights, and do a fart sound, or something like that. (like a joke for the rich people)
+
 -- games ---
 - [x] 1vs1 someone on the TV (like a game show (and put some coins?))
 - [ ] gift for a condition? Like we can see somewhere that doing X gives a gift.
@@ -31,10 +33,13 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] Horse Race: Bet on a horse and watch the race unfold on the TV, hoping yours crosses the line first.
 
 # Bugs / improvements
+- [ ] The TV page sometimes cahnge the layout and the right part become too big (for ex when I add a lot of music to the queue...) ![alt text](image.png)
 - [ ] pixelcanvas: should be able to use gesture to navigate the canvas, not just drag the finger to draw. (like pinch to zoom, two fingers to move)
 - [ ] When a user adds a song but spotify is not played anywhere, he sees a +10 on his money and the error. (He gets -10 for putting a song and instend of +10 for the error). Make sure this bug doesnt also appens somewhere else.
 - [ ] Let the admin choose the delay for the passive earning.
 - Add more fun emoji for the selfie avatars (like a crown, a hat, a mustache, a monocle, etc.)
+- [ ] add some lights effects (dark, a better fiework that uses the firework effect, some effects that are not just copied on all devices the same)
+- [ ] show a +x to the music queue when there is more than the screen can display in te queue.
 
 ## Quick start
 
