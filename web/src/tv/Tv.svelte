@@ -89,6 +89,8 @@
     height: 100vh;
     display: grid;
     grid-template-rows: auto 1fr auto;
+    /* minmax(0, ...) so a wide footer (many ticker items) can't widen the whole layout */
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--tv-gap);
     padding: 1.6rem var(--tv-pad-x) 1.6rem;
     overflow: hidden;
@@ -134,6 +136,7 @@
     margin-top: auto;
   }
   footer {
+    min-width: 0;
     min-height: 2.6rem;
   }
   .takeover {
