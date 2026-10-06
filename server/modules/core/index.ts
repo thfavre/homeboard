@@ -356,6 +356,17 @@ export default defineModule({
       ctx.toast(guest, { text: reason, amount, kind: amount > 0 ? 'success' : 'info' });
     });
 
+    /** Set a guest's balance to an exact amount: the difference goes through the ledger like a gift or a take */
+    ctx.onAdmin('setBalance', (args) => {
+      const guest = session.byId(args.guestId);
+      const target = Math.max(0, Math.round(num(args.amount)));
+      const diff = target - guest.balance;
+      if (!diff) throw new HbError('They already have this amount');
+      const reason = cleanName(args.reason, 60) || 'Balance set by the host';
+      economy.credit(guest, diff, reason);
+      ctx.toast(guest, { text: reason, amount: diff, kind: diff > 0 ? 'success' : 'info' });
+    });
+
     ctx.onAdmin('moneyRain', (args) => {
       const amount = Math.round(num(args.amount));
       if (amount <= 0) throw new HbError('Enter an amount');
