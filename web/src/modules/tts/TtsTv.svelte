@@ -203,7 +203,7 @@
 {#if current}
   {#key current.key}
     {#each current.fx.overlays as kind (kind)}
-      <div transition:fade={{ duration: 500 }}><EggOverlay {kind} /></div>
+      <EggOverlay {kind} />
     {/each}
     <div
       class="tts-strip"

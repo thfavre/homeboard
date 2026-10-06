@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition';
   import type { OverlayFx } from './eggs.ts';
 
   /** Full-screen particles of a shoutout easter egg. Random values are drawn once, when the banner appears. */
@@ -69,7 +70,8 @@
   }));
 </script>
 
-<div class="egg {k}" aria-hidden="true">
+<!-- Fixed over the screen, so it never takes room in the TV layout. Global: it fades out with the banner. -->
+<div class="egg {k}" aria-hidden="true" in:fade|global={{ duration: 900 }} out:fade|global={{ duration: 1200 }}>
   {#if k === 'snow'}
     {#each falling as p}
       <span class="flake" style:left="{p.x}%" style:--s="{p.size}rem" style:--d="{p.dur}s" style:--delay="{p.delay}s" style:--drift="{p.drift}vw" style:opacity={p.opacity}></span>
