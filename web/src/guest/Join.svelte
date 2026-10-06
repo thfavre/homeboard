@@ -1,146 +1,215 @@
 <script lang="ts">
-  import { tick } from 'svelte';
-  import { Eye, EyeOff, TriangleAlert } from '@lucide/svelte';
-  import { hb, join, lastName, toast } from '$lib/client.svelte.ts';
+  import { ArrowLeft, ArrowRight, Eye, EyeOff, LoaderCircle, Tv } from '@lucide/svelte';
+  import { untrack } from 'svelte';
+  import { fly } from 'svelte/transition';
+  import type { NameCheck } from '$shared/protocol.ts';
+  import { hb, join, lastName, rpc, toast } from '$lib/client.svelte.ts';
+  import Avatar from '$lib/ui/Avatar.svelte';
+  import DigitInput from '$lib/ui/DigitInput.svelte';
+
+  /**
+   * One question per screen: the code on the TV, your name, then your PIN.
+   * Knowing the name first lets the last step say "welcome back" or "choose a PIN".
+   */
+  type Step = 'code' | 'name' | 'pin';
 
   const params = new URLSearchParams(location.search);
-  const codeFromLink = !!params.get('c');
-  let code = $state(params.get('c') ?? '');
+  const codeFromLink = /^\d{4}$/.test(params.get('c') ?? '');
+  let code = $state(codeFromLink ? params.get('c')! : '');
   let name = $state(lastName());
   let pin = $state('');
+  let check = $state<NameCheck | null>(null);
   let showPin = $state(false);
+  let step = $state<Step>(hb.codeRequired && !codeFromLink ? 'code' : 'name');
   let busy = $state(false);
   let error = $state('');
-  // A code from the QR link is shown read-only until it turns out to be wrong
-  let editCode = $state(!codeFromLink);
-  let codeInput = $state<HTMLInputElement>();
+  let shake = $state(0);
+  let back = $state(false);
 
-  async function changeCode(clear = true) {
-    editCode = true;
-    if (clear) code = '';
-    await tick();
-    codeInput?.focus();
+  const steps = $derived<Step[]>(hb.codeRequired ? ['code', 'name', 'pin'] : ['name', 'pin']);
+  const canGoBack = $derived(step === 'pin' || (step === 'name' && hb.codeRequired));
+
+  function go(to: Step) {
+    back = steps.indexOf(to) < steps.indexOf(step);
+    error = '';
+    step = to;
   }
 
-  // After a new session the code in the link is outdated
+  function fail(message: string) {
+    error = message;
+    shake++;
+  }
+
+  /** The code was wrong or outdated: ask for it again */
+  function askCode(message = '') {
+    code = '';
+    go('code');
+    if (message) fail(message);
+  }
+
+  // After a new session the code in the link is outdated: ask for it once per kick
+  let kickHandled = '';
   $effect(() => {
-    if (hb.kickedReason && codeFromLink && !editCode) changeCode();
+    const reason = hb.kickedReason;
+    if (!reason || reason === kickHandled) return;
+    kickHandled = reason;
+    if (untrack(() => hb.codeRequired && step !== 'code')) untrack(() => askCode());
   });
 
-  async function submit(e: SubmitEvent) {
-    e.preventDefault();
-    error = '';
-    if (hb.codeRequired && !/^\d{4}$/.test(code.trim())) {
-      error = 'Enter the 4-digit session code shown on the TV.';
-      if (!editCode) changeCode();
-      return;
-    }
-    if (name.trim().length < 2) {
-      error = 'Enter your name (at least 2 characters).';
-      return;
-    }
-    if (!/^\d{4}$/.test(pin)) {
-      error = 'Choose a PIN of exactly 4 digits.';
-      return;
-    }
+  async function run(fn: () => Promise<void>) {
+    if (busy) return;
     busy = true;
+    error = '';
     try {
-      const r = await join({ code: code.trim(), name, pin });
-      if (r.returning) toast({ text: `Welcome back, ${r.me.name}`, kind: 'success' });
-      else hb.offerAvatar = true;
-      // Do not keep an old code in the address bar for the next visit
-      if (codeFromLink) history.replaceState(null, '', location.pathname);
+      await fn();
     } catch (err) {
-      error = (err as Error).message;
-      if (/session code/i.test(error)) changeCode();
+      const message = (err as Error).message;
+      if (/session code|wrong codes/i.test(message) && step !== 'code') askCode(message);
+      else fail(message);
     } finally {
       busy = false;
     }
   }
+
+  const submitCode = () =>
+    run(async () => {
+      if (!/^\d{4}$/.test(code)) return fail('Enter the 4 digits shown on the TV.');
+      try {
+        await rpc('core', 'checkCode', { code });
+      } catch (err) {
+        code = '';
+        throw err;
+      }
+      go('name');
+    });
+
+  const submitName = () =>
+    run(async () => {
+      if (name.trim().length < 2) return fail('Enter your name (at least 2 letters).');
+      check = await rpc<NameCheck>('core', 'checkName', { code, name: name.trim() });
+      name = check.name;
+      pin = '';
+      // Choosing a PIN: show it so it is easy to remember. Typing it again: hide it.
+      showPin = !check.returning;
+      go('pin');
+    });
+
+  const submitPin = () =>
+    run(async () => {
+      if (!/^\d{4}$/.test(pin)) return fail('The PIN has 4 digits.');
+      try {
+        const r = await join({ code, name, pin });
+        if (r.returning) toast({ text: `Welcome back, ${r.me.name}`, kind: 'success' });
+        else hb.offerAvatar = true;
+        // Do not keep an old code in the address bar for the next visit
+        if (codeFromLink) history.replaceState(null, '', location.pathname);
+      } catch (err) {
+        pin = '';
+        const message = (err as Error).message;
+        throw new Error(check?.returning && /check your PIN/i.test(message) ? 'Wrong PIN, try again.' : message);
+      }
+    });
 </script>
 
 <div class="join">
-  <div class="hero">
+  <header class="hero">
     <span class="eyebrow">You are invited to</span>
     <h1>{hb.visitor?.appName ?? 'Homeboard'}</h1>
-    <p class="dim">Play music, draw on the TV, light up the room. Everything happens on the big screen.</p>
-  </div>
+  </header>
 
   {#if hb.kickedReason}<p class="notice card">{hb.kickedReason}</p>{/if}
 
-  <form novalidate class="card form" onsubmit={submit}>
-    {#if hb.codeRequired}
-      {#if editCode}
-        <label class="field">
-          <span>Session code (shown on the TV)</span>
-          <input
-            class="input code mono"
-            bind:this={codeInput}
-            bind:value={code}
-            oninput={() => (error = '')}
-            inputmode="numeric"
-            maxlength="4"
-            placeholder="0000"
-            autocomplete="off"
-            required
-          />
-        </label>
-      {:else}
-        <div class="code-line">
-          <span class="dim">Session code</span>
-          <span class="mono value">{code}</span>
-          <span class="spacer"></span>
-          <button type="button" class="btn ghost small" onclick={() => changeCode(false)}>Change</button>
-        </div>
-      {/if}
-    {/if}
-    <label class="field">
-      <span>Your name</span>
-      <input
-        class="input"
-        bind:value={name}
-        maxlength="20"
-        placeholder="How should we call you?"
-        autocomplete="nickname"
-        required
-        oninput={() => (error = '')}
-      />
-    </label>
-
-    <label class="field">
-      <span>Choose a 4-digit PIN</span>
-      <div class="pin-row">
-        <input
-          class="input mono pin"
-          type={showPin ? 'text' : 'password'}
-          bind:value={pin}
-          oninput={() => (pin = pin.replace(/\D/g, '').slice(0, 4))}
-          inputmode="numeric"
-          maxlength="4"
-          placeholder="0000"
-          autocomplete="off"
-          required
-        />
-        <button type="button" class="btn ghost eye" onclick={() => (showPin = !showPin)} aria-label={showPin ? 'Hide PIN' : 'Show PIN'}>
-          {#if showPin}<EyeOff size={18} />{:else}<Eye size={18} />{/if}
+  <div class="card panel">
+    <div class="top">
+      {#if canGoBack}
+        <button type="button" class="btn ghost small iconbtn" aria-label="Back" onclick={() => (step === 'pin' ? go('name') : askCode())}>
+          <ArrowLeft size={18} />
         </button>
+      {:else}
+        <span class="iconbtn"></span>
+      {/if}
+      <div class="dots" aria-label={`Step ${steps.indexOf(step) + 1} of ${steps.length}`}>
+        {#each steps as s (s)}<i class:on={steps.indexOf(s) <= steps.indexOf(step)}></i>{/each}
       </div>
-    </label>
-
-    <div class="help">
-      <p>To come back from another phone or browser, enter the <strong>same name</strong> and this <strong>PIN</strong>.</p>
-      <p class="warn">
-        <TriangleAlert size={16} />
-        <span>Make up a new one. Do not use a PIN you use elsewhere (bank card, phone lock).</span>
-      </p>
+      <span class="iconbtn"></span>
     </div>
 
-    {#if error}<p class="error">{error}</p>{/if}
+    {#key step}
+      <form novalidate class="step" in:fly={{ x: back ? -24 : 24, duration: 220 }} onsubmit={(e) => (e.preventDefault(), step === 'code' ? submitCode() : step === 'name' ? submitName() : submitPin())}>
+        {#if step === 'code'}
+          <div class="ask">
+            <span class="badge"><Tv size={22} /></span>
+            <h2>Enter the code on the TV</h2>
+            <p class="dim">The 4 digits under the QR code.</p>
+          </div>
+          <DigitInput bind:value={code} label="Session code" autofocus {shake} disabled={busy} oncomplete={submitCode} />
+        {:else if step === 'name'}
+          <div class="ask">
+            <h2>What's your name?</h2>
+            <p class="dim">This is how you appear on the TV.</p>
+          </div>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            class="input big"
+            bind:value={name}
+            maxlength="20"
+            placeholder="Your name"
+            autocomplete="nickname"
+            autocapitalize="words"
+            enterkeyhint="next"
+            autofocus
+            oninput={() => (error = '')}
+          />
+        {:else if check?.returning}
+          <div class="ask">
+            <Avatar name={check.name} color={check.color ?? 'var(--accent)'} src={check.avatar} size="4.2rem" />
+            <h2>Welcome back, {check.name}</h2>
+            <p class="dim">Enter your PIN to continue.</p>
+          </div>
+          <DigitInput bind:value={pin} label="PIN" masked={!showPin} autofocus {shake} disabled={busy} oncomplete={submitPin} />
+          <button type="button" class="link toggle" onclick={() => (showPin = !showPin)}>
+            {#if showPin}<EyeOff size={16} /> Hide PIN{:else}<Eye size={16} /> Show PIN{/if}
+          </button>
+          <p class="faint small center">
+            Not {check.name}? <button type="button" class="link" onclick={() => go('name')}>Use another name</button><br />
+            Forgot your PIN? The host can set a new one.
+          </p>
+        {:else}
+          <div class="ask">
+            <h2>Choose a PIN, {name}</h2>
+            <p class="dim">4 digits to log back in from another phone.</p>
+          </div>
+          <DigitInput bind:value={pin} label="New PIN" masked={!showPin} autofocus {shake} disabled={busy} />
+          <button type="button" class="link toggle" onclick={() => (showPin = !showPin)}>
+            {#if showPin}<EyeOff size={16} /> Hide PIN{:else}<Eye size={16} /> Show PIN{/if}
+          </button>
+          <p class="faint small center">Make up a new one, not the PIN of your bank card or phone.</p>
+        {/if}
 
-    <button class="btn primary block" disabled={busy || !hb.connected}>
-      {#if !hb.connected}Connecting...{:else}Join{/if}
-    </button>
-  </form>
+        <p class="error" role="alert">{error}</p>
+
+        {#if step !== 'pin' || !check?.returning}
+          <button class="btn primary block" disabled={busy || !hb.connected}>
+            {#if !hb.connected}
+              Connecting...
+            {:else if busy}
+              <LoaderCircle size={18} class="spin" />
+            {:else if step === 'pin'}
+              Join the party
+            {:else}
+              Continue <ArrowRight size={18} />
+            {/if}
+          </button>
+        {:else if busy}
+          <p class="faint center"><LoaderCircle size={18} class="spin" /></p>
+        {/if}
+      </form>
+    {/key}
+  </div>
+
+  {#if step === 'name' && hb.codeRequired && codeFromLink}
+    <p class="faint small center">Session code {code} · <button type="button" class="link" onclick={() => askCode()}>Change</button></p>
+  {/if}
 </div>
 
 <style>
@@ -148,17 +217,18 @@
     min-height: 100dvh;
     display: grid;
     align-content: center;
-    gap: 1.5rem;
+    gap: 1.4rem;
     padding: 2rem 1.25rem calc(2rem + env(safe-area-inset-bottom));
     max-width: 26rem;
     margin: 0 auto;
   }
   .hero {
     display: grid;
-    gap: 0.6rem;
+    gap: 0.35rem;
+    text-align: center;
   }
   h1 {
-    font-size: 2.8rem;
+    font-size: 2.6rem;
     letter-spacing: -0.04em;
     background: var(--gradient);
     -webkit-background-clip: text;
@@ -166,76 +236,110 @@
     color: transparent;
     padding-bottom: 0.05em;
   }
-  .form {
-    padding: 1.25rem;
+  .panel {
+    padding: 1rem 1.25rem 1.4rem;
     display: grid;
-    gap: 1rem;
+    gap: 0.6rem;
+    overflow: hidden;
   }
-  .code {
-    font-size: 1.6rem;
-    letter-spacing: 0.5em;
-    text-align: center;
-    padding-left: 0.5em;
-  }
-  .code-line {
+  .top {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.35rem 0.4rem 0.35rem 0.95rem;
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    font-size: 0.9rem;
+    justify-content: space-between;
   }
-  .code-line .value {
-    font-weight: 700;
-    font-size: 1.1rem;
-    letter-spacing: 0.25em;
-  }
-  .pin-row {
-    position: relative;
-  }
-  .pin {
-    font-size: 1.3rem;
-    letter-spacing: 0.5em;
-    padding-right: 3rem;
-  }
-  .eye {
-    position: absolute;
-    right: 0.2rem;
-    top: 50%;
-    translate: 0 -50%;
-    padding: 0;
-    width: 2.6rem;
+  .iconbtn {
+    width: 2.4rem;
     min-height: 2.4rem;
+    padding: 0;
     color: var(--text-dim);
   }
-  .help {
+  .dots {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .dots i {
+    width: 1.6rem;
+    height: 0.3rem;
+    border-radius: 999px;
+    background: var(--border-strong);
+    transition: background 0.25s ease;
+  }
+  .dots i.on {
+    background: var(--accent);
+  }
+  .step {
     display: grid;
-    gap: 0.5rem;
-    padding: 0.8rem 0.9rem;
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
+    gap: 1.1rem;
+  }
+  .ask {
+    display: grid;
+    justify-items: center;
+    gap: 0.4rem;
+    text-align: center;
+  }
+  h2 {
+    font-size: 1.45rem;
+  }
+  .ask p {
+    font-size: 0.92rem;
+  }
+  .badge {
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    margin-bottom: 0.2rem;
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+  }
+  .big {
+    font-size: 1.25rem;
+    text-align: center;
+    padding-block: 0.85rem;
+  }
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-self: center;
+    gap: 0.4rem;
+    margin-top: -0.4rem;
     font-size: 0.85rem;
     color: var(--text-dim);
   }
-  .help strong {
-    color: var(--text);
+  .small {
+    font-size: 0.82rem;
   }
-  .warn {
-    display: flex;
-    gap: 0.5rem;
-    color: var(--warning);
+  .center {
+    text-align: center;
+    line-height: 1.6;
   }
-  .warn :global(svg) {
-    flex: none;
-    margin-top: 0.1rem;
+  .link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
   }
   .error {
+    min-height: 1.3em;
+    margin: -0.4rem 0 -0.5rem;
+    text-align: center;
     color: var(--danger);
     font-size: 0.9rem;
   }
   .notice {
     padding: 0.8rem 1rem;
     font-size: 0.9rem;
+  }
+  .join :global(.spin) {
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

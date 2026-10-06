@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import QRCode from 'qrcode';
 import { AVATAR_EFFECTS, type AvatarParams } from '../../../shared/avatar.ts';
 import { ensureDir } from '../../core/paths.ts';
-import type { CoreState, Currency, JoinResult, LeaderboardMode, PublicGuest } from '../../../shared/protocol.ts';
+import type { CoreState, Currency, JoinResult, LeaderboardMode, NameCheck, PublicGuest } from '../../../shared/protocol.ts';
 import { THEMES } from '../../../shared/themes.ts';
 import type { CoreSettings } from '../../core/hub.ts';
 import { defineModule } from '../../core/module.ts';
@@ -135,6 +135,21 @@ export default defineModule({
         throw new HbError('Wrong session code. Look at the TV.');
       }
     };
+
+    // The join screen goes step by step: code, then name, then PIN
+    hub.onVisitor('checkCode', (args, socket) => {
+      checkCode(socket.data, args.code);
+      return true;
+    });
+
+    hub.onVisitor('checkName', (args, socket): NameCheck => {
+      checkCode(socket.data, args.code);
+      const name = cleanName(args.name);
+      if (name.length < 2) throw new HbError('Please enter a name (at least 2 characters)');
+      const g = session.byName(name);
+      if (!g) return { returning: false, name };
+      return { returning: true, name: g.name, color: g.color, ...(g.avatar ? { avatar: g.avatar.url } : {}) };
+    });
 
     hub.onVisitor('join', (args, socket, bind): JoinResult => {
       checkCode(socket.data, args.code);

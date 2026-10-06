@@ -171,6 +171,15 @@ export interface ToastMessage {
   kind?: 'info' | 'success' | 'error';
 }
 
+/** Before the PIN step: is this name new, or someone coming back? */
+export interface NameCheck {
+  returning: boolean;
+  /** The name as stored (case of the first time) */
+  name: string;
+  color?: string;
+  avatar?: string;
+}
+
 export interface JoinResult {
   token: string;
   me: Me;
