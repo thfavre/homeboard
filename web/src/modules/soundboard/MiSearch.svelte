@@ -3,6 +3,7 @@
   import { LoaderCircle, Search } from '@lucide/svelte';
   import type { MiPage, MiSound } from '$shared/soundboard.ts';
   import { rpc } from '$lib/client.svelte.ts';
+  import { stopPreview } from './preview.svelte.ts';
 
   /** Sound search (MyInstants). `item` draws each result (a SoundCard), in the same grid as the board. */
   let { item }: { item: Snippet<[MiSound, number]> } = $props();
@@ -41,7 +42,10 @@
   // Popular sounds before anything is typed
   load('', 1);
 
-  $effect(() => () => clearTimeout(timer));
+  $effect(() => () => {
+    clearTimeout(timer);
+    stopPreview();
+  });
 </script>
 
 <div class="mi">

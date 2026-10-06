@@ -9,6 +9,7 @@
   import Ducking from '../spotify/Ducking.svelte';
   import MiSearch from './MiSearch.svelte';
   import SoundCard from './SoundCard.svelte';
+  import ListenButton from './ListenButton.svelte';
 
   const mod = $derived(hb.modules.soundboard as SoundboardState | undefined);
   const volume = new Synced(() => (hb.modules.soundboard ? Math.round(hb.modules.soundboard.volume * 100) : undefined), 80);
@@ -84,7 +85,7 @@
     </div>
   </Section>
 
-  <Section title="Sound search" hint="Sounds from myinstants.com. Tap a sound to play it on the TV, or + to add it to the board: it is downloaded, so it keeps working without internet.">
+  <Section title="Sound search" hint="Sounds from myinstants.com. Tap a sound to play it on the TV, the headphones to listen on this phone, or + to add it to the board: it is downloaded, so it keeps working without internet.">
     <div class="line">
       <span class="grow">Guests can search for sounds<span class="faint sub">They play them on the TV at the usual price, and can keep their own</span></span>
       <Toggle checked={mod.guestSearch} label="Guests can search for sounds" onchange={(v) => set({ guestSearch: v })} />
@@ -99,6 +100,7 @@
       {#snippet item(s, i)}
         <SoundCard name={s.title} hue={(i * 47 + 200) % 360} onclick={() => attempt(() => rpc('soundboard', 'playSearch', { mp3: s.mp3, title: s.title }))}>
           {#snippet aside()}
+            <ListenButton sound={s} />
             <button aria-label="Add to the board" disabled={adding === s.mp3} onclick={() => add(s.mp3, s.title)}><Plus size={18} /></button>
           {/snippet}
         </SoundCard>

@@ -3,8 +3,8 @@
   import { AudioLines } from '@lucide/svelte';
 
   /**
-   * One sound on a board: tap to play. `aside` puts a small button on the right of the card
-   * (save, add to the board), `badge` one on its top-right corner (remove while editing).
+   * One sound on a board: tap to play. `aside` puts small buttons on the right of the card
+   * (listen, save, add to the board), `badge` one on its top-right corner (remove while editing).
    */
   let {
     name,
@@ -17,8 +17,8 @@
   }: { name: string; hue: number; active?: boolean; disabled?: boolean; onclick: () => void; aside?: Snippet; badge?: Snippet } = $props();
 </script>
 
-<div class="wrap">
-  <button class="sound card" class:active class:has-aside={!!aside} {disabled} {onclick} style:--h={hue}>
+<div class="sound card" class:active style:--h={hue}>
+  <button class="main" {disabled} {onclick}>
     <span class="icon"><AudioLines size={20} /></span>
     <span class="name">{name}</span>
   </button>
@@ -27,31 +27,36 @@
 </div>
 
 <style>
-  .wrap {
-    position: relative;
-    display: grid;
-    min-width: 0;
-  }
   .sound {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    transition: transform 0.1s ease;
+  }
+  .sound:has(.main:active:not(:disabled)) {
+    transform: scale(0.96);
+  }
+  .active {
+    border-color: var(--accent);
+  }
+  .main {
+    flex: 1;
     display: flex;
     align-items: center;
     gap: 0.7rem;
     min-width: 0;
     padding: 0.9rem;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
     text-align: left;
-    transition: transform 0.1s ease;
+    cursor: pointer;
   }
-  .has-aside {
-    padding-right: 2.4rem;
-  }
-  .sound:active:not(:disabled) {
-    transform: scale(0.96);
-  }
-  .sound:disabled {
+  .main:disabled {
     opacity: 0.5;
-  }
-  .active {
-    border-color: var(--accent);
+    cursor: default;
   }
   .icon {
     flex: none;
@@ -70,14 +75,14 @@
     font-size: 0.92rem;
     line-height: 1.2;
   }
+  /* Buttons passed in `aside`, stacked so the name keeps its room on narrow phones */
   .aside {
-    position: absolute;
-    top: 50%;
-    right: 0.4rem;
-    translate: 0 -50%;
+    flex: none;
     display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding-right: 0.3rem;
   }
-  /* Button passed in `aside` */
   .aside :global(button) {
     display: grid;
     place-items: center;

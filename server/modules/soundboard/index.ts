@@ -142,6 +142,13 @@ export default defineModule<SoundboardSettings>({
     });
     ctx.onAdmin('search', (args) => searchMyInstants(args.q, args.page));
 
+    // Listen on the phone before playing it on the TV
+    ctx.onGuest('preview', (args) => {
+      guestSearchOn();
+      return cached(args.mp3);
+    });
+    ctx.onAdmin('preview', (args) => cached(args.mp3));
+
     ctx.onGuest('playSearch', async (args, guest) => {
       guestSearchOn();
       checkCooldown();

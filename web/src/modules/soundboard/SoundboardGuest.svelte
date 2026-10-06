@@ -5,6 +5,7 @@
   import Money from '$lib/ui/Money.svelte';
   import MiSearch from './MiSearch.svelte';
   import SoundCard from './SoundCard.svelte';
+  import ListenButton from './ListenButton.svelte';
 
   const mod = $derived(hb.modules.soundboard as SoundboardState | undefined);
   const economy = $derived(!!hb.core?.economyEnabled);
@@ -83,6 +84,7 @@
         {#snippet item(s, i)}
           <SoundCard name={s.title} hue={(i * 47 + 200) % 360} active={last === `mi:${s.mp3}`} disabled={wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)}>
             {#snippet aside()}
+              <ListenButton sound={s} />
               <button class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>
                 {#if saved(s.mp3)}<BookmarkCheck size={16} />{:else}<BookmarkPlus size={16} />{/if}
               </button>
