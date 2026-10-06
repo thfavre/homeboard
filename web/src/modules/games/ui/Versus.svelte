@@ -57,6 +57,7 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    padding: 0 0.2rem;
+    /* The gradient only paints inside the box: room for the italic overhang */
+    padding: 0 0.15em;
   }
 </style>

@@ -263,7 +263,8 @@
     background: var(--gradient);
     -webkit-background-clip: text;
     background-clip: text;
-    color: transparent;
+    color: transparent;    /* The gradient only paints inside the box: room for the italic overhang */
+    padding: 0 0.15em;
   }
   .timer {
     display: grid;
