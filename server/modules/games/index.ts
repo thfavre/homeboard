@@ -57,7 +57,6 @@ interface Match {
   stake: number;
   /** Room game prize paid by the house (null: the "win a room game" reward) */
   prize: number | null;
-  options: { side?: 'heads' | 'tails' };
   phase: MatchPhase;
   endsAt: number | null;
   phaseMs: number;
@@ -180,7 +179,7 @@ export default defineModule<GamesSettings>({
       return m.prize ?? ctx.economy.earnAmount('games.win');
     };
 
-    const createMatch = (game: GameId, mode: GameMode, starter: GamePlayer | null, players: GamePlayer[], stake: number, charges: Charge[], options: Match['options'] = {}) => {
+    const createMatch = (game: GameId, mode: GameMode, starter: GamePlayer | null, players: GamePlayer[], stake: number, charges: Charge[]) => {
       tvFree();
       ctx.takeover.start();
       match = {
@@ -191,7 +190,6 @@ export default defineModule<GamesSettings>({
         players,
         stake,
         prize: null,
-        options,
         phase: 'lobby',
         endsAt: null,
         phaseMs: 0,
@@ -228,7 +226,6 @@ export default defineModule<GamesSettings>({
         mode: m.mode,
         stake: m.stake,
         pot: potOf(m),
-        options: m.options,
         settings: ctx.settings.get(),
         light: (color) => {
           m.lightColor = color;
@@ -308,7 +305,6 @@ export default defineModule<GamesSettings>({
       checkFree(opponent.id, opponent.name);
       const stake = cleanStake(args?.stake);
       if (stake > opponent.balance) throw new HbError(`${opponent.name} cannot match that bet`);
-      const side = args?.side === 'tails' ? 'tails' : 'heads';
       const name = gameInfo(game)!.name;
 
       const fee = ctx.economy.charge(guest, 'games.duel', 1, `Duel: ${name}`);
@@ -325,7 +321,6 @@ export default defineModule<GamesSettings>({
         from: player(guest),
         to: player(opponent),
         stake,
-        ...(game === 'coin' ? { side } : {}),
         expiresAt: Date.now() + DUEL_INVITE_MS,
         charges: [fee, bet],
         timer: setTimeout(() => {
@@ -350,7 +345,7 @@ export default defineModule<GamesSettings>({
       tvFree();
       const bet = ctx.economy.pay(guest, inv.stake, `Duel bet: ${gameInfo(inv.game)!.name}`);
       try {
-        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet], { side: inv.side });
+        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet]);
         dropInvite(inv, null);
         intro(m);
       } catch (err) {

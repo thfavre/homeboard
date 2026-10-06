@@ -21,7 +21,6 @@ export interface MatchApi {
   readonly mode: GameMode;
   readonly stake: number;
   readonly pot: number;
-  readonly options: { side?: 'heads' | 'tails' };
   /** Host settings when the game started */
   readonly settings: GamesSettings;
   /** Show a color on the lights (and on the TV). null: dark. */

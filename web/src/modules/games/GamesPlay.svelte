@@ -24,8 +24,6 @@
   const now = new Now(250);
   let busy = $state(false);
 
-  const other = (side: 'heads' | 'tails') => (side === 'heads' ? 'tails' : 'heads');
-
   async function act(method: string, args?: unknown) {
     busy = true;
     await attempt(() => rpc('games', method, args));
@@ -120,12 +118,7 @@
   <div class="screen">
     <div class="col" in:fly={{ y: 24, duration: 300 }}>
       <span class="eyebrow center"><Swords size={14} /> You are challenged</span>
-      <Versus
-        left={received.from}
-        right={meAsPlayer}
-        leftLabel={received.side ?? 'Challenger'}
-        rightLabel={received.side ? other(received.side) : 'You'}
-      />
+      <Versus left={received.from} right={meAsPlayer} leftLabel="Challenger" rightLabel="You" />
       <GameCard game={info} />
       {#if economy && received.stake > 0}<PotPanel inLabel="You put in" stake={received.stake} outLabel="Winner takes" pot={received.stake * 2} />{/if}
       <div class="answer">
@@ -140,7 +133,7 @@
   <div class="screen">
     <div class="col" in:fly={{ y: 24, duration: 300 }}>
       <span class="eyebrow center"><Swords size={14} /> Challenge sent</span>
-      <Versus left={meAsPlayer} right={sent.to} leftLabel={sent.side ?? 'You'} rightLabel={sent.side ? other(sent.side) : 'Thinking...'} waiting />
+      <Versus left={meAsPlayer} right={sent.to} leftLabel="You" rightLabel="Thinking..." waiting />
       <GameCard game={info} steps={false} />
       {#if economy && sent.stake > 0}<PotPanel inLabel="You put in" stake={sent.stake} outLabel="Winner takes" pot={sent.stake * 2} />{/if}
       <Fuse endsAt={sent.expiresAt} totalMs={DUEL_INVITE_MS} label={`Waiting for ${sent.to.name}`} />

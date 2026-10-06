@@ -70,9 +70,9 @@ export const GAMES: GameInfo[] = [
     id: 'coin',
     name: 'Coin Flip',
     tagline: 'Heads or tails, winner takes the pot',
-    rules: 'The challenger picked a side. The coin decides.',
+    rules: 'The TV picks who calls heads or tails. The other one flips the coin from their phone. The coin decides.',
     modes: ['duel'],
-    steps: ['The challenger picked heads or tails', 'The coin flips on the TV', 'The right side takes the whole pot'],
+    steps: ['The TV picks who calls heads or tails', 'The other one swipes the coin up to the TV', 'The right side takes the whole pot'],
     colors: ['#ffc861', '#ff8a3a'],
   },
 ];
@@ -106,8 +106,6 @@ export interface DuelInvite {
   from: GamePlayer;
   to: GamePlayer;
   stake: number;
-  /** Coin flip: the challenger's side */
-  side?: 'heads' | 'tails';
   expiresAt: number;
 }
 
@@ -260,11 +258,22 @@ export interface BluffView {
   choices?: Record<string, 'share' | 'steal'>;
 }
 
+export type CoinSide = 'heads' | 'tails';
+
 export interface CoinView {
-  side: 'heads' | 'tails';
-  /** Who called the side */
+  /** draw: the TV picks the caller. call: they pick a side. toss: the flipper swipes. flight: the coin is in the air. */
+  step: 'draw' | 'call' | 'toss' | 'flight';
+  /** Who calls the side (the result of the draw) */
   caller: string;
-  /** Set when the coin lands */
-  outcome: 'heads' | 'tails' | null;
+  /** Who flips the coin */
+  flipper: string;
+  drawAt: number | null;
+  drawMs: number;
+  /** The caller's side, once called */
+  side: CoinSide | null;
   flipAt: number | null;
+  /** How hard the coin was swiped (0 to 1) */
+  power: number;
+  /** Set when the coin lands */
+  outcome: CoinSide | null;
 }

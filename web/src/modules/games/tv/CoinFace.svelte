@@ -1,12 +1,12 @@
 <script lang="ts">
   import { Crown, Star } from '@lucide/svelte';
 
-  /** A coin spinning in the air until `outcome` is known, then landing on that face */
-  let { outcome, size = '12rem' }: { outcome: 'heads' | 'tails' | null; size?: string } = $props();
+  /** A coin spinning in the air until `outcome` is known, then landing on that face. `still`: lying on heads, not spinning. */
+  let { outcome, size = '12rem', still = false }: { outcome: 'heads' | 'tails' | null; size?: string; still?: boolean } = $props();
 </script>
 
 <div class="coin" style:--s={size}>
-  <div class="body" class:spin={!outcome} class:heads={outcome === 'heads'} class:tails={outcome === 'tails'}>
+  <div class="body" class:spin={!outcome && !still} class:heads={outcome === 'heads'} class:tails={outcome === 'tails'}>
     <div class="face front"><Crown size="45%" /><span>Heads</span></div>
     <div class="face back"><Star size="45%" /><span>Tails</span></div>
   </div>

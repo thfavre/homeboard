@@ -13,7 +13,6 @@
   let picked = $state<GameInfo | null>(null);
   let opponent = $state<string | null>(null);
   let stakeText = $state('');
-  let side = $state<'heads' | 'tails'>('heads');
   let busy = $state(false);
   let error = $state('');
 
@@ -52,7 +51,7 @@
     busy = true;
     const ok =
       mode === 'duel'
-        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake, side }))
+        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake }))
         : await attempt(() => rpc('games', 'startRoom', { game: picked!.id, stake }));
     busy = false;
     if (ok) picked = null;
@@ -113,15 +112,6 @@
           {/each}
         </div>
       </div>
-      {#if picked.id === 'coin'}
-        <div class="field">
-          <span class="label">Your side</span>
-          <div class="sides">
-            <button class:active={side === 'heads'} onclick={() => (side = 'heads')}>Heads</button>
-            <button class:active={side === 'tails'} onclick={() => (side = 'tails')}>Tails</button>
-          </div>
-        </div>
-      {/if}
     {/if}
 
     {#if economy}
@@ -163,8 +153,7 @@
     display: grid;
     gap: 0.9rem;
   }
-  .tabs,
-  .sides {
+  .tabs {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.3rem;
@@ -173,8 +162,7 @@
     background: var(--surface-2);
     border: 1px solid var(--border);
   }
-  .tabs button,
-  .sides button {
+  .tabs button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -186,8 +174,7 @@
     color: var(--text-dim);
     font-weight: 600;
   }
-  .tabs button.active,
-  .sides button.active {
+  .tabs button.active {
     background: var(--accent);
     color: var(--accent-contrast);
   }
