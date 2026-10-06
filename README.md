@@ -103,7 +103,12 @@ to accept by matching the bet. The winner takes the pot; a tie splits it. Declin
 expired challenges give everything back.
 
 **Everyone**: a guest (for the start fee) or the host starts a game with an entry amount, and every
-phone gets a Join screen for 45 seconds. The winner takes the pot plus the room-game reward.
+phone gets a Join screen for 45 seconds. The winner takes the pot plus a prize paid by the house:
+the host chooses it when starting the game, otherwise it is the room-game reward.
+
+Blind Timer is played over several rounds (3 by default, set in the admin), each with a new
+target between 8 and 30 seconds. Nobody sees who stopped; after each round the TV sweeps a time
+axis and drops each player's face where they stopped, and the smallest total gap wins.
 
 Light Simon and Color Reflex drive the WLED lights with solid colors (queued light effects wait,
 and every light goes back to what it was doing afterwards). The TV shows the colors too, or only

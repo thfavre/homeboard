@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Play, Square, X } from '@lucide/svelte';
+  import { Minus, Play, Plus, Square, X } from '@lucide/svelte';
   import { GAMES, gameInfo, type GameId } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -14,6 +14,9 @@
   const roomGames = GAMES.filter((g) => g.modes.includes('room'));
   let game = $state<GameId>('timer');
   let stake = $state(0);
+  // Prize paid by the house; starts at the "win a room game" reward
+  const defaultPrize = () => hb.core?.admin?.earnRules.find((r) => r.key === 'games.win')?.amount ?? 0;
+  let prize = $state<number | null>(null);
 
   const PHASES = { lobby: 'Waiting for players', intro: 'Showing the rules', play: 'Playing', result: 'Showing the result' } as const;
   const setSettings = (patch: object) => attempt(() => rpc('games', 'setSettings', patch));
@@ -42,7 +45,7 @@
       </div>
     </Section>
   {:else}
-    <Section title="Start a game for the room" hint="Free for you. Guests join from their phone; the winner takes the pot.">
+    <Section title="Start a game for the room" hint="Free for you. Guests join from their phone; the winner takes the pot and your prize.">
       <div class="choices">
         {#each roomGames as g (g.id)}
           {@const Icon = GAME_ICONS[g.id]}
@@ -51,11 +54,15 @@
       </div>
       {#if hb.core?.economyEnabled}
         <div class="line">
-          <span>Entry for each player</span>
+          <span>Entry for each player <span class="faint small">Goes in the pot, 0 = free to join</span></span>
           <AmountInput value={stake} oncommit={(v) => (stake = v)} />
         </div>
+        <div class="line">
+          <span>Prize for the winner <span class="faint small">Paid by you, on top of the pot</span></span>
+          <AmountInput value={prize ?? defaultPrize()} oncommit={(v) => (prize = v)} />
+        </div>
       {/if}
-      <button class="btn primary" onclick={() => attempt(() => rpc('games', 'startRoom', { game, stake }))}><Play size={18} /> Start {gameInfo(game)?.name}</button>
+      <button class="btn primary" onclick={() => attempt(() => rpc('games', 'startRoom', { game, stake, prize: prize ?? defaultPrize() }))}><Play size={18} /> Start {gameInfo(game)?.name}</button>
     </Section>
   {/if}
 
@@ -93,6 +100,14 @@
         <AmountInput value={s.settings.maxStake} oncommit={(v) => setSettings({ maxStake: v })} />
       </div>
     {/if}
+    <div class="line">
+      <span>Blind Timer rounds <span class="faint small">1 to 10</span></span>
+      <span class="stepper">
+        <button class="btn small" disabled={s.settings.timerRounds <= 1} onclick={() => setSettings({ timerRounds: s.settings.timerRounds - 1 })}><Minus size={16} /></button>
+        <strong class="mono">{s.settings.timerRounds}</strong>
+        <button class="btn small" disabled={s.settings.timerRounds >= 10} onclick={() => setSettings({ timerRounds: s.settings.timerRounds + 1 })}><Plus size={16} /></button>
+      </span>
+    </div>
     <div class="line">
       <span>
         Show the light colors on the TV too
@@ -137,11 +152,22 @@
     align-items: center;
     gap: 0.7rem;
   }
+  /* Label with a hint under it */
   .game > span,
-  .line > span {
+  .line > span:not(.game, .stepper) {
     display: grid;
   }
   .small {
     font-size: 0.78rem;
+  }
+  .line > .stepper {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .stepper strong {
+    min-width: 1.5rem;
+    text-align: center;
+    font-size: 1.1rem;
   }
 </style>

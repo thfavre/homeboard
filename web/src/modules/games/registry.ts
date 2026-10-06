@@ -20,7 +20,7 @@ type View = Component<{ m: MatchState }>;
  * (drawings, revealed cards...) instead of the generic result list.
  */
 export const GAME_UI: Record<GameId, { phone: View; tv: View; tvResult?: boolean }> = {
-  timer: { phone: TimerPhone, tv: TimerTv },
+  timer: { phone: TimerPhone, tv: TimerTv, tvResult: true },
   simon: { phone: SimonPhone, tv: SimonTv },
   reflex: { phone: ReflexPhone, tv: ReflexTv },
   circle: { phone: CirclePhone, tv: CircleTv, tvResult: true },

@@ -23,9 +23,9 @@ export const GAMES: GameInfo[] = [
     id: 'timer',
     name: 'Blind Timer',
     tagline: 'Stop the clock at the target time, without seeing it',
-    rules: 'A target time between 8 and 30 seconds is drawn. The timer starts on GO and is hidden: tap STOP when you think the target time has passed. Closest wins.',
+    rules: 'A target time between 8 and 30 seconds is drawn. The timer starts on GO and is hidden: tap STOP when you think the target time has passed. Over several rounds, the smallest total gap wins.',
     modes: ['duel', 'room'],
-    steps: ['A target between 8 and 30 seconds is drawn', 'GO: the clock starts and stays hidden', 'Tap STOP when you feel it. Closest wins'],
+    steps: ['A target between 8 and 30 seconds is drawn', 'GO: the clock starts and stays hidden', 'Tap STOP when you feel it. Closest over all rounds wins'],
     colors: ['#ff5f6d', '#ffa64d'],
   },
   {
@@ -140,6 +140,8 @@ export interface MatchState {
   players: GamePlayer[];
   stake: number;
   pot: number;
+  /** Paid by the house to the winner of a room game, on top of the pot (split on a tie) */
+  prize: number;
   phase: MatchPhase;
   endsAt: number | null;
   phaseMs: number;
@@ -165,19 +167,32 @@ export interface GamesSettings {
   maxStake: number;
   /** Show the light colors on the TV too (always shown when no light is reachable) */
   tvColors: boolean;
+  /** Rounds of Blind Timer */
+  timerRounds: number;
 }
 
 // ------------------------------------------------------------ per game views
 
-export interface TimerView {
+export interface TimerRound {
   /** Time to stop at (ms) */
   target: number;
-  /** Server time when the timer started */
-  startAt: number | null;
-  /** Ids of the players who stopped */
-  stopped: string[];
-  /** After the game: elapsed ms per player (null: did not stop) */
-  times?: Record<string, number | null>;
+  /** Elapsed ms per player (null: did not stop) */
+  times: Record<string, number | null>;
+}
+
+export interface TimerView {
+  round: number;
+  rounds: number;
+  /** countdown and running: before and after GO (from startAt), reveal: this round's times */
+  step: 'countdown' | 'running' | 'reveal';
+  /** Time to stop at this round (ms) */
+  target: number;
+  /** Server time of GO */
+  startAt: number;
+  /** Rounds already revealed (the current one included during its reveal). Nobody sees who stopped before. */
+  history: TimerRound[];
+  /** Total distance to the targets so far (ms) per player, over the revealed rounds */
+  totals: Record<string, number>;
 }
 
 export interface SimonView {

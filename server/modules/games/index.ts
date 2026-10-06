@@ -53,6 +53,8 @@ interface Match {
   starter: GamePlayer | null;
   players: GamePlayer[];
   stake: number;
+  /** Room game prize paid by the house (null: the "win a room game" reward) */
+  prize: number | null;
   options: { side?: 'heads' | 'tails' };
   phase: MatchPhase;
   endsAt: number | null;
@@ -76,7 +78,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -169,6 +171,11 @@ export default defineModule<GamesSettings>({
     };
 
     const potOf = (m: Match) => m.stake * m.players.length;
+    /** House prize for the winner of a room game (split between tied winners) */
+    const prizeOf = (m: Match) => {
+      if (m.mode !== 'room' || !ctx.economy.enabled) return 0;
+      return m.prize ?? ctx.economy.earnAmount('games.win');
+    };
 
     const createMatch = (game: GameId, mode: GameMode, starter: GamePlayer | null, players: GamePlayer[], stake: number, charges: Charge[], options: Match['options'] = {}) => {
       tvFree();
@@ -180,6 +187,7 @@ export default defineModule<GamesSettings>({
         starter,
         players,
         stake,
+        prize: null,
         options,
         phase: 'lobby',
         endsAt: null,
@@ -215,6 +223,7 @@ export default defineModule<GamesSettings>({
         stake: m.stake,
         pot: potOf(m),
         options: m.options,
+        settings: ctx.settings.get(),
         light: (color) => {
           m.lightColor = color;
           if (m.usesLights) lights()?.color(color ? (GAME_COLORS.find((c) => c.id === color)?.led ?? null) : null);
@@ -244,7 +253,9 @@ export default defineModule<GamesSettings>({
       } else if (outcome.winners.length) {
         const share = Math.floor(pot / outcome.winners.length);
         outcome.winners.forEach((id, i) => (payouts[id] += share + (i === 0 ? pot - share * outcome.winners.length : 0)));
-        if (m.mode === 'room' && ctx.economy.enabled) for (const id of outcome.winners) payouts[id] += ctx.economy.earnAmount('games.win');
+        const prize = prizeOf(m);
+        const each = Math.floor(prize / outcome.winners.length);
+        outcome.winners.forEach((id, i) => (payouts[id] += each + (i === 0 ? prize - each * outcome.winners.length : 0)));
       } else {
         // Nobody won: everyone gets their stake back
         for (const p of m.players) payouts[p.id] += m.stake;
@@ -353,7 +364,7 @@ export default defineModule<GamesSettings>({
 
     // ------------------------------------------------------------ room games
 
-    const startRoom = (game: GameId, starter: Guest | null, rawStake: unknown) => {
+    const startRoom = (game: GameId, starter: Guest | null, rawStake: unknown, rawPrize?: unknown) => {
       if (!allowed(game, 'room') && starter) throw new HbError('This game cannot be started for the room');
       if (!gameInfo(game)?.modes.includes('room')) throw new HbError('This game is for duels only');
       tvFree();
@@ -371,6 +382,8 @@ export default defineModule<GamesSettings>({
       }
       try {
         const m = createMatch(game, 'room', starter ? player(starter) : null, starter ? [player(starter)] : [], stake, charges);
+        // Only the host chooses the prize
+        if (!starter && rawPrize !== undefined && rawPrize !== null) m.prize = Math.max(0, Math.round(num(rawPrize, 0)));
         deadline(m, LOBBY_MS);
         later(m, LOBBY_MS, () => beginRoom(m));
       } catch (err) {
@@ -438,7 +451,7 @@ export default defineModule<GamesSettings>({
 
     // ------------------------------------------------------------ host
 
-    ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake));
+    ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake, args?.prize));
     ctx.onAdmin('begin', () => {
       if (match?.phase === 'lobby') beginRoom(match);
     });
@@ -453,6 +466,7 @@ export default defineModule<GamesSettings>({
         enabled: Array.isArray(args?.enabled) ? GAMES.map((g) => g.id).filter((id) => args.enabled.includes(id)) : s.enabled,
         maxStake: args?.maxStake !== undefined ? Math.max(0, Math.round(num(args.maxStake, 0))) : s.maxStake,
         tvColors: typeof args?.tvColors === 'boolean' ? args.tvColors : s.tvColors,
+        timerRounds: args?.timerRounds !== undefined ? Math.min(10, Math.max(1, Math.round(num(args.timerRounds, 3)))) : s.timerRounds,
       });
       ctx.publish();
     });
@@ -469,6 +483,7 @@ export default defineModule<GamesSettings>({
         players: m.players,
         stake: m.stake,
         pot: potOf(m),
+        prize: prizeOf(m),
         phase: m.phase,
         endsAt: m.endsAt,
         phaseMs: m.phaseMs,

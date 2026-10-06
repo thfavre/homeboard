@@ -1,42 +1,43 @@
 <script lang="ts">
-  import { scale } from 'svelte/transition';
   import type { MatchState, TimerView } from '$shared/games.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import { Now } from '../store.svelte.ts';
+  import TimerReveal from './TimerReveal.svelte';
+  import TimerFinal from './TimerFinal.svelte';
 
   let { m }: { m: MatchState } = $props();
   const v = $derived(m.view as TimerView);
   const now = new Now(50);
-  const before = $derived(v.startAt !== null && now.value < v.startAt);
-  // Never show the clock running: GO for a second, then question marks
-  const elapsed = $derived(v.startAt ? Math.max(0, now.value - v.startAt) : 0);
+  const before = $derived(now.value < v.startAt);
+  const sec = (ms: number) => (ms / 1000).toFixed(2);
 </script>
 
-<div class="timer">
-  <span class="eyebrow">Target</span>
-  <span class="target mono">{(v.target / 1000).toFixed(2)} s</span>
-  <div class="clock mono" class:hidden={!before && elapsed > 1000}>
-    {#if before}
-      {Math.ceil(((v.startAt ?? 0) - now.value) / 1000)}
-    {:else if elapsed <= 1000}
-      GO
-    {:else}
-      ??.??
-    {/if}
+{#if m.phase === 'result'}
+  <TimerFinal {m} />
+{:else if v.step === 'reveal'}
+  {#key v.round}
+    <TimerReveal r={v.history[v.history.length - 1]} players={m.players} totals={v.totals} round={v.round} rounds={v.rounds} />
+  {/key}
+{:else}
+  <div class="timer">
+    <span class="eyebrow">Round {v.round} of {v.rounds}</span>
+    <span class="label">Target</span>
+    <span class="target mono">{sec(v.target)} s</span>
+    <div class="clock mono" class:hidden={!before}>
+      {before ? Math.ceil((v.startAt - now.value) / 1000) : '??.??'}
+    </div>
+    <p class="dim lead">{before ? 'Get ready...' : 'The clock is running, hidden. Stop on your phone.'}</p>
+    <!-- Nobody's status is shown: seeing others stop would help -->
+    <div class="players">
+      {#each m.players as p (p.id)}
+        <div class="p">
+          <Avatar name={p.name} color={p.color} id={p.id} size="3.6rem" />
+          <span class="truncate">{p.name}</span>
+        </div>
+      {/each}
+    </div>
   </div>
-  <p class="dim lead">{before ? 'Get ready...' : `Stop at ${v.target / 1000} seconds. The clock is hidden.`}</p>
-
-  <div class="players">
-    {#each m.players as p (p.id)}
-      {@const done = v.stopped.includes(p.id)}
-      <div class="p" class:done>
-        <Avatar name={p.name} color={p.color} id={p.id} size="4rem" />
-        <span class="truncate">{p.name}</span>
-        {#if done}<span class="pill success" in:scale>Stopped</span>{/if}
-      </div>
-    {/each}
-  </div>
-</div>
+{/if}
 
 <style>
   .timer {
@@ -44,19 +45,29 @@
     display: grid;
     place-content: center;
     justify-items: center;
-    gap: 1.5rem;
+    gap: 1.2rem;
     text-align: center;
   }
   .eyebrow {
     font-size: 1.2rem;
   }
+  .label {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: 1rem;
+  }
   .target {
     font-size: 4.5rem;
     font-weight: 700;
     color: var(--accent);
+    line-height: 1;
   }
   .clock {
-    font-size: 13rem;
+    font-size: 12rem;
     font-weight: 700;
     line-height: 1;
     letter-spacing: -0.04em;
@@ -73,23 +84,15 @@
     flex-wrap: wrap;
     justify-content: center;
     gap: 1.5rem;
-    margin-top: 2rem;
+    margin-top: 1.5rem;
     max-width: 90rem;
   }
   .p {
     display: grid;
     justify-items: center;
     gap: 0.5rem;
-    width: 9rem;
-    font-size: 1.2rem;
+    width: 8rem;
+    font-size: 1.15rem;
     font-weight: 600;
-    opacity: 0.55;
-    transition: opacity 0.3s ease;
-  }
-  .p.done {
-    opacity: 1;
-  }
-  .pill {
-    font-size: 0.95rem;
   }
 </style>

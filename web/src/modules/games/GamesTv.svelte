@@ -24,7 +24,7 @@
       <span class="brand">{m.mode === 'duel' ? 'Duel' : 'Party game'}</span>
       <span class="name"><Icon size="1.4rem" /> {info.name}</span>
       <span class="spacer"></span>
-      {#if economy && m.pot > 0}<span class="pill pot">Pot <Money amount={m.pot} /></span>{/if}
+      {#if economy && m.pot + m.prize > 0}<span class="pill pot">{m.mode === 'room' ? 'Winner takes' : 'Pot'} <Money amount={m.pot + m.prize} /></span>{/if}
     </header>
 
     {#if m.phase === 'lobby'}
@@ -34,7 +34,8 @@
           <h1 class="big">{info.name}</h1>
           <p class="dim lead">{info.rules}</p>
           <p class="join">
-            Tap <strong>Join</strong> on your phone{#if economy && m.stake > 0}<span>{' (entry '}</span><Money amount={m.stake} /><span>, winner takes the pot)</span>{/if}.
+            Tap <strong>Join</strong> on your phone{#if economy && m.stake > 0}<span>{' (entry '}</span><Money amount={m.stake} /><span>)</span>{/if}.
+            {#if economy && m.prize > 0}<span class="prize">Prize <Money amount={m.prize} />{m.stake > 0 ? ' + the pot' : ''}</span>{/if}
           </p>
           <div class="players">
             {#each m.players as p (p.id)}
@@ -159,6 +160,17 @@
   }
   .join {
     font-size: 1.6rem;
+  }
+  .prize {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 0.6rem;
+    padding: 0.2rem 0.9rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--coin) 16%, transparent);
+    color: var(--coin);
+    font-weight: 700;
   }
   .players {
     display: flex;

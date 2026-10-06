@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { BLIND_TARGET_SEC, type TimerView } from '../../../shared/games.ts';
+import { BLIND_TARGET_SEC, type TimerRound, type TimerView } from '../../../shared/games.ts';
 import { HbError, num } from '../../core/util.ts';
 import { best, type GameFactory } from './engine.ts';
 
@@ -7,60 +7,93 @@ import { best, type GameFactory } from './engine.ts';
 const COUNTDOWN_MS = 5000;
 /** Nobody can stop later than this after the target */
 const OVERTIME_MS = 10_000;
+/** Not stopping counts as being this far off */
+const MISS_MS = OVERTIME_MS;
+/** The TV sweeps the time axis, then holds the result */
+const REVEAL_MS = 11_000;
 
-const seconds = (ms: number) => `${(ms / 1000).toFixed(2)} s`;
+const gap = (ms: number) => `${(ms / 1000).toFixed(2)} s`;
 
-/** Blind Timer: stop the hidden clock as close as possible to a random target time */
+/**
+ * Blind Timer: stop the hidden clock as close as possible to a random target time,
+ * over several rounds. Nobody can see who stopped until the round is revealed.
+ */
 export const blindTimer: GameFactory = (m) => {
-  const target = randomInt(BLIND_TARGET_SEC.min, BLIND_TARGET_SEC.max + 1) * 1000;
-  let startAt: number | null = null;
-  const times = new Map<string, number>();
-  let over = false;
+  const rounds = Math.max(1, m.settings.timerRounds);
+  let round = 0;
+  let step: TimerView['step'] = 'countdown';
+  let target = 0;
+  let startAt = 0;
+  let times = new Map<string, number>();
+  const history: TimerRound[] = [];
+  const totals = new Map<string, number>(m.players.map((p) => [p.id, 0]));
+
+  const nextRound = () => {
+    round += 1;
+    step = 'countdown';
+    target = randomInt(BLIND_TARGET_SEC.min, BLIND_TARGET_SEC.max + 1) * 1000;
+    times = new Map();
+    startAt = Date.now() + COUNTDOWN_MS;
+    m.deadline(null);
+    m.later(COUNTDOWN_MS, () => {
+      step = 'running';
+      m.publish();
+    });
+    const r = round;
+    m.later(COUNTDOWN_MS + target + OVERTIME_MS, () => reveal(r));
+    m.publish();
+  };
+
+  /** Reveal round `r` (timers of a round that already ended do nothing) */
+  const reveal = (r: number) => {
+    if (r !== round || step === 'reveal') return;
+    step = 'reveal';
+    history.push({ target, times: Object.fromEntries(m.players.map((p) => [p.id, times.get(p.id) ?? null])) });
+    for (const p of m.players) {
+      const t = times.get(p.id);
+      totals.set(p.id, totals.get(p.id)! + (t === undefined ? MISS_MS : Math.abs(t - target)));
+    }
+    m.publish();
+    m.later(REVEAL_MS, () => (round < rounds ? nextRound() : end()));
+  };
 
   const end = () => {
-    if (over) return;
-    over = true;
-    const diff = (id: string) => (times.has(id) ? Math.abs(times.get(id)! - target) : null);
-    const order = [...m.players].sort((a, b) => (diff(a.id) ?? Infinity) - (diff(b.id) ?? Infinity));
+    const total = (id: string) => totals.get(id)!;
+    const order = [...m.players].sort((a, b) => total(a.id) - total(b.id));
     m.finish({
-      winners: best(m.players, diff, false),
+      winners: best(m.players, total, false),
       lines: order.map((p) => {
-        const t = times.get(p.id);
-        if (t === undefined) return { id: p.id, label: 'No stop', detail: 'Did not tap in time' };
-        const d = t - target;
-        return { id: p.id, label: seconds(t), detail: d === 0 ? 'Perfect' : `${d > 0 ? '+' : '-'}${(Math.abs(d) / 1000).toFixed(2)} s` };
+        const missed = history.filter((r) => r.times[p.id] === null).length;
+        return {
+          id: p.id,
+          label: `${gap(total(p.id))} off`,
+          detail: rounds > 1 ? `Over ${rounds} rounds${missed ? `, ${missed} missed` : ''}` : missed ? 'Did not stop' : undefined,
+        };
       }),
     });
   };
 
   return {
     start() {
-      startAt = Date.now() + COUNTDOWN_MS;
-      m.deadline(COUNTDOWN_MS + target + OVERTIME_MS);
-      m.later(COUNTDOWN_MS + target + OVERTIME_MS, end);
+      nextRound();
     },
 
     input(id, args) {
-      if (!startAt || over) throw new HbError('Not now');
+      if (step === 'reveal') throw new HbError('Wait for the next round');
       if (times.has(id)) throw new HbError('You already stopped');
       const serverElapsed = Date.now() - startAt;
       if (serverElapsed < 0) throw new HbError('Wait for GO');
       // The phone measures the time itself (no network delay); it can only be a little earlier
       const claimed = num(args?.elapsed, serverElapsed);
-      const elapsed = Math.round(Math.min(serverElapsed, Math.max(serverElapsed - 1500, claimed)));
-      times.set(id, elapsed);
-      if (times.size >= m.players.length) m.later(600, end);
-      else m.publish();
-      return true;
+      times.set(id, Math.round(Math.min(serverElapsed, Math.max(serverElapsed - 1500, claimed))));
+      // Nothing is published: the others must not know who already stopped
+      const r = round;
+      if (times.size >= m.players.length) m.later(800, () => reveal(r));
+      return { round };
     },
 
     view(): TimerView {
-      return {
-        target,
-        startAt,
-        stopped: [...times.keys()],
-        ...(over ? { times: Object.fromEntries(m.players.map((p) => [p.id, times.get(p.id) ?? null])) } : {}),
-      };
+      return { round, rounds, step, target, startAt, history, totals: Object.fromEntries(totals) };
     },
   };
 };
