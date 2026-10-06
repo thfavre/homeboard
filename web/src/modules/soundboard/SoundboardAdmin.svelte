@@ -94,7 +94,7 @@
     </div>
     {#if mod.guestSearch}
       <label class="field">
-        <span>Cut searched sounds after (seconds, 0 = never)</span>
+        <span>Longest sound guests can find (seconds, 0 = no limit)</span>
         <input class="input" type="number" min="0" max="60" bind:value={maxSec.value} onfocus={maxSec.start} onblur={() => { set({ searchMaxSec: Number(maxSec.value) }); maxSec.end(); }} />
       </label>
     {/if}

@@ -130,7 +130,7 @@ export default defineModule<SoundboardSettings>({
 
     ctx.onGuest('search', (args) => {
       guestSearchOn();
-      return searchMyInstants(args.q, args.page);
+      return searchMyInstants(args.q, args.page, ctx.settings.get().searchMaxSec);
     });
     ctx.onAdmin('search', (args) => searchMyInstants(args.q, args.page));
 
@@ -161,7 +161,8 @@ export default defineModule<SoundboardSettings>({
       await cached(mp3);
       const now = mine(guest);
       if (now.some((x) => x.mp3 === mp3)) return now;
-      return setMine(guest, [...now, { id: String(args.id ?? mp3).slice(0, 120), title: cleanName(args.title, 40) || 'Sound', mp3 }]);
+      const duration = Number(args.duration) > 0 ? Math.round(Number(args.duration) * 10) / 10 : undefined;
+      return setMine(guest, [...now, { id: String(args.id ?? mp3).slice(0, 120), title: cleanName(args.title, 40) || 'Sound', mp3, ...(duration ? { duration } : {}) }]);
     });
 
     ctx.onGuest('removeMine', (args, guest) => setMine(guest, mine(guest).filter((x) => x.mp3 !== args.mp3)));

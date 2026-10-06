@@ -65,7 +65,7 @@
     {/if}
 
     {#if mod.guestSearch && tab === 'search'}
-      {#if mod.searchMaxSec}<p class="faint hint">Long sounds stop after {mod.searchMaxSec}s on the TV. Tap the headphones to listen on your phone first.</p>{/if}
+      {#if mod.searchMaxSec}<p class="faint hint">Only sounds up to {mod.searchMaxSec}s are shown. Tap the headphones to listen on your phone first.</p>{/if}
       <MiSearch>
         {#snippet actions(s)}
           <button class="btn ghost small" class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>

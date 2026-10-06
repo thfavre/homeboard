@@ -24,15 +24,19 @@ export function cleanMp3(input: unknown): string {
 
 const results = new Map<string, { at: number; page: MiPage }>();
 
-/** Search MyInstants. An empty query lists the most popular sounds. */
-export async function searchMyInstants(query: unknown, page: unknown): Promise<MiPage> {
+/**
+ * Search MyInstants. An empty query lists the most popular sounds.
+ * With `maxSec`, sounds longer than that are left out (the scraper measures them).
+ */
+export async function searchMyInstants(query: unknown, page: unknown, maxSec = 0): Promise<MiPage> {
   const q = cleanName(query, 60);
   const p = Math.max(1, Math.min(50, Math.floor(Number(page) || 1)));
-  const url = q ? `${API}/search?q=${encodeURIComponent(q)}&page=${p}` : `${API}/best?q=us&page=${p}`;
+  const length = maxSec > 0 ? `&max_duration=${maxSec}` : '&with_duration=1';
+  const url = (q ? `${API}/search?q=${encodeURIComponent(q)}&page=${p}` : `${API}/best?q=us&page=${p}`) + length;
   const hit = results.get(url);
   if (hit && Date.now() - hit.at < 10 * 60_000) return hit.page;
 
-  let body: { status?: string; has_next?: boolean | null; data?: { id?: string; title?: string; mp3?: string }[] };
+  let body: { status?: string; has_next?: boolean | null; data?: { id?: string; title?: string; mp3?: string; duration?: number }[] };
   try {
     const res = await fetch(url, { headers: { 'user-agent': UA, accept: 'application/json' }, signal: AbortSignal.timeout(12_000) });
     body = (await res.json()) as typeof body;
@@ -44,12 +48,14 @@ export async function searchMyInstants(query: unknown, page: unknown): Promise<M
   for (const d of body.data ?? []) {
     const mp3 = d.mp3?.startsWith(MEDIA) ? decodeURIComponent(d.mp3.slice(MEDIA.length)) : '';
     try {
-      items.push({ id: String(d.id ?? mp3), title: cleanName(d.title, 40) || 'Sound', mp3: cleanMp3(mp3) });
+      const duration = typeof d.duration === 'number' && d.duration > 0 ? Math.round(d.duration * 10) / 10 : undefined;
+      items.push({ id: String(d.id ?? mp3), title: cleanName(d.title, 40) || 'Sound', mp3: cleanMp3(mp3), ...(duration ? { duration } : {}) });
     } catch {
       // not a plain MyInstants file
     }
   }
-  const out: MiPage = { items, page: p, hasNext: body.has_next ?? items.length >= 30 };
+  // The first page never says whether more follow, and filtering by length shortens pages
+  const out: MiPage = { items, page: p, hasNext: body.has_next ?? items.length > 0 };
   if (results.size > 200) results.clear();
   results.set(url, { at: Date.now(), page: out });
   return out;

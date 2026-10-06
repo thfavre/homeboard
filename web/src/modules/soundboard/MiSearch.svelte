@@ -86,6 +86,7 @@
           {#if fetching === s.id}<LoaderCircle size={15} class="spin" />{:else if previewing === s.id}<Square size={15} />{:else}<Headphones size={15} />{/if}
         </button>
         <span class="grow title">{s.title}</span>
+        {#if s.duration}<span class="faint len">{s.duration < 10 ? s.duration.toFixed(1) : Math.round(s.duration)}s</span>{/if}
         {@render actions(s)}
       </div>
     {:else}
@@ -139,6 +140,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .len {
+    flex: none;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
   }
   .small {
     font-size: 0.85rem;

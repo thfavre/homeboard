@@ -26,6 +26,8 @@ export interface MiSound {
   id: string;
   title: string;
   mp3: string;
+  /** Length in seconds, when known */
+  duration?: number;
 }
 
 export interface MiPage {
@@ -41,7 +43,7 @@ export interface SoundboardState {
   cooldownSec: number;
   /** Guests can search MyInstants and play any sound from it */
   guestSearch: boolean;
-  /** Searched sounds are cut after this many seconds (0 = no limit) */
+  /** Guests only find sounds up to this many seconds, and the TV cuts longer ones (0 = no limit) */
   searchMaxSec: number;
   /** Admin only: every built-in, including disabled ones */
   builtins?: { id: string; name: string; enabled: boolean }[];
