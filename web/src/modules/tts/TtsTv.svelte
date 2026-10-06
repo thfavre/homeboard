@@ -12,7 +12,7 @@
   let activeUtterance: SpeechSynthesisUtterance | null = null;
 
   /** Easter egg: a shoutout about pride scrolls in rainbow colors */
-  const RAINBOW = /\b(lgbt\w*|gays?|lesbi\w*|queers?|pride)\b/i;
+  const RAINBOW = /\b(lgbt\w*|gays?|lesbi\w*|queers?|pride|trans|bisexu\w*|non-?binar\w*)\b/i;
 
   const voiceLang = (v: SpeechSynthesisVoice) => v.lang.toLowerCase().replace('_', '-');
 
