@@ -55,7 +55,9 @@
       Sounds play through the TV speakers.
       {#if hb.core?.economyEnabled && cost}Each one costs <Money amount={cost} />.{/if}
     </p>
-    <p class="faint wait">{wait ? `Next sound available in ${wait}s` : 'Ready, pick a sound'}</p>
+    {#if mod.cooldownSec > 0 || wait}
+      <p class="faint wait">{wait ? `Next sound available in ${wait}s` : ''}</p>
+    {/if}
 
     {#if mod.guestSearch}
       <div class="tabs">
