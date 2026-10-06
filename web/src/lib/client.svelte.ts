@@ -122,6 +122,12 @@ export function connect(role: Role): void {
     listeners.get('core:activity')?.forEach((fn) => fn(item));
   });
   socket.on('toast', (msg: ToastMessage) => toast(msg));
+  // Only sent to the TV: reload when the server now serves a newer build than the one running
+  let build: string | null = null;
+  socket.on('build', (id: string) => {
+    if (build !== null && id && id !== build) location.reload();
+    build = id;
+  });
 
   socket.on('me', (me: Me) => {
     hb.me = me;

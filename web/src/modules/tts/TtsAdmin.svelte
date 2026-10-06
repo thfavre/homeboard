@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Synced } from '$lib/synced.svelte.ts';
   import { Megaphone, Play, Volume2 } from '@lucide/svelte';
-  import { TTS_LANGS, TTS_STYLES, ttsLang, ttsStyle, type TtsLang, type TtsPricingMode, type TtsState, type TtsStyle } from '$shared/tts.ts';
+  import { TTS_LANGS, ttsLang, type TtsLang, type TtsPricingMode, type TtsState } from '$shared/tts.ts';
   import { hb, rpc, attempt, toast } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -16,7 +16,6 @@
   let testText = $state('Testing text to speech on the TV! Homeboard party sound is working great.');
   let testAnonymous = $state(false);
   let testLang = $state<TtsLang | ''>('');
-  let testStyle = $state<TtsStyle>('normal');
 
   /** Languages the host can offer that the TV has no voice for */
   const missing = $derived(mod?.tvLangs ? TTS_LANGS.filter((l) => !mod.tvLangs!.includes(l.id)) : []);
@@ -29,7 +28,7 @@
   }
 
   function testOnTv() {
-    attempt(() => rpc('tts', 'test', { text: testText, anonymous: testAnonymous, lang: testLang || mod?.defaultLang, style: testStyle }), 'Playing on TV');
+    attempt(() => rpc('tts', 'test', { text: testText, anonymous: testAnonymous, lang: testLang || mod?.defaultLang }), 'Playing on TV');
   }
 
   function previewLocally() {
@@ -41,10 +40,7 @@
     const u = new SpeechSynthesisUtterance(testText);
     u.volume = volume.value / 100;
     const lang = ttsLang(testLang || mod?.defaultLang) ?? TTS_LANGS[0];
-    const style = ttsStyle(testStyle);
     u.lang = lang.bcp47;
-    u.pitch = style.pitch;
-    u.rate = style.rate;
     const voices = window.speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(lang.id));
     const voice = voices.find((v) => v.default) ?? voices.find((v) => v.localService) ?? voices[0];
     if (voice) u.voice = voice;
@@ -130,7 +126,7 @@
     <Ducking source="tts" title="Lower the music" hint="Spotify gets quieter while a shoutout is read." />
   </Section>
 
-  <Section title="Voice" hint="Guests pick a language and a voice for each shoutout. Voices come from the PC that runs the TV.">
+  <Section title="Voice" hint="Guests pick the language of each shoutout. Voices come from the PC that runs the TV.">
     <div class="field">
       <span>Default language</span>
       <div class="langs">
@@ -159,35 +155,19 @@
     {:else}
       <p class="faint small">The TV can speak every language.</p>
     {/if}
-
-    <div class="line">
-      <div>
-        <span>Funny voices</span>
-        <p class="faint small">{TTS_STYLES.filter((v) => v.id !== 'normal').map((v) => v.label).join(', ')}</p>
-      </div>
-      <Toggle checked={mod.funnyVoices} label="Funny voices" onchange={(v) => set({ funnyVoices: v })} />
-    </div>
   </Section>
 
   <Section title="Test announcement" hint="Test the voice and scrolling banner on the TV.">
     <div class="field">
       <input class="input" bind:value={testText} placeholder="Enter a test message..." maxlength="200" />
     </div>
-    <div class="test-voice">
-      <label class="field">
-        <span>Language</span>
-        <select class="input" bind:value={testLang}>
-          <option value="">Default</option>
-          {#each TTS_LANGS as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
-        </select>
-      </label>
-      <label class="field">
-        <span>Voice</span>
-        <select class="input" bind:value={testStyle}>
-          {#each TTS_STYLES as v (v.id)}<option value={v.id}>{v.label}</option>{/each}
-        </select>
-      </label>
-    </div>
+    <label class="field">
+      <span>Language</span>
+      <select class="input" bind:value={testLang}>
+        <option value="">Default</option>
+        {#each TTS_LANGS as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+      </select>
+    </label>
     <div class="line">
       <div>
         <span>Test as anonymous</span>
@@ -245,8 +225,7 @@
   .small {
     font-size: 0.82rem;
   }
-  .langs,
-  .test-voice {
+  .langs {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 0.7rem;

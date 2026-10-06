@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingHttpHeaders } from 'node:http';
 import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
@@ -305,6 +305,15 @@ export class Hub {
     }
   }
 
+  /** Changes every time the web app is rebuilt */
+  private buildId(): string {
+    try {
+      return String(statSync(join(WEB_DIST, 'index.html')).mtimeMs);
+    } catch {
+      return '';
+    }
+  }
+
   private sendSnapshot(socket: Socket, role: Role): void {
     for (const m of this.modules.values()) {
       if (!m.provider) continue;
@@ -411,6 +420,8 @@ export class Hub {
       socket.join(`role:${role}`);
       if (role === 'tv') this.tvSockets.push(socket);
       this.sendSnapshot(socket, role);
+      // The TV window stays open for days: it reloads itself when the web app was rebuilt
+      if (role === 'tv') socket.emit('build', this.buildId());
     }
 
     socket.on('rpc', async (req: RpcRequest, ack: (r: RpcResponse) => void) => {

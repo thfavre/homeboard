@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { EyeOff, Footprints, Megaphone, Mic, Rabbit, Snail, Squirrel, Volume2 } from '@lucide/svelte';
-  import { TTS_LANGS, TTS_STYLES, type TtsLang, type TtsState, type TtsStyle } from '$shared/tts.ts';
+  import { EyeOff, Megaphone, Volume2 } from '@lucide/svelte';
+  import { TTS_LANGS, type TtsLang, type TtsState } from '$shared/tts.ts';
   import { hb, rpc, attempt, price, toast } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -10,9 +10,6 @@
   let text = $state('');
   let anonymous = $state(false);
   let pickedLang = $state<TtsLang | null>(null);
-  let style = $state<TtsStyle>('normal');
-
-  const styleIcons = { normal: Mic, chipmunk: Squirrel, giant: Footprints, speedy: Rabbit, sleepy: Snail };
 
   /** Only the languages the TV can speak (all of them until the TV has reported) */
   const langs = $derived(TTS_LANGS.filter((l) => !mod?.tvLangs?.length || mod.tvLangs.includes(l.id)));
@@ -40,7 +37,7 @@
     const trimmed = text.trim();
     if (!trimmed) return;
     busy = true;
-    const r = await attempt(() => rpc<{ position: number }>('tts', 'say', { text: trimmed, anonymous, lang, style: mod?.funnyVoices ? style : 'normal' }));
+    const r = await attempt(() => rpc<{ position: number }>('tts', 'say', { text: trimmed, anonymous, lang }));
     busy = false;
     if (r) {
       text = '';
@@ -113,29 +110,6 @@
                   class:active={lang === l.id}
                   onclick={() => (pickedLang = l.id)}>{l.label}</button
                 >
-              {/each}
-            </div>
-          </div>
-        {/if}
-
-        {#if mod.funnyVoices}
-          <div class="pick-group">
-            <span class="pick-label">Voice</span>
-            <div class="voices" role="radiogroup" aria-label="Voice">
-              {#each TTS_STYLES as v (v.id)}
-                {@const Icon = styleIcons[v.id]}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={style === v.id}
-                  class="voice"
-                  class:active={style === v.id}
-                  onclick={() => (style = v.id)}
-                >
-                  <Icon size={20} />
-                  <span class="voice-name">{v.label}</span>
-                  <span class="voice-hint">{v.hint}</span>
-                </button>
               {/each}
             </div>
           </div>
@@ -313,39 +287,6 @@
   .seg.active {
     background: color-mix(in srgb, var(--accent) 22%, var(--surface));
     color: var(--text);
-  }
-  .voices {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr));
-    gap: 0.45rem;
-  }
-  .voice {
-    display: grid;
-    justify-items: center;
-    gap: 0.15rem;
-    padding: 0.6rem 0.3rem;
-    border-radius: 0.75rem;
-    font: inherit;
-    color: var(--text-dim);
-    background: color-mix(in srgb, var(--bg) 40%, transparent);
-    border: 1.5px solid var(--border);
-    cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
-  }
-  .voice.active {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-    color: var(--accent);
-  }
-  .voice-name {
-    font-size: 0.88rem;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .voice-hint {
-    font-size: 0.7rem;
-    line-height: 1.2;
-    text-align: center;
   }
   .anon-card {
     display: flex;

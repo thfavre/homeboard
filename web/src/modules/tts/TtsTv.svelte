@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
-  import { TTS_LANGS, ttsLang, ttsSpeechMs, ttsStyle, type TtsEvent } from '$shared/tts.ts';
+  import { TTS_LANGS, ttsLang, ttsSpeechMs, type TtsEvent } from '$shared/tts.ts';
   import { hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
 
@@ -29,7 +29,6 @@
 
   function speak(item: TtsEvent): Promise<void> {
     const { text, volume } = item;
-    const style = ttsStyle(item.style);
     return new Promise((resolve) => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
         resolve();
@@ -45,8 +44,8 @@
       const utterance = new SpeechSynthesisUtterance(text);
       activeUtterance = utterance;
       utterance.volume = Math.max(0, Math.min(1, volume));
-      utterance.rate = style.rate;
-      utterance.pitch = style.pitch;
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
       const lang = ttsLang(item.lang) ?? TTS_LANGS[0];
       utterance.lang = lang.bcp47;
       const voice = pickVoice(lang.id);
@@ -77,7 +76,7 @@
       }, 1000);
 
       // Fallback timeout in case speech synthesis stalls
-      timer = setTimeout(finish, Math.max(6000, (text.length * 150) / style.rate));
+      timer = setTimeout(finish, Math.max(6000, text.length * 150));
 
       try {
         window.speechSynthesis.speak(utterance);
@@ -97,7 +96,7 @@
         const key = ++seq;
 
         // Estimated reading & speech duration
-        const estimatedSpeechMs = Math.max(5000, ttsSpeechMs(item.text, ttsStyle(item.style).rate) + 1500);
+        const estimatedSpeechMs = Math.max(5000, ttsSpeechMs(item.text) + 1500);
         const durationMs = Math.max(6500, estimatedSpeechMs + 2000);
 
         current = {
