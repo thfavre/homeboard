@@ -8,7 +8,7 @@ const DRAW_MS = 4500;
 const CALL_MS = 15_000;
 const TOSS_MS = 15_000;
 /** From the swipe to the landing */
-const FLIP_MS = 4000;
+const FLIP_MS = 2600;
 
 const other = (side: CoinSide): CoinSide => (side === 'heads' ? 'tails' : 'heads');
 
