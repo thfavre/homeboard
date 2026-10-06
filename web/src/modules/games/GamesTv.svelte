@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Crown } from '@lucide/svelte';
+  import { Check, Crown } from '@lucide/svelte';
   import { fade, scale } from 'svelte/transition';
   import { gameInfo } from '$shared/games.ts';
   import { hb } from '$lib/client.svelte.ts';
@@ -8,6 +8,7 @@
   import Ring from '../quiz/Ring.svelte';
   import { GAME_ICONS, gamesState } from './store.svelte.ts';
   import { GAME_UI } from './registry.ts';
+  import RulesPoster from './tv/RulesPoster.svelte';
 
   const m = $derived(gamesState()?.match ?? null);
   const info = $derived(m ? gameInfo(m.game) : undefined);
@@ -28,45 +29,62 @@
     </header>
 
     {#if m.phase === 'lobby'}
-      <div class="lobby" in:fade>
-        <div class="intro">
-          <span class="eyebrow">{m.starter ? `${m.starter.name} started a game` : 'Game time'}</span>
-          <h1 class="big">{info.name}</h1>
-          <p class="dim lead">{info.rules}</p>
-          <p class="join">
-            Tap <strong>Join</strong> on your phone{#if economy && m.stake > 0}<span>{' (entry '}</span><Money amount={m.stake} /><span>)</span>{/if}.
-            {#if economy && m.prize > 0}<span class="prize">Prize <Money amount={m.prize} />{m.stake > 0 ? ' + the pot' : ''}</span>{/if}
-          </p>
-          <div class="players">
-            {#each m.players as p (p.id)}
-              <span class="player" in:scale><Avatar name={p.name} color={p.color} id={p.id} size="2.6rem" />{p.name}</span>
-            {/each}
+      <div class="screen" in:fade>
+        <RulesPoster game={info} eyebrow={m.starter ? `${m.starter.name} started a game` : 'Game time'} />
+        <div class="bottom">
+          <div class="join-box">
+            <p class="join">
+              Tap <strong>Join</strong> on your phone{#if economy && m.stake > 0}<span>{' (entry '}</span><Money amount={m.stake} /><span>)</span>{/if}.
+              {#if economy && m.prize > 0}<span class="prize">Prize <Money amount={m.prize} />{m.stake > 0 ? ' + the pot' : ''}</span>{/if}
+            </p>
+            <div class="players">
+              {#each m.players as p (p.id)}
+                <span class="player" in:scale><Avatar name={p.name} color={p.color} id={p.id} size="2.6rem" />{p.name}</span>
+              {/each}
+            </div>
           </div>
+          {#if m.endsAt}<Ring endsAt={m.endsAt} totalMs={m.phaseMs} size="9rem" />{/if}
         </div>
-        {#if m.endsAt}<Ring endsAt={m.endsAt} totalMs={m.phaseMs} size="11rem" />{/if}
       </div>
     {:else if m.phase === 'intro'}
-      <div class="intro-screen" in:fade>
-        {#if m.mode === 'duel'}
-          <div class="versus">
-            {#each m.players as p, i (p.id)}
-              <div class="fighter" in:scale={{ delay: i * 300, start: 0.6 }}>
-                <Avatar name={p.name} color={p.color} id={p.id} size="12rem" />
-                <strong>{p.name}</strong>
+      {@const allReady = m.ready.length >= m.players.length}
+      <div class="screen" in:fade>
+        <RulesPoster game={info} eyebrow={m.mode === 'duel' ? 'Duel' : 'Read the rules on your phone'} />
+        <div class="bottom">
+          {#if m.mode === 'duel'}
+            <div class="versus">
+              {#each m.players as p, i (p.id)}
+                {@const ready = m.ready.includes(p.id)}
+                <div class="fighter" class:ready in:scale={{ delay: i * 300, start: 0.6 }}>
+                  <span class="face">
+                    <Avatar name={p.name} color={p.color} id={p.id} size="6.5rem" />
+                    {#if ready}<span class="check" in:scale={{ start: 0.3 }}><Check size="1.6rem" strokeWidth={3} /></span>{/if}
+                  </span>
+                  <strong>{p.name}</strong>
+                  <span class="state">{ready ? 'Ready' : 'Reading...'}</span>
+                </div>
+                {#if i === 0}<span class="vs">VS</span>{/if}
+              {/each}
+            </div>
+          {:else}
+            <div class="join-box">
+              <p class="join">{m.ready.length} of {m.players.length} ready</p>
+              <div class="players">
+                {#each m.players as p (p.id)}
+                  {@const ready = m.ready.includes(p.id)}
+                  <span class="player" class:ready>
+                    <Avatar name={p.name} color={p.color} id={p.id} size="2.6rem" />{p.name}
+                    {#if ready}<Check size="1.3rem" strokeWidth={3} class="tick" />{/if}
+                  </span>
+                {/each}
               </div>
-              {#if i === 0}<span class="vs">VS</span>{/if}
-            {/each}
+            </div>
+          {/if}
+          <div class="timer">
+            {#if m.endsAt}<Ring endsAt={m.endsAt} totalMs={m.phaseMs} size="9rem" />{/if}
+            <span class="dim">{allReady ? 'Everyone is ready!' : 'Starts when everyone is ready'}</span>
           </div>
-        {:else}
-          <h1 class="big">{info.name}</h1>
-          <div class="players center">
-            {#each m.players as p (p.id)}
-              <span class="player"><Avatar name={p.name} color={p.color} id={p.id} size="2.6rem" />{p.name}</span>
-            {/each}
-          </div>
-        {/if}
-        <p class="dim lead rules">{info.rules}</p>
-        {#if m.endsAt}<Ring endsAt={m.endsAt} totalMs={m.phaseMs} size="7rem" />{/if}
+        </div>
       </div>
     {:else if m.phase === 'play'}
       <div class="stage"><Game {m} /></div>
@@ -144,22 +162,25 @@
     font-size: 5.5rem;
     letter-spacing: -0.04em;
   }
-  .lead {
-    font-size: 1.6rem;
-    max-width: 60rem;
-  }
-  .lobby {
+  .screen {
+    min-height: 0;
     display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 3rem;
+    grid-template-rows: auto 1fr;
+    gap: 2rem;
+  }
+  .bottom {
+    display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 3rem;
+    min-height: 0;
   }
-  .intro {
+  .join-box {
     display: grid;
-    gap: 1.2rem;
+    gap: 1rem;
   }
   .join {
-    font-size: 1.6rem;
+    font-size: 1.8rem;
   }
   .prize {
     display: inline-flex;
@@ -176,10 +197,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.7rem;
-    margin-top: 0.8rem;
-  }
-  .players.center {
-    justify-content: center;
   }
   .player {
     display: inline-flex;
@@ -191,36 +208,71 @@
     border: 1px solid var(--border);
     font-size: 1.25rem;
     font-weight: 600;
+    transition: border-color 0.3s ease;
   }
-  .intro-screen {
-    display: grid;
-    place-content: center;
-    justify-items: center;
-    gap: 2rem;
-    text-align: center;
+  .player.ready {
+    border-color: var(--success);
+  }
+  .player :global(.tick) {
+    color: var(--success);
   }
   .versus {
+    flex: 1;
     display: flex;
     align-items: center;
-    gap: 5rem;
+    justify-content: center;
+    gap: 4rem;
   }
   .fighter {
     display: grid;
     justify-items: center;
-    gap: 1rem;
-    font-size: 2.6rem;
+    gap: 0.5rem;
+    font-size: 2rem;
+  }
+  .face {
+    position: relative;
+  }
+  .check {
+    position: absolute;
+    right: -0.3rem;
+    bottom: -0.3rem;
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 50%;
+    background: var(--success);
+    color: #fff;
+    box-shadow: 0 0 0 0.3rem var(--bg);
+  }
+  .state {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .ready .state {
+    color: var(--success);
   }
   .vs {
     font-family: var(--font-display);
-    font-size: 7rem;
+    font-size: 5rem;
     font-weight: 700;
+    font-style: italic;
     background: var(--gradient);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
-  .rules {
-    max-width: 56rem;
+  .timer {
+    display: grid;
+    justify-items: center;
+    gap: 0.8rem;
+    font-size: 2.2rem;
+  }
+  .timer .dim {
+    font-size: 1.2rem;
   }
   .result {
     display: grid;

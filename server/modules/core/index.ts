@@ -55,7 +55,9 @@ export default defineModule({
         if (g.onlineAccum >= interval) {
           g.onlineAccum -= interval;
           const amount = economy.reward(g, 'core.passive');
-          if (amount) ctx.toast(g, { text: 'Thanks for hanging out', amount, kind: 'success' });
+          // Paid quietly while a game or quiz is on: a pop-up would get in the way
+          const busy = !!hub.takeover || !!ctx.use<{ busy(guestId: string): boolean }>('games')?.busy(g.id);
+          if (amount && !busy) ctx.toast(g, { text: 'Thanks for hanging out', amount, kind: 'success' });
         }
       }
     }, TICK_SECONDS * 1000);

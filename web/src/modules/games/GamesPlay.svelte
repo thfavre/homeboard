@@ -63,14 +63,33 @@
         {/if}
       </div>
     {:else if m.phase === 'intro'}
+      {@const allReady = m.ready.length >= m.players.length}
+      {@const imReady = m.ready.includes(me)}
       <div class="col" in:fade>
-        {#if m.mode === 'duel'}<Versus left={m.players[0]} right={m.players[1]} />{/if}
-        <GameCard game={info} eyebrow="Get ready" />
-        <div class="count-wrap">
-          {#key secondsLeft(m.endsAt, now.value)}
-            <span class="count mono" in:scale={{ start: 1.6, duration: 300 }}>{secondsLeft(m.endsAt, now.value)}</span>
-          {/key}
-        </div>
+        {#if m.mode === 'duel'}
+          <Versus
+            left={m.players[0]}
+            right={m.players[1]}
+            leftLabel={m.ready.includes(m.players[0].id) ? 'Ready' : 'Reading...'}
+            rightLabel={m.ready.includes(m.players[1].id) ? 'Ready' : 'Reading...'}
+          />
+        {/if}
+        <GameCard game={info} eyebrow="Read the rules" />
+        {#if allReady}
+          <div class="count-wrap">
+            {#key secondsLeft(m.endsAt, now.value)}
+              <span class="count mono" in:scale={{ start: 1.6, duration: 300 }}>{secondsLeft(m.endsAt, now.value)}</span>
+            {/key}
+          </div>
+        {:else}
+          {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Starts anyway in" />{/if}
+          {#if imReady}
+            <div class="ready-note"><Check size={20} /> Ready. Waiting for {m.players.length - m.ready.length === 1 ? m.players.find((p) => !m.ready.includes(p.id))?.name : 'the others'}...</div>
+          {:else}
+            <button class="btn primary block big" disabled={busy} onclick={() => act('ready')}><Check size={20} /> I'm ready</button>
+          {/if}
+          {#if m.mode === 'room'}<p class="faint note">{m.ready.length} of {m.players.length} ready</p>{/if}
+        {/if}
       </div>
     {:else if m.phase === 'play'}
       {@const Game = GAME_UI[m.game].phone}
@@ -208,6 +227,17 @@
   .note {
     font-size: 0.8rem;
     text-align: center;
+  }
+  .ready-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 3.5rem;
+    padding: 0 1.4rem;
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--success) 14%, transparent);
+    color: var(--success);
+    font-weight: 700;
   }
   .count-wrap {
     display: grid;

@@ -148,6 +148,8 @@ export interface MatchState {
   /** Game specific, see the *View types below */
   view: unknown;
   result: MatchResult | null;
+  /** Rules screen: players who pressed Ready (it starts once everyone is) */
+  ready: string[];
 }
 
 export interface GamesState {

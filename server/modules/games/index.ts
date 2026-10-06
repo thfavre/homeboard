@@ -38,7 +38,9 @@ const FACTORIES: Record<GameId, GameFactory> = {
 };
 
 const LOBBY_MS = 45_000;
-const INTRO_MS = 7_000;
+/** Time to read the rules; it starts sooner once every player pressed Ready */
+const INTRO_MS = 30_000;
+const ALL_READY_MS = 3_000;
 const RESULT_MS = 15_000;
 
 interface Invite extends DuelInvite {
@@ -66,6 +68,7 @@ interface Match {
   timers: Set<NodeJS.Timeout>;
   lightColor: GameColor | null;
   usesLights: boolean;
+  ready: Set<string>;
 }
 
 const player = (g: Guest): GamePlayer => ({ id: g.id, name: g.name, color: g.color });
@@ -198,6 +201,7 @@ export default defineModule<GamesSettings>({
         timers: new Set(),
         lightColor: null,
         usesLights: false,
+        ready: new Set(),
       };
       return match;
     };
@@ -214,6 +218,8 @@ export default defineModule<GamesSettings>({
     };
 
     const play = (m: Match) => {
+      // The rules timer and "everyone is ready" can both get here
+      if (m.phase !== 'intro') return;
       m.phase = 'play';
       m.endsAt = null;
       m.phaseMs = 0;
@@ -433,6 +439,20 @@ export default defineModule<GamesSettings>({
       return true;
     });
 
+    /** Rules screen: this player has read them */
+    ctx.onGuest('ready', (_args, guest) => {
+      const m = match;
+      if (!m || m.phase !== 'intro') throw new HbError('Not now');
+      if (!m.players.some((p) => p.id === guest.id)) throw new HbError('You are not in this game');
+      if (m.ready.has(guest.id)) return true;
+      m.ready.add(guest.id);
+      if (m.ready.size >= m.players.length && (m.endsAt ?? 0) - Date.now() > ALL_READY_MS) {
+        deadline(m, ALL_READY_MS);
+        later(m, ALL_READY_MS, () => play(m));
+      } else ctx.publish();
+      return true;
+    });
+
     ctx.onGuest('begin', (_args, guest) => {
       const m = match;
       if (!m || m.phase !== 'lobby') throw new HbError('Not now');
@@ -454,6 +474,7 @@ export default defineModule<GamesSettings>({
     ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake, args?.prize));
     ctx.onAdmin('begin', () => {
       if (match?.phase === 'lobby') beginRoom(match);
+      else if (match?.phase === 'intro') play(match);
     });
     ctx.onAdmin('stop', () => cancel('The host stopped the game'));
     ctx.onAdmin('cancelInvite', (args) => {
@@ -473,6 +494,12 @@ export default defineModule<GamesSettings>({
 
     // ------------------------------------------------------------ state
 
+    /** For other modules: is this guest playing, or in a challenge? (no pop-ups then) */
+    ctx.provide('games', {
+      busy: (guestId: string) =>
+        !!match?.players.some((p) => p.id === guestId) || [...invites.values()].some((i) => i.from.id === guestId || i.to.id === guestId),
+    });
+
     ctx.state((role): GamesState => {
       const m = match;
       const state: MatchState | null = m && {
@@ -489,6 +516,7 @@ export default defineModule<GamesSettings>({
         phaseMs: m.phaseMs,
         view: m.runtime?.view(role) ?? null,
         result: m.result,
+        ready: [...m.ready],
       };
       return {
         invites: [...invites.values()].map(({ charges: _c, timer: _t, ...inv }) => inv),
