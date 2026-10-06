@@ -47,6 +47,8 @@ export interface SoundboardState {
   searchMaxSec: number;
   /** Admin only: every built-in, including disabled ones */
   builtins?: { id: string; name: string; enabled: boolean }[];
+  /** Admin only: how many built-ins the host deleted (they can be restored) */
+  deletedBuiltins?: number;
 }
 
 export interface PlayEvent {

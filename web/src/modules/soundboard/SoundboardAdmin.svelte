@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Synced } from '$lib/synced.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
-  import { Play, Plus, Trash2, Tv, Upload } from '@lucide/svelte';
+  import { Play, Plus, RotateCcw, Trash2, Tv, Upload } from '@lucide/svelte';
   import type { SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -64,8 +64,18 @@
         <button class="btn ghost small" aria-label="Test" onclick={() => test(b.id)}><Play size={15} /></button>
         <span class="grow">{b.name}</span>
         <Toggle checked={b.enabled} label={b.name} onchange={(v) => attempt(() => rpc('soundboard', 'setBuiltin', { id: b.id, enabled: v }))} />
+        <button class="btn ghost small" aria-label="Delete" onclick={async () => (await ask({ title: `Delete ${b.name}?`, message: 'You can bring it back with "Restore deleted sounds".', confirm: 'Delete', danger: true })) && attempt(() => rpc('soundboard', 'deleteBuiltin', { id: b.id }))}>
+          <Trash2 size={15} />
+        </button>
       </div>
+    {:else}
+      <p class="faint">All built-in sounds were deleted.</p>
     {/each}
+    {#if mod.deletedBuiltins}
+      <button class="btn ghost small" onclick={() => attempt(() => rpc('soundboard', 'restoreBuiltins'), 'Built-in sounds restored')}>
+        <RotateCcw size={15} /> Restore deleted sounds ({mod.deletedBuiltins})
+      </button>
+    {/if}
   </Section>
 
   <Section title="Your sounds" hint="Short clips work best (a few seconds).">

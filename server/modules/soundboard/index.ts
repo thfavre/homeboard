@@ -12,6 +12,8 @@ interface SoundboardSettings {
   volume: number;
   cooldownSec: number;
   disabledBuiltins: string[];
+  /** Built-ins the host deleted: hidden everywhere until restored */
+  deletedBuiltins: string[];
   custom: { id: string; name: string; file: string; myinstants?: boolean }[];
   guestSearch: boolean;
   searchMaxSec: number;
@@ -38,7 +40,7 @@ export default defineModule<SoundboardSettings>({
   id: 'soundboard',
   name: 'Soundboard',
   description: 'Guests play sound effects through the TV speakers',
-  settings: { volume: 0.8, cooldownSec: 4, disabledBuiltins: [], custom: [], guestSearch: false, searchMaxSec: 10 },
+  settings: { volume: 0.8, cooldownSec: 4, disabledBuiltins: [], deletedBuiltins: [], custom: [], guestSearch: false, searchMaxSec: 10 },
 
   setup(ctx) {
     const media = ctx.mediaDir();
@@ -60,10 +62,13 @@ export default defineModule<SoundboardSettings>({
     });
     let cooldownUntil = 0;
 
+    /** Built-ins the host has not deleted */
+    const builtins = () => SYNTH_SOUNDS.filter((b) => !ctx.settings.get().deletedBuiltins.includes(b.id));
+
     const sounds = (admin = false): Sound[] => {
       const s = ctx.settings.get();
       return [
-        ...SYNTH_SOUNDS.filter((b) => !s.disabledBuiltins.includes(b.id)).map((b) => ({ id: b.id, name: b.name, kind: 'synth' as const })),
+        ...builtins().filter((b) => !s.disabledBuiltins.includes(b.id)).map((b) => ({ id: b.id, name: b.name, kind: 'synth' as const })),
         ...s.custom.map((c) => ({ id: c.id, name: c.name, kind: 'file' as const, src: ctx.mediaUrl(c.file), ...(admin && c.myinstants ? { myinstants: true } : {}) })),
       ];
     };
@@ -90,7 +95,7 @@ export default defineModule<SoundboardSettings>({
         cooldownSec: s.cooldownSec,
         guestSearch: s.guestSearch,
         searchMaxSec: s.searchMaxSec,
-        ...(role === 'admin' ? { builtins: SYNTH_SOUNDS.map((b) => ({ id: b.id, name: b.name, enabled: !s.disabledBuiltins.includes(b.id) })) } : {}),
+        ...(role === 'admin' ? { builtins: builtins().map((b) => ({ id: b.id, name: b.name, enabled: !s.disabledBuiltins.includes(b.id) })), deletedBuiltins: s.deletedBuiltins.length } : {}),
       };
     });
 
@@ -184,7 +189,7 @@ export default defineModule<SoundboardSettings>({
     });
 
     ctx.onAdmin('test', (args) => {
-      const sound = sounds().find((x) => x.id === args.id) ?? SYNTH_SOUNDS.map((b) => ({ ...b, kind: 'synth' as const })).find((b) => b.id === args.id);
+      const sound = sounds().find((x) => x.id === args.id) ?? builtins().map((b) => ({ ...b, kind: 'synth' as const })).find((b) => b.id === args.id);
       if (!sound) throw new HbError('Unknown sound');
       play(sound, 'Host');
     });
@@ -204,6 +209,19 @@ export default defineModule<SoundboardSettings>({
       const s = ctx.settings.get();
       const rest = s.disabledBuiltins.filter((id) => id !== args.id);
       ctx.settings.update({ disabledBuiltins: args.enabled ? rest : [...rest, String(args.id)] });
+      ctx.publish();
+    });
+
+    ctx.onAdmin('deleteBuiltin', (args) => {
+      const id = String(args.id);
+      const s = ctx.settings.get();
+      if (!SYNTH_SOUNDS.some((b) => b.id === id) || s.deletedBuiltins.includes(id)) return;
+      ctx.settings.update({ deletedBuiltins: [...s.deletedBuiltins, id] });
+      ctx.publish();
+    });
+
+    ctx.onAdmin('restoreBuiltins', () => {
+      ctx.settings.update({ deletedBuiltins: [] });
       ctx.publish();
     });
 
