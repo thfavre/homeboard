@@ -1,25 +1,16 @@
 <script lang="ts">
-  import { Disc3 } from '@lucide/svelte';
   import type { GamesState, ScratchMove } from '$shared/games.ts';
-  import type { SpotifyState } from '$shared/spotify.ts';
   import { hb, onEvent } from '$lib/client.svelte.ts';
-  import Ring from '../../quiz/Ring.svelte';
   import { NORMAL_SPEED, Scratcher } from './scratch.ts';
   import Vinyl from './Vinyl.svelte';
 
   /**
-   * Perfect Circle prize, in the side column instead of "Up next": the winner's best circle on a
-   * record, scratched live from their phone, with the sound on the TV.
+   * Perfect Circle prize, in the side column instead of "Up next": just the record (the winner's
+   * best circle), scratched live from their phone, with the sound on the TV.
    */
   const perk = $derived.by(() => {
     const p = (hb.modules.games as GamesState | undefined)?.perk;
     return p?.kind === 'scratch' ? p : null;
-  });
-
-  // The record plays the song on now
-  const song = $derived.by(() => {
-    const s = hb.modules.spotify as SpotifyState | undefined;
-    return s?.connected && s.now?.isPlaying ? s.now : null;
   });
 
   // Only on and off: every state update brings a new perk object, the deck must not restart for it
@@ -56,65 +47,23 @@
 </script>
 
 {#if perk}
-  <div class="card deck" class:touching>
-    <div class="head">
-      <span class="eyebrow"><Disc3 size="0.9rem" /> On the decks</span>
-      <Ring endsAt={perk.until} totalMs={perk.totalMs} size="2.4rem" />
-    </div>
-    <div class="body">
-      <span class="platter"><Vinyl points={perk.drawing.points} color={perk.guest.color} name={perk.guest.name} {angle} size="8.5rem" /></span>
-      <div class="text">
-        <strong class="truncate">{perk.guest.name}</strong>
-        {#if song}<span class="song truncate">{song.title}</span>{/if}
-        <span class="dim">{touching ? 'Scratching...' : 'Perfect Circle winner. Scratch it from your phone!'}</span>
-      </div>
-    </div>
+  <div class="deck" class:touching>
+    <span class="platter"><Vinyl points={perk.drawing.points} color={perk.guest.color} name={perk.guest.name} {angle} size="15rem" /></span>
   </div>
 {/if}
 
 <style>
   .deck {
-    padding: 1rem 1.2rem;
     display: grid;
-    gap: 0.6rem;
-    transition: box-shadow 0.25s ease;
-  }
-  .deck.touching {
-    box-shadow: 0 0 3rem -1rem color-mix(in srgb, var(--coin) 70%, transparent);
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-  }
-  .body {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
+    place-items: center;
+    padding: 0.5rem 0;
   }
   .platter {
-    flex: none;
     display: grid;
+    border-radius: 50%;
+    transition: filter 0.25s ease;
   }
-  .text {
-    min-width: 0;
-    display: grid;
-    gap: 0.3rem;
-  }
-  strong {
-    font-size: 1.15rem;
-  }
-  .dim {
-    font-size: 0.9rem;
-  }
-  .song {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--coin);
+  .touching .platter {
+    filter: drop-shadow(0 0 1.5rem color-mix(in srgb, var(--coin) 55%, transparent));
   }
 </style>
