@@ -119,7 +119,7 @@
           <div in:fly={{ x: 30, duration: 200 }}><Panel /></div>
         {/key}
       {:else if tab === 'home'}
-        <Home {open} />
+        <Home {open} earn={() => go('earn')} />
       {:else if tab === 'earn'}
         <Earn />
       {:else}
