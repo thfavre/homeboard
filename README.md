@@ -15,6 +15,17 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - spin the wheel
 - 1vs1 someone on the TV (like a game show (and put some coins?))
 - gift for a condition? Like we can see somewhere that doing X gives a gift.
+- slot machine, it shows on a corner of the TV
+- Blind Timer: Stop the timer as close as possible to 10.00 seconds without seeing it run.
+- Light Simon: Repeat the color sequence shown by the WLED lights, which grows longer each round until someone slips up.
+- Color Reflex: Tap the button matching the color the lights turn, faster than your opponent.
+- Bluff: Secretly choose to share or steal the pot, hoping to guess what the other player will do.
+- Blind Drawing: Draw the given word on a black screen, then discover the result in full on the TV.
+- From Memory: Study an image for 5 seconds, redraw it, then compare your drawing to the original on the TV.
+- Perfect Circle: Draw the most perfect circle you can in one stroke, and the app scores your precision.
+- Beat Maker: Compose a rhythm on a grid without hearing a single sound, then let the room vote when it plays on the TV.
+- Horse Race: Bet on a horse and watch the race unfold on the TV, hoping yours crosses the line first.
+- Sync Selfie: Take a selfie on the same signal as everyone else, then see the mosaic of all the faces on the TV.
 
 ## Quick start
 
