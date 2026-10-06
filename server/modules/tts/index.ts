@@ -1,4 +1,4 @@
-import { ttsLang, ttsSpeechMs, type TtsEvent, type TtsLang, type TtsSettings, type TtsState } from '../../../shared/tts.ts';
+import { ttsLang, ttsSpeechMs, type TtsEvent, type TtsMention, type TtsLang, type TtsSettings, type TtsState } from '../../../shared/tts.ts';
 import type { Charge } from '../../core/economy.ts';
 import { defineModule } from '../../core/module.ts';
 import { HbError, clamp, num, uid } from '../../core/util.ts';
@@ -24,7 +24,9 @@ const cleanText = (raw: unknown) =>
   String(raw ?? '')
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    // One character per accented letter, so positions found in the folded text match the text
+    .normalize('NFC');
 
 /**
  * Shoutouts: guests type a message, the TV reads it out loud and scrolls it.
@@ -74,16 +76,31 @@ export default defineModule<TtsSettings>({
     /** Language asked by the caller, or the host's default */
     const langOf = (args: any): TtsLang => ttsLang(args?.lang)?.id ?? ctx.settings.get().defaultLang;
 
-    /** Other guests named in the text, by full name or first name (3 letters or more) */
+    /** Other guests named in the text (full name or first name, 3 letters or more), with where they are written.
+     *  Only guests with a selfie: initials hopping around would look like noise */
     const mentionsIn = (text: string, senderId?: string) => {
       const t = fold(text);
-      const found: NonNullable<TtsEvent['mentions']> = [];
-      for (const g of ctx.session.guests.values()) {
-        if (g.id === senderId || found.length >= 3) continue;
+      const found: TtsMention[] = [];
+      const taken: [number, number][] = [];
+      const free = (s: number, e: number) => taken.every(([a, b]) => e <= a || s >= b);
+      // Longest names first, so "Marie Curie" wins over another guest called "Marie"
+      const guests = [...ctx.session.guests.values()].sort((a, b) => b.name.length - a.name.length);
+      for (const g of guests) {
+        if (g.id === senderId || !g.avatar || found.length >= 3) continue;
         const full = fold(g.name).trim();
-        const names = [full, full.split(/\s+/)[0]].filter((n) => n.length >= 3);
-        const named = names.some((n) => new RegExp(`(?<![\\p{L}\\d])${escapeRe(n).replace(/\s+/g, '\\s+')}(?![\\p{L}\\d])`, 'u').test(t));
-        if (named) found.push({ id: g.id, name: g.name, color: g.color, avatar: g.avatar?.url });
+        const names = [...new Set([full, full.split(/\s+/)[0]])].filter((n) => n.length >= 3);
+        const ranges: [number, number][] = [];
+        for (const n of names) {
+          const re = new RegExp(`(?<![\\p{L}\\d])${escapeRe(n).replace(/\s+/g, '\\s+')}(?![\\p{L}\\d])`, 'gu');
+          for (const m of t.matchAll(re)) {
+            const range: [number, number] = [m.index, m.index + m[0].length];
+            if (free(...range)) {
+              ranges.push(range);
+              taken.push(range);
+            }
+          }
+        }
+        if (ranges.length) found.push({ id: g.id, name: g.name, color: g.color, avatar: g.avatar?.url, ranges });
       }
       return found;
     };

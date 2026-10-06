@@ -43,6 +43,11 @@ export interface TtsGuestRef {
   avatar?: string;
 }
 
+export interface TtsMention extends TtsGuestRef {
+  /** Where the name is written in the text: [start, end) character positions */
+  ranges: [number, number][];
+}
+
 export interface TtsEvent {
   id: string;
   text: string;
@@ -51,7 +56,7 @@ export interface TtsEvent {
   by: string;
   anonymous?: boolean;
   guest?: TtsGuestRef;
-  /** Guests named in the text: their pictures hop at the end of the banner */
-  mentions?: TtsGuestRef[];
+  /** Guests named in the text: their pictures hop above their names */
+  mentions?: TtsMention[];
   durationMs: number;
 }

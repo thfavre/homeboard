@@ -1,12 +1,31 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
-  import { TTS_LANGS, ttsLang, ttsSpeechMs, type TtsEvent } from '$shared/tts.ts';
+  import { TTS_LANGS, ttsLang, ttsSpeechMs, type TtsEvent, type TtsMention } from '$shared/tts.ts';
   import { hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import { detectEggs, type EggFx } from './eggs.ts';
   import EggOverlay from './EggOverlay.svelte';
 
-  let current = $state<(TtsEvent & { key: number; durationMs: number; fx: EggFx }) | null>(null);
+  type Part = { text: string; who?: TtsMention };
+  let current = $state<(TtsEvent & { key: number; durationMs: number; fx: EggFx; parts: Part[] }) | null>(null);
+
+  /** The text cut around the guests' names, so their pictures can hop above them */
+  function splitNames(text: string, mentions: TtsMention[] = []): Part[] {
+    const spots = mentions
+      .flatMap((who) => who.ranges.map(([start, end]) => ({ start, end, who })))
+      .filter((r) => r.start >= 0 && r.end <= text.length && r.start < r.end)
+      .sort((a, b) => a.start - b.start);
+    const parts: Part[] = [];
+    let at = 0;
+    for (const r of spots) {
+      if (r.start < at) continue;
+      if (r.start > at) parts.push({ text: text.slice(at, r.start) });
+      parts.push({ text: text.slice(r.start, r.end), who: r.who });
+      at = r.end;
+    }
+    if (at < text.length) parts.push({ text: text.slice(at) });
+    return parts;
+  }
   let queue: TtsEvent[] = [];
   let seq = 0;
   let processing = false;
@@ -106,6 +125,7 @@
           key,
           durationMs,
           fx: detectEggs(item.text),
+          parts: splitNames(item.text, item.mentions),
         };
 
         // Play audio and wait for both speech & scroll
@@ -205,9 +225,13 @@
               />
             {/if}
 
-            <span class="marquee-text {current.fx.text ? `fx-${current.fx.text}` : ''}" class:shout={current.fx.shout} data-text={current.text}>
-              {current.text}
-            </span>
+            <span class="marquee-text {current.fx.text ? `fx-${current.fx.text}` : ''}" class:shout={current.fx.shout} data-text={current.text}
+              >{#each current.parts as part, i}{#if part.who?.avatar}<span class="name"
+                    ><span class="name-pic" style:--i={i}
+                      ><Avatar name={part.who.name} color={part.who.color} id={part.who.id} src={part.who.avatar} size="4.6rem" /></span
+                    >{part.text}</span
+                  >{:else}{part.text}{/if}{/each}</span
+            >
 
             {#if !current.anonymous && current.guest}
               <Avatar
@@ -219,11 +243,6 @@
               />
             {/if}
 
-            {#each current.mentions ?? [] as m, i (m.id)}
-              <span class="mention" style:--i={i}>
-                <Avatar name={m.name} color={m.color} id={m.id} src={m.avatar} size="6rem" />
-              </span>
-            {/each}
           </div>
         </div>
       </div>
@@ -248,7 +267,8 @@
     box-shadow:
       0 0 60px 15px rgba(0, 0, 0, 0.75),
       0 0 35px -5px color-mix(in srgb, var(--accent) 25%, transparent);
-    overflow: hidden;
+    /* Pictures of named guests stand on the top border */
+    overflow: visible;
     display: flex;
     align-items: center;
     pointer-events: none;
@@ -257,6 +277,9 @@
   .marquee-viewport {
     width: 100%;
     overflow: hidden;
+    /* Room above the banner for the pictures of named guests, without making the banner taller */
+    padding-top: 8rem;
+    margin-top: -8rem;
     position: relative;
     mask-image: linear-gradient(90deg, transparent 0%, black 4%, black 96%, transparent 100%);
     -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 4%, black 96%, transparent 100%);
@@ -291,6 +314,12 @@
     text-shadow: 0 0 30px color-mix(in srgb, var(--accent) 30%, transparent);
     display: inline-block;
     flex-shrink: 0;
+    line-height: 1.2;
+  }
+
+  /* Same height with or without the sender's picture, so named guests always land on the border */
+  .marquee-content {
+    min-height: 7rem;
   }
 
   /* ------------------------------------------------ easter eggs */
@@ -323,9 +352,23 @@
     }
   }
 
-  .mention {
-    flex-shrink: 0;
-    animation: hop 0.9s ease-in-out calc(var(--i) * 0.2s) infinite;
+  .name {
+    position: relative;
+    display: inline-block;
+    white-space: pre;
+  }
+  /* The banner is 7rem tall plus 0.35rem padding: its top border is 3.85rem above the middle of the text */
+  .name-pic {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 3.85rem - 0.6em);
+    translate: -50% 0;
+    display: grid;
+    border-radius: 50%;
+    background: var(--bg);
+    text-shadow: none;
+    transform-origin: 50% 100%;
+    animation: hop 0.9s ease-in-out calc(var(--i) * 0.13s) infinite;
   }
   @keyframes hop {
     0%,
@@ -333,10 +376,10 @@
       transform: translateY(0);
     }
     35% {
-      transform: translateY(-1.6rem) rotate(-6deg);
+      transform: translateY(-1.8rem) rotate(-6deg);
     }
     55% {
-      transform: translateY(0) scale(1.06, 0.94);
+      transform: translateY(0) scale(1.12, 0.88);
     }
   }
 
