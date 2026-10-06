@@ -6,7 +6,10 @@
   import MiSearch from './MiSearch.svelte';
 
   const mod = $derived(hb.modules.soundboard as SoundboardState | undefined);
-  const cost = $derived(price('soundboard.sound'));
+  const economy = $derived(!!hb.core?.economyEnabled);
+  // Party sounds (built-in and host's) and searched ones (incl. My sounds) are priced separately
+  const partyCost = $derived(price('soundboard.sound'));
+  const searchCost = $derived(price('soundboard.search'));
   let now = $state(serverNow());
   let last = $state<string | null>(null);
   let tab = $state<'board' | 'search'>('board');
@@ -49,11 +52,15 @@
   }
 </script>
 
+{#snippet tag(amount: number)}
+  {#if economy}<span class="tag"><Money {amount} free /><span class="each">each</span></span>{/if}
+{/snippet}
+
 {#if mod}
   <div class="sounds">
     <p class="dim intro">
       Sounds play through the TV speakers.
-      {#if hb.core?.economyEnabled && cost}Each one costs <Money amount={cost} />.{/if}
+      {#if !mod.guestSearch && economy && partyCost}Each one costs <Money amount={partyCost} />.{/if}
     </p>
     {#if mod.cooldownSec > 0 || wait}
       <p class="faint wait">{wait ? `Next sound available in ${wait}s` : ''}</p>
@@ -67,6 +74,10 @@
     {/if}
 
     {#if mod.guestSearch && tab === 'search'}
+      <div class="head">
+        <h4>Tap a sound to play it</h4>
+        {@render tag(searchCost)}
+      </div>
       <MiSearch onpress={(s) => playSearch(s.mp3, s.title)} pressDisabled={wait > 0} busyMp3={sending}>
         {#snippet actions(s)}
           <button type="button" class="tool" class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>
@@ -78,6 +89,8 @@
     {#if mod.guestSearch}
       <div class="head">
         <h4>My sounds</h4>
+        {@render tag(searchCost)}
+        <span class="grow"></span>
         {#if mine.length}<button class="btn ghost small" onclick={() => (editing = !editing)}>{editing ? 'Done' : 'Edit'}</button>{/if}
       </div>
       <div class="grid">
@@ -95,7 +108,7 @@
           </button>
         {/each}
       </div>
-      <div class="divider"><span>Party sounds</span></div>
+      <div class="divider"><span>Party sounds</span>{@render tag(partyCost)}</div>
     {/if}
     <div class="grid">
       {#each mod.sounds as s, i (s.id)}
@@ -148,8 +161,30 @@
   .head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 0.5rem;
     margin-bottom: -0.3rem;
+    min-height: 2rem;
+  }
+  .grow {
+    flex: 1;
+  }
+  /* Price of the sounds in a section */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    color: var(--text);
+    font-size: 0.78rem;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .each {
+    color: var(--text-dim);
+    font-weight: 500;
   }
   .head h4 {
     margin: 0;

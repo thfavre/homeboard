@@ -84,7 +84,8 @@ export default defineModule<SoundboardSettings>({
       ctx.bus.emit('soundboard:ended', { id: String(args.id) });
     });
 
-    ctx.price({ key: 'soundboard.sound', label: 'Play a sound', default: 500 });
+    ctx.price({ key: 'soundboard.sound', label: 'Play a party sound', default: 500 });
+    ctx.price({ key: 'soundboard.search', label: 'Play a searched sound', default: 1000, active: () => ctx.settings.get().guestSearch });
 
     ctx.state((role): SoundboardState => {
       const s = ctx.settings.get();
@@ -104,9 +105,10 @@ export default defineModule<SoundboardSettings>({
       if (wait > 0) throw new HbError(`Another sound just played. Try again in ${wait}s.`);
     };
 
-    const guestPlays = (sound: Sound, guest: Guest, maxSec?: number) => {
+    /** `priceKey`: party sounds and searched ones (incl. My sounds) can cost different amounts */
+    const guestPlays = (sound: Sound, guest: Guest, priceKey: 'soundboard.sound' | 'soundboard.search', maxSec?: number) => {
       checkCooldown();
-      ctx.economy.charge(guest, 'soundboard.sound', 1, `Sound: ${sound.name}`);
+      ctx.economy.charge(guest, priceKey, 1, `Sound: ${sound.name}`);
       cooldownUntil = Date.now() + ctx.settings.get().cooldownSec * 1000;
       play(sound, guest.name, maxSec);
       ctx.activity(`{name} played ${sound.name}`, { guest });
@@ -116,7 +118,7 @@ export default defineModule<SoundboardSettings>({
     ctx.onGuest('play', (args, guest) => {
       const sound = sounds().find((x) => x.id === args.id);
       if (!sound) throw new HbError('Unknown sound');
-      guestPlays(sound, guest);
+      guestPlays(sound, guest, 'soundboard.sound');
       return true;
     });
 
@@ -150,7 +152,7 @@ export default defineModule<SoundboardSettings>({
       checkCooldown();
       const src = await cached(args.mp3);
       const sound: Sound = { id: `mi:${cleanMp3(args.mp3)}`, name: cleanName(args.title, 30) || 'Sound', kind: 'file', src };
-      guestPlays(sound, guest, ctx.settings.get().searchMaxSec || undefined);
+      guestPlays(sound, guest, 'soundboard.search', ctx.settings.get().searchMaxSec || undefined);
       return true;
     });
 
