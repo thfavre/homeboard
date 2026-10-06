@@ -8,7 +8,7 @@
 
   const mod = $derived(hb.modules.soundboard as SoundboardState | undefined);
   const economy = $derived(!!hb.core?.economyEnabled);
-  // Party sounds (built-in and host's) and searched ones (incl. My sounds) are priced separately
+  // Party sounds (the host's board) and searched ones (incl. My sounds) are priced separately
   const partyCost = $derived(price('soundboard.sound'));
   const searchCost = $derived(price('soundboard.search'));
   let now = $state(serverNow());

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Synced } from '$lib/synced.svelte.ts';
-  import { Play, Plus, RotateCcw, Trash2, Upload } from '@lucide/svelte';
+  import { Play, Plus, Trash2, Upload } from '@lucide/svelte';
   import type { SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -36,7 +36,7 @@
   }
 </script>
 
-<!-- Tap once to arm, again to delete (it goes to Recently deleted) -->
+<!-- Tap once to arm, again to delete -->
 {#snippet del(onconfirm: () => Promise<unknown>)}
   <TwoStepButton class="ghost small del" {onconfirm}>
     <Trash2 size={15} />
@@ -67,21 +67,8 @@
     <Ducking source="soundboard" title="Lower the music" hint="Spotify gets quieter while a sound plays." />
   </Section>
 
-  <Section title="Built-in sounds">
-    {#each mod.builtins ?? [] as b (b.id)}
-      <div class="line">
-        <button class="btn ghost small" aria-label="Test" onclick={() => test(b.id)}><Play size={15} /></button>
-        <span class="grow">{b.name}</span>
-        <Toggle checked={b.enabled} label={b.name} onchange={(v) => attempt(() => rpc('soundboard', 'setBuiltin', { id: b.id, enabled: v }))} />
-        {@render del(() => attempt(() => rpc('soundboard', 'deleteBuiltin', { id: b.id })))}
-      </div>
-    {:else}
-      <p class="faint">All built-in sounds were deleted.</p>
-    {/each}
-  </Section>
-
   <Section title="Your sounds" hint="Short clips work best (a few seconds).">
-    {#each mod.sounds.filter((s) => s.kind === 'file') as s (s.id)}
+    {#each mod.sounds as s (s.id)}
       <div class="line">
         <button class="btn ghost small" aria-label="Test" onclick={() => test(s.id)}><Play size={15} /></button>
         <span class="grow">{s.name}</span>
@@ -96,17 +83,6 @@
       <input bind:this={fileInput} type="file" accept="audio/*" hidden onchange={onFile} />
     </div>
   </Section>
-
-  {#if mod.trash?.length}
-    <Section title="Recently deleted" hint="The last 10 sounds you deleted. Older ones are gone for good.">
-      {#each mod.trash as t (t.id)}
-        <div class="line">
-          <span class="grow">{t.name}<span class="faint sub">{t.kind === 'builtin' ? 'Built-in' : 'Your sound'}</span></span>
-          <button class="btn ghost small" onclick={() => attempt(() => rpc('soundboard', 'restore', { id: t.id }), `${t.name} restored`)}><RotateCcw size={15} /> Restore</button>
-        </div>
-      {/each}
-    </Section>
-  {/if}
 
   <Section title="Sound search" hint="Sounds from myinstants.com. Tap a sound to play it on the TV, or + to add it to the board: it is downloaded, so it keeps working without internet.">
     <div class="line">

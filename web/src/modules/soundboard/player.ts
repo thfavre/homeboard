@@ -1,5 +1,4 @@
 import type { Sound } from '$shared/soundboard.ts';
-import { SYNTHS } from './synth.ts';
 
 let ctx: AudioContext | null = null;
 
@@ -15,23 +14,12 @@ export function unlockAudio(): Promise<void> {
 }
 
 /**
- * Play a sound (synthesized or file) at the given volume (0-1). Resolves when it has finished.
- * A file is faded out and stopped after `maxSec` seconds when given.
+ * Play a sound file at the given volume (0-1). Resolves when it has finished.
+ * It is faded out and stopped after `maxSec` seconds when given.
  */
 export async function playSound(sound: Sound, volume: number, maxSec?: number): Promise<void> {
   const ac = audioContext();
   if (ac.state !== 'running') await ac.resume().catch(() => {});
-  if (sound.kind === 'synth') {
-    const synth = SYNTHS[sound.id];
-    if (!synth) return;
-    const gain = ac.createGain();
-    gain.gain.value = volume;
-    gain.connect(ac.destination);
-    const len = synth(ac, gain, ac.currentTime + 0.02);
-    await new Promise((r) => setTimeout(r, len * 1000 + 50));
-    setTimeout(() => gain.disconnect(), 1000);
-    return;
-  }
   if (!sound.src) return;
   const audio = new Audio(sound.src);
   audio.volume = volume;

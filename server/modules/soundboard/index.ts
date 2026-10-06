@@ -1,7 +1,7 @@
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import express from 'express';
-import { SYNTH_SOUNDS, type MiSound, type PlayEvent, type Sound, type SoundboardState } from '../../../shared/soundboard.ts';
+import { type MiSound, type PlayEvent, type Sound, type SoundboardState } from '../../../shared/soundboard.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
@@ -11,12 +11,7 @@ import { cleanMp3, downloadMp3, pruneCache, searchMyInstants } from './myinstant
 interface SoundboardSettings {
   volume: number;
   cooldownSec: number;
-  disabledBuiltins: string[];
-  /** Built-ins the host deleted: hidden everywhere (restorable while still in `trash`) */
-  deletedBuiltins: string[];
   custom: CustomSound[];
-  /** Recently deleted sounds, newest first. Uploaded files are kept on disk until they leave it. */
-  trash: TrashItem[];
   guestSearch: boolean;
   searchMaxSec: number;
 }
@@ -27,11 +22,6 @@ interface CustomSound {
   file: string;
   myinstants?: boolean;
 }
-
-type TrashItem = { kind: 'builtin'; id: string; name: string } | ({ kind: 'file' } & CustomSound);
-
-/** How many deleted sounds can be restored */
-const TRASH_SIZE = 10;
 
 /** Sounds a guest can keep on their own board */
 const MAX_MINE = 30;
@@ -54,7 +44,7 @@ export default defineModule<SoundboardSettings>({
   id: 'soundboard',
   name: 'Soundboard',
   description: 'Guests play sound effects through the TV speakers',
-  settings: { volume: 0.8, cooldownSec: 4, disabledBuiltins: [], deletedBuiltins: [], custom: [], trash: [], guestSearch: false, searchMaxSec: 10 },
+  settings: { volume: 0.8, cooldownSec: 4, custom: [], guestSearch: false, searchMaxSec: 10 },
 
   setup(ctx) {
     const media = ctx.mediaDir();
@@ -76,14 +66,10 @@ export default defineModule<SoundboardSettings>({
     });
     let cooldownUntil = 0;
 
-    /** Built-ins the host has not deleted */
-    const builtins = () => SYNTH_SOUNDS.filter((b) => !ctx.settings.get().deletedBuiltins.includes(b.id));
-
     const sounds = (admin = false): Sound[] => {
       const s = ctx.settings.get();
       return [
-        ...builtins().filter((b) => !s.disabledBuiltins.includes(b.id)).map((b) => ({ id: b.id, name: b.name, kind: 'synth' as const })),
-        ...s.custom.map((c) => ({ id: c.id, name: c.name, kind: 'file' as const, src: ctx.mediaUrl(c.file), ...(admin && c.myinstants ? { myinstants: true } : {}) })),
+        ...s.custom.map((c) => ({ id: c.id, name: c.name, src: ctx.mediaUrl(c.file), ...(admin && c.myinstants ? { myinstants: true } : {}) })),
       ];
     };
 
@@ -110,7 +96,6 @@ export default defineModule<SoundboardSettings>({
         cooldownSec: s.cooldownSec,
         guestSearch: s.guestSearch,
         searchMaxSec: s.searchMaxSec,
-        ...(role === 'admin' ? { builtins: builtins().map((b) => ({ id: b.id, name: b.name, enabled: !s.disabledBuiltins.includes(b.id) })), trash: s.trash.map((t) => ({ id: t.id, name: t.name, kind: t.kind })) } : {}),
       };
     });
 
@@ -161,7 +146,7 @@ export default defineModule<SoundboardSettings>({
       guestSearchOn();
       checkCooldown();
       const src = await cached(args.mp3);
-      const sound: Sound = { id: `mi:${cleanMp3(args.mp3)}`, name: cleanName(args.title, 30) || 'Sound', kind: 'file', src };
+      const sound: Sound = { id: `mi:${cleanMp3(args.mp3)}`, name: cleanName(args.title, 30) || 'Sound', src };
       guestPlays(sound, guest, 'soundboard.search', ctx.settings.get().searchMaxSec || undefined);
       return true;
     });
@@ -186,7 +171,7 @@ export default defineModule<SoundboardSettings>({
 
     ctx.onAdmin('playSearch', async (args) => {
       const src = await cached(args.mp3);
-      play({ id: `mi:${cleanMp3(args.mp3)}`, name: cleanName(args.title, 30) || 'Sound', kind: 'file', src }, 'Host');
+      play({ id: `mi:${cleanMp3(args.mp3)}`, name: cleanName(args.title, 30) || 'Sound', src }, 'Host');
     });
 
     /** Put a MyInstants sound on the board for everyone (kept on disk, works offline) */
@@ -201,7 +186,7 @@ export default defineModule<SoundboardSettings>({
     });
 
     ctx.onAdmin('test', (args) => {
-      const sound = sounds().find((x) => x.id === args.id) ?? builtins().map((b) => ({ ...b, kind: 'synth' as const })).find((b) => b.id === args.id);
+      const sound = sounds().find((x) => x.id === args.id);
       if (!sound) throw new HbError('Unknown sound');
       play(sound, 'Host');
     });
@@ -217,57 +202,16 @@ export default defineModule<SoundboardSettings>({
       ctx.publish();
     });
 
-    ctx.onAdmin('setBuiltin', (args) => {
-      const s = ctx.settings.get();
-      const rest = s.disabledBuiltins.filter((id) => id !== args.id);
-      ctx.settings.update({ disabledBuiltins: args.enabled ? rest : [...rest, String(args.id)] });
-      ctx.publish();
-    });
-
-    /** Put a deleted sound on top of the history; the oldest one beyond TRASH_SIZE is gone for good */
-    const toTrash = (item: TrashItem) => {
-      const trash = [item, ...ctx.settings.get().trash.filter((t) => t.id !== item.id)];
-      for (const old of trash.slice(TRASH_SIZE)) {
-        if (old.kind === 'file') removeFile(old.file);
-      }
-      return trash.slice(0, TRASH_SIZE);
-    };
-
-    const removeFile = (file: string) => {
-      try {
-        unlinkSync(join(media, file));
-      } catch {
-        // already gone
-      }
-    };
-
-    ctx.onAdmin('deleteBuiltin', (args) => {
-      const s = ctx.settings.get();
-      const b = SYNTH_SOUNDS.find((x) => x.id === args.id);
-      if (!b || s.deletedBuiltins.includes(b.id)) return;
-      ctx.settings.update({ deletedBuiltins: [...s.deletedBuiltins, b.id], trash: toTrash({ kind: 'builtin', id: b.id, name: b.name }) });
-      ctx.publish();
-    });
-
     ctx.onAdmin('deleteCustom', (args) => {
       const s = ctx.settings.get();
       const c = s.custom.find((x) => x.id === args.id);
       if (!c) return;
-      ctx.settings.update({ custom: s.custom.filter((x) => x.id !== c.id), trash: toTrash({ kind: 'file', ...c }) });
-      ctx.publish();
-    });
-
-    ctx.onAdmin('restore', (args) => {
-      const s = ctx.settings.get();
-      const t = s.trash.find((x) => x.id === args.id);
-      if (!t) throw new HbError('That sound is no longer in the history');
-      const trash = s.trash.filter((x) => x !== t);
-      if (t.kind === 'builtin') {
-        ctx.settings.update({ deletedBuiltins: s.deletedBuiltins.filter((id) => id !== t.id), trash });
-      } else {
-        const { kind: _, ...c } = t;
-        ctx.settings.update({ custom: [...s.custom, c], trash });
+      try {
+        unlinkSync(join(media, c.file));
+      } catch {
+        // already gone
       }
+      ctx.settings.update({ custom: s.custom.filter((x) => x.id !== c.id) });
       ctx.publish();
     });
 

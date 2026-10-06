@@ -1,22 +1,7 @@
-/** Built-in sounds, synthesized on the TV by web/src/modules/soundboard/synth.ts */
-export const SYNTH_SOUNDS = [
-  { id: 'airhorn', name: 'Air horn' },
-  { id: 'tada', name: 'Ta-da' },
-  { id: 'drumroll', name: 'Drum roll' },
-  { id: 'applause', name: 'Applause' },
-  { id: 'rimshot', name: 'Ba dum tss' },
-  { id: 'buzzer', name: 'Wrong buzzer' },
-  { id: 'chime', name: 'Chime' },
-  { id: 'laser', name: 'Laser' },
-  { id: 'bassdrop', name: 'Bass drop' },
-  { id: 'crickets', name: 'Crickets' },
-] as const;
-
 export interface Sound {
   id: string;
   name: string;
-  kind: 'synth' | 'file';
-  src?: string;
+  src: string;
   /** Added from MyInstants (admin view only) */
   myinstants?: boolean;
 }
@@ -45,10 +30,6 @@ export interface SoundboardState {
   guestSearch: boolean;
   /** Guests only find sounds up to this many seconds, and the TV cuts longer ones (0 = no limit) */
   searchMaxSec: number;
-  /** Admin only: every built-in, including disabled ones */
-  builtins?: { id: string; name: string; enabled: boolean }[];
-  /** Admin only: recently deleted sounds, newest first, that can be restored */
-  trash?: { id: string; name: string; kind: 'builtin' | 'file' }[];
 }
 
 export interface PlayEvent {
