@@ -175,11 +175,9 @@
 <style>
   .quiz {
     position: relative;
-    min-height: calc(100dvh - 6rem);
     display: grid;
     align-content: center;
     gap: 1rem;
-    padding-bottom: 1rem;
   }
   .paused {
     position: absolute;

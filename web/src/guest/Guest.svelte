@@ -106,10 +106,10 @@
       {/if}
     </header>
 
-    <main>
+    <main class:full={!!takeover}>
       {#if takeover}
         {@const Takeover = takeover}
-        <Takeover />
+        <div class="takeover"><Takeover /></div>
       {:else if featureModule?.guest}
         {@const Panel = featureModule.guest.component}
         {#key featureModule.id}
@@ -221,6 +221,16 @@
   main {
     flex: 1;
     padding: 0.5rem 1rem 6.5rem;
+  }
+  /* Full-screen views (games, quiz): no nav, so they fill exactly what is left under the header */
+  main.full {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+  .takeover {
+    flex: 1;
+    display: grid;
   }
   nav {
     position: fixed;
