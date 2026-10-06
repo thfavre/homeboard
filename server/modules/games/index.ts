@@ -165,8 +165,7 @@ export default defineModule<GamesSettings>({
       for (const t of m.timers) clearTimeout(t);
       match = null;
       if (m.usesLights) void lights()?.release();
-      // The scratch prize keeps the TV after the result
-      if (perk?.kind !== 'scratch') ctx.takeover.stop();
+      ctx.takeover.stop();
       ctx.publish();
     };
 
@@ -181,7 +180,6 @@ export default defineModule<GamesSettings>({
       if (perkTimer) clearTimeout(perkTimer);
       perkTimer = null;
       if (p.kind === 'lights' && !keepLights) void lights()?.release();
-      if (p.kind === 'scratch' && !match) ctx.takeover.stop();
       ctx.publish();
     };
 
@@ -195,7 +193,7 @@ export default defineModule<GamesSettings>({
       if (outcome.perk.kind === 'lights' && !(m.usesLights && lightsOn())) return false;
       endPerk();
       const base = { guest: winner, until: Date.now() + sec * 1000, totalMs: sec * 1000 };
-      perk = outcome.perk.kind === 'lights' ? { ...base, kind: 'lights', color: null } : { ...base, kind: 'scratch', drawing: outcome.perk.drawing, live: false };
+      perk = outcome.perk.kind === 'lights' ? { ...base, kind: 'lights', color: null } : { ...base, kind: 'scratch', drawing: outcome.perk.drawing };
       perkTimer = setTimeout(() => endPerk(), sec * 1000);
       return true;
     };
@@ -599,10 +597,8 @@ export default defineModule<GamesSettings>({
     /** Scratch moves go straight to the TV, without a state update each time */
     ctx.onGuest('scratch', (args, guest) => {
       if (perk?.kind !== 'scratch' || perk.guest.id !== guest.id) return false;
-      if (!perk.live) {
-        perk.live = true;
-        ctx.publish();
-      }
+      // The record is in the side column: the winner's first touch ends the result screen
+      if (match?.phase === 'result' && match.game === 'circle') close();
       const angle = num(args?.angle, 0);
       ctx.emit('tv', 'scratch', { angle: Number.isFinite(angle) ? clamp(angle, -1e6, 1e6) : 0, touching: !!args?.touching });
       return true;

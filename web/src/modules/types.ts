@@ -9,6 +9,11 @@ export interface TvWidget {
   component: Component;
   /** Extra visibility condition (the module must also be enabled) */
   visible?: () => boolean;
+  /**
+   * Side slot: widgets with the same spot take turns in one place (the first visible one by order
+   * shows, with a fade between them). Lets a module stand in for another one's card for a while.
+   */
+  spot?: string;
 }
 
 export interface GuestFeature {

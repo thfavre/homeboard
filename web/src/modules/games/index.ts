@@ -5,11 +5,16 @@ import GamesPlay from './GamesPlay.svelte';
 import GamesGuest from './GamesGuest.svelte';
 import GamesAdmin from './GamesAdmin.svelte';
 import InviteTv from './InviteTv.svelte';
-import { showGamesScreen } from './store.svelte.ts';
+import ScratchCard from './perk/ScratchCard.svelte';
+import { gamesState, showGamesScreen } from './store.svelte.ts';
 
 export default {
   id: 'games',
-  tv: [{ slot: 'overlay', order: 40, component: InviteTv }],
+  tv: [
+    { slot: 'overlay', order: 40, component: InviteTv },
+    // The Perfect Circle prize stands in for the music's "Up next" while it lasts
+    { slot: 'side', order: 15, component: ScratchCard, spot: 'next', visible: () => gamesState()?.perk?.kind === 'scratch' },
+  ],
   tvTakeover: GamesTv,
   guestTakeover: GamesPlay,
   showGuestTakeover: showGamesScreen,

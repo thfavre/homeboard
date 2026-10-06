@@ -9,23 +9,15 @@
   import { GAME_ICONS, gamesState } from './store.svelte.ts';
   import { GAME_UI } from './registry.ts';
   import RulesPoster from './tv/RulesPoster.svelte';
-  import ScratchTv from './perk/ScratchTv.svelte';
 
   const m = $derived(gamesState()?.match ?? null);
-  // The vinyl replaces the result once the winner touches it, and stays after the game
-  const scratch = $derived.by(() => {
-    const p = gamesState()?.perk;
-    return p?.kind === 'scratch' && (p.live || !m) ? p : null;
-  });
   const info = $derived(m ? gameInfo(m.game) : undefined);
   const ui = $derived(m ? GAME_UI[m.game] : undefined);
   const economy = $derived(!!hb.core?.economyEnabled);
   const nameOf = (id: string) => m?.players.find((p) => p.id === id);
 </script>
 
-{#if scratch && (!m || m.phase === 'result')}
-  <div class="perk"><ScratchTv perk={scratch} /></div>
-{:else if m && info && ui}
+{#if m && info && ui}
   {@const Icon = GAME_ICONS[m.game]}
   {@const Game = ui.tv}
   <div class="games">
@@ -126,10 +118,6 @@
 {/if}
 
 <style>
-  .perk {
-    height: 100%;
-    padding: 2rem 2.5rem 2.5rem;
-  }
   .games {
     height: 100%;
     display: grid;

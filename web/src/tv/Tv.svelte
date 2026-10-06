@@ -14,7 +14,11 @@
       .sort((a, b) => a.order - b.order);
 
   const main = $derived(widgets('main')[0]);
-  const side = $derived(widgets('side'));
+  // Widgets sharing a spot take turns there: only the first visible one shows
+  const side = $derived.by(() => {
+    const taken = new Set<string>();
+    return widgets('side').filter((w) => !w.spot || (!taken.has(w.spot) && !!taken.add(w.spot)));
+  });
   const footer = $derived(widgets('footer'));
   const overlays = $derived(widgets('overlay'));
   const takeover = $derived(moduleById(hb.core?.takeover)?.tvTakeover);
@@ -48,7 +52,15 @@
         {#if main}{#key main}<main.component />{/key}{/if}
       </section>
       <aside>
-        {#each side as w}<w.component />{/each}
+        {#each side as w (w.spot ?? w)}
+          {#if w.spot}
+            <div class="spot">
+              {#key w}<div class="layer" transition:fade|global={{ duration: 400 }}><w.component /></div>{/key}
+            </div>
+          {:else}
+            <w.component />
+          {/if}
+        {/each}
       </aside>
     </main>
 
@@ -134,6 +146,14 @@
   }
   aside > :global(:last-child) {
     margin-top: auto;
+  }
+  /* Both cards on top of each other while one fades out and the other in */
+  .spot {
+    display: grid;
+  }
+  .layer {
+    grid-area: 1 / 1;
+    min-width: 0;
   }
   footer {
     min-width: 0;

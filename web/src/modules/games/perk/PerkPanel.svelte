@@ -85,7 +85,7 @@
 </script>
 
 <div class="perk" in:scale={{ start: 0.9, duration: 300 }}>
-  <span class="eyebrow">Your prize</span>
+  <span class="eyebrow">You won {perk.kind === 'lights' ? 'Color Reflex' : 'Perfect Circle'}! Your prize</span>
   {#if perk.kind === 'lights'}
     <h1>The lights are yours</h1>
     <p class="dim">Pick a color for every light in the room.</p>
@@ -106,7 +106,7 @@
       aria-valuenow={Math.round(angle * 10) / 10}
       tabindex="-1"
     >
-      <Vinyl points={perk.drawing.points} color={perk.guest.color} label={perk.guest.name} {angle} size="min(19rem, 78vw)" />
+      <Vinyl points={perk.drawing.points} color={perk.guest.color} name={perk.guest.name} {angle} size="min(19rem, 78vw)" />
     </div>
   {/if}
   <Fuse endsAt={perk.until} totalMs={perk.totalMs} label="Ends in" />

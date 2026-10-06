@@ -1,68 +1,98 @@
 <script lang="ts">
+  import type { SpotifyState } from '$shared/spotify.ts';
+  import { hb } from '$lib/client.svelte.ts';
   import { circlePath } from '../ui/circlePath.ts';
 
-  /** A vinyl record with a drawn circle pressed on it and a name on the label, turned by `angle` (radians) */
+  /**
+   * A vinyl record cut to the shape of the winner's drawn circle, turned by `angle` (radians).
+   * The label shows the song playing (cover and title), or the winner's color and name.
+   */
   let {
     points,
     color,
-    label,
+    name,
     angle = 0,
     size = '20rem',
-  }: { points: [number, number][]; color: string; label: string; angle?: number; size?: string } = $props();
-  const d = $derived(circlePath(points, 62));
+  }: { points: [number, number][]; color: string; name: string; angle?: number; size?: string } = $props();
+
+  const id = $props.id();
+  const d = $derived(circlePath(points, 97));
+  const deg = $derived((angle * 180) / Math.PI);
+  const song = $derived.by(() => {
+    const s = hb.modules.spotify as SpotifyState | undefined;
+    return s?.connected && s.now?.isPlaying ? s.now : null;
+  });
+  const text = $derived(song ? song.title : name);
+  const short = $derived(text.length > 14 ? text.slice(0, 13) + '.' : text);
+
+  /** A slice of light from the center, between two angles (degrees) */
+  const sector = (a0: number, a1: number) => {
+    const p = (a: number) => `${(50 + 60 * Math.cos((a * Math.PI) / 180)).toFixed(1)} ${(50 + 60 * Math.sin((a * Math.PI) / 180)).toFixed(1)}`;
+    return `M50 50 L${p(a0)} A60 60 0 0 1 ${p(a1)} Z`;
+  };
 </script>
 
-<div class="vinyl" style:--s={size}>
-  <svg viewBox="0 0 100 100" style:transform="rotate({angle}rad)">
-    <circle cx="50" cy="50" r="49.5" class="disc" />
-    {#each [46, 43, 40, 37, 34, 31, 28, 25, 22] as r (r)}<circle cx="50" cy="50" {r} class="groove" />{/each}
-    <circle cx="50" cy="50" r="15" fill={color} />
-    <circle cx="50" cy="50" r="15" class="label-ring" />
-    <!-- The label text shows the record turning, even with a perfect circle on it -->
-    <text x="50" y="45" class="label-name">{label.length > 12 ? label.slice(0, 11) + '.' : label}</text>
-    <text x="50" y="58.5" class="label-sub">33 RPM</text>
-    <path {d} class="drawn" />
-    <circle cx="50" cy="50" r="1.6" class="hole" />
-  </svg>
+<svg class="vinyl" viewBox="0 0 100 100" style:width={size} style:height={size}>
+  <defs>
+    <clipPath id="{id}-disc"><path {d} transform="rotate({deg} 50 50)" /></clipPath>
+    <clipPath id="{id}-label"><circle cx="50" cy="50" r="15" /></clipPath>
+  </defs>
+  <g transform="rotate({deg} 50 50)">
+    <path {d} class="disc" />
+    <g clip-path="url(#{id}-disc)">
+      {#each [46, 43, 40, 37, 34, 31, 28, 25, 22, 19] as r (r)}<circle cx="50" cy="50" {r} class="groove" />{/each}
+    </g>
+    <!-- The edge of the record is the stroke they drew -->
+    <path {d} class="rim" />
+  </g>
   <!-- The light reflections stay still while the record turns -->
-  <span class="sheen"></span>
-</div>
+  <g clip-path="url(#{id}-disc)" class="sheen">
+    <path d={sector(25, 55)} />
+    <path d={sector(205, 235)} />
+  </g>
+  <g transform="rotate({deg} 50 50)">
+    {#if song?.image}
+      <image href={song.image} x="35" y="35" width="30" height="30" preserveAspectRatio="xMidYMid slice" clip-path="url(#{id}-label)" />
+      <circle cx="50" cy="50" r="15" class="label-ring" />
+    {:else}
+      <circle cx="50" cy="50" r="15" fill={color} />
+      <circle cx="50" cy="50" r="15" class="label-ring" />
+      <!-- The label text shows the record turning -->
+      <text x="50" y="45" class="label-name">{short}</text>
+      <text x="50" y="58.5" class="label-sub">{song ? song.artists.slice(0, 22) : '33 RPM'}</text>
+    {/if}
+    <circle cx="50" cy="50" r="1.6" class="hole" />
+  </g>
+</svg>
 
 <style>
   .vinyl {
-    position: relative;
-    width: var(--s);
-    height: var(--s);
-    border-radius: 50%;
-    box-shadow: 0 calc(var(--s) * 0.06) calc(var(--s) * 0.15) -0.2rem rgba(0, 0, 0, 0.7);
-  }
-  svg {
-    width: 100%;
-    height: 100%;
     display: block;
+    overflow: visible;
+    filter: drop-shadow(0 0.6rem 1rem rgba(0, 0, 0, 0.6));
   }
   .disc {
     fill: #111114;
-    stroke: #26262c;
-    stroke-width: 0.6;
   }
   .groove {
     fill: none;
     stroke: rgba(255, 255, 255, 0.05);
     stroke-width: 0.4;
   }
+  .rim {
+    fill: none;
+    stroke: var(--coin);
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .sheen path {
+    fill: rgba(255, 255, 255, 0.07);
+  }
   .label-ring {
     fill: none;
     stroke: rgba(0, 0, 0, 0.35);
     stroke-width: 0.8;
-  }
-  .drawn {
-    fill: none;
-    stroke: var(--coin);
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    filter: drop-shadow(0 0 1.2px rgba(0, 0, 0, 0.8));
   }
   .label-name,
   .label-sub {
@@ -72,29 +102,15 @@
     font-weight: 700;
   }
   .label-name {
-    font-size: 3.6px;
+    font-size: 3.4px;
   }
   .label-sub {
     font-size: 2.2px;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.2px;
   }
   .hole {
     fill: #050506;
-  }
-  .sheen {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    pointer-events: none;
-    background: conic-gradient(
-      from 20deg,
-      transparent 0deg,
-      rgba(255, 255, 255, 0.1) 25deg,
-      transparent 60deg,
-      transparent 180deg,
-      rgba(255, 255, 255, 0.08) 205deg,
-      transparent 240deg
-    );
-    mask-image: radial-gradient(circle, transparent 31%, #000 32%);
+    stroke: rgba(255, 255, 255, 0.4);
+    stroke-width: 0.3;
   }
 </style>

@@ -44,7 +44,10 @@
   </div>
 {/snippet}
 
-{#if m && inMatch}
+{#if myPerk && !(m && inMatch && m.phase !== 'result')}
+  <!-- The winner's prize, from the result on: one place, so it stays put when the game closes (a finger may be on it) -->
+  <div class="screen"><div class="col"><PerkPanel perk={myPerk} /></div></div>
+{:else if m && inMatch}
   {@const info = gameInfo(m.game)!}
   <div class="screen">
     {#if m.phase === 'lobby'}
@@ -99,32 +102,23 @@
       {@const won = r.winners.includes(me)}
       {@const line = r.lines.find((l) => l.id === me)}
       <div class="col result" class:won style:--g1={info.colors[0]} style:--g2={info.colors[1]} in:fade>
-        <!-- With a prize, a short header so the prize fits on the screen -->
-        {#if !myPerk}
-          <div class="medal" in:scale={{ start: 0.4, duration: 500 }}>
-            {#if won}<Crown size={46} />{:else}<Avatar name={hb.me?.name ?? ''} color={hb.me?.color ?? '#888'} src={hb.me?.avatar} size="5.5rem" />{/if}
-          </div>
-          <span class="eyebrow">{r.headline}</span>
-        {/if}
+        <div class="medal" in:scale={{ start: 0.4, duration: 500 }}>
+          {#if won}<Crown size={46} />{:else}<Avatar name={hb.me?.name ?? ''} color={hb.me?.color ?? '#888'} src={hb.me?.avatar} size="5.5rem" />{/if}
+        </div>
+        <span class="eyebrow">{r.headline}</span>
         <h1>{won ? (r.winners.length > 1 ? 'Shared win' : 'You won!') : 'Not this time'}</h1>
-        {#if line && !myPerk}
+        {#if line}
           <div class="stat">
             <span class="mono">{line.label}</span>
             {#if line.detail}<span class="dim">{line.detail}</span>{/if}
           </div>
         {/if}
         {#if economy && r.payouts[me] > 0}<p class="gain" in:fly={{ y: 12, delay: 300 }}><Money amount={r.payouts[me]} sign /></p>{/if}
-        {#if myPerk}
-          <PerkPanel perk={myPerk} />
-        {:else}
-          <button class="btn block close" onclick={() => (local.closed = m.id)}>Close</button>
-        {/if}
+        <button class="btn block close" onclick={() => (local.closed = m.id)}>Close</button>
       </div>
     {/if}
   </div>
-{:else if myPerk}
-  <!-- The game is over, the prize goes on -->
-  <div class="screen"><div class="col"><PerkPanel perk={myPerk} /></div></div>
+
 {:else if received}
   {@const info = gameInfo(received.game)!}
   <div class="screen">

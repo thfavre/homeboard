@@ -153,16 +153,11 @@ export interface MatchState {
 /**
  * A prize the winner plays with for a while after the game, until the time is up or they close it.
  * lights: Color Reflex, they pick the color of every light. scratch: Perfect Circle, their best circle
- * becomes a vinyl they scratch from the phone, live on the TV.
+ * becomes a vinyl they scratch from the phone, live on the TV (in place of the music's "Up next").
  */
 export type Perk = { guest: GamePlayer; until: number; totalMs: number } & (
   | { kind: 'lights'; color: GameColor | null }
-  | {
-      kind: 'scratch';
-      drawing: CircleDrawing;
-      /** The winner touched the record: the TV switches from the result to the vinyl */
-      live: boolean;
-    }
+  | { kind: 'scratch'; drawing: CircleDrawing }
 );
 
 /** Scratch moves, phone to TV: the record angle (radians, unbounded) and whether a finger is on it */
