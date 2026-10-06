@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte';
   import { Eraser, Hand, Paintbrush, ZoomIn, ZoomOut } from '@lucide/svelte';
   import type { CanvasState } from '$shared/canvas.ts';
-  import { hb, rpc, price, toast } from '$lib/client.svelte.ts';
+  import { hb, moneyAlert, rpc, price, toast } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import { PixelBoard } from './board.ts';
 
@@ -70,7 +70,10 @@
     if (!mod || x < 0 || y < 0 || x >= mod.width || y >= mod.height) return;
     if (board.get(x, y) === color) return;
     if (!canAfford()) {
-      if (!warned) toast({ text: `Out of ${hb.core?.currency.name}. Check the Earn tab.`, kind: 'error' });
+      if (!warned) {
+        toast({ text: `Out of ${hb.core?.currency.name}. Check the Earn tab.`, kind: 'error' });
+        moneyAlert();
+      }
       warned = true;
       return;
     }

@@ -6,6 +6,7 @@ import type {
   JoinResult,
   Me,
   Role,
+  RpcErrorCode,
   RpcResponse,
   StateMessage,
   ToastMessage,
@@ -13,6 +14,12 @@ import type {
 } from '$shared/protocol.ts';
 
 export interface Toast extends ToastMessage {
+  id: number;
+}
+
+/** A glow around the guest's screen edge: green when an action worked, red when it failed */
+export interface Flash {
+  kind: 'success' | 'error';
   id: number;
 }
 
@@ -55,6 +62,9 @@ export const hb = $state({
   kickedReason: '',
   activity: [] as ActivityItem[],
   toasts: [] as Toast[],
+  flash: null as Flash | null,
+  /** Goes up each time the guest could not afford something: the balance badge reacts to it */
+  moneyAlert: 0,
 });
 
 let socket: Socket | null = null;
@@ -87,6 +97,7 @@ async function syncClock(s: Socket): Promise<void> {
 }
 const listeners = new Map<string, Set<(data: any) => void>>();
 let toastSeq = 0;
+let flashSeq = 0;
 
 export function connect(role: Role): void {
   hb.role = role;
@@ -161,7 +172,7 @@ export function rpc<T = unknown>(module: string, method: string, args?: unknown)
     socket.timeout(15000).emit('rpc', { module, method, args }, (err: Error | null, res: RpcResponse<T>) => {
       if (err) reject(new Error('The server did not answer'));
       else if (res.ok) resolve(res.data);
-      else reject(new Error(res.error));
+      else reject(Object.assign(new Error(res.error), { code: res.code }));
     });
   });
 }
@@ -175,19 +186,37 @@ export function onEvent<T = any>(module: string, name: string, fn: (data: T) => 
   return () => set.delete(fn);
 }
 
+/** Guest only: glow the screen edge (the admin keeps plain toasts) */
+export function flash(kind: Flash['kind']): void {
+  if (hb.role === 'guest') hb.flash = { kind, id: ++flashSeq };
+}
+
+/** The guest tried something they cannot afford: highlight their balance */
+export function moneyAlert(): void {
+  hb.moneyAlert++;
+}
+
 export function toast(msg: ToastMessage, ms = 3500): void {
+  if (msg.kind === 'success' || msg.kind === 'error') flash(msg.kind);
   const t = { ...msg, id: ++toastSeq };
   hb.toasts = [...hb.toasts, t].slice(-4);
   setTimeout(() => (hb.toasts = hb.toasts.filter((x) => x.id !== t.id)), ms);
 }
 
-/** Run an action and show its error as a toast. Returns undefined on failure. */
+/**
+ * Run an action and show its error as a toast. Returns undefined on failure.
+ * Guests get the green edge glow instead of the success message: it only confirms what they just did.
+ */
 export async function attempt<T>(fn: () => Promise<T>, success?: string): Promise<T | undefined> {
   try {
     const result = await fn();
-    if (success) toast({ text: success, kind: 'success' });
+    if (success) {
+      if (hb.role === 'guest') flash('success');
+      else toast({ text: success, kind: 'success' });
+    }
     return result;
   } catch (err) {
+    if ((err as { code?: RpcErrorCode }).code === 'NO_MONEY') moneyAlert();
     toast({ text: (err as Error).message, kind: 'error' }, 5000);
     return undefined;
   }

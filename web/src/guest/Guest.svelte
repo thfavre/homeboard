@@ -2,8 +2,9 @@
   import { ChevronLeft, House, Sparkles, UserRound } from '@lucide/svelte';
   import { fly } from 'svelte/transition';
   import { hb } from '$lib/client.svelte.ts';
-  import Money from '$lib/ui/Money.svelte';
+  import Balance from './Balance.svelte';
   import Toasts from '$lib/ui/Toasts.svelte';
+  import EdgeFlash from '$lib/ui/EdgeFlash.svelte';
   import DialogHost from '$lib/ui/DialogHost.svelte';
   import { applyTheme } from '../themes/index.ts';
   import { activeModules, clientModules } from '../modules/index.ts';
@@ -18,6 +19,7 @@
   type Tab = 'home' | 'earn' | 'me';
   let tab = $state<Tab>('home');
   let feature = $state<string | null>(null);
+  let headerHeight = $state(0);
 
   $effect(() => applyTheme(hb.core?.theme ?? hb.visitor?.theme));
 
@@ -60,7 +62,8 @@
   }
 </script>
 
-<Toasts />
+<Toasts top={hb.me && hb.core && !hb.needJoin && headerHeight ? headerHeight : undefined} />
+<EdgeFlash />
 <DialogHost />
 
 {#if avatarFlow.mode}
@@ -92,7 +95,7 @@
   <div class="splash"><p class="dim">Connecting...</p></div>
 {:else}
   <div class="app">
-    <header>
+    <header bind:offsetHeight={headerHeight}>
       {#if featureModule && !takeover}
         <button class="btn ghost back" onclick={() => (feature = null)} aria-label="Back"><ChevronLeft size={22} /></button>
         <h2 class="truncate">{featureModule.guest?.title}</h2>
@@ -102,7 +105,7 @@
       <span class="spacer"></span>
       {#if !hb.connected}<span class="pill danger">Offline</span>{/if}
       {#if hb.core.economyEnabled}
-        <button class="balance" onclick={() => go('earn')}><Money amount={hb.me.balance} /></button>
+        <Balance amount={hb.me.balance} onclick={() => go('earn')} />
       {/if}
     </header>
 
@@ -210,13 +213,6 @@
     min-height: 2.2rem;
     width: 2.2rem;
     margin-left: -0.4rem;
-  }
-  .balance {
-    border: 1px solid var(--border-strong);
-    background: var(--surface-2);
-    border-radius: 999px;
-    padding: 0.4rem 0.85rem;
-    font-size: 1rem;
   }
   main {
     flex: 1;

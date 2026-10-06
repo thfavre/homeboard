@@ -139,7 +139,7 @@ export class Economy {
     if (amount > 0) {
       if (guest.balance < amount) {
         const c = this.currency;
-        throw new HbError(`Not enough ${c.name}: this costs ${formatAmount(amount)} ${c.symbol}, you have ${formatAmount(guest.balance)} ${c.symbol}`);
+        throw new HbError(`Not enough ${c.name}: this costs ${formatAmount(amount)} ${c.symbol}, you have ${formatAmount(guest.balance)} ${c.symbol}`, 'NO_MONEY');
       }
       this.session.applyAmount(guest, -amount, reason);
     }
