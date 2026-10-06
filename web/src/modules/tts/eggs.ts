@@ -72,7 +72,7 @@ const EGGS: Egg[] = [
     text: 'gold',
     words: [
       'champion*', 'winner*', 'gagnant*', 'victory', 'victoire', 'gold', 'golden', 'medal*', 'medaille*', 'trophy',
-      'trophee', 'goat', 'legend*', 'legende*', 'number one', 'numero un', 'mvp', 'first place', 'king', 'roi', 'reine',
+      'trophee', 'goat', 'legend*', 'legende*', 'number one', 'mvp', 'first place', 'king', 'roi', 'reine',
     ],
   },
   {
