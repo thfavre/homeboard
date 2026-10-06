@@ -30,6 +30,7 @@ export function showGamesScreen(): boolean {
   if (!s || !me) return false;
   const m = s.match;
   if (myMatch()) return true;
+  if (s.perk?.guest.id === me) return true;
   if (s.invites.some((i) => i.to.id === me || i.from.id === me)) return true;
   return !!m && m.mode === 'room' && m.phase === 'lobby' && local.skipped !== m.id;
 }

@@ -81,8 +81,11 @@ export const perfectCircle: GameFactory = (m) => {
   };
 
   const end = () => {
+    const winners = best(m.players, (id) => total(id) || null);
+    const top = winners.length === 1 ? [...drawings.get(winners[0])!].sort((a, b) => b.score - a.score)[0] : undefined;
     m.finish({
-      winners: best(m.players, (id) => total(id) || null),
+      winners,
+      ...(top ? { perk: { kind: 'scratch' as const, drawing: top } } : {}),
       lines: [...m.players]
         .sort((a, b) => total(b.id) - total(a.id))
         .map((p) => {

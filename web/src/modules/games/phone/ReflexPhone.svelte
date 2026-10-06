@@ -3,49 +3,43 @@
   import { hb, rpc } from '$lib/client.svelte.ts';
   import ColorPad from '../ColorPad.svelte';
 
+  /** One tap per round; right or wrong and the time stay secret until the reveal on the TV */
   let { m }: { m: MatchState } = $props();
   const v = $derived(m.view as ReflexView);
   const me = $derived(hb.me?.id ?? '');
-  const out = $derived(v.out.includes(me));
+  const tapped = $derived(v.tapped.includes(me));
 
   // What happened to my tap this round
-  let mine = $state<{ round: number; result: string; ms?: number } | null>(null);
-  const result = $derived(mine?.round === v.round ? mine : null);
-  const nameOf = (id: string | null) => m.players.find((p) => p.id === id)?.name ?? '';
+  let mine = $state<{ round: number; result: string } | null>(null);
+  const result = $derived(mine?.round === v.round ? mine.result : null);
   const colorName = (c: GameColor | null) => GAME_COLORS.find((x) => x.id === c)?.name ?? '';
 
   async function pick(c: GameColor) {
-    if (out || (result && result.result !== 'ignored')) return;
+    if (tapped || v.step === 'done' || v.step === 'reveal') return;
     const round = v.round;
-    const r = await rpc<{ result: string; ms?: number }>('games', 'play', { color: c }).catch(() => null);
-    if (r) mine = { round, ...r };
+    const r = await rpc<{ result: string }>('games', 'play', { color: c }).catch(() => null);
+    if (r) mine = { round, result: r.result };
   }
 </script>
 
 <div class="reflex">
   <div class="top">
-    <span class="eyebrow">Round {v.round} of {v.rounds}</span>
-    <span class="mono score">{v.scores[me] ?? 0} pts</span>
+    <span class="eyebrow">{v.step === 'reveal' ? 'All rounds played' : `Round ${v.round} of ${v.rounds}`}</span>
   </div>
 
-  <div class="status" class:go={v.step === 'go' && !out}>
-    {#if v.step === 'won'}
-      {#if v.roundWinner === me}
-        <h1>You got it</h1>
-        <p class="dim">{v.reactionMs} ms</p>
-      {:else if v.roundWinner}
-        <h1>{nameOf(v.roundWinner)} was faster</h1>
-        <p class="dim">It was {colorName(v.color)}, {v.reactionMs} ms</p>
-      {:else}
-        <h1>Nobody got it</h1>
-        <p class="dim">It was {colorName(v.color)}</p>
-      {/if}
-    {:else if result?.result === 'early'}
+  <div class="status" class:go={v.step === 'go' && !tapped}>
+    {#if v.step === 'reveal'}
+      <h1>Look at the TV</h1>
+      <p class="dim">The times are coming...</p>
+    {:else if result === 'early'}
       <h1>Too early</h1>
       <p class="dim">Wait for the color next round.</p>
-    {:else if result?.result === 'wrong' || out}
-      <h1>Wrong color</h1>
-      <p class="dim">Out for this round.</p>
+    {:else if tapped}
+      <h1>Locked in</h1>
+      <p class="dim">{v.step === 'done' ? `It was ${colorName(v.color)}` : 'Your time stays secret until the end.'}</p>
+    {:else if v.step === 'done'}
+      <h1>Too slow</h1>
+      <p class="dim">It was {colorName(v.color)}</p>
     {:else if v.step === 'go'}
       <h1>NOW</h1>
     {:else if v.step === 'wait'}
@@ -57,7 +51,7 @@
     {/if}
   </div>
 
-  <ColorPad onpick={pick} disabled={out || v.step === 'won'} />
+  <ColorPad onpick={pick} disabled={tapped || v.step === 'done' || v.step === 'reveal'} />
 </div>
 
 <style>
@@ -69,10 +63,6 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-  }
-  .score {
-    font-weight: 700;
-    font-size: 1.1rem;
   }
   .status {
     display: grid;

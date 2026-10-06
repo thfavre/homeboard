@@ -42,10 +42,10 @@ export const GAMES: GameInfo[] = [
     id: 'reflex',
     name: 'Color Reflex',
     tagline: 'Tap the color of the lights before anyone else',
-    rules: 'When the lights change color, tap that color on your phone. Fastest right tap wins the round. Tap too early or the wrong color and you miss the round.',
+    rules: 'When the lights change color, tap that color on your phone as fast as you can. Your times add up over the rounds and stay secret until the end. Too early, wrong color or no tap: a 3 second penalty. Lowest total wins.',
     modes: ['duel', 'room'],
     lights: true,
-    steps: ['The lights go dark... then change color', 'Tap that color before anyone else', 'Too early or wrong: you miss the round'],
+    steps: ['The lights go dark... then change color', 'Tap that color as fast as you can', 'Times revealed at the end: lowest total wins'],
     colors: ['#ffd23d', '#ff6a3d'],
   },
   {
@@ -150,9 +150,31 @@ export interface MatchState {
   ready: string[];
 }
 
+/**
+ * A prize the winner plays with for a while after the game, until the time is up or they close it.
+ * lights: Color Reflex, they pick the color of every light. scratch: Perfect Circle, their best circle
+ * becomes a vinyl they scratch from the phone, live on the TV.
+ */
+export type Perk = { guest: GamePlayer; until: number; totalMs: number } & (
+  | { kind: 'lights'; color: GameColor | null }
+  | {
+      kind: 'scratch';
+      drawing: CircleDrawing;
+      /** The winner touched the record: the TV switches from the result to the vinyl */
+      live: boolean;
+    }
+);
+
+/** Scratch moves, phone to TV: the record angle (radians, unbounded) and whether a finger is on it */
+export interface ScratchMove {
+  angle: number;
+  touching: boolean;
+}
+
 export interface GamesState {
   invites: DuelInvite[];
   match: MatchState | null;
+  perk: Perk | null;
   /** WLED lights can show the game colors */
   lights: boolean;
   /** Guests online with their balance, to pick an opponent who can match the bet */
@@ -173,6 +195,10 @@ export interface GamesSettings {
   circleCount: number;
   /** Rounds of Color Reflex */
   reflexRounds: number;
+  /** Seconds the Color Reflex winner controls the lights (0: off) */
+  reflexPerkSec: number;
+  /** Seconds the Perfect Circle winner scratches their circle on the TV (0: off) */
+  circlePerkSec: number;
   /** Colors in the first sequence of Light Simon */
   simonStart: number;
 }
@@ -220,18 +246,27 @@ export interface SimonView {
   flash?: GameColor | null;
 }
 
+/** One round of one player: the reaction time, or why it was missed (then it counts as the penalty) */
+export interface ReflexTap {
+  ms: number | null;
+  miss?: 'early' | 'wrong' | 'none';
+}
+
 export interface ReflexView {
   round: number;
   rounds: number;
-  /** 'wait': lights are dark, 'go': color is on, 'won': someone got it */
-  step: 'ready' | 'wait' | 'go' | 'won';
-  scores: Record<string, number>;
-  /** Players who cannot tap any more this round */
-  out: string[];
-  roundWinner: string | null;
-  reactionMs: number | null;
-  /** Shown once the round is decided (and to the TV during 'go') */
+  /** 'wait': lights are dark, 'go': color is on, 'done': round over, 'reveal': the TV shows the times */
+  step: 'ready' | 'wait' | 'go' | 'done' | 'reveal';
+  /** Players who tapped this round (no result, that stays secret) */
+  tapped: string[];
+  /** The round color: the TV gets it during 'go', the phones once the round is over */
   color: GameColor | null;
+  /** A miss counts as this many ms */
+  penaltyMs: number;
+  /** From the reveal on: every round of every player, revealed one by one (round 1 of everyone, then round 2...) */
+  taps?: Record<string, ReflexTap[]>;
+  revealAt?: number;
+  stepMs?: number;
 }
 
 export interface CircleDrawing {

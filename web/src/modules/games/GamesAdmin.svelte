@@ -25,6 +25,14 @@
     { key: 'reflexRounds', label: 'Color Reflex rounds', max: 15 },
     { key: 'simonStart', label: 'Light Simon: colors in the first round', max: 10 },
   ] as const;
+  /** Seconds the winner plays with their prize (0: no prize) */
+  const PERKS = [
+    { key: 'reflexPerkSec', label: 'Color Reflex: the winner controls the lights' },
+    { key: 'circlePerkSec', label: 'Perfect Circle: the winner scratches their circle on the TV' },
+  ] as const;
+  const PERK_STEPS = [0, 15, 30, 45, 60, 90, 120, 180, 300];
+  const perkStep = (now: number, dir: 1 | -1) =>
+    dir > 0 ? (PERK_STEPS.find((x) => x > now) ?? now) : ([...PERK_STEPS].reverse().find((x) => x < now) ?? now);
   const PHASES = { lobby: 'Waiting for players', intro: 'Showing the rules', play: 'Playing', result: 'Showing the result' } as const;
   const setSettings = (patch: object) => attempt(() => rpc('games', 'setSettings', patch));
 
@@ -115,6 +123,17 @@
           <button class="btn small" disabled={n <= 1} onclick={() => setSettings({ [r.key]: n - 1 })}><Minus size={16} /></button>
           <strong class="mono">{n}</strong>
           <button class="btn small" disabled={n >= r.max} onclick={() => setSettings({ [r.key]: n + 1 })}><Plus size={16} /></button>
+        </span>
+      </div>
+    {/each}
+    {#each PERKS as r (r.key)}
+      {@const n = s.settings[r.key]}
+      <div class="line">
+        <span>{r.label} <span class="faint small">Seconds, 0 = no prize</span></span>
+        <span class="stepper">
+          <button class="btn small" disabled={n <= 0} onclick={() => setSettings({ [r.key]: perkStep(n, -1) })}><Minus size={16} /></button>
+          <strong class="mono">{n}</strong>
+          <button class="btn small" disabled={n >= 300} onclick={() => setSettings({ [r.key]: perkStep(n, 1) })}><Plus size={16} /></button>
         </span>
       </div>
     {/each}

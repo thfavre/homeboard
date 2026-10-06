@@ -13,12 +13,13 @@ import {
   type MatchPhase,
   type MatchResult,
   type MatchState,
+  type Perk,
 } from '../../../shared/games.ts';
 import { formatAmount } from '../../../shared/money.ts';
 import type { Charge } from '../../core/economy.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
-import { HbError, num, uid } from '../../core/util.ts';
+import { HbError, clamp, num, uid } from '../../core/util.ts';
 import type { LightsApi } from '../wled/index.ts';
 import type { GameFactory, GameRuntime, MatchApi, Outcome } from './engine.ts';
 import { blindTimer } from './timer.ts';
@@ -80,11 +81,13 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
     let match: Match | null = null;
+    let perk: Perk | null = null;
+    let perkTimer: NodeJS.Timeout | null = null;
 
     ctx.price({ key: 'games.duel', label: 'Challenge someone to a duel', default: 5000 });
     ctx.price({ key: 'games.room', label: 'Start a game for the room', default: 5000 });
@@ -162,8 +165,39 @@ export default defineModule<GamesSettings>({
       for (const t of m.timers) clearTimeout(t);
       match = null;
       if (m.usesLights) void lights()?.release();
-      ctx.takeover.stop();
+      // The scratch prize keeps the TV after the result
+      if (perk?.kind !== 'scratch') ctx.takeover.stop();
       ctx.publish();
+    };
+
+    /**
+     * End the winner's prize. `keepLights`: a new light game takes the lights over as they are,
+     * instead of restoring them in between.
+     */
+    const endPerk = (keepLights = false) => {
+      const p = perk;
+      if (!p) return;
+      perk = null;
+      if (perkTimer) clearTimeout(perkTimer);
+      perkTimer = null;
+      if (p.kind === 'lights' && !keepLights) void lights()?.release();
+      if (p.kind === 'scratch' && !match) ctx.takeover.stop();
+      ctx.publish();
+    };
+
+    /** Called when a game ends: true when the winner got a prize (it keeps the lights then) */
+    const startPerk = (m: Match, outcome: Outcome): boolean => {
+      const winner = outcome.winners.length === 1 ? m.players.find((p) => p.id === outcome.winners[0]) : undefined;
+      if (!outcome.perk || !winner) return false;
+      const s = ctx.settings.get();
+      const sec = outcome.perk.kind === 'lights' ? s.reflexPerkSec : s.circlePerkSec;
+      if (sec <= 0) return false;
+      if (outcome.perk.kind === 'lights' && !(m.usesLights && lightsOn())) return false;
+      endPerk();
+      const base = { guest: winner, until: Date.now() + sec * 1000, totalMs: sec * 1000 };
+      perk = outcome.perk.kind === 'lights' ? { ...base, kind: 'lights', color: null } : { ...base, kind: 'scratch', drawing: outcome.perk.drawing, live: false };
+      perkTimer = setTimeout(() => endPerk(), sec * 1000);
+      return true;
     };
 
     const cancel = (why: string, refund = true) => {
@@ -181,6 +215,9 @@ export default defineModule<GamesSettings>({
 
     const createMatch = (game: GameId, mode: GameMode, starter: GamePlayer | null, players: GamePlayer[], stake: number, charges: Charge[]) => {
       tvFree();
+      // A new game ends the prize; a light game takes the lights straight from it
+      const handOver = perk?.kind === 'lights' && !!gameInfo(game)?.lights;
+      endPerk(handOver);
       ctx.takeover.start();
       match = {
         id: uid(6),
@@ -198,7 +235,8 @@ export default defineModule<GamesSettings>({
         charges,
         timers: new Set(),
         lightColor: null,
-        usesLights: false,
+        // Lights handed over by the prize: released when this game is over, even if it never starts
+        usesLights: handOver,
         ready: new Set(),
       };
       return match;
@@ -275,9 +313,11 @@ export default defineModule<GamesSettings>({
       const headline = outcome.headline ?? (names.length === 1 ? `${names[0]} wins` : names.length ? `Tie: ${names.join(' and ')}` : 'Nobody wins');
       m.result = { winners: outcome.winners, lines: outcome.lines, payouts, headline };
       m.phase = 'result';
+      const prize = startPerk(m, outcome);
       if (m.usesLights) {
         m.usesLights = false;
-        void lights()?.release();
+        // A lights prize keeps them: released when it ends
+        if (!(prize && perk?.kind === 'lights')) void lights()?.release();
       }
       const top = outcome.winners.length === 1 ? ctx.session.guests.get(outcome.winners[0]) : undefined;
       if (top) ctx.activity(`{name} won ${name}${pot ? ` and a pot of ${fmt(pot)}` : ''}`, { guest: top });
@@ -486,6 +526,8 @@ export default defineModule<GamesSettings>({
         circleCount: args?.circleCount !== undefined ? Math.min(10, Math.max(1, Math.round(num(args.circleCount, 3)))) : s.circleCount,
         reflexRounds: args?.reflexRounds !== undefined ? Math.min(15, Math.max(1, Math.round(num(args.reflexRounds, 5)))) : s.reflexRounds,
         simonStart: args?.simonStart !== undefined ? Math.min(10, Math.max(1, Math.round(num(args.simonStart, 1)))) : s.simonStart,
+        reflexPerkSec: args?.reflexPerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.reflexPerkSec, 60)))) : s.reflexPerkSec,
+        circlePerkSec: args?.circlePerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.circlePerkSec, 60)))) : s.circlePerkSec,
       });
       ctx.publish();
     });
@@ -519,6 +561,7 @@ export default defineModule<GamesSettings>({
       return {
         invites: [...invites.values()].map(({ charges: _c, timer: _t, ...inv }) => inv),
         match: state,
+        perk,
         lights: lightsOn(),
         online: role === 'tv' ? [] : [...ctx.session.guests.values()].filter((g) => g.sockets > 0).map((g) => ({ ...player(g), balance: g.balance })),
         settings: ctx.settings.get(),
@@ -532,7 +575,44 @@ export default defineModule<GamesSettings>({
     const stopAll = (refund: boolean) => {
       for (const inv of [...invites.values()]) dropInvite(inv, refund ? 'Your challenge was cancelled' : null);
       cancel('The game was stopped', refund);
+      endPerk();
     };
+
+    // ------------------------------------------------------------ the winner's prize
+
+    const myPerk = (guest: Guest) => {
+      if (perk?.guest.id !== guest.id) throw new HbError('Your prize is over');
+      return perk;
+    };
+
+    ctx.onGuest('perkColor', (args, guest) => {
+      const p = myPerk(guest);
+      if (p.kind !== 'lights') throw new HbError('Your prize is over');
+      const c = GAME_COLORS.find((x) => x.id === args?.color);
+      if (!c) throw new HbError('Pick a color');
+      p.color = c.id;
+      lights()?.color(c.led);
+      ctx.publish();
+      return true;
+    });
+
+    /** Scratch moves go straight to the TV, without a state update each time */
+    ctx.onGuest('scratch', (args, guest) => {
+      if (perk?.kind !== 'scratch' || perk.guest.id !== guest.id) return false;
+      if (!perk.live) {
+        perk.live = true;
+        ctx.publish();
+      }
+      const angle = num(args?.angle, 0);
+      ctx.emit('tv', 'scratch', { angle: Number.isFinite(angle) ? clamp(angle, -1e6, 1e6) : 0, touching: !!args?.touching });
+      return true;
+    });
+
+    ctx.onGuest('perkEnd', (_args, guest) => {
+      myPerk(guest);
+      endPerk();
+      return true;
+    });
     ctx.onToggle((on) => {
       if (!on) stopAll(true);
     });

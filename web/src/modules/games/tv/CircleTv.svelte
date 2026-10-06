@@ -8,6 +8,7 @@
   import Money from '$lib/ui/Money.svelte';
   import Ring from '../../quiz/Ring.svelte';
   import CountUp from '../ui/CountUp.svelte';
+  import { circlePath } from '../ui/circlePath.ts';
   import { Now } from '../store.svelte.ts';
 
   /**
@@ -36,18 +37,6 @@
   const winners = $derived(m.result?.winners ?? []);
   // Smaller drawings when there are many players
   const size = $derived(Math.min(9, 58 / Math.max(1, m.players.length) - 1.2));
-
-  /** Center a drawing in a 100x100 box */
-  function path(points: [number, number][]): string {
-    if (points.length < 2) return '';
-    const xs = points.map((p) => p[0]);
-    const ys = points.map((p) => p[1]);
-    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 0.01);
-    const k = 84 / span;
-    return points.map(([x, y], i) => `${i ? 'L' : 'M'}${(50 + (x - cx) * k).toFixed(1)} ${(50 + (y - cy) * k).toFixed(1)}`).join(' ');
-  }
 </script>
 
 {#if v.step === 'draw'}
@@ -85,7 +74,7 @@
                   <span class="shown" in:scale={{ start: 1.6, duration: 450, opacity: 0 }}>
                     <svg viewBox="0 0 100 100">
                       <circle cx="50" cy="50" r="42" class="guide" />
-                      {#if d}<path d={path(d.points)} style:stroke={row.p.color} />{/if}
+                      {#if d}<path d={circlePath(d.points)} style:stroke={row.p.color} />{/if}
                     </svg>
                     <span class="score mono" class:good={(d?.score ?? 0) >= 85} class:bad={!d || d.score < 70}>{d ? `${d.score.toFixed(1)}%` : 'none'}</span>
                   </span>

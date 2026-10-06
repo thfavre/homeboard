@@ -1,12 +1,18 @@
-import { GAME_COLORS, type GameColor, type ReflexView } from '../../../shared/games.ts';
+import { GAME_COLORS, type GameColor, type ReflexTap, type ReflexView } from '../../../shared/games.ts';
 import { HbError } from '../../core/util.ts';
 import { best, type GameFactory } from './engine.ts';
 
 const READY_MS = 1800;
 const GO_MS = 3000;
-const SHOW_MS = 2600;
+/** A miss (too early, wrong color, no tap) counts as this */
+const PENALTY_MS = GO_MS;
+const DONE_MS = 1400;
+/** Reveal: one time every STEP_MS at most, the whole reveal within REVEAL_MAX_MS, then the totals */
+const STEP_MS = 900;
+const REVEAL_MAX_MS = 15_000;
+const REVEAL_HOLD_MS = 3500;
 
-/** Color Reflex: tap the color the lights turn, before everyone else */
+/** Color Reflex: everyone taps the color of the lights as fast as they can; times stay secret until the reveal */
 export const colorReflex: GameFactory = (m) => {
   const rounds = Math.max(1, m.settings.reflexRounds);
   let round = 0;
@@ -14,20 +20,21 @@ export const colorReflex: GameFactory = (m) => {
   let color: GameColor | null = null;
   let previous: GameColor | null = null;
   let goAt = 0;
-  let out = new Set<string>();
-  let roundWinner: string | null = null;
-  let reactionMs: number | null = null;
-  const scores = new Map<string, number>(m.players.map((p) => [p.id, 0]));
-  const fastest = new Map<string, number>();
+  /** This round's taps */
+  let taps = new Map<string, ReflexTap>();
+  const history = new Map<string, ReflexTap[]>(m.players.map((p) => [p.id, []]));
+  let revealAt = 0;
+  let stepMs = 0;
+
+  const score = (t: ReflexTap) => t.ms ?? PENALTY_MS;
+  const total = (id: string) => history.get(id)!.reduce((s, t) => s + score(t), 0);
 
   const nextRound = () => {
     round += 1;
     step = 'ready';
     previous = color ?? previous;
     color = null;
-    out = new Set();
-    roundWinner = null;
-    reactionMs = null;
+    taps = new Map();
     m.light(null);
     m.deadline(null);
     m.publish();
@@ -39,32 +46,57 @@ export const colorReflex: GameFactory = (m) => {
   };
 
   const go = () => {
+    if (step !== 'wait') return;
     const choices = GAME_COLORS.map((c) => c.id).filter((c) => c !== previous);
     color = choices[Math.floor(Math.random() * choices.length)];
     step = 'go';
     goAt = Date.now();
     m.light(color);
     m.deadline(GO_MS);
-    m.later(GO_MS, () => step === 'go' && endRound());
+    const r = round;
+    // Only this round: it may have ended early, when everyone had tapped
+    m.later(GO_MS, () => round === r && endRound());
     m.publish();
+    // Everyone jumped the gun: nothing to wait for
+    if (m.players.every((p) => taps.has(p.id))) m.later(400, endRound);
   };
 
   const endRound = () => {
-    step = 'won';
+    if (step !== 'go') return;
+    step = 'done';
     m.deadline(null);
+    for (const p of m.players) history.get(p.id)!.push(taps.get(p.id) ?? { ms: null, miss: 'none' });
     m.publish();
-    m.later(SHOW_MS, () => {
-      if (round < rounds) return nextRound();
-      m.light(null);
-      const order = [...m.players].sort((a, b) => scores.get(b.id)! - scores.get(a.id)! || (fastest.get(a.id) ?? 1e9) - (fastest.get(b.id) ?? 1e9));
-      m.finish({
-        winners: best(m.players, (id) => scores.get(id) || null),
-        lines: order.map((p) => {
-          const s = scores.get(p.id)!;
-          const f = fastest.get(p.id);
-          return { id: p.id, label: `${s} ${s === 1 ? 'point' : 'points'}`, detail: f ? `Fastest: ${f} ms` : 'No round won' };
+    m.later(DONE_MS, () => (round < rounds ? nextRound() : reveal()));
+  };
+
+  const reveal = () => {
+    step = 'reveal';
+    m.light(null);
+    const steps = m.players.length * rounds;
+    stepMs = Math.round(Math.min(STEP_MS, REVEAL_MAX_MS / steps));
+    revealAt = Date.now() + 1200;
+    m.publish();
+    m.later(1200 + steps * stepMs + REVEAL_HOLD_MS, end);
+  };
+
+  const end = () => {
+    const hits = (id: string) => history.get(id)!.filter((t) => t.ms !== null);
+    const winners = best(m.players, total, false);
+    m.finish({
+      winners,
+      lines: [...m.players]
+        .sort((a, b) => total(a.id) - total(b.id))
+        .map((p) => {
+          const h = hits(p.id);
+          const fastest = h.length ? Math.min(...h.map((t) => t.ms!)) : null;
+          return {
+            id: p.id,
+            label: `${(total(p.id) / 1000).toFixed(2)} s`,
+            detail: `${h.length} of ${rounds} right${fastest !== null ? `, fastest ${fastest} ms` : ''}`,
+          };
         }),
-      });
+      perk: { kind: 'lights' },
     });
   };
 
@@ -74,26 +106,19 @@ export const colorReflex: GameFactory = (m) => {
     },
 
     input(id, args) {
-      if (out.has(id)) throw new HbError('Wait for the next round');
+      if (taps.has(id)) throw new HbError('Already in for this round');
       if (step === 'ready') return { result: 'ignored' };
       if (step === 'wait') {
-        out.add(id);
+        taps.set(id, { ms: null, miss: 'early' });
         m.publish();
         return { result: 'early' };
       }
       if (step !== 'go') return { result: 'late' };
-      if (args?.color !== color) {
-        out.add(id);
-        if (m.players.every((p) => out.has(p.id))) endRound();
-        else m.publish();
-        return { result: 'wrong' };
-      }
-      roundWinner = id;
-      reactionMs = Date.now() - goAt;
-      scores.set(id, scores.get(id)! + 1);
-      if (!fastest.has(id) || reactionMs < fastest.get(id)!) fastest.set(id, reactionMs);
-      endRound();
-      return { result: 'won', ms: reactionMs };
+      // Right or wrong stays secret until the reveal
+      taps.set(id, args?.color === color ? { ms: Date.now() - goAt } : { ms: null, miss: 'wrong' });
+      if (m.players.every((p) => taps.has(p.id))) m.later(400, endRound);
+      m.publish();
+      return { result: 'in' };
     },
 
     view(role): ReflexView {
@@ -101,12 +126,11 @@ export const colorReflex: GameFactory = (m) => {
         round,
         rounds,
         step,
-        scores: Object.fromEntries(scores),
-        out: [...out],
-        roundWinner,
-        reactionMs,
-        // Phones only learn the color once the round is decided
+        tapped: [...taps.keys()],
+        // Phones only learn the color once the round is over
         color: role === 'guest' && step === 'go' ? null : color,
+        penaltyMs: PENALTY_MS,
+        ...(step === 'reveal' ? { taps: Object.fromEntries(history), revealAt, stepMs } : {}),
       };
     },
   };

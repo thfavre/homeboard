@@ -1,5 +1,5 @@
 import type { Role } from '../../../shared/protocol.ts';
-import type { GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine } from '../../../shared/games.ts';
+import type { CircleDrawing, GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine } from '../../../shared/games.ts';
 
 /** How a game ended. The match pays out from it. */
 export interface Outcome {
@@ -8,6 +8,8 @@ export interface Outcome {
   /** Every player, best first */
   lines: MatchResultLine[];
   headline?: string;
+  /** A prize for the winner when there is only one (see Perk) */
+  perk?: { kind: 'lights' } | { kind: 'scratch'; drawing: CircleDrawing };
   /**
    * Custom payout instead of "winners share the pot" (amounts credited per guest id).
    * Room rewards are not added then.

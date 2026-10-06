@@ -22,7 +22,7 @@ type View = Component<{ m: MatchState }>;
 export const GAME_UI: Record<GameId, { phone: View; tv: View; tvResult?: boolean }> = {
   timer: { phone: TimerPhone, tv: TimerTv, tvResult: true },
   simon: { phone: SimonPhone, tv: SimonTv },
-  reflex: { phone: ReflexPhone, tv: ReflexTv },
+  reflex: { phone: ReflexPhone, tv: ReflexTv, tvResult: true },
   circle: { phone: CirclePhone, tv: CircleTv, tvResult: true },
   bluff: { phone: BluffPhone, tv: BluffTv, tvResult: true },
   coin: { phone: CoinPhone, tv: CoinTv, tvResult: true },

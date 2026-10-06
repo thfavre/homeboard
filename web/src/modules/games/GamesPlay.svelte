@@ -11,6 +11,7 @@
   import Versus from './ui/Versus.svelte';
   import PotPanel from './ui/PotPanel.svelte';
   import Fuse from './ui/Fuse.svelte';
+  import PerkPanel from './perk/PerkPanel.svelte';
 
   /** Everything a phone shows for games: challenges, the room lobby, the game itself, the result */
   const s = $derived(gamesState());
@@ -21,6 +22,7 @@
   const received = $derived(s?.invites.find((i) => i.to.id === me));
   const sent = $derived(s?.invites.find((i) => i.from.id === me));
   const economy = $derived(!!hb.core?.economyEnabled);
+  const myPerk = $derived(s?.perk?.guest.id === me ? s.perk : null);
   const now = new Now(250);
   let busy = $state(false);
 
@@ -97,22 +99,32 @@
       {@const won = r.winners.includes(me)}
       {@const line = r.lines.find((l) => l.id === me)}
       <div class="col result" class:won style:--g1={info.colors[0]} style:--g2={info.colors[1]} in:fade>
-        <div class="medal" in:scale={{ start: 0.4, duration: 500 }}>
-          {#if won}<Crown size={46} />{:else}<Avatar name={hb.me?.name ?? ''} color={hb.me?.color ?? '#888'} src={hb.me?.avatar} size="5.5rem" />{/if}
-        </div>
-        <span class="eyebrow">{r.headline}</span>
+        <!-- With a prize, a short header so the prize fits on the screen -->
+        {#if !myPerk}
+          <div class="medal" in:scale={{ start: 0.4, duration: 500 }}>
+            {#if won}<Crown size={46} />{:else}<Avatar name={hb.me?.name ?? ''} color={hb.me?.color ?? '#888'} src={hb.me?.avatar} size="5.5rem" />{/if}
+          </div>
+          <span class="eyebrow">{r.headline}</span>
+        {/if}
         <h1>{won ? (r.winners.length > 1 ? 'Shared win' : 'You won!') : 'Not this time'}</h1>
-        {#if line}
+        {#if line && !myPerk}
           <div class="stat">
             <span class="mono">{line.label}</span>
             {#if line.detail}<span class="dim">{line.detail}</span>{/if}
           </div>
         {/if}
         {#if economy && r.payouts[me] > 0}<p class="gain" in:fly={{ y: 12, delay: 300 }}><Money amount={r.payouts[me]} sign /></p>{/if}
-        <button class="btn block close" onclick={() => (local.closed = m.id)}>Close</button>
+        {#if myPerk}
+          <PerkPanel perk={myPerk} />
+        {:else}
+          <button class="btn block close" onclick={() => (local.closed = m.id)}>Close</button>
+        {/if}
       </div>
     {/if}
   </div>
+{:else if myPerk}
+  <!-- The game is over, the prize goes on -->
+  <div class="screen"><div class="col"><PerkPanel perk={myPerk} /></div></div>
 {:else if received}
   {@const info = gameInfo(received.game)!}
   <div class="screen">
