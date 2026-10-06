@@ -1,7 +1,8 @@
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import express from 'express';
-import { SYNTH_SOUNDS, type PlayEvent, type Sound, type SoundboardState } from '../../../shared/soundboard.ts';
+import { SYNTH_SOUNDS, type MiSound, type PlayEvent, type Sound, type SoundboardState } from '../../../shared/soundboard.ts';
+import { JsonFile } from '../../core/jsonFile.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
 import { HbError, clamp, cleanName, num, uid } from '../../core/util.ts';
@@ -15,6 +16,9 @@ interface SoundboardSettings {
   guestSearch: boolean;
   searchMaxSec: number;
 }
+
+/** Sounds a guest can keep on their own board */
+const MAX_MINE = 30;
 
 const AUDIO_TYPES: Record<string, string> = {
   'audio/mpeg': 'mp3',
@@ -40,6 +44,20 @@ export default defineModule<SoundboardSettings>({
     const media = ctx.mediaDir();
     // Sounds guests found on MyInstants, downloaded on demand
     const cache = ctx.mediaDir('myinstants');
+    // Each guest's own board ("My sounds"), by guest id. Cleared with the session, like the guests.
+    const personal = new JsonFile<{ guests: Record<string, MiSound[]> }>(join(ctx.dataDir, 'personal.json'), { guests: {} });
+    const mine = (guest: Guest) => personal.data.guests[guest.id] ?? [];
+    const setMine = (guest: Guest, list: MiSound[]) => {
+      personal.data.guests[guest.id] = list;
+      personal.save();
+      // Other phones logged in as the same guest
+      ctx.emit({ guest: guest.id }, 'mine', list);
+      return list;
+    };
+    ctx.onSessionReset(() => {
+      personal.data.guests = {};
+      personal.save();
+    });
     let cooldownUntil = 0;
 
     const sounds = (admin = false): Sound[] => {
@@ -130,6 +148,23 @@ export default defineModule<SoundboardSettings>({
       guestPlays(sound, guest, ctx.settings.get().searchMaxSec || undefined);
       return true;
     });
+
+    ctx.onGuest('mine', (_args, guest) => (ctx.settings.get().guestSearch ? mine(guest) : []));
+
+    ctx.onGuest('saveMine', async (args, guest) => {
+      guestSearchOn();
+      const mp3 = cleanMp3(args.mp3);
+      const list = mine(guest);
+      if (list.some((x) => x.mp3 === mp3)) return list;
+      if (list.length >= MAX_MINE) throw new HbError(`Your board is full (${MAX_MINE} sounds). Remove one first.`);
+      // Download now: checks the sound exists, and playing it later is instant
+      await cached(mp3);
+      const now = mine(guest);
+      if (now.some((x) => x.mp3 === mp3)) return now;
+      return setMine(guest, [...now, { id: String(args.id ?? mp3).slice(0, 120), title: cleanName(args.title, 40) || 'Sound', mp3 }]);
+    });
+
+    ctx.onGuest('removeMine', (args, guest) => setMine(guest, mine(guest).filter((x) => x.mp3 !== args.mp3)));
 
     ctx.onAdmin('playSearch', async (args) => {
       const src = await cached(args.mp3);
