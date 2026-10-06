@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
-  import type { TtsEvent } from '$shared/tts.ts';
-  import { onEvent, rpc } from '$lib/client.svelte.ts';
+  import { TTS_LANGS, ttsLang, ttsSpeechMs, ttsStyle, type TtsEvent } from '$shared/tts.ts';
+  import { hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
 
   let current = $state<(TtsEvent & { key: number; durationMs: number }) | null>(null);
@@ -11,7 +11,25 @@
   let destroyed = false;
   let activeUtterance: SpeechSynthesisUtterance | null = null;
 
-  function speak(text: string, volume: number): Promise<void> {
+  const voiceLang = (v: SpeechSynthesisVoice) => v.lang.toLowerCase().replace('_', '-');
+
+  /** Best installed voice for a language: the system default if it fits, then an offline one */
+  function pickVoice(lang: string): SpeechSynthesisVoice | undefined {
+    const fitting = window.speechSynthesis.getVoices().filter((v) => voiceLang(v).startsWith(lang));
+    return fitting.find((v) => v.default) ?? fitting.find((v) => v.localService) ?? fitting[0];
+  }
+
+  /** Tell the server which languages this TV can speak, so the host sees a missing French voice */
+  function reportVoices() {
+    if (!('speechSynthesis' in window) || !hb.connected) return;
+    const voices = window.speechSynthesis.getVoices();
+    const langs = TTS_LANGS.filter((l) => voices.some((v) => voiceLang(v).startsWith(l.id))).map((l) => l.id);
+    void rpc('tts', 'voices', { langs }).catch(() => {});
+  }
+
+  function speak(item: TtsEvent): Promise<void> {
+    const { text, volume } = item;
+    const style = ttsStyle(item.style);
     return new Promise((resolve) => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
         resolve();
@@ -27,15 +45,12 @@
       const utterance = new SpeechSynthesisUtterance(text);
       activeUtterance = utterance;
       utterance.volume = Math.max(0, Math.min(1, volume));
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      utterance.lang = navigator.language || 'en-US';
-
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length > 0) {
-        const preferred = voices.find((v) => v.default) ?? voices.find((v) => v.lang.startsWith('en')) ?? voices[0];
-        if (preferred) utterance.voice = preferred;
-      }
+      utterance.rate = style.rate;
+      utterance.pitch = style.pitch;
+      const lang = ttsLang(item.lang) ?? TTS_LANGS[0];
+      utterance.lang = lang.bcp47;
+      const voice = pickVoice(lang.id);
+      if (voice) utterance.voice = voice;
 
       let done = false;
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -62,7 +77,7 @@
       }, 1000);
 
       // Fallback timeout in case speech synthesis stalls
-      timer = setTimeout(finish, Math.max(6000, text.length * 150));
+      timer = setTimeout(finish, Math.max(6000, (text.length * 150) / style.rate));
 
       try {
         window.speechSynthesis.speak(utterance);
@@ -82,7 +97,7 @@
         const key = ++seq;
 
         // Estimated reading & speech duration
-        const estimatedSpeechMs = Math.max(5000, Math.round((item.text.length / 12) * 1000) + 1500);
+        const estimatedSpeechMs = Math.max(5000, ttsSpeechMs(item.text, ttsStyle(item.style).rate) + 1500);
         const durationMs = Math.max(6500, estimatedSpeechMs + 2000);
 
         current = {
@@ -93,7 +108,7 @@
 
         // Play audio and wait for both speech & scroll
         // As soon as the voice stops, the music can come back up (the banner may still be scrolling)
-        const speechPromise = speak(item.text, item.volume).then(() => {
+        const speechPromise = speak(item).then(() => {
           void rpc('tts', 'spoken', { id: item.id }).catch(() => {});
         });
         const scrollPromise = new Promise((r) => setTimeout(r, durationMs));
@@ -119,6 +134,19 @@
       processing = false;
     }
   }
+
+  // Report on every (re)connection, once the voice list had time to load
+  $effect(() => {
+    if (!hb.connected) return;
+    const t = setTimeout(reportVoices, 1500);
+    return () => clearTimeout(t);
+  });
+
+  $effect(() => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.addEventListener('voiceschanged', reportVoices);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', reportVoices);
+  });
 
   $effect(() => {
     const unlock = () => {

@@ -1,4 +1,4 @@
-import type { TtsEvent, TtsSettings, TtsState } from '../../../shared/tts.ts';
+import { ttsLang, ttsSpeechMs, ttsStyle, type TtsEvent, type TtsLang, type TtsSettings, type TtsState } from '../../../shared/tts.ts';
 import type { Charge } from '../../core/economy.ts';
 import { defineModule } from '../../core/module.ts';
 import { HbError, clamp, num, uid } from '../../core/util.ts';
@@ -32,6 +32,8 @@ export default defineModule<TtsSettings>({
     pricingMode: 'flat',
     maxLength: 150,
     cooldownSec: 4,
+    defaultLang: 'en',
+    funnyVoices: true,
   },
 
   setup(ctx) {
@@ -39,6 +41,8 @@ export default defineModule<TtsSettings>({
     let playing: Queued | null = null;
     let failsafe: NodeJS.Timeout | null = null;
     let pauseTimer: NodeJS.Timeout | null = null;
+    /** Languages the TV has voices for (the last TV to report wins: it is the one that plays sound) */
+    let tvLangs: TtsLang[] | null = null;
 
     // Only one of the two prices is used, depending on the pricing mode
     ctx.price({ key: 'tts.message', label: 'Shoutout', default: 200, active: () => ctx.settings.get().pricingMode === 'flat' });
@@ -54,20 +58,33 @@ export default defineModule<TtsSettings>({
         maxLength: s.maxLength,
         cooldownSec: s.cooldownSec,
         waiting: queue.length + (playing ? 1 : 0),
+        defaultLang: s.defaultLang,
+        funnyVoices: s.funnyVoices,
+        tvLangs,
       };
     });
 
     // ------------------------------------------------------------ queue
 
-    const makeEvent = (text: string, guest: TtsEvent['guest'], anonymous: boolean): TtsEvent => ({
+    /** Language and voice asked by the caller, falling back to the host's choices */
+    const voiceOf = (args: any) => {
+      const s = ctx.settings.get();
+      return {
+        lang: ttsLang(args?.lang)?.id ?? s.defaultLang,
+        style: s.funnyVoices ? ttsStyle(args?.style).id : ('normal' as const),
+      };
+    };
+
+    const makeEvent = (text: string, guest: TtsEvent['guest'], anonymous: boolean, voice: ReturnType<typeof voiceOf>): TtsEvent => ({
       id: uid(6),
       text,
       volume: ctx.settings.get().volume,
+      ...voice,
       by: anonymous ? 'Anonymous' : (guest?.name ?? 'Guest'),
       anonymous,
       guest: anonymous ? undefined : guest,
-      // About 12 characters per second, plus time to read and scroll
-      durationMs: Math.max(5000, Math.round((text.length / 12) * 1000) + 2000),
+      // Speaking time, plus time to read and scroll
+      durationMs: Math.max(5000, ttsSpeechMs(text, ttsStyle(voice.style).rate) + 2000),
     });
 
     /** Play the next shoutout, unless one is playing or the pause is running */
@@ -116,6 +133,13 @@ export default defineModule<TtsSettings>({
       ctx.publish();
     };
 
+    /** The TV tells which languages its speech engine has voices for */
+    ctx.onTv('voices', (args) => {
+      const langs = Array.isArray(args?.langs) ? args.langs.map((l: unknown) => ttsLang(l)?.id).filter(Boolean) : [];
+      tvLangs = [...new Set(langs as TtsLang[])];
+      ctx.publish();
+    });
+
     /** The voice stopped: the music comes back up, even if the banner is still scrolling */
     ctx.onTv('spoken', (args) => {
       ctx.bus.emit('soundboard:ended', { id: String(args.id) });
@@ -140,7 +164,7 @@ export default defineModule<TtsSettings>({
           : ctx.economy.charge(guest, 'tts.message', 1, `Shoutout: "${snippet}"`);
 
       const position = enqueue({
-        event: makeEvent(text, { id: guest.id, name: guest.name, color: guest.color, avatar: guest.avatar?.url }, anonymous),
+        event: makeEvent(text, { id: guest.id, name: guest.name, color: guest.color, avatar: guest.avatar?.url }, anonymous, voiceOf(args)),
         charge,
       });
       // The feed never repeats the message; {name} becomes "Someone" when the host hides names
@@ -153,7 +177,7 @@ export default defineModule<TtsSettings>({
 
     ctx.onAdmin('test', (args) => {
       const text = cleanText(args?.text) || 'Testing text to speech on the TV.';
-      enqueue({ event: makeEvent(text, { id: 'host', name: 'Host', color: '#ffaa00' }, !!args?.anonymous), charge: null });
+      enqueue({ event: makeEvent(text, { id: 'host', name: 'Host', color: '#ffaa00' }, !!args?.anonymous, voiceOf(args)), charge: null });
       return true;
     });
 
@@ -165,6 +189,9 @@ export default defineModule<TtsSettings>({
       if (args.pricingMode === 'flat' || args.pricingMode === 'per_char') patch.pricingMode = args.pricingMode;
       if (args.maxLength !== undefined) patch.maxLength = clamp(Math.round(num(args.maxLength, 150)), 10, 1000);
       if (args.cooldownSec !== undefined) patch.cooldownSec = clamp(Math.round(num(args.cooldownSec, 4)), 0, 120);
+      const lang = ttsLang(args.defaultLang);
+      if (lang) patch.defaultLang = lang.id;
+      if (typeof args.funnyVoices === 'boolean') patch.funnyVoices = args.funnyVoices;
       ctx.settings.update(patch);
       // The active price may have changed: refresh the price lists of the host screens
       ctx.hub.publish('core');
