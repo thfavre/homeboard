@@ -168,7 +168,7 @@ export default defineModule<TtsSettings>({
     // ------------------------------------------------------------ host
 
     ctx.onAdmin('test', (args) => {
-      const text = cleanText(args?.text) || 'Hello party!';
+      const text = cleanText(args?.text) || 'Hello, this is a test';
       enqueue({ event: makeEvent(text, { id: 'host', name: 'Host', color: '#ffaa00' }, !!args?.anonymous, langOf(args)), charge: null });
       return true;
     });

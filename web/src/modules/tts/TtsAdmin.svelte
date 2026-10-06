@@ -13,7 +13,7 @@
   const cooldown = new Synced(() => mod?.cooldownSec, 4);
   const maxLength = new Synced(() => mod?.maxLength, 150);
 
-  let testText = $state('Hello party!');
+  let testText = $state('Hello, this is a test');
   let testAnonymous = $state(false);
   let testLang = $state<TtsLang | ''>('');
 
