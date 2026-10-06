@@ -51,8 +51,9 @@
   .unlock,
   .playing {
     position: fixed;
+    /* In the footer row, under the side column (the activity ticker stays left of it) */
     right: 2rem;
-    bottom: 5rem;
+    bottom: 1.6rem;
     z-index: 45;
     display: flex;
     align-items: center;

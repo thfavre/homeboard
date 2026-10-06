@@ -25,6 +25,8 @@
     display: flex;
     gap: 0.7rem;
     overflow: hidden;
+    /* The space under the side column is for the "now playing" pill */
+    margin-right: calc(var(--tv-side) + var(--tv-gap));
     mask-image: linear-gradient(90deg, #000 85%, transparent);
   }
   .item {

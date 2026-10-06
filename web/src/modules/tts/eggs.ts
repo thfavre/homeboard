@@ -1,0 +1,194 @@
+/**
+ * Easter eggs of the TV shoutout banner: some words change how the banner looks.
+ * Words are matched case- and accent-insensitive, as whole words. A trailing * matches any ending,
+ * and a word starting with / is a raw regular expression (written without accents, in lowercase).
+ * A shoutout gets at most one text style, any number of overlays (the first two are kept) and the shout shake.
+ */
+
+export type TextFx = 'rainbow' | 'fire' | 'matrix' | 'glitch' | 'spooky' | 'gold' | 'sad' | 'disco' | 'love';
+export type OverlayFx =
+  | 'confetti'
+  | 'bubbles'
+  | 'hearts'
+  | 'snow'
+  | 'matrix'
+  | 'spooky'
+  | 'fireworks'
+  | 'disco'
+  | 'coins'
+  | 'rain'
+  | 'stars';
+
+interface Egg {
+  id: string;
+  words: string[];
+  text?: TextFx;
+  overlay?: OverlayFx;
+}
+
+/** In priority order: the first matching text style wins */
+const EGGS: Egg[] = [
+  {
+    id: 'pride',
+    text: 'rainbow',
+    words: ['lgbt*', 'gay', 'gays', 'lesbi*', 'queer', 'queers', 'pride', 'trans', 'bisexu*', 'non-binai*', 'non-binar*', 'nonbinai*', 'nonbinar*'],
+  },
+  {
+    id: 'spooky',
+    text: 'spooky',
+    overlay: 'spooky',
+    words: [
+      'halloween', 'boo', 'ghost*', 'fantome*', 'spooky', 'scary', 'zombie*', 'vampire*', 'witch*', 'sorciere*',
+      'pumpkin*', 'citrouille*', 'monster*', 'monstre*', 'skeleton*', 'squelette*', 'creepy', 'horror', 'horreur', 'trick or treat',
+    ],
+  },
+  {
+    id: 'matrix',
+    text: 'matrix',
+    overlay: 'matrix',
+    words: [
+      'matrix', 'matrice', 'hacker*', 'hacked', 'hacking', 'neo', 'cyber*', 'mainframe', 'red pill', 'blue pill',
+      'pilule rouge', 'pilule bleue', 'terminal', 'sudo', 'pirate informatique',
+    ],
+  },
+  {
+    id: 'glitch',
+    text: 'glitch',
+    words: [
+      'glitch*', 'bug', 'bugs', 'buggy', 'beug', 'bogue', 'error', 'erreur', 'crash*', 'lag', 'lagging', 'laggy',
+      '404', 'bsod', 'blue screen', 'ecran bleu', 'broken', 'casse', 'cassee',
+    ],
+  },
+  {
+    id: 'fire',
+    text: 'fire',
+    words: [
+      'fire', 'on fire', "/feu(?!x?\\s+d'?\\s*artifice)", 'en feu', 'hot', 'flame*', 'flamme*', 'burn*', 'brule*', 'caliente', 'fuego',
+      'spicy', 'incendie', 'lit af', 'blaze', 'inferno',
+    ],
+  },
+  {
+    id: 'gold',
+    text: 'gold',
+    words: [
+      'champion*', 'winner*', 'gagnant*', 'victory', 'victoire', 'gold', 'golden', 'medal*', 'medaille*', 'trophy',
+      'trophee', 'goat', 'legend*', 'legende*', 'number one', 'numero un', 'mvp', 'first place', 'king', 'roi', 'reine',
+    ],
+  },
+  {
+    id: 'sad',
+    text: 'sad',
+    overlay: 'rain',
+    words: [
+      'sad', 'triste', 'cry', 'crying', 'cries', 'pleure*', 'pleurer', 'rainy', 'raining', 'pluie', 'il pleut', 'snif', 'sniff',
+      'depressed', 'deprime*', 'tears', 'larme*', ':(', ":'(",
+    ],
+  },
+  {
+    id: 'disco',
+    text: 'disco',
+    overlay: 'disco',
+    words: [
+      'disco', 'dance', 'dancing', 'danse', 'danser', 'dansez', 'dancefloor', 'piste de danse', 'boogie', 'groove*',
+      'funky', 'ymca', 'saturday night', 'macarena',
+    ],
+  },
+  {
+    id: 'love',
+    text: 'love',
+    overlay: 'hearts',
+    words: [
+      'love', 'i love you', 'luv', "je t'aime", 'je t aime', 'jtm', 'amour', 'bisou*', 'kiss*', 'xoxo', 'darling',
+      'cheri', 'cherie', 'mon coeur', 'coeur', 'heart*', 'crush', '<3', 'sweetheart', 'valentin*',
+    ],
+  },
+  {
+    id: 'birthday',
+    overlay: 'confetti',
+    words: [
+      'birthday', 'happy birthday', 'bday', 'b-day', 'hbd', 'anniversaire', 'anniv', 'joyeux anniversaire',
+      'bon anniversaire', 'bon anniv', 'cumpleanos', 'cake', 'gateau', 'bougies', 'candles',
+    ],
+  },
+  {
+    id: 'cheers',
+    overlay: 'bubbles',
+    words: [
+      'cheers', 'sante', 'a la tienne', 'a la votre', 'tchin', 'tchin tchin', 'chin chin', 'cin cin', 'skol', 'skal',
+      'prost', 'salud', 'champagne', 'champ', 'bubbly', 'apero', 'prosecco', 'toast',
+    ],
+  },
+  {
+    id: 'snow',
+    overlay: 'snow',
+    words: [
+      'christmas', 'xmas', 'merry christmas', 'noel', 'joyeux noel', 'snow*', 'neige*', 'santa', 'pere noel', 'flocon*',
+      'winter', 'hiver', 'ski', 'skiing', 'frozen', 'bonhomme de neige', 'sapin', 'reindeer', 'renne*',
+    ],
+  },
+  {
+    id: 'newyear',
+    overlay: 'fireworks',
+    words: [
+      'happy new year', 'new year', 'nouvel an', 'bonne annee', 'nye', 'countdown', 'minuit', 'midnight',
+      'firework*', "feu d'artifice", "feux d'artifice", 'feu d artifice', 'feux d artifice', 'reveillon', 'saint-sylvestre',
+    ],
+  },
+  {
+    id: 'money',
+    overlay: 'coins',
+    words: [
+      'money', 'cash', 'rich', 'riche', 'riches', 'argent', 'fric', 'thune*', 'dollar*', 'euro', 'euros', 'francs',
+      'millionaire*', 'milliardaire*', 'billionaire*', 'jackpot', 'bling', 'pognon', 'moula', 'make it rain',
+    ],
+  },
+  {
+    id: 'space',
+    overlay: 'stars',
+    words: [
+      'space', 'espace', 'rocket*', 'fusee*', 'moon', 'lune', 'to the moon', 'galaxy', 'galaxie', 'star wars', 'stars',
+      'etoile*', 'alien*', 'astronaut*', 'nasa', 'ufo', 'ovni', 'cosmos', 'warp',
+    ],
+  },
+];
+
+export interface EggFx {
+  text?: TextFx;
+  overlays: OverlayFx[];
+  shout: boolean;
+}
+
+const normalize = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[‘’`]/g, "'");
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const toPattern = (word: string) => {
+  if (word.startsWith('/')) return word.slice(1);
+  const any = word.endsWith('*');
+  const base = normalize(any ? word.slice(0, -1) : word);
+  return escape(base).replace(/ +/g, '\\s+') + (any ? '[\\p{L}\\d]*' : '');
+};
+
+const matchers = EGGS.map((egg) => ({
+  egg,
+  re: new RegExp(`(?<![\\p{L}\\d])(?:${egg.words.map(toPattern).join('|')})(?![\\p{L}\\d])`, 'u'),
+}));
+
+/** Shouting: at least 3 letters, and at least 75% of them in capitals */
+function isShouting(text: string): boolean {
+  const cased = (text.match(/\p{L}/gu) ?? []).filter((c) => c.toLowerCase() !== c.toUpperCase());
+  if (cased.length < 3) return false;
+  return cased.filter((c) => c === c.toUpperCase()).length / cased.length >= 0.75;
+}
+
+export function detectEggs(text: string): EggFx {
+  const t = normalize(text);
+  const hits = matchers.filter((m) => m.re.test(t)).map((m) => m.egg);
+  const overlays = [...new Set(hits.map((e) => e.overlay).filter((o): o is OverlayFx => !!o))].slice(0, 2);
+  return { text: hits.find((e) => e.text)?.text, overlays, shout: isShouting(text) };
+}

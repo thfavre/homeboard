@@ -36,6 +36,13 @@ export interface TtsState {
   tvLangs: TtsLang[] | null;
 }
 
+export interface TtsGuestRef {
+  id: string;
+  name: string;
+  color: string;
+  avatar?: string;
+}
+
 export interface TtsEvent {
   id: string;
   text: string;
@@ -43,11 +50,8 @@ export interface TtsEvent {
   lang: TtsLang;
   by: string;
   anonymous?: boolean;
-  guest?: {
-    id: string;
-    name: string;
-    color: string;
-    avatar?: string;
-  };
+  guest?: TtsGuestRef;
+  /** Guests named in the text: their pictures hop at the end of the banner */
+  mentions?: TtsGuestRef[];
   durationMs: number;
 }

@@ -3,16 +3,15 @@
   import { TTS_LANGS, ttsLang, ttsSpeechMs, type TtsEvent } from '$shared/tts.ts';
   import { hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
+  import { detectEggs, type EggFx } from './eggs.ts';
+  import EggOverlay from './EggOverlay.svelte';
 
-  let current = $state<(TtsEvent & { key: number; durationMs: number }) | null>(null);
+  let current = $state<(TtsEvent & { key: number; durationMs: number; fx: EggFx }) | null>(null);
   let queue: TtsEvent[] = [];
   let seq = 0;
   let processing = false;
   let destroyed = false;
   let activeUtterance: SpeechSynthesisUtterance | null = null;
-
-  /** Easter egg: a shoutout about pride scrolls in rainbow colors */
-  const RAINBOW = /\b(lgbt\w*|gays?|lesbi\w*|queers?|pride|trans|bisexu\w*|non-?binai?r\w*)\b/i;
 
   const voiceLang = (v: SpeechSynthesisVoice) => v.lang.toLowerCase().replace('_', '-');
 
@@ -106,6 +105,7 @@
           ...item,
           key,
           durationMs,
+          fx: detectEggs(item.text),
         };
 
         // Play audio and wait for both speech & scroll
@@ -182,11 +182,14 @@
 
 {#if current}
   {#key current.key}
+    {#each current.fx.overlays as kind (kind)}
+      <div transition:fade={{ duration: 500 }}><EggOverlay {kind} /></div>
+    {/each}
     <div
       class="tts-strip"
       transition:fade={{ duration: 350 }}
     >
-      <div class="marquee-viewport">
+      <div class="marquee-viewport" class:shout={current.fx.shout}>
         <div
           class="marquee-track"
           style:--dur="{current.durationMs}ms"
@@ -202,7 +205,7 @@
               />
             {/if}
 
-            <span class="marquee-text" class:rainbow={RAINBOW.test(current.text)}>
+            <span class="marquee-text {current.fx.text ? `fx-${current.fx.text}` : ''}" class:shout={current.fx.shout} data-text={current.text}>
               {current.text}
             </span>
 
@@ -215,6 +218,12 @@
                 size="7rem"
               />
             {/if}
+
+            {#each current.mentions ?? [] as m, i (m.id)}
+              <span class="mention" style:--i={i}>
+                <Avatar name={m.name} color={m.color} id={m.id} src={m.avatar} size="6rem" />
+              </span>
+            {/each}
           </div>
         </div>
       </div>
@@ -284,19 +293,225 @@
     flex-shrink: 0;
   }
 
-  .marquee-text.rainbow {
+  /* ------------------------------------------------ easter eggs */
+
+  .marquee-viewport.shout {
+    animation: shake 0.35s linear infinite;
+  }
+  .marquee-text.shout {
+    font-size: 5rem;
+    font-weight: 900;
+  }
+  /* Red only when no other text effect colors it */
+  .marquee-text.shout:not([class*='fx-']) {
+    color: #ff3b3b;
+    text-shadow: 0 0 30px rgba(255, 40, 40, 0.6);
+  }
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    25% {
+      transform: translate(-6px, 3px) rotate(-0.4deg);
+    }
+    50% {
+      transform: translate(5px, -4px);
+    }
+    75% {
+      transform: translate(-3px, -2px) rotate(0.4deg);
+    }
+  }
+
+  .mention {
+    flex-shrink: 0;
+    animation: hop 0.9s ease-in-out calc(var(--i) * 0.2s) infinite;
+  }
+  @keyframes hop {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    35% {
+      transform: translateY(-1.6rem) rotate(-6deg);
+    }
+    55% {
+      transform: translateY(0) scale(1.06, 0.94);
+    }
+  }
+
+  /* Gradient-filled text: shared by several effects */
+  .fx-rainbow,
+  .fx-fire,
+  .fx-gold,
+  .fx-disco {
     color: transparent;
-    background: linear-gradient(90deg, #e40303, #ff8c00, #ffed00, #008026, #24408e, #732982, #e40303) 0 0 / 200% 100%;
     -webkit-background-clip: text;
     background-clip: text;
     text-shadow: none;
-    filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.25));
-    animation: rainbow-flow 3s linear infinite;
+    background-size: 200% 100%;
+    animation: flow 3s linear infinite;
   }
-
-  @keyframes rainbow-flow {
+  .fx-rainbow {
+    background-image: linear-gradient(90deg, #e40303, #ff8c00, #ffed00, #008026, #24408e, #732982, #e40303);
+    filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.25));
+  }
+  .fx-fire {
+    background-image: linear-gradient(0deg, #ff2a00, #ff7b00 35%, #ffd000 70%, #fff3a0);
+    background-size: 100% 200%;
+    filter: drop-shadow(0 0 14px rgba(255, 90, 0, 0.8));
+    animation: flicker-up 0.6s ease-in-out infinite alternate;
+  }
+  .fx-gold {
+    background-image: linear-gradient(100deg, #a66d00 0%, #ffd700 30%, #fff8d0 45%, #ffd700 60%, #a66d00 100%);
+    filter: drop-shadow(0 0 12px rgba(255, 200, 0, 0.55));
+    animation-duration: 2.2s;
+  }
+  .fx-disco {
+    background-image: linear-gradient(90deg, #ff2e88, #00e5ff, #ffe600, #7c4dff, #00ff85, #ff2e88);
+    animation-duration: 0.9s;
+    filter: drop-shadow(0 0 16px rgba(255, 255, 255, 0.4));
+  }
+  @keyframes flow {
     to {
       background-position: -200% 0;
+    }
+  }
+  @keyframes flicker-up {
+    from {
+      background-position: 0 0;
+      transform: scaleY(1);
+    }
+    to {
+      background-position: 0 -40%;
+      transform: scaleY(1.04);
+    }
+  }
+
+  .fx-matrix {
+    font-family: ui-monospace, Consolas, monospace;
+    color: #3dff6e;
+    text-shadow:
+      0 0 10px #3dff6e,
+      0 0 30px rgba(61, 255, 110, 0.5);
+  }
+
+  .fx-spooky {
+    color: #9dff5c;
+    text-shadow:
+      0 4px 0 #5c9e2a,
+      0 10px 6px rgba(92, 158, 42, 0.7),
+      0 22px 14px rgba(92, 158, 42, 0.35);
+    animation: wobble 2.4s ease-in-out infinite;
+  }
+  @keyframes wobble {
+    0%,
+    100% {
+      transform: skewX(0) translateY(0);
+    }
+    50% {
+      transform: skewX(-4deg) translateY(4px);
+    }
+  }
+
+  .fx-sad {
+    color: #9bb8d8;
+    text-shadow: 0 0 18px rgba(120, 160, 220, 0.45);
+    animation: droop 3s ease-in-out infinite;
+  }
+  @keyframes droop {
+    50% {
+      transform: translateY(8px) rotate(1deg);
+    }
+  }
+
+  .fx-love {
+    color: #ff6b9d;
+    text-shadow: 0 0 24px rgba(255, 60, 130, 0.65);
+    animation: beat 1s ease-in-out infinite;
+  }
+  @keyframes beat {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    15% {
+      transform: scale(1.06);
+    }
+    30% {
+      transform: scale(1);
+    }
+    45% {
+      transform: scale(1.04);
+    }
+  }
+
+  /* Glitch: two colored copies of the text jitter over it */
+  .fx-glitch {
+    position: relative;
+    animation: jitter 1.6s steps(1) infinite;
+  }
+  .fx-glitch::before,
+  .fx-glitch::after {
+    content: attr(data-text);
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .fx-glitch::before {
+    color: #ff004c;
+    mix-blend-mode: screen;
+    animation: slice-a 0.9s steps(1) infinite;
+  }
+  .fx-glitch::after {
+    color: #00e5ff;
+    mix-blend-mode: screen;
+    animation: slice-b 0.7s steps(1) infinite;
+  }
+  @keyframes jitter {
+    0%,
+    100% {
+      transform: none;
+    }
+    20% {
+      transform: translate(3px, -2px) skewX(6deg);
+    }
+    23% {
+      transform: none;
+    }
+    60% {
+      transform: translate(-4px, 1px);
+    }
+    62% {
+      transform: none;
+    }
+  }
+  @keyframes slice-a {
+    0% {
+      clip-path: inset(10% 0 60% 0);
+      transform: translate(-6px, 0);
+    }
+    33% {
+      clip-path: inset(55% 0 20% 0);
+      transform: translate(5px, 0);
+    }
+    66% {
+      clip-path: inset(30% 0 45% 0);
+      transform: translate(-3px, 0);
+    }
+  }
+  @keyframes slice-b {
+    0% {
+      clip-path: inset(65% 0 5% 0);
+      transform: translate(6px, 0);
+    }
+    40% {
+      clip-path: inset(5% 0 75% 0);
+      transform: translate(-5px, 0);
+    }
+    70% {
+      clip-path: inset(40% 0 35% 0);
+      transform: translate(4px, 0);
     }
   }
 

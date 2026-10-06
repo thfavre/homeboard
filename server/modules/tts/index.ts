@@ -13,6 +13,13 @@ const MAX_QUEUE = 20;
 /** Extra time the TV gets to report the end before the next shoutout starts anyway */
 const FAILSAFE_MS = 5000;
 
+const fold = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const cleanText = (raw: unknown) =>
   String(raw ?? '')
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
@@ -67,6 +74,20 @@ export default defineModule<TtsSettings>({
     /** Language asked by the caller, or the host's default */
     const langOf = (args: any): TtsLang => ttsLang(args?.lang)?.id ?? ctx.settings.get().defaultLang;
 
+    /** Other guests named in the text, by full name or first name (3 letters or more) */
+    const mentionsIn = (text: string, senderId?: string) => {
+      const t = fold(text);
+      const found: NonNullable<TtsEvent['mentions']> = [];
+      for (const g of ctx.session.guests.values()) {
+        if (g.id === senderId || found.length >= 3) continue;
+        const full = fold(g.name).trim();
+        const names = [full, full.split(/\s+/)[0]].filter((n) => n.length >= 3);
+        const named = names.some((n) => new RegExp(`(?<![\\p{L}\\d])${escapeRe(n).replace(/\s+/g, '\\s+')}(?![\\p{L}\\d])`, 'u').test(t));
+        if (named) found.push({ id: g.id, name: g.name, color: g.color, avatar: g.avatar?.url });
+      }
+      return found;
+    };
+
     const makeEvent = (text: string, guest: TtsEvent['guest'], anonymous: boolean, lang: TtsLang): TtsEvent => ({
       id: uid(6),
       text,
@@ -75,6 +96,7 @@ export default defineModule<TtsSettings>({
       by: anonymous ? 'Anonymous' : (guest?.name ?? 'Guest'),
       anonymous,
       guest: anonymous ? undefined : guest,
+      mentions: mentionsIn(text, guest?.id),
       // Speaking time, plus time to read and scroll
       durationMs: Math.max(5000, ttsSpeechMs(text) + 2000),
     });
