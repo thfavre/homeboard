@@ -1,9 +1,9 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Camera, Eye, EyeOff, Sparkles, Trash2 } from '@lucide/svelte';
+  import { Camera, Eye, EyeOff, LogOut, Sparkles, Trash2 } from '@lucide/svelte';
   import { ask } from '$lib/dialog.svelte.ts';
   import { avatarFlow } from './avatar.svelte.ts';
-  import { hb, rpc, attempt } from '$lib/client.svelte.ts';
+  import { hb, rpc, attempt, logout } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
 
@@ -35,6 +35,15 @@
       editing = false;
       showPin = true;
     }
+  }
+
+  async function confirmLogout() {
+    const me = hb.me;
+    if (!me) return;
+    const how = me.pin
+      ? `To come back, join with the name ${me.name} and the PIN ${me.pin}. Your money stays on your account.`
+      : `To come back, join with the name ${me.name} and your PIN. Your money stays on your account.`;
+    if (await ask({ title: 'Log out of this phone?', message: how, confirm: 'Log out', danger: true })) logout();
   }
 
   async function save(e: SubmitEvent) {
@@ -116,6 +125,8 @@
         </div>
       {/if}
     </div>
+
+    <button class="btn ghost logout" onclick={confirmLogout}><LogOut size={18} /> Log out of this phone</button>
   </div>
 {/if}
 
@@ -183,5 +194,9 @@
   }
   .small {
     font-size: 0.86rem;
+  }
+  .logout {
+    justify-self: center;
+    color: var(--danger);
   }
 </style>

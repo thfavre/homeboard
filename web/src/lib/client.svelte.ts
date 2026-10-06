@@ -236,6 +236,17 @@ export async function join(args: { code: string; name: string; pin: string }): P
 
 export const lastName = () => storageGet(STORAGE.lastName) ?? '';
 
+/**
+ * Forget the account on this phone only and go back to the join screen.
+ * The account stays on the server (other phones logged in with it are not affected):
+ * the same name and PIN open it again.
+ */
+export function logout(): void {
+  storageSet(STORAGE.guestToken, null);
+  storageSet(STORAGE.lastName, null);
+  location.reload();
+}
+
 // ------------------------------------------------------------------ admin session
 
 export async function adminLogin(password: string): Promise<void> {
