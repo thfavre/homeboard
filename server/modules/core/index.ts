@@ -98,7 +98,7 @@ export default defineModule({
         prices: economy.priceList((id) => hub.isEnabled(id)),
         earn: economy.earnList((id) => hub.isEnabled(id)),
         leaderboardMode: c.leaderboardMode,
-        leaderboard: c.leaderboardMode === 'off' ? [] : guests.sort((a, b) => sortKey[c.leaderboardMode as 'balance'](b) - sortKey[c.leaderboardMode as 'balance'](a)).slice(0, 8),
+        leaderboard: c.leaderboardMode === 'off' ? [] : guests.sort((a, b) => sortKey[c.leaderboardMode as 'balance'](b) - sortKey[c.leaderboardMode as 'balance'](a)).slice(0, 10),
         guestsOnline: guests.filter((g) => g.online).length,
         takeover: hub.takeover,
         privacy: c.privacy,
