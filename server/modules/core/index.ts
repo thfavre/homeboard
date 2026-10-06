@@ -357,7 +357,8 @@ export default defineModule({
         amount = Math.max(amount, -guest.balance);
       }
       const reason = cleanName(args.reason, 60) || (amount > 0 ? 'Gift from the host' : 'Taken by the host');
-      economy.credit(guest, amount, reason);
+      // Off unless the host ticks it: host corrections do not move the earned/spent leaderboard
+      economy.credit(guest, amount, reason, args.leaderboard === true);
       ctx.toast(guest, { text: reason, amount, kind: amount > 0 ? 'success' : 'info' });
     });
 
@@ -368,7 +369,7 @@ export default defineModule({
       const diff = target - guest.balance;
       if (!diff) throw new HbError('They already have this amount');
       const reason = cleanName(args.reason, 60) || 'Balance set by the host';
-      economy.credit(guest, diff, reason);
+      economy.credit(guest, diff, reason, args.leaderboard === true);
       ctx.toast(guest, { text: reason, amount: diff, kind: diff > 0 ? 'success' : 'info' });
     });
 

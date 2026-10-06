@@ -150,9 +150,10 @@ export class Economy {
     if (charge.amount > 0) this.session.applyAmount(charge.guest, charge.amount, `Refund: ${charge.reason}`);
   }
 
-  credit(guest: Guest, amount: number, reason: string): void {
+  /** countStats false: a host correction that should not move the earned/spent leaderboard */
+  credit(guest: Guest, amount: number, reason: string, countStats = true): void {
     if (amount === 0) return;
-    this.session.applyAmount(guest, amount, reason);
+    this.session.applyAmount(guest, amount, reason, countStats);
   }
 
   /** Credit using an earn rule. Returns the amount credited. */
