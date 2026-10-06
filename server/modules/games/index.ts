@@ -44,6 +44,8 @@ const LOBBY_MS = 45_000;
 const INTRO_MS = 30_000;
 const ALL_READY_MS = 3_000;
 const RESULT_MS = 15_000;
+/** When the Perfect Circle winner scratches, the result closes once it has been up this long */
+const RESULT_SCRATCH_MS = 7000;
 
 interface Invite extends DuelInvite {
   charges: Charge[];
@@ -91,6 +93,8 @@ export default defineModule<GamesSettings>({
     let perkTimer: NodeJS.Timeout | null = null;
     /** The scratch record on a light strip, while the scratch prize lasts */
     let turntable: Turntable | null = null;
+    /** Match whose result is already set to close early for the scratch */
+    let cutShort: string | null = null;
 
     ctx.price({ key: 'games.duel', label: 'Challenge someone to a duel', default: 5000 });
     ctx.price({ key: 'games.room', label: 'Start a game for the room', default: 5000 });
@@ -611,8 +615,13 @@ export default defineModule<GamesSettings>({
     /** Scratch moves go straight to the TV, without a state update each time */
     ctx.onGuest('scratch', (args, guest) => {
       if (perk?.kind !== 'scratch' || perk.guest.id !== guest.id) return false;
-      // The record is in the side column: the winner's first touch ends the result screen
-      if (match?.phase === 'result' && match.game === 'circle') close();
+      // The record is in the side column: scratching cuts the result short (it stays at least 7 s)
+      const m = match;
+      if (m?.phase === 'result' && m.game === 'circle' && m.endsAt && cutShort !== m.id) {
+        cutShort = m.id;
+        const shown = Date.now() - (m.endsAt - RESULT_MS);
+        later(m, Math.max(0, RESULT_SCRATCH_MS - shown), close);
+      }
       const raw = num(args?.angle, 0);
       const angle = Number.isFinite(raw) ? clamp(raw, -1e6, 1e6) : 0;
       ctx.emit('tv', 'scratch', { angle, touching: !!args?.touching });
