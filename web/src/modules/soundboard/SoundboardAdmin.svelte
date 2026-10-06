@@ -1,11 +1,11 @@
 <script lang="ts">
   import { Synced } from '$lib/synced.svelte.ts';
-  import { ask } from '$lib/dialog.svelte.ts';
   import { Play, Plus, RotateCcw, Trash2, Upload } from '@lucide/svelte';
   import type { SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
+  import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import Ducking from '../spotify/Ducking.svelte';
   import MiSearch from './MiSearch.svelte';
   import SoundCard from './SoundCard.svelte';
@@ -36,6 +36,14 @@
   }
 </script>
 
+<!-- Tap once to arm, again to delete (it goes to Recently deleted) -->
+{#snippet del(onconfirm: () => Promise<unknown>)}
+  <TwoStepButton class="ghost small del" {onconfirm}>
+    <Trash2 size={15} />
+    {#snippet armed()}Delete{/snippet}
+  </TwoStepButton>
+{/snippet}
+
 {#if mod}
   <Section title="Settings" hint="Sounds play on the TV page, so the PC must send its audio to the TV.">
     <label class="field">
@@ -65,9 +73,7 @@
         <button class="btn ghost small" aria-label="Test" onclick={() => test(b.id)}><Play size={15} /></button>
         <span class="grow">{b.name}</span>
         <Toggle checked={b.enabled} label={b.name} onchange={(v) => attempt(() => rpc('soundboard', 'setBuiltin', { id: b.id, enabled: v }))} />
-        <button class="btn ghost small" aria-label="Delete" onclick={async () => (await ask({ title: `Delete ${b.name}?`, confirm: 'Delete', danger: true })) && attempt(() => rpc('soundboard', 'deleteBuiltin', { id: b.id }))}>
-          <Trash2 size={15} />
-        </button>
+        {@render del(() => attempt(() => rpc('soundboard', 'deleteBuiltin', { id: b.id })))}
       </div>
     {:else}
       <p class="faint">All built-in sounds were deleted.</p>
@@ -79,9 +85,7 @@
       <div class="line">
         <button class="btn ghost small" aria-label="Test" onclick={() => test(s.id)}><Play size={15} /></button>
         <span class="grow">{s.name}</span>
-        <button class="btn ghost small" aria-label="Delete" onclick={async () => (await ask({ title: `Delete ${s.name}?`, confirm: 'Delete', danger: true })) && attempt(() => rpc('soundboard', 'deleteCustom', { id: s.id }))}>
-          <Trash2 size={15} />
-        </button>
+        {@render del(() => attempt(() => rpc('soundboard', 'deleteCustom', { id: s.id })))}
       </div>
     {:else}
       <p class="faint">No uploaded sounds yet.</p>
@@ -135,6 +139,11 @@
   }
   .grow {
     flex: 1;
+  }
+  /* Same width with the bin and with "Delete", so the row does not jump */
+  .line :global(.del) {
+    min-width: 4.6rem;
+    justify-content: center;
   }
   .sub {
     display: block;
