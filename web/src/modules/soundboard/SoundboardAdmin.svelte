@@ -72,7 +72,7 @@
     {#each mod.sounds.filter((s) => s.kind === 'file') as s (s.id)}
       <div class="line">
         <button class="btn ghost small" aria-label="Test" onclick={() => test(s.id)}><Play size={15} /></button>
-        <span class="grow">{s.name}{#if s.myinstants}<span class="tag">MyInstants</span>{/if}</span>
+        <span class="grow">{s.name}</span>
         <button class="btn ghost small" aria-label="Delete" onclick={async () => (await ask({ title: `Delete ${s.name}?`, confirm: 'Delete', danger: true })) && attempt(() => rpc('soundboard', 'deleteCustom', { id: s.id }))}>
           <Trash2 size={15} />
         </button>
@@ -87,10 +87,10 @@
     </div>
   </Section>
 
-  <Section title="MyInstants" hint="Pick sounds from myinstants.com for the board. They are downloaded, so they keep working without internet.">
+  <Section title="Sound search" hint="Sounds from myinstants.com. Tap a button to listen, then add it to the board: it is downloaded, so it keeps working without internet.">
     <div class="line">
-      <span class="grow">Guests can search MyInstants<span class="faint sub">Any sound from the site, played on the TV at the usual price</span></span>
-      <Toggle checked={mod.guestSearch} label="Guests can search MyInstants" onchange={(v) => set({ guestSearch: v })} />
+      <span class="grow">Guests can search for sounds<span class="faint sub">They play them on the TV at the usual price, and can keep their own</span></span>
+      <Toggle checked={mod.guestSearch} label="Guests can search for sounds" onchange={(v) => set({ guestSearch: v })} />
     </div>
     {#if mod.guestSearch}
       <label class="field">
@@ -100,8 +100,8 @@
     {/if}
     <MiSearch>
       {#snippet actions(s)}
-        <button class="btn ghost small" aria-label="Play on the TV" onclick={() => attempt(() => rpc('soundboard', 'playSearch', { mp3: s.mp3, title: s.title }))}><Tv size={15} /></button>
-        <button class="btn small" aria-label="Add to the board" disabled={adding === s.mp3} onclick={() => add(s.mp3, s.title)}><Plus size={15} /> Add</button>
+        <button type="button" class="tool" aria-label="Play on the TV" onclick={() => attempt(() => rpc('soundboard', 'playSearch', { mp3: s.mp3, title: s.title }))}><Tv size={15} /></button>
+        <button type="button" class="tool" aria-label="Add to the board" disabled={adding === s.mp3} onclick={() => add(s.mp3, s.title)}><Plus size={17} /></button>
       {/snippet}
     </MiSearch>
   </Section>
@@ -119,17 +119,6 @@
   .sub {
     display: block;
     font-size: 0.8rem;
-  }
-  .tag {
-    margin-left: 0.5rem;
-    padding: 0.05rem 0.45rem;
-    border-radius: 999px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 0.7rem;
-    font-weight: 600;
-    vertical-align: middle;
   }
   input[type='range'] {
     width: 100%;

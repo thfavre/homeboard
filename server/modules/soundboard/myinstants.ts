@@ -18,7 +18,7 @@ const UA = 'Mozilla/5.0 (Homeboard party dashboard)';
 /** File name of a sound on myinstants.com, e.g. "vine-boom.mp3" */
 export function cleanMp3(input: unknown): string {
   const file = String(input ?? '');
-  if (!/^[\w.%()'-]{1,160}\.mp3$/i.test(file) || file.includes('..')) throw new HbError('Unknown MyInstants sound');
+  if (!/^[\w.%()'-]{1,160}\.mp3$/i.test(file) || file.includes('..')) throw new HbError('Unknown sound');
   return file;
 }
 
@@ -41,7 +41,7 @@ export async function searchMyInstants(query: unknown, page: unknown, maxSec = 0
     const res = await fetch(url, { headers: { 'user-agent': UA, accept: 'application/json' }, signal: AbortSignal.timeout(12_000) });
     body = (await res.json()) as typeof body;
   } catch {
-    throw new HbError('MyInstants search is not reachable right now');
+    throw new HbError('Sound search is not reachable right now');
   }
   // The scraper answers "404" when a search has no result
   const items: MiSound[] = [];
@@ -74,9 +74,9 @@ export async function downloadMp3(mp3: string, dir: string, as = mp3): Promise<s
       try {
         res = await fetch(MEDIA + encodeURIComponent(mp3), { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(20_000) });
       } catch {
-        throw new HbError('Could not download the sound from MyInstants');
+        throw new HbError('Could not download this sound');
       }
-      if (!res.ok) throw new HbError('MyInstants does not have this sound anymore');
+      if (!res.ok) throw new HbError('This sound is not available anymore');
       if (Number(res.headers.get('content-length') ?? 0) > MAX_BYTES) throw new HbError('This sound is too long');
       const data = Buffer.from(await res.arrayBuffer());
       if (data.length > MAX_BYTES) throw new HbError('This sound is too long');

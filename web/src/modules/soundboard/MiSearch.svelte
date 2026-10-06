@@ -3,9 +3,19 @@
   import { Headphones, LoaderCircle, Search, Square } from '@lucide/svelte';
   import type { MiPage, MiSound } from '$shared/soundboard.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
+  import InstantButton from './InstantButton.svelte';
 
-  /** Search box over MyInstants. `actions` renders the buttons of each result. */
-  let { actions }: { actions: Snippet<[MiSound]> } = $props();
+  /**
+   * Sound search (MyInstants), shown as a grid of round buttons like the site.
+   * Pressing a button calls `onpress`, or plays the sound on this phone when there is none.
+   * `actions` adds small buttons under each sound, after "listen on this phone".
+   */
+  let {
+    onpress,
+    pressDisabled = false,
+    busyMp3 = null,
+    actions,
+  }: { onpress?: (s: MiSound) => void; pressDisabled?: boolean; busyMp3?: string | null; actions?: Snippet<[MiSound]> } = $props();
 
   let query = $state('');
   let items = $state<MiSound[]>([]);
@@ -70,41 +80,53 @@
     clearTimeout(timer);
     stop();
   });
+
+  const seconds = (d: number) => `${d < 10 ? d.toFixed(1) : Math.round(d)}s`;
 </script>
 
 <div class="mi">
   <label class="search">
     <Search size={17} />
-    <input class="input" type="search" bind:value={query} oninput={onInput} placeholder="Search MyInstants (bruh, vine boom, sad violin...)" maxlength="60" />
+    <input class="input" type="search" bind:value={query} oninput={onInput} placeholder="Search sounds" maxlength="60" enterkeyhint="search" />
   </label>
-  <p class="faint small">{query.trim() ? 'Results' : 'Most popular on MyInstants'}</p>
+  <p class="faint small">{query.trim() ? 'Results' : 'Popular sounds'}</p>
 
-  <div class="list">
+  <div class="grid">
     {#each items as s (s.id)}
-      <div class="line">
-        <button class="btn ghost small" aria-label={previewing === s.id ? 'Stop preview' : 'Listen on this phone'} onclick={() => preview(s)}>
-          {#if fetching === s.id}<LoaderCircle size={15} class="spin" />{:else if previewing === s.id}<Square size={15} />{:else}<Headphones size={15} />{/if}
-        </button>
-        <span class="grow title">{s.title}</span>
-        {#if s.duration}<span class="faint len">{s.duration < 10 ? s.duration.toFixed(1) : Math.round(s.duration)}s</span>{/if}
-        {@render actions(s)}
+      <div class="instant">
+        <InstantButton
+          seed={s.mp3}
+          label={onpress ? `Play ${s.title}` : `Listen to ${s.title}`}
+          active={previewing === s.id || busyMp3 === s.mp3}
+          disabled={onpress ? pressDisabled || busyMp3 === s.mp3 : false}
+          onpress={() => (onpress ? onpress(s) : preview(s))}
+        />
+        <span class="title">{s.title}</span>
+        <div class="tools">
+          <button type="button" class="tool" aria-label={previewing === s.id ? 'Stop' : 'Listen on this phone'} onclick={() => preview(s)}>
+            {#if fetching === s.id}<LoaderCircle size={15} class="spin" />{:else if previewing === s.id}<Square size={14} />{:else}<Headphones size={15} />{/if}
+          </button>
+          {@render actions?.(s)}
+          {#if s.duration}<span class="len">{seconds(s.duration)}</span>{/if}
+        </div>
       </div>
-    {:else}
-      {#if !loading}<p class="faint small">{error || 'No sound found.'}</p>{/if}
     {/each}
-    {#if loading}
-      <p class="faint small loading"><LoaderCircle size={15} class="spin" /> Searching...</p>
-    {:else if hasNext && items.length}
-      <button class="btn ghost more" onclick={() => load(query.trim(), page + 1)}>Show more</button>
-    {/if}
   </div>
-  <p class="faint credit">Sounds from myinstants.com</p>
+
+  {#if loading}
+    <p class="faint small loading"><LoaderCircle size={15} class="spin" /> Searching...</p>
+  {:else if !items.length}
+    <p class="faint small">{error || 'No sound found.'}</p>
+  {:else if hasNext}
+    <button class="btn ghost more" onclick={() => load(query.trim(), page + 1)}>Show more</button>
+  {/if}
 </div>
 
 <style>
   .mi {
     display: grid;
-    gap: 0.6rem;
+    gap: 0.7rem;
+    min-width: 0;
   }
   .search {
     position: relative;
@@ -119,32 +141,69 @@
   }
   .search .input {
     width: 100%;
+    min-width: 0;
     padding-left: 2.3rem;
   }
-  .list {
+  .grid {
     display: grid;
-    gap: 0.35rem;
-    max-height: 22rem;
-    overflow-y: auto;
+    grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+    gap: 1.1rem 0.5rem;
   }
-  .line {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .grow {
-    flex: 1;
+  .instant {
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: 0.45rem;
     min-width: 0;
+    padding-top: 0.2rem;
   }
   .title {
+    width: 100%;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: center;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  }
+  .tools {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.15rem;
+    color: var(--text-dim);
+  }
+  /* Shared with the buttons passed in `actions` */
+  .tools :global(.tool) {
+    display: grid;
+    place-items: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .tools :global(.tool:active) {
+    background: var(--surface-2);
+  }
+  .tools :global(.tool.on) {
+    color: var(--accent);
+  }
+  .tools :global(.tool:disabled) {
+    opacity: 0.4;
   }
   .len {
-    flex: none;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     font-variant-numeric: tabular-nums;
+    color: var(--text-faint);
   }
   .small {
     font-size: 0.85rem;
@@ -156,10 +215,6 @@
   }
   .more {
     justify-self: center;
-  }
-  .credit {
-    font-size: 0.75rem;
-    text-align: right;
   }
   .mi :global(.spin) {
     animation: spin 0.9s linear infinite;

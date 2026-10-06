@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AudioLines, BookmarkCheck, BookmarkPlus, Play, X } from '@lucide/svelte';
+  import { AudioLines, BookmarkCheck, BookmarkPlus, X } from '@lucide/svelte';
   import type { MiSound, SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, onEvent, price, serverNow } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
@@ -60,17 +60,16 @@
     {#if mod.guestSearch}
       <div class="tabs">
         <button class:active={tab === 'board'} onclick={() => (tab = 'board')}>Board</button>
-        <button class:active={tab === 'search'} onclick={() => (tab = 'search')}>Search MyInstants</button>
+        <button class:active={tab === 'search'} onclick={() => (tab = 'search')}>Search</button>
       </div>
     {/if}
 
     {#if mod.guestSearch && tab === 'search'}
-      <MiSearch>
+      <MiSearch onpress={(s) => playSearch(s.mp3, s.title)} pressDisabled={wait > 0} busyMp3={sending}>
         {#snippet actions(s)}
-          <button class="btn ghost small" class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>
+          <button type="button" class="tool" class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>
             {#if saved(s.mp3)}<BookmarkCheck size={16} />{:else}<BookmarkPlus size={16} />{/if}
           </button>
-          <button class="btn small" disabled={wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)}><Play size={15} /> Play</button>
         {/snippet}
       </MiSearch>
     {:else}
@@ -90,7 +89,7 @@
           </div>
         {:else}
           <button class="card empty mine-empty" onclick={() => (tab = 'search')}>
-            <BookmarkPlus size={18} /> Search MyInstants and save sounds here. Only you see them.
+            <BookmarkPlus size={18} /> Search for sounds and save them here. Only you see them.
           </button>
         {/each}
       </div>
@@ -181,9 +180,6 @@
     border: 0;
     background: var(--danger);
     color: #fff;
-  }
-  .on {
-    color: var(--accent);
   }
   .divider {
     display: flex;
