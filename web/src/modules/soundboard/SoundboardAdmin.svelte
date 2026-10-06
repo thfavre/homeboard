@@ -67,7 +67,7 @@
     <Ducking source="soundboard" title="Lower the music" hint="Spotify gets quieter while a sound plays." />
   </Section>
 
-  <Section title="Your sounds" hint="Short clips work best (a few seconds).">
+  <Section title="Party sounds" hint="The board every guest can play from. Upload a clip or add one from Sound search below. Short clips work best (a few seconds).">
     {#each mod.sounds as s (s.id)}
       <div class="line">
         <button class="btn ghost small" aria-label="Test" onclick={() => test(s.id)}><Play size={15} /></button>
@@ -75,7 +75,7 @@
         {@render del(() => attempt(() => rpc('soundboard', 'deleteCustom', { id: s.id })))}
       </div>
     {:else}
-      <p class="faint">No uploaded sounds yet.</p>
+      <p class="faint">No sounds on the board yet.</p>
     {/each}
     <div class="row">
       <input class="input" bind:value={name} placeholder="Name (optional)" maxlength="30" />
