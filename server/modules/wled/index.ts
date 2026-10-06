@@ -21,6 +21,17 @@ interface Health {
   leds?: number;
 }
 
+/** Used by games: solid colors on every reachable light, the effect queue waits meanwhile */
+export interface LightsApi {
+  available(): boolean;
+  /** Pause the effect queue and keep the lights for a game */
+  claim(): void;
+  /** Solid color on every light (null: dark). Latest call wins, never queued up. */
+  color(hex: string | null): void;
+  /** Give the lights back: previous state restored, queued effects resume */
+  release(): Promise<void>;
+}
+
 const POLL_MS = 20_000;
 const TIMEOUT_MS = 3000;
 const SEGMENT_KEYS = ['id', 'on', 'bri', 'col', 'fx', 'sx', 'ix', 'pal', 'c1', 'c2', 'c3', 'o1', 'o2', 'o3', 'sel'];
@@ -69,6 +80,8 @@ export default defineModule<WledSettings>({
     let current: (Job & { until: number }) | null = null;
     let timer: NodeJS.Timeout | null = null;
     let catalog: { effects: string[]; palettes: string[] } | null = null;
+    /** A game holds the lights: no effect starts meanwhile */
+    let held = false;
 
     const devices = () => ctx.settings.get().devices;
     const device = (id: string) => devices().find((d) => d.id === id);
@@ -130,7 +143,7 @@ export default defineModule<WledSettings>({
     };
 
     const runNext = async () => {
-      if (current) return;
+      if (current || held) return;
       const job = queue.shift();
       if (!job) {
         ctx.publish();
@@ -183,6 +196,69 @@ export default defineModule<WledSettings>({
       void runNext();
       return { position: current ? queue.indexOf(job) + 1 : 0 };
     };
+
+    // ------------------------------------------------------------ games
+
+    /** Color each device should show next (null: dark); one request in flight per device */
+    const wanted = new Map<string, string | null>();
+    const sending = new Set<string>();
+
+    const sendSolid = async (deviceId: string) => {
+      if (sending.has(deviceId)) return;
+      const d = device(deviceId);
+      if (!d) return;
+      sending.add(deviceId);
+      try {
+        while (wanted.has(deviceId) && held) {
+          const hex = wanted.get(deviceId) ?? null;
+          wanted.delete(deviceId);
+          try {
+            if (!saved.has(d.id)) saved.set(d.id, await wled(d.host, '/json/state'));
+            const col = [hex ? hexToRgb(hex) : [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+            const seg = (saved.get(d.id).seg ?? [{ id: 0 }]).map((s: any) => ({ id: s.id, on: true, fx: 0, col }));
+            const bri = ctx.settings.get().brightness;
+            await wled(d.host, '/json/state', { on: true, transition: 0, ...(bri > 0 ? { bri } : {}), seg });
+          } catch (err) {
+            ctx.log.warn(`Could not reach ${d.name}`, (err as Error).message);
+          }
+        }
+      } finally {
+        sending.delete(deviceId);
+      }
+    };
+
+    ctx.provide<LightsApi>('lights', {
+      available: () => ctx.enabled() && devices().some((d) => health.get(d.id)?.online),
+      claim: () => {
+        if (held) return;
+        held = true;
+        if (current) {
+          // The effect on now plays again (in full) after the game
+          if (timer) clearTimeout(timer);
+          timer = null;
+          queue = [current, ...queue];
+          current = null;
+          ctx.publish();
+        }
+      },
+      color: (hex) => {
+        if (!held) return;
+        for (const d of devices()) {
+          if (!health.get(d.id)?.online) continue;
+          wanted.set(d.id, hex);
+          void sendSolid(d.id);
+        }
+      },
+      release: async () => {
+        if (!held) return;
+        held = false;
+        wanted.clear();
+        // Let a color on its way land first, so it does not cover the restored state
+        for (let i = 0; sending.size && i < 50; i++) await new Promise((r) => setTimeout(r, 40));
+        await Promise.all([...saved.keys()].map(restore));
+        await runNext();
+      },
+    });
 
     // ------------------------------------------------------------ api
 

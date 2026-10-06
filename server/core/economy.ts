@@ -131,16 +131,19 @@ export class Economy {
    * Returns a Charge that can be refunded if the action fails afterwards.
    */
   charge(guest: Guest, key: string, qty = 1, reason?: string): Charge {
-    const amount = this.cost(key, qty);
-    const label = reason ?? this.prices.get(key)?.label ?? key;
+    return this.pay(guest, this.cost(key, qty), reason ?? this.prices.get(key)?.label ?? key);
+  }
+
+  /** Take an amount that is not a price (a bet, a stake). Same rules as charge(). */
+  pay(guest: Guest, amount: number, reason: string): Charge {
     if (amount > 0) {
       if (guest.balance < amount) {
         const c = this.currency;
         throw new HbError(`Not enough ${c.name}: this costs ${formatAmount(amount)} ${c.symbol}, you have ${formatAmount(guest.balance)} ${c.symbol}`);
       }
-      this.session.applyAmount(guest, -amount, label);
+      this.session.applyAmount(guest, -amount, reason);
     }
-    return { guest, amount, reason: label };
+    return { guest, amount: Math.max(0, amount), reason };
   }
 
   refund(charge: Charge): void {

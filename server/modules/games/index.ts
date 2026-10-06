@@ -1,0 +1,492 @@
+import {
+  GAMES,
+  GAME_COLORS,
+  gameInfo,
+  type DuelInvite,
+  type GameColor,
+  type GameId,
+  type GameMode,
+  type GamePlayer,
+  type GamesSettings,
+  type GamesState,
+  type MatchPhase,
+  type MatchResult,
+  type MatchState,
+} from '../../../shared/games.ts';
+import { formatAmount } from '../../../shared/money.ts';
+import type { Charge } from '../../core/economy.ts';
+import { defineModule } from '../../core/module.ts';
+import type { Guest } from '../../core/session.ts';
+import { HbError, num, uid } from '../../core/util.ts';
+import type { LightsApi } from '../wled/index.ts';
+import type { GameFactory, GameRuntime, MatchApi, Outcome } from './engine.ts';
+import { blindTimer } from './timer.ts';
+import { lightSimon } from './simon.ts';
+import { colorReflex } from './reflex.ts';
+import { perfectCircle } from './circle.ts';
+import { bluff } from './bluff.ts';
+import { coinFlip } from './coin.ts';
+
+const FACTORIES: Record<GameId, GameFactory> = {
+  timer: blindTimer,
+  simon: lightSimon,
+  reflex: colorReflex,
+  circle: perfectCircle,
+  bluff,
+  coin: coinFlip,
+};
+
+const INVITE_MS = 60_000;
+const LOBBY_MS = 45_000;
+const INTRO_MS = 7_000;
+const RESULT_MS = 15_000;
+
+interface Invite extends DuelInvite {
+  charges: Charge[];
+  timer: NodeJS.Timeout;
+}
+
+interface Match {
+  id: string;
+  game: GameId;
+  mode: GameMode;
+  starter: GamePlayer | null;
+  players: GamePlayer[];
+  stake: number;
+  options: { side?: 'heads' | 'tails' };
+  phase: MatchPhase;
+  endsAt: number | null;
+  phaseMs: number;
+  runtime: GameRuntime | null;
+  result: MatchResult | null;
+  /** Everything paid for this match, given back if it is cancelled */
+  charges: Charge[];
+  timers: Set<NodeJS.Timeout>;
+  lightColor: GameColor | null;
+  usesLights: boolean;
+}
+
+const player = (g: Guest): GamePlayer => ({ id: g.id, name: g.name, color: g.color });
+
+/**
+ * Mini games on the TV: 1 vs 1 duels where both put money in the pot, or room games
+ * that anyone can join. Each game lives in its own file and plugs in through engine.ts.
+ */
+export default defineModule<GamesSettings>({
+  id: 'games',
+  name: 'Games',
+  description: 'Duels and party games on the TV, played from the phones',
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true },
+
+  setup(ctx) {
+    const invites = new Map<string, Invite>();
+    let match: Match | null = null;
+
+    ctx.price({ key: 'games.duel', label: 'Challenge someone to a duel', default: 5000 });
+    ctx.price({ key: 'games.room', label: 'Start a game for the room', default: 5000 });
+    ctx.earn({ key: 'games.win', label: 'Games: win a room game', default: 2000, describe: (a) => `${a} for winning a game started for the room` });
+    ctx.earn({ key: 'games.bluff', label: 'Bluff: both share', default: 2000, describe: (a) => `${a} each when both players share in Bluff` });
+
+    const lights = () => ctx.use<LightsApi>('lights');
+    const lightsOn = () => !!lights()?.available();
+    const allowed = (game: GameId, mode: GameMode) => ctx.settings.get().enabled.includes(game) && !!gameInfo(game)?.modes.includes(mode);
+    const fmt = (amount: number) => `${formatAmount(amount)} ${ctx.economy.currency.symbol}`;
+
+    const cleanStake = (raw: unknown): number => {
+      if (!ctx.economy.enabled) return 0;
+      const stake = Math.round(num(raw, 0));
+      if (stake < 0) throw new HbError('The stake cannot be negative');
+      const max = ctx.settings.get().maxStake;
+      if (max > 0 && stake > max) throw new HbError(`The stake is limited to ${fmt(max)}`);
+      return stake;
+    };
+
+    /** Throws when this guest is already playing or has a challenge waiting (who: their name, or null for "you") */
+    const checkFree = (guestId: string, who: string | null) => {
+      if (match?.players.some((p) => p.id === guestId) && match.phase !== 'result') {
+        throw new HbError(who ? `${who} is already in a game` : 'You are already in a game');
+      }
+      for (const inv of invites.values()) {
+        if (inv.from.id === guestId || inv.to.id === guestId) {
+          throw new HbError(who ? `${who} already has a challenge waiting` : 'You already have a challenge waiting');
+        }
+      }
+    };
+
+    const tvFree = () => {
+      if (match) throw new HbError('A game is already on the TV, wait for it to end');
+      if (ctx.hub.takeover && ctx.hub.takeover !== ctx.id) throw new HbError('Something else is on the TV right now');
+    };
+
+    const refundAll = (charges: Charge[], why: string) => {
+      for (const c of charges) {
+        if (!c.amount || !ctx.session.guests.has(c.guest.id)) continue;
+        ctx.economy.refund(c);
+        ctx.toast(c.guest, { text: why, amount: c.amount, kind: 'info' });
+      }
+    };
+
+    // ------------------------------------------------------------ match flow
+
+    const later = (m: Match, ms: number, fn: () => void) => {
+      const t = setTimeout(() => {
+        m.timers.delete(t);
+        if (match === m) fn();
+      }, ms);
+      m.timers.add(t);
+    };
+
+    const deadline = (m: Match, ms: number | null) => {
+      m.endsAt = ms === null ? null : Date.now() + ms;
+      m.phaseMs = ms ?? 0;
+      ctx.publish();
+    };
+
+    const close = () => {
+      const m = match;
+      if (!m) return;
+      for (const t of m.timers) clearTimeout(t);
+      match = null;
+      if (m.usesLights) void lights()?.release();
+      ctx.takeover.stop();
+      ctx.publish();
+    };
+
+    const cancel = (why: string, refund = true) => {
+      if (!match) return;
+      if (refund && match.phase !== 'result') refundAll(match.charges, why);
+      close();
+    };
+
+    const potOf = (m: Match) => m.stake * m.players.length;
+
+    const createMatch = (game: GameId, mode: GameMode, starter: GamePlayer | null, players: GamePlayer[], stake: number, charges: Charge[], options: Match['options'] = {}) => {
+      tvFree();
+      ctx.takeover.start();
+      match = {
+        id: uid(6),
+        game,
+        mode,
+        starter,
+        players,
+        stake,
+        options,
+        phase: 'lobby',
+        endsAt: null,
+        phaseMs: 0,
+        runtime: null,
+        result: null,
+        charges,
+        timers: new Set(),
+        lightColor: null,
+        usesLights: false,
+      };
+      return match;
+    };
+
+    const intro = (m: Match) => {
+      m.phase = 'intro';
+      if (gameInfo(m.game)?.lights && lights()) {
+        m.usesLights = true;
+        lights()!.claim();
+        lights()!.color(null);
+      }
+      deadline(m, INTRO_MS);
+      later(m, INTRO_MS, () => play(m));
+    };
+
+    const play = (m: Match) => {
+      m.phase = 'play';
+      m.endsAt = null;
+      m.phaseMs = 0;
+      const api: MatchApi = {
+        players: m.players,
+        mode: m.mode,
+        stake: m.stake,
+        pot: potOf(m),
+        options: m.options,
+        light: (color) => {
+          m.lightColor = color;
+          if (m.usesLights) lights()?.color(color ? (GAME_COLORS.find((c) => c.id === color)?.led ?? null) : null);
+          ctx.publish();
+        },
+        get lightColor() {
+          return m.lightColor;
+        },
+        deadline: (ms) => deadline(m, ms),
+        later: (ms, fn) => later(m, ms, fn),
+        publish: () => ctx.publish(),
+        finish: (outcome) => finish(m, outcome),
+        reward: (key) => (ctx.economy.enabled ? ctx.economy.earnAmount(key) : 0),
+      };
+      m.runtime = FACTORIES[m.game](api);
+      m.runtime.start();
+      ctx.publish();
+    };
+
+    const finish = (m: Match, outcome: Outcome) => {
+      if (m.phase !== 'play') return;
+      const name = gameInfo(m.game)?.name ?? 'Game';
+      const pot = potOf(m);
+      const payouts: Record<string, number> = Object.fromEntries(m.players.map((p) => [p.id, 0]));
+      if (outcome.payouts) {
+        Object.assign(payouts, outcome.payouts);
+      } else if (outcome.winners.length) {
+        const share = Math.floor(pot / outcome.winners.length);
+        outcome.winners.forEach((id, i) => (payouts[id] += share + (i === 0 ? pot - share * outcome.winners.length : 0)));
+        if (m.mode === 'room' && ctx.economy.enabled) for (const id of outcome.winners) payouts[id] += ctx.economy.earnAmount('games.win');
+      } else {
+        // Nobody won: everyone gets their stake back
+        for (const p of m.players) payouts[p.id] += m.stake;
+      }
+
+      for (const [id, amount] of Object.entries(payouts)) {
+        const guest = ctx.session.guests.get(id);
+        if (!guest || amount <= 0) continue;
+        ctx.economy.credit(guest, amount, `${name}: ${outcome.winners.includes(id) ? 'winnings' : 'stake back'}`);
+        ctx.toast(guest, { text: outcome.winners.includes(id) ? `${name}: you won` : `${name}: stake back`, amount, kind: 'success' });
+      }
+
+      const names = outcome.winners.map((id) => m.players.find((p) => p.id === id)?.name).filter(Boolean) as string[];
+      const headline = outcome.headline ?? (names.length === 1 ? `${names[0]} wins` : names.length ? `Tie: ${names.join(' and ')}` : 'Nobody wins');
+      m.result = { winners: outcome.winners, lines: outcome.lines, payouts, headline };
+      m.phase = 'result';
+      if (m.usesLights) {
+        m.usesLights = false;
+        void lights()?.release();
+      }
+      const top = outcome.winners.length === 1 ? ctx.session.guests.get(outcome.winners[0]) : undefined;
+      if (top) ctx.activity(`{name} won ${name}${pot ? ` and a pot of ${fmt(pot)}` : ''}`, { guest: top });
+      deadline(m, RESULT_MS);
+      later(m, RESULT_MS, close);
+    };
+
+    // ------------------------------------------------------------ duels
+
+    const dropInvite = (inv: Invite, why: string | null) => {
+      clearTimeout(inv.timer);
+      invites.delete(inv.id);
+      if (why) refundAll(inv.charges, why);
+      ctx.publish();
+    };
+
+    ctx.onGuest('invite', (args, guest) => {
+      const game = String(args?.game ?? '') as GameId;
+      if (!allowed(game, 'duel')) throw new HbError('This game is not available as a duel');
+      const opponent = ctx.session.guests.get(String(args?.to ?? ''));
+      if (!opponent) throw new HbError('Pick someone to challenge');
+      if (opponent.id === guest.id) throw new HbError('You cannot challenge yourself');
+      if (opponent.sockets === 0) throw new HbError(`${opponent.name} is not online`);
+      checkFree(guest.id, null);
+      checkFree(opponent.id, opponent.name);
+      const stake = cleanStake(args?.stake);
+      if (stake > opponent.balance) throw new HbError(`${opponent.name} cannot match that stake`);
+      const side = args?.side === 'tails' ? 'tails' : 'heads';
+      const name = gameInfo(game)!.name;
+
+      const fee = ctx.economy.charge(guest, 'games.duel', 1, `Duel: ${name}`);
+      let bet: Charge;
+      try {
+        bet = ctx.economy.pay(guest, stake, `Duel stake: ${name}`);
+      } catch (err) {
+        ctx.economy.refund(fee);
+        throw err;
+      }
+      const inv: Invite = {
+        id: uid(6),
+        game,
+        from: player(guest),
+        to: player(opponent),
+        stake,
+        ...(game === 'coin' ? { side } : {}),
+        expiresAt: Date.now() + INVITE_MS,
+        charges: [fee, bet],
+        timer: setTimeout(() => {
+          if (!invites.has(inv.id)) return;
+          ctx.toast(guest, { text: `${opponent.name} did not answer`, kind: 'info' });
+          dropInvite(inv, 'Challenge expired, money back');
+        }, INVITE_MS),
+      };
+      invites.set(inv.id, inv);
+      ctx.activity(`{name} challenged ${opponent.name} to ${name}${stake ? ` for ${fmt(stake)}` : ''}`, { guest, sensitive: true });
+      ctx.publish();
+      return { id: inv.id };
+    });
+
+    ctx.onGuest('respond', (args, guest) => {
+      const inv = invites.get(String(args?.id ?? ''));
+      if (!inv || inv.to.id !== guest.id) throw new HbError('This challenge is gone');
+      const from = ctx.session.guests.get(inv.from.id);
+      if (!args?.accept || !from) {
+        if (from) ctx.toast(from, { text: `${guest.name} declined your challenge`, kind: 'info' });
+        dropInvite(inv, 'Challenge declined, money back');
+        return true;
+      }
+      tvFree();
+      const bet = ctx.economy.pay(guest, inv.stake, `Duel stake: ${gameInfo(inv.game)!.name}`);
+      try {
+        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet], { side: inv.side });
+        dropInvite(inv, null);
+        intro(m);
+      } catch (err) {
+        ctx.economy.refund(bet);
+        throw err;
+      }
+      ctx.activity(`{name} accepted the duel against ${inv.from.name}`, { guest, sensitive: true });
+      return true;
+    });
+
+    ctx.onGuest('cancelInvite', (args, guest) => {
+      const inv = invites.get(String(args?.id ?? ''));
+      if (!inv || inv.from.id !== guest.id) return false;
+      dropInvite(inv, 'Challenge cancelled, money back');
+      return true;
+    });
+
+    // ------------------------------------------------------------ room games
+
+    const startRoom = (game: GameId, starter: Guest | null, rawStake: unknown) => {
+      if (!allowed(game, 'room') && starter) throw new HbError('This game cannot be started for the room');
+      if (!gameInfo(game)?.modes.includes('room')) throw new HbError('This game is for duels only');
+      tvFree();
+      const stake = cleanStake(rawStake);
+      const charges: Charge[] = [];
+      if (starter) {
+        checkFree(starter.id, null);
+        charges.push(ctx.economy.charge(starter, 'games.room', 1, `Started ${gameInfo(game)!.name}`));
+        try {
+          charges.push(ctx.economy.pay(starter, stake, `${gameInfo(game)!.name}: entry`));
+        } catch (err) {
+          refundAll(charges, 'Money back');
+          throw err;
+        }
+      }
+      try {
+        const m = createMatch(game, 'room', starter ? player(starter) : null, starter ? [player(starter)] : [], stake, charges);
+        deadline(m, LOBBY_MS);
+        later(m, LOBBY_MS, () => beginRoom(m));
+      } catch (err) {
+        refundAll(charges, 'Money back');
+        throw err;
+      }
+      ctx.activity(starter ? `{name} started ${gameInfo(game)!.name}, join from your phone` : `${gameInfo(game)!.name} is starting, join from your phone`, { guest: starter ?? undefined });
+    };
+
+    const beginRoom = (m: Match) => {
+      if (m.phase !== 'lobby') return;
+      if (m.players.length < 2) {
+        cancel('Not enough players joined, money back');
+        return;
+      }
+      intro(m);
+    };
+
+    ctx.onGuest('startRoom', (args, guest) => {
+      startRoom(String(args?.game ?? '') as GameId, guest, args?.stake);
+      return true;
+    });
+
+    ctx.onGuest('join', (_args, guest) => {
+      const m = match;
+      if (!m || m.mode !== 'room' || m.phase !== 'lobby') throw new HbError('Too late to join');
+      if (m.players.some((p) => p.id === guest.id)) return true;
+      checkFree(guest.id, null);
+      m.charges.push(ctx.economy.pay(guest, m.stake, `${gameInfo(m.game)!.name}: entry`));
+      m.players.push(player(guest));
+      ctx.publish();
+      return true;
+    });
+
+    ctx.onGuest('leave', (_args, guest) => {
+      const m = match;
+      if (!m || m.mode !== 'room' || m.phase !== 'lobby') throw new HbError('The game has started');
+      if (m.starter?.id === guest.id) {
+        cancel(`${guest.name} cancelled the game, money back`);
+        return true;
+      }
+      m.players = m.players.filter((p) => p.id !== guest.id);
+      const mine = m.charges.filter((c) => c.guest.id === guest.id);
+      m.charges = m.charges.filter((c) => c.guest.id !== guest.id);
+      refundAll(mine, 'Left the game, money back');
+      ctx.publish();
+      return true;
+    });
+
+    ctx.onGuest('begin', (_args, guest) => {
+      const m = match;
+      if (!m || m.phase !== 'lobby') throw new HbError('Not now');
+      if (m.starter?.id !== guest.id) throw new HbError('Only the person who started it can do that');
+      if (m.players.length < 2) throw new HbError('Wait for at least one more player');
+      beginRoom(m);
+      return true;
+    });
+
+    ctx.onGuest('play', (args, guest) => {
+      const m = match;
+      if (!m || m.phase !== 'play' || !m.runtime) throw new HbError('Not now');
+      if (!m.players.some((p) => p.id === guest.id)) throw new HbError('You are not in this game');
+      return m.runtime.input(guest.id, args) ?? true;
+    });
+
+    // ------------------------------------------------------------ host
+
+    ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake));
+    ctx.onAdmin('begin', () => {
+      if (match?.phase === 'lobby') beginRoom(match);
+    });
+    ctx.onAdmin('stop', () => cancel('The host stopped the game, money back'));
+    ctx.onAdmin('cancelInvite', (args) => {
+      const inv = invites.get(String(args?.id ?? ''));
+      if (inv) dropInvite(inv, 'The host cancelled the challenge, money back');
+    });
+    ctx.onAdmin('setSettings', (args) => {
+      const s = ctx.settings.get();
+      ctx.settings.update({
+        enabled: Array.isArray(args?.enabled) ? GAMES.map((g) => g.id).filter((id) => args.enabled.includes(id)) : s.enabled,
+        maxStake: args?.maxStake !== undefined ? Math.max(0, Math.round(num(args.maxStake, 0))) : s.maxStake,
+        tvColors: typeof args?.tvColors === 'boolean' ? args.tvColors : s.tvColors,
+      });
+      ctx.publish();
+    });
+
+    // ------------------------------------------------------------ state
+
+    ctx.state((role): GamesState => {
+      const m = match;
+      const state: MatchState | null = m && {
+        id: m.id,
+        game: m.game,
+        mode: m.mode,
+        starter: m.starter,
+        players: m.players,
+        stake: m.stake,
+        pot: potOf(m),
+        phase: m.phase,
+        endsAt: m.endsAt,
+        phaseMs: m.phaseMs,
+        view: m.runtime?.view(role) ?? null,
+        result: m.result,
+      };
+      return {
+        invites: [...invites.values()].map(({ charges: _c, timer: _t, ...inv }) => inv),
+        match: state,
+        lights: lightsOn(),
+        online: role === 'tv' ? [] : [...ctx.session.guests.values()].filter((g) => g.sockets > 0).map(player),
+        settings: ctx.settings.get(),
+      };
+    });
+
+    // Opponents come and go: keep the "who is online" list fresh
+    ctx.session.on('guests-changed', () => ctx.publish());
+
+    const stopAll = (refund: boolean) => {
+      for (const inv of [...invites.values()]) dropInvite(inv, refund ? 'Challenge cancelled, money back' : null);
+      cancel('The game was stopped, money back', refund);
+    };
+    ctx.onToggle((on) => {
+      if (!on) stopAll(true);
+    });
+    ctx.onSessionReset(() => stopAll(false));
+    ctx.onShutdown(() => stopAll(true));
+  },
+});

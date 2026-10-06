@@ -9,11 +9,12 @@ import wled from './wled/index.ts';
 import soundboard from './soundboard/index.ts';
 import quiz from './quiz/index.ts';
 import tts from './tts/index.ts';
+import games from './games/index.ts';
 
 /**
  * Client side of every module. Keep the ids in sync with server/modules/index.ts.
  */
-export const clientModules: ClientModule[] = [core, spotify, canvas, stickers, photos, wled, soundboard, quiz, tts];
+export const clientModules: ClientModule[] = [core, spotify, canvas, stickers, photos, wled, soundboard, quiz, tts, games];
 
 export function activeModules(): ClientModule[] {
   return clientModules.filter((m) => m.id === 'core' || enabled(m.id));
