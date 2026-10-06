@@ -101,13 +101,13 @@
           disabled={onpress ? pressDisabled || busyMp3 === s.mp3 : false}
           onpress={() => (onpress ? onpress(s) : preview(s))}
         />
-        <span class="title">{s.title}</span>
+        <span class="title" title={s.title}>{s.title}</span>
+        <span class="len">{s.duration ? seconds(s.duration) : ''}</span>
         <div class="tools">
           <button type="button" class="tool" aria-label={previewing === s.id ? 'Stop' : 'Listen on this phone'} onclick={() => preview(s)}>
-            {#if fetching === s.id}<LoaderCircle size={15} class="spin" />{:else if previewing === s.id}<Square size={14} />{:else}<Headphones size={15} />{/if}
+            {#if fetching === s.id}<LoaderCircle size={20} class="spin" />{:else if previewing === s.id}<Square size={18} />{:else}<Headphones size={20} />{/if}
           </button>
           {@render actions?.(s)}
-          {#if s.duration}<span class="len">{seconds(s.duration)}</span>{/if}
         </div>
       </div>
     {/each}
@@ -149,59 +149,66 @@
     grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
     gap: 1.1rem 0.5rem;
   }
+  /* Every cell has the same rows, so buttons, names and tools line up across the grid */
   .instant {
     display: grid;
+    grid-template-rows: auto auto auto auto;
     justify-items: center;
     align-content: start;
-    gap: 0.45rem;
+    gap: 0.3rem;
     min-width: 0;
     padding-top: 0.2rem;
   }
+  .instant > :global(:first-child) {
+    margin-bottom: 0.3rem;
+  }
   .title {
     width: 100%;
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     font-weight: 600;
     line-height: 1.25;
     text-align: center;
-    overflow-wrap: anywhere;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
+    white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
   }
   .tools {
     display: flex;
-    align-items: center;
     justify-content: center;
-    flex-wrap: wrap;
-    gap: 0.15rem;
-    color: var(--text-dim);
+    width: 100%;
+    gap: 0.25rem;
   }
   /* Shared with the buttons passed in `actions` */
   .tools :global(.tool) {
     display: grid;
     place-items: center;
-    width: 1.9rem;
-    height: 1.9rem;
+    /* Shrinks a little when three tools share a narrow cell (admin) */
+    flex: 0 1 2.6rem;
+    min-width: 0;
+    height: 2.6rem;
     padding: 0;
-    border: 0;
+    border: 1px solid var(--border);
     border-radius: 50%;
-    background: none;
+    background: var(--surface-2);
     color: var(--text-dim);
     cursor: pointer;
   }
   .tools :global(.tool:active) {
-    background: var(--surface-2);
+    background: var(--border);
   }
   .tools :global(.tool.on) {
     color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
   }
   .tools :global(.tool:disabled) {
     opacity: 0.4;
   }
   .len {
+    min-height: 1em;
+    margin-top: -0.2rem;
     font-size: 0.72rem;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
     color: var(--text-faint);
   }

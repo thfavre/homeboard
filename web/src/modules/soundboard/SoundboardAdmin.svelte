@@ -100,8 +100,8 @@
     {/if}
     <MiSearch>
       {#snippet actions(s)}
-        <button type="button" class="tool" aria-label="Play on the TV" onclick={() => attempt(() => rpc('soundboard', 'playSearch', { mp3: s.mp3, title: s.title }))}><Tv size={15} /></button>
-        <button type="button" class="tool" aria-label="Add to the board" disabled={adding === s.mp3} onclick={() => add(s.mp3, s.title)}><Plus size={17} /></button>
+        <button type="button" class="tool" aria-label="Play on the TV" onclick={() => attempt(() => rpc('soundboard', 'playSearch', { mp3: s.mp3, title: s.title }))}><Tv size={19} /></button>
+        <button type="button" class="tool" aria-label="Add to the board" disabled={adding === s.mp3} onclick={() => add(s.mp3, s.title)}><Plus size={20} /></button>
       {/snippet}
     </MiSearch>
   </Section>

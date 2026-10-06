@@ -68,7 +68,7 @@
       <MiSearch onpress={(s) => playSearch(s.mp3, s.title)} pressDisabled={wait > 0} busyMp3={sending}>
         {#snippet actions(s)}
           <button type="button" class="tool" class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>
-            {#if saved(s.mp3)}<BookmarkCheck size={16} />{:else}<BookmarkPlus size={16} />{/if}
+            {#if saved(s.mp3)}<BookmarkCheck size={20} />{:else}<BookmarkPlus size={20} />{/if}
           </button>
         {/snippet}
       </MiSearch>
