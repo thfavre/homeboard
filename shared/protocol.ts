@@ -152,7 +152,10 @@ export interface RpcRequest {
   args?: unknown;
 }
 
-export type RpcResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
+/** NO_MONEY: the guest cannot afford the action */
+export type RpcErrorCode = 'NO_MONEY';
+
+export type RpcResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string; code?: RpcErrorCode };
 
 export interface StateMessage {
   module: string;

@@ -20,13 +20,17 @@
   });
   onDestroy(() => board.destroy());
 
-  // Integer scaling keeps every pixel perfectly square and sharp
+  // A whole number of screen pixels per canvas pixel keeps every pixel square and sharp.
+  // When rounding down would leave a wide empty border, fill the space instead.
   $effect(() => {
     if (!frame || !mod) return;
     const { width, height } = mod;
     const ro = new ResizeObserver(([e]) => {
       const { width: w, height: h } = e.contentRect;
-      scale = Math.max(1, Math.floor(Math.min(w / width, h / height)));
+      const dpr = window.devicePixelRatio || 1;
+      const fit = Math.min(w / width, h / height);
+      const sharp = Math.floor(fit * dpr) / dpr;
+      scale = sharp >= fit * 0.96 ? sharp : Math.max(1 / dpr, fit);
     });
     ro.observe(frame);
     return () => ro.disconnect();
@@ -57,8 +61,8 @@
     height: 100%;
     display: grid;
     grid-template-rows: auto 1fr;
-    gap: 0.8rem;
-    padding: 1rem 1.2rem 1.2rem;
+    gap: 0.6rem;
+    padding: 0.9rem 1rem 1rem;
     min-height: 0;
   }
   .label {

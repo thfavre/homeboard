@@ -2,9 +2,12 @@
   import { hb } from '$lib/client.svelte.ts';
   import Money from './Money.svelte';
   import { CircleAlert, CircleCheck, Info } from '@lucide/svelte';
+
+  /** Distance from the top of the screen in px: the guest page keeps its top bar (back, balance) visible */
+  let { top }: { top?: number } = $props();
 </script>
 
-<div class="toasts" aria-live="polite">
+<div class="toasts" class:below={top !== undefined} style:--below={top !== undefined ? `${top + 8}px` : undefined} aria-live="polite">
   {#each hb.toasts as t (t.id)}
     <div class="toast card {t.kind ?? 'info'}">
       {#if t.kind === 'error'}<CircleAlert size={18} />{:else if t.kind === 'success'}<CircleCheck size={18} />{:else}<Info size={18} />{/if}
@@ -27,14 +30,19 @@
     z-index: 5000;
     pointer-events: none;
   }
+  .toasts.below {
+    top: var(--below);
+  }
   .toast {
     display: flex;
     align-items: center;
     gap: 0.6rem;
     padding: 0.75rem 1rem;
     border-radius: var(--radius-sm);
-    background: var(--surface);
-    --blur: 24px;
+    /* Solid: the page under it must not show through the text */
+    background: var(--bg);
+    background-image: linear-gradient(var(--surface), var(--surface));
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
     animation: hb-fade-up 0.25s ease;
     font-size: 0.92rem;
     font-weight: 500;

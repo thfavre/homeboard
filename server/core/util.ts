@@ -1,7 +1,16 @@
 import { randomBytes, randomInt } from 'node:crypto';
+import type { RpcErrorCode } from '../../shared/protocol.ts';
 
 /** An error whose message is safe to show to the user */
-export class HbError extends Error {}
+export class HbError extends Error {
+  /** Optional machine-readable reason the client can react to (see RpcErrorCode) */
+  constructor(
+    message: string,
+    readonly code?: RpcErrorCode,
+  ) {
+    super(message);
+  }
+}
 
 export const uid = (bytes = 12) => randomBytes(bytes).toString('base64url');
 

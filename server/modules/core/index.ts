@@ -349,11 +349,28 @@ export default defineModule({
 
     ctx.onAdmin('give', (args) => {
       const guest = session.byId(args.guestId);
-      const amount = Math.round(num(args.amount));
+      let amount = Math.round(num(args.amount));
       if (!amount) throw new HbError('Enter an amount');
+      // Take at most what they have: a balance below zero would block every purchase
+      if (amount < 0) {
+        if (guest.balance <= 0) throw new HbError(`${guest.name} has nothing to take`);
+        amount = Math.max(amount, -guest.balance);
+      }
       const reason = cleanName(args.reason, 60) || (amount > 0 ? 'Gift from the host' : 'Taken by the host');
-      economy.credit(guest, amount, reason);
+      // Off unless the host ticks it: host corrections do not move the earned/spent leaderboard
+      economy.credit(guest, amount, reason, args.leaderboard === true);
       ctx.toast(guest, { text: reason, amount, kind: amount > 0 ? 'success' : 'info' });
+    });
+
+    /** Set a guest's balance to an exact amount: the difference goes through the ledger like a gift or a take */
+    ctx.onAdmin('setBalance', (args) => {
+      const guest = session.byId(args.guestId);
+      const target = Math.max(0, Math.round(num(args.amount)));
+      const diff = target - guest.balance;
+      if (!diff) throw new HbError('They already have this amount');
+      const reason = cleanName(args.reason, 60) || 'Balance set by the host';
+      economy.credit(guest, diff, reason, args.leaderboard === true);
+      ctx.toast(guest, { text: reason, amount: diff, kind: diff > 0 ? 'success' : 'info' });
     });
 
     ctx.onAdmin('moneyRain', (args) => {

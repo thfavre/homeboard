@@ -430,7 +430,7 @@ export class Hub {
       try {
         ack({ ok: true, data: await this.handleRpc(socket, req) });
       } catch (err) {
-        if (err instanceof HbError) ack({ ok: false, error: err.message });
+        if (err instanceof HbError) ack({ ok: false, error: err.message, ...(err.code ? { code: err.code } : {}) });
         else {
           log.error('rpc', `${req?.module}.${req?.method}`, err);
           ack({ ok: false, error: 'Something went wrong' });

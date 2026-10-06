@@ -139,7 +139,7 @@ export class Economy {
     if (amount > 0) {
       if (guest.balance < amount) {
         const c = this.currency;
-        throw new HbError(`Not enough ${c.name}: this costs ${formatAmount(amount)} ${c.symbol}, you have ${formatAmount(guest.balance)} ${c.symbol}`);
+        throw new HbError(`Not enough ${c.name}: this costs ${formatAmount(amount)} ${c.symbol}, you have ${formatAmount(guest.balance)} ${c.symbol}`, 'NO_MONEY');
       }
       this.session.applyAmount(guest, -amount, reason);
     }
@@ -150,9 +150,10 @@ export class Economy {
     if (charge.amount > 0) this.session.applyAmount(charge.guest, charge.amount, `Refund: ${charge.reason}`);
   }
 
-  credit(guest: Guest, amount: number, reason: string): void {
+  /** countStats false: a host correction that should not move the earned/spent leaderboard */
+  credit(guest: Guest, amount: number, reason: string, countStats = true): void {
     if (amount === 0) return;
-    this.session.applyAmount(guest, amount, reason);
+    this.session.applyAmount(guest, amount, reason, countStats);
   }
 
   /** Credit using an earn rule. Returns the amount credited. */

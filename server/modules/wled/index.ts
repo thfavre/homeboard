@@ -1,4 +1,6 @@
+import { join } from 'node:path';
 import { DEFAULT_WLED_EFFECTS, type WledDevice, type WledEffect, type WledJob, type WledState } from '../../../shared/wled.ts';
+import { JsonFile } from '../../core/jsonFile.ts';
 import { defineModule } from '../../core/module.ts';
 import { HbError, clamp, cleanName, num, uid } from '../../core/util.ts';
 
@@ -13,6 +15,14 @@ interface WledSettings {
 interface Job extends WledJob {
   guestId: string | null;
   paid: number;
+}
+
+/** A device Homeboard took over */
+interface Snapshot {
+  /** Its state before (GET /json/state), put back when the effects end */
+  before: any;
+  /** How it looked after Homeboard's last change: anything else at the end means someone changed it by hand */
+  sent?: string;
 }
 
 interface Health {
@@ -34,7 +44,15 @@ export interface LightsApi {
 
 const POLL_MS = 20_000;
 const TIMEOUT_MS = 3000;
-const SEGMENT_KEYS = ['id', 'on', 'bri', 'col', 'fx', 'sx', 'ix', 'pal', 'c1', 'c2', 'c3', 'o1', 'o2', 'o3', 'sel'];
+// Look and layout of a segment (start/stop, grouping, mirroring, 2D...), restored when no preset was active
+const SEGMENT_KEYS = ['id', 'start', 'stop', 'startY', 'stopY', 'grp', 'spc', 'of', 'rev', 'mi', 'rY', 'mY', 'tp', 'n', 'on', 'frz', 'bri', 'cct', 'set', 'col', 'fx', 'sx', 'ix', 'pal', 'c1', 'c2', 'c3', 'o1', 'o2', 'o3', 'si', 'm12', 'sel'];
+
+/** What a person would notice changing on a light: compared to tell a hand change from Homeboard's own */
+function look(state: any): string | undefined {
+  if (!state || typeof state.on !== 'boolean') return undefined;
+  const seg = (state.seg ?? []).map((g: any) => [g.id, g.start, g.stop, g.on, g.fx, g.pal, g.sx, g.ix, g.col]);
+  return JSON.stringify([state.on, state.bri, state.ps, state.pl, seg]);
+}
 
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.replace('#', ''), 16);
@@ -74,8 +92,30 @@ export default defineModule<WledSettings>({
 
   setup(ctx) {
     const health = new Map<string, Health>();
-    /** State of each device before Homeboard took over, restored when the effects end */
-    const saved = new Map<string, any>();
+    // Kept on disk at once, so lights left on an effect by a crash or a power cut are put back at the next start
+    const store = new JsonFile<{ devices: Record<string, Snapshot> }>(join(ctx.dataDir, 'snapshots.json'), { devices: {} });
+    const saved = {
+      has: (id: string) => id in store.data.devices,
+      get: (id: string): Snapshot | undefined => store.data.devices[id],
+      keys: () => Object.keys(store.data.devices),
+      take(id: string, before: any) {
+        store.data.devices[id] = { before };
+        store.saveNow();
+      },
+      /** Remember how the light looks after our change (the state WLED answers with) */
+      sent(id: string, after: any) {
+        const snap = store.data.devices[id];
+        if (!snap) return;
+        snap.sent = look(after);
+        store.saveNow();
+      },
+      drop(id: string) {
+        delete store.data.devices[id];
+        store.saveNow();
+      },
+    };
+    /** Snapshots from a previous run, or whose restore failed: put back once the light answers */
+    const pending = new Set(saved.keys());
     let queue: Job[] = [];
     let current: (Job & { until: number }) | null = null;
     let timer: NodeJS.Timeout | null = null;
@@ -100,6 +140,11 @@ export default defineModule<WledSettings>({
           }
         }),
       );
+      for (const id of pending) {
+        if (!health.get(id)?.online && device(id)) continue;
+        pending.delete(id);
+        void restore(id);
+      }
       ctx.publish();
     };
     void poll();
@@ -111,12 +156,13 @@ export default defineModule<WledSettings>({
       const d = device(deviceId);
       if (!d) return false;
       try {
-        if (!saved.has(d.id)) saved.set(d.id, await wled(d.host, '/json/state'));
-        const before = saved.get(d.id);
+        pending.delete(d.id);
+        if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
         const col = effect.colors.length ? effect.colors.map(hexToRgb) : undefined;
-        const seg = (before.seg ?? [{ id: 0 }]).map((s: any) => ({ id: s.id, on: true, fx: effect.fx, pal: effect.pal, sx: effect.sx, ix: effect.ix, ...(col ? { col } : {}) }));
+        const seg = (saved.get(d.id)!.before.seg ?? [{ id: 0 }]).map((s: any) => ({ id: s.id, on: true, fx: effect.fx, pal: effect.pal, sx: effect.sx, ix: effect.ix, ...(col ? { col } : {}) }));
         const bri = ctx.settings.get().brightness;
-        await wled(d.host, '/json/state', { on: true, transition: 3, ...(bri > 0 ? { bri } : {}), seg });
+        // v: WLED answers with its new state
+        saved.sent(d.id, await wled(d.host, '/json/state', { on: true, transition: 3, ...(bri > 0 ? { bri } : {}), seg, v: true }));
         return true;
       } catch (err) {
         ctx.log.warn(`Could not reach ${d.name}`, (err as Error).message);
@@ -126,19 +172,35 @@ export default defineModule<WledSettings>({
     };
 
     const restore = async (deviceId: string) => {
-      const before = saved.get(deviceId);
-      saved.delete(deviceId);
+      // In use again (a retry can come in while an effect or a game holds the light)
+      if (held || current?.devices.includes(deviceId)) return;
+      const snap = saved.get(deviceId);
       const d = device(deviceId);
-      if (!before || !d) return;
+      if (!snap || !d) {
+        if (snap) saved.drop(deviceId);
+        return;
+      }
+      const { before } = snap;
       try {
-        if (before.ps > 0) {
+        if (snap.sent && look(await wled(d.host, '/json/state')) !== snap.sent) {
+          // Someone picked something else on the light meanwhile: theirs wins
+          ctx.log.info(`${d.name} was changed by hand, left as it is`);
+        } else if (before.on && before.pl > 0) {
+          // A playlist was running: start it again rather than freezing on its current preset
+          await wled(d.host, '/json/state', { ps: before.pl });
+        } else if (before.on && before.ps > 0) {
           await wled(d.host, '/json/state', { ps: before.ps });
         } else {
+          // No preset, or the light was off (a preset would switch it on)
           const seg = (before.seg ?? []).map((s: any) => Object.fromEntries(SEGMENT_KEYS.filter((k) => k in s).map((k) => [k, s[k]])));
           await wled(d.host, '/json/state', { on: before.on, bri: before.bri, transition: 7, seg });
         }
+        saved.drop(deviceId);
       } catch (err) {
+        // Kept, and tried again once the light answers
         ctx.log.warn(`Could not restore ${d.name}`, (err as Error).message);
+        health.set(d.id, { online: false });
+        pending.add(deviceId);
       }
     };
 
@@ -213,11 +275,12 @@ export default defineModule<WledSettings>({
           const hex = wanted.get(deviceId) ?? null;
           wanted.delete(deviceId);
           try {
-            if (!saved.has(d.id)) saved.set(d.id, await wled(d.host, '/json/state'));
+            pending.delete(d.id);
+            if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
             const col = [hex ? hexToRgb(hex) : [0, 0, 0], [0, 0, 0], [0, 0, 0]];
-            const seg = (saved.get(d.id).seg ?? [{ id: 0 }]).map((s: any) => ({ id: s.id, on: true, fx: 0, col }));
+            const seg = (saved.get(d.id)!.before.seg ?? [{ id: 0 }]).map((s: any) => ({ id: s.id, on: true, fx: 0, col }));
             const bri = ctx.settings.get().brightness;
-            await wled(d.host, '/json/state', { on: true, transition: 0, ...(bri > 0 ? { bri } : {}), seg });
+            saved.sent(d.id, await wled(d.host, '/json/state', { on: true, transition: 0, ...(bri > 0 ? { bri } : {}), seg, v: true }));
           } catch (err) {
             ctx.log.warn(`Could not reach ${d.name}`, (err as Error).message);
           }

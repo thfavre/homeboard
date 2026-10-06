@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ask } from '$lib/dialog.svelte.ts';
-  import { ChevronRight, Minus, Plus, UserX } from '@lucide/svelte';
+  import { ChevronRight, Equal, Minus, Plus, UserX } from '@lucide/svelte';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
@@ -16,6 +16,8 @@
   let reason = $state('');
   let newName = $state('');
   let newPin = $state('');
+  /** Host gifts and takes stay out of the earned/spent leaderboard unless ticked */
+  let countLeaderboard = $state(false);
 
   /** For a guest who forgot their PIN */
   async function setPin(guestId: string) {
@@ -27,10 +29,14 @@
     open = id;
     newName = name;
     reason = '';
+    newPin = '';
+    countLeaderboard = false;
   }
 
   const give = (guestId: string, sign: 1 | -1) =>
-    attempt(() => rpc('core', 'give', { guestId, amount: amount * sign, reason }), sign > 0 ? 'Sent' : 'Taken');
+    attempt(() => rpc('core', 'give', { guestId, amount: amount * sign, reason, leaderboard: countLeaderboard }), sign > 0 ? 'Sent' : 'Taken');
+
+  const setBalance = (guestId: string) => attempt(() => rpc('core', 'setBalance', { guestId, amount, reason, leaderboard: countLeaderboard }), 'Balance set');
 
   async function kick(guestId: string, name: string) {
     if (await ask({ title: `Remove ${name}?`, message: 'They leave the session and their balance is lost.', confirm: 'Remove', danger: true })) attempt(() => rpc('core', 'kick', { guestId }), 'Removed');
@@ -41,6 +47,10 @@
   {@const g = openGuest}
   <Sheet title={g.name} onclose={() => (open = null)}>
     <div class="details">
+          <div class="balance">
+            <span class="eyebrow">Balance</span>
+            <span class="big"><Money amount={g.balance} /></span>
+          </div>
           <div class="stats faint">Earned <Money amount={g.earned} /> &middot; Spent <Money amount={g.spent} /></div>
           <div class="row wrap">
             <AmountInput value={amount} oncommit={(v) => (amount = v)} />
@@ -49,7 +59,12 @@
           <div class="row wrap">
             <button class="btn primary small" onclick={() => give(g.id, 1)}><Plus size={16} /> Give</button>
             <button class="btn small" onclick={() => give(g.id, -1)}><Minus size={16} /> Take</button>
+            <button class="btn small" onclick={() => setBalance(g.id)}><Equal size={16} /> Set to this amount</button>
           </div>
+          <label class="tick faint">
+            <input type="checkbox" bind:checked={countLeaderboard} />
+            Count in the leaderboard
+          </label>
           <div class="row wrap">
             <input class="input" bind:value={newName} maxlength="20" />
             <button class="btn small" onclick={() => attempt(() => rpc('core', 'renameGuest', { guestId: g.id, name: newName }), 'Renamed')}>
@@ -144,8 +159,31 @@
     display: grid;
     gap: 0.8rem;
   }
+  .balance {
+    display: grid;
+    gap: 0.2rem;
+  }
+  .big {
+    font-size: 1.9rem;
+    line-height: 1.1;
+  }
+  .tick {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    margin-top: -0.3rem;
+    cursor: pointer;
+  }
+  .tick input {
+    width: 1.05rem;
+    height: 1.05rem;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
   .stats {
     font-size: 0.85rem;
+    margin-top: -0.4rem;
   }
   .wrap {
     flex-wrap: wrap;

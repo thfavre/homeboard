@@ -47,8 +47,6 @@ const GUEST_COLORS = [
 
 const LEDGER_SIZE = 500;
 const PIN_PATTERN = /^\d{4}$/;
-const MAX_PIN_FAILURES = 5;
-const PIN_LOCK_MS = 5 * 60_000;
 
 function checkPin(pin: string, stored: NonNullable<Guest['pin']>): boolean {
   const [a, b] =
@@ -77,8 +75,6 @@ function freshSession(): SessionData {
 export class Session extends EventEmitter {
   private file = new JsonFile<SessionData>(join(DATA_DIR, 'session.json'), freshSession());
   guests = new Map<string, Guest>();
-  /** Wrong PIN attempts per guest, to slow down guessing */
-  private pinFailures = new Map<string, { count: number; until: number }>();
 
   constructor() {
     super();
@@ -155,27 +151,19 @@ export class Session extends EventEmitter {
   }
 
   private login(guest: Guest, pin: string): Guest {
-    const fails = this.pinFailures.get(guest.id);
-    if (fails && fails.count >= MAX_PIN_FAILURES && Date.now() < fails.until) {
-      throw new HbError('Too many wrong PINs for this name. Wait 5 minutes or ask the host.');
-    }
     if (!guest.pin || !checkPin(pin, guest.pin)) {
-      const count = (fails && Date.now() < fails.until ? fails.count : 0) + 1;
-      this.pinFailures.set(guest.id, { count, until: Date.now() + PIN_LOCK_MS });
       throw new HbError(
         guest.pin
           ? `${guest.name} is already here. If it is you, check your PIN. Otherwise pick another name.`
           : `${guest.name} is already here. Pick another name, or ask the host to set a PIN for you.`,
       );
     }
-    this.pinFailures.delete(guest.id);
     // The token stays the same, so the first phone stays logged in too
     return guest;
   }
 
   setPin(guest: Guest, rawPin: unknown): void {
     guest.pin = validPin(rawPin);
-    this.pinFailures.delete(guest.id);
     this.changed(guest);
   }
 
@@ -201,11 +189,14 @@ export class Session extends EventEmitter {
     this.emit('guests-changed');
   }
 
-  /** Low-level balance change. Use Economy for anything user-facing. */
-  applyAmount(guest: Guest, amount: number, reason: string): LedgerEntry {
+  /**
+   * Low-level balance change. Use Economy for anything user-facing.
+   * countStats false: the balance moves but earned/spent (the leaderboard) do not.
+   */
+  applyAmount(guest: Guest, amount: number, reason: string, countStats = true): LedgerEntry {
     guest.balance += amount;
-    if (amount > 0) guest.earned += amount;
-    else guest.spent += -amount;
+    if (countStats && amount > 0) guest.earned += amount;
+    else if (countStats) guest.spent += -amount;
     const entry: LedgerEntry = {
       id: ++this.file.data.ledgerSeq,
       at: Date.now(),
