@@ -86,7 +86,7 @@ export default defineModule<TtsSettings>({
       // Longest names first, so "Marie Curie" wins over another guest called "Marie"
       const guests = [...ctx.session.guests.values()].sort((a, b) => b.name.length - a.name.length);
       for (const g of guests) {
-        if (g.id === senderId || !g.avatar || found.length >= 3) continue;
+        if (g.id === senderId || !g.avatar) continue;
         const full = fold(g.name).trim();
         const names = [...new Set([full, full.split(/\s+/)[0]])].filter((n) => n.length >= 3);
         const ranges: [number, number][] = [];
