@@ -15,7 +15,7 @@
   <div class="left">
     <span class="eyebrow">Round {v.round}</span>
     <h1>{v.step === 'show' ? 'Watch the lights' : v.step === 'input' ? 'Repeat it on your phone' : 'Get ready'}</h1>
-    <p class="dim lead">{v.length} colors</p>
+    <p class="dim lead">{v.length === 1 ? '1 color' : `${v.length} colors`}</p>
     {#if v.step === 'input' && m.endsAt}<Ring endsAt={m.endsAt} totalMs={m.phaseMs} size="8rem" />{/if}
   </div>
 

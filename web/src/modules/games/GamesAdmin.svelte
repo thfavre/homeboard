@@ -89,7 +89,7 @@
   <Section title="Options">
     {#if hb.core?.economyEnabled}
       <div class="line">
-        <span>Highest stake <span class="faint small">0 = no limit</span></span>
+        <span>Highest bet <span class="faint small">0 = no limit</span></span>
         <AmountInput value={s.settings.maxStake} oncommit={(v) => setSettings({ maxStake: v })} />
       </div>
     {/if}

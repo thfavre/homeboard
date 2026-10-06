@@ -7,6 +7,7 @@
   import Money from '$lib/ui/Money.svelte';
   import Sheet from '$lib/ui/Sheet.svelte';
   import { GAME_ICONS, gamesState } from './store.svelte.ts';
+  import GameCard from './ui/GameCard.svelte';
 
   let mode = $state<GameMode>('duel');
   let picked = $state<GameInfo | null>(null);
@@ -20,6 +21,7 @@
   const economy = $derived(!!hb.core?.economyEnabled);
   const list = $derived(GAMES.filter((g) => g.modes.includes(mode) && s?.settings.enabled.includes(g.id)));
   const others = $derived((s?.online ?? []).filter((p) => p.id !== hb.me?.id));
+  const opponentName = $derived(others.find((p) => p.id === opponent)?.name);
   const stake = $derived(economy ? Math.max(0, parseAmount(stakeText || '0')) : 0);
   const fee = $derived(price(mode === 'duel' ? 'games.duel' : 'games.room'));
   const maxStake = $derived(s?.settings.maxStake ?? 0);
@@ -38,7 +40,7 @@
       return;
     }
     if (maxStake > 0 && stake > maxStake) {
-      error = `The stake is limited to ${formatAmount(maxStake)}`;
+      error = `Bets are limited to ${formatAmount(maxStake)}`;
       return;
     }
     busy = true;
@@ -67,8 +69,8 @@
   <div class="list">
     {#each list as g (g.id)}
       {@const Icon = GAME_ICONS[g.id]}
-      <button class="tile card" onclick={() => open(g)}>
-        <span class="icon"><Icon size={22} /></span>
+      <button class="tile card" style:--g1={g.colors[0]} style:--g2={g.colors[1]} onclick={() => open(g)}>
+        <span class="icon"><Icon size={22} strokeWidth={2.2} /></span>
         <span class="text">
           <span class="title">{g.name}</span>
           <span class="tagline">{g.tagline}</span>
@@ -82,12 +84,8 @@
 </div>
 
 {#if picked}
-  {@const Icon = GAME_ICONS[picked.id]}
-  <Sheet title={picked.name} onclose={() => (picked = null)}>
-    <div class="head">
-      <span class="icon"><Icon size={22} /></span>
-      <p class="dim rules">{picked.rules}</p>
-    </div>
+  <Sheet title={mode === 'duel' ? 'New duel' : 'Game for everyone'} onclose={() => (picked = null)}>
+    <GameCard game={picked} />
 
     {#if mode === 'duel'}
       <div class="field">
@@ -116,18 +114,25 @@
 
     {#if economy}
       <label class="field">
-        <span class="label">{mode === 'duel' ? 'Your stake (they put in the same)' : 'Entry for each player'}</span>
+        <span class="label">{mode === 'duel' ? 'Your bet' : 'Entry for each player'}</span>
         <input class="input mono" inputmode="decimal" placeholder="0" bind:value={stakeText} />
-        {#if maxStake > 0}<span class="faint small">Up to {formatAmount(maxStake)}</span>{/if}
+        <span class="faint small">
+          {#if mode === 'duel'}
+            {opponentName ?? 'Your opponent'} has to match it to accept. Winner takes {formatAmount(stake * 2)}.
+          {:else}
+            Every player puts this in. Winner takes the pot.
+          {/if}
+          {#if maxStake > 0}{` Up to ${formatAmount(maxStake)}.`}{/if}
+        </span>
       </label>
       <div class="sum">
         <span>{mode === 'duel' ? 'Challenge fee' : 'Start fee'}</span><Money amount={fee} free />
-        <span>{mode === 'duel' ? 'Your stake' : 'Your entry'}</span><Money amount={stake} />
+        <span>{mode === 'duel' ? 'Your bet' : 'Your entry'}</span><Money amount={stake} />
         <span class="total">You pay now</span><span class="total"><Money amount={fee + stake} /></span>
       </div>
       <p class="faint small">
         {mode === 'duel'
-          ? 'Everything comes back if they decline or do not answer within a minute.'
+          ? 'Everything comes back if they decline, do not answer within a minute, or you cancel.'
           : 'Everything comes back if nobody else joins.'}
       </p>
     {/if}
@@ -195,11 +200,12 @@
     flex: none;
     display: grid;
     place-items: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    border-radius: 0.9rem;
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
-    color: var(--accent);
+    width: 2.9rem;
+    height: 2.9rem;
+    border-radius: 0.95rem;
+    background: linear-gradient(135deg, var(--g1), var(--g2));
+    color: #fff;
+    box-shadow: 0 8px 20px -10px var(--g1);
   }
   .text {
     flex: 1;
@@ -217,14 +223,6 @@
   .tile :global(.chev) {
     color: var(--text-faint);
     flex: none;
-  }
-  .head {
-    display: flex;
-    gap: 0.8rem;
-    align-items: flex-start;
-  }
-  .rules {
-    font-size: 0.9rem;
   }
   .field {
     display: grid;
@@ -282,7 +280,9 @@
     font-size: 0.88rem;
   }
   .go {
-    min-height: 3.2rem;
-    font-size: 1.02rem;
+    min-height: 3.4rem;
+    font-size: 1.05rem;
+    border-radius: var(--radius);
+    background: var(--gradient);
   }
 </style>

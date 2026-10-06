@@ -1,5 +1,6 @@
 import {
   GAMES,
+  DUEL_INVITE_MS,
   GAME_COLORS,
   gameInfo,
   type DuelInvite,
@@ -36,7 +37,6 @@ const FACTORIES: Record<GameId, GameFactory> = {
   coin: coinFlip,
 };
 
-const INVITE_MS = 60_000;
 const LOBBY_MS = 45_000;
 const INTRO_MS = 7_000;
 const RESULT_MS = 15_000;
@@ -95,9 +95,9 @@ export default defineModule<GamesSettings>({
     const cleanStake = (raw: unknown): number => {
       if (!ctx.economy.enabled) return 0;
       const stake = Math.round(num(raw, 0));
-      if (stake < 0) throw new HbError('The stake cannot be negative');
+      if (stake < 0) throw new HbError('The bet cannot be negative');
       const max = ctx.settings.get().maxStake;
-      if (max > 0 && stake > max) throw new HbError(`The stake is limited to ${fmt(max)}`);
+      if (max > 0 && stake > max) throw new HbError(`Bets are limited to ${fmt(max)}`);
       return stake;
     };
 
@@ -253,8 +253,8 @@ export default defineModule<GamesSettings>({
       for (const [id, amount] of Object.entries(payouts)) {
         const guest = ctx.session.guests.get(id);
         if (!guest || amount <= 0) continue;
-        ctx.economy.credit(guest, amount, `${name}: ${outcome.winners.includes(id) ? 'winnings' : 'stake back'}`);
-        ctx.toast(guest, { text: outcome.winners.includes(id) ? `${name}: you won` : `${name}: stake back`, amount, kind: 'success' });
+        ctx.economy.credit(guest, amount, `${name}: ${outcome.winners.includes(id) ? 'winnings' : 'bet back'}`);
+        ctx.toast(guest, { text: outcome.winners.includes(id) ? `${name}: you won` : `${name}: bet back`, amount, kind: 'success' });
       }
 
       const names = outcome.winners.map((id) => m.players.find((p) => p.id === id)?.name).filter(Boolean) as string[];
@@ -290,14 +290,14 @@ export default defineModule<GamesSettings>({
       checkFree(guest.id, null);
       checkFree(opponent.id, opponent.name);
       const stake = cleanStake(args?.stake);
-      if (stake > opponent.balance) throw new HbError(`${opponent.name} cannot match that stake`);
+      if (stake > opponent.balance) throw new HbError(`${opponent.name} cannot match that bet`);
       const side = args?.side === 'tails' ? 'tails' : 'heads';
       const name = gameInfo(game)!.name;
 
       const fee = ctx.economy.charge(guest, 'games.duel', 1, `Duel: ${name}`);
       let bet: Charge;
       try {
-        bet = ctx.economy.pay(guest, stake, `Duel stake: ${name}`);
+        bet = ctx.economy.pay(guest, stake, `Duel bet: ${name}`);
       } catch (err) {
         ctx.economy.refund(fee);
         throw err;
@@ -309,12 +309,12 @@ export default defineModule<GamesSettings>({
         to: player(opponent),
         stake,
         ...(game === 'coin' ? { side } : {}),
-        expiresAt: Date.now() + INVITE_MS,
+        expiresAt: Date.now() + DUEL_INVITE_MS,
         charges: [fee, bet],
         timer: setTimeout(() => {
           if (!invites.has(inv.id)) return;
           dropInvite(inv, `${opponent.name} did not answer your challenge`);
-        }, INVITE_MS),
+        }, DUEL_INVITE_MS),
       };
       invites.set(inv.id, inv);
       ctx.activity(`{name} challenged ${opponent.name} to ${name}${stake ? ` for ${fmt(stake)}` : ''}`, { guest, sensitive: true });
@@ -331,7 +331,7 @@ export default defineModule<GamesSettings>({
         return true;
       }
       tvFree();
-      const bet = ctx.economy.pay(guest, inv.stake, `Duel stake: ${gameInfo(inv.game)!.name}`);
+      const bet = ctx.economy.pay(guest, inv.stake, `Duel bet: ${gameInfo(inv.game)!.name}`);
       try {
         const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet], { side: inv.side });
         dropInvite(inv, null);

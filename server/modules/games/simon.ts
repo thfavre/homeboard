@@ -2,7 +2,7 @@ import { GAME_COLORS, type GameColor, type SimonView } from '../../../shared/gam
 import { HbError } from '../../core/util.ts';
 import { best, type GameFactory } from './engine.ts';
 
-const FIRST_LENGTH = 3;
+const FIRST_LENGTH = 1;
 const MAX_ROUNDS = 25;
 const BETWEEN_MS = 2200;
 
@@ -46,7 +46,8 @@ export const lightSimon: GameFactory = (m) => {
 
   const startInput = () => {
     step = 'input';
-    const ms = 4000 + sequence.length * 900;
+    // Plenty of time: the challenge is the memory, not the speed
+    const ms = 6000 + sequence.length * 1500;
     m.deadline(ms);
     m.later(ms, endRound);
     m.publish();
@@ -82,7 +83,7 @@ export const lightSimon: GameFactory = (m) => {
         .sort((a, b) => Number(winners.includes(b.id)) - Number(winners.includes(a.id)) || score(b.id) - score(a.id))
         .map((p) => {
           const n = completed.get(p.id) ?? 0;
-          return { id: p.id, label: `${n} colors`, detail: n ? `Longest sequence repeated` : 'Out in the first round' };
+          return { id: p.id, label: n === 1 ? '1 color' : `${n} colors`, detail: n ? `Longest sequence repeated` : 'Out in the first round' };
         }),
     });
   };

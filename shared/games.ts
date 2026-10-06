@@ -12,6 +12,10 @@ export interface GameInfo {
   modes: GameMode[];
   /** Uses the WLED lights (also shown on the TV) */
   lights?: boolean;
+  /** How to play in 3 short steps, for the phones */
+  steps: string[];
+  /** Two colors of the game's gradient */
+  colors: [string, string];
 }
 
 export const GAMES: GameInfo[] = [
@@ -21,6 +25,8 @@ export const GAMES: GameInfo[] = [
     tagline: 'Stop the clock at the target time, without seeing it',
     rules: 'A target time between 8 and 30 seconds is drawn. The timer starts on GO and is hidden: tap STOP when you think the target time has passed. Closest wins.',
     modes: ['duel', 'room'],
+    steps: ['A target between 8 and 30 seconds is drawn', 'GO: the clock starts and stays hidden', 'Tap STOP when you feel it. Closest wins'],
+    colors: ['#ff5f6d', '#ffa64d'],
   },
   {
     id: 'simon',
@@ -29,6 +35,8 @@ export const GAMES: GameInfo[] = [
     rules: 'Watch the lights, then tap the same colors in the same order. One more color every round. One mistake and you are out.',
     modes: ['duel', 'room'],
     lights: true,
+    steps: ['Watch the lights: one color to start', 'Tap them back in the same order', 'One more each round. One slip and you are out'],
+    colors: ['#8b7cff', '#3d8bff'],
   },
   {
     id: 'reflex',
@@ -37,6 +45,8 @@ export const GAMES: GameInfo[] = [
     rules: 'When the lights change color, tap that color on your phone. Fastest right tap wins the round. Tap too early or the wrong color and you miss the round.',
     modes: ['duel', 'room'],
     lights: true,
+    steps: ['The lights go dark... then change color', 'Tap that color before anyone else', 'Too early or wrong: you miss the round. 5 rounds'],
+    colors: ['#ffd23d', '#ff6a3d'],
   },
   {
     id: 'circle',
@@ -44,6 +54,8 @@ export const GAMES: GameInfo[] = [
     tagline: 'Draw the roundest circle in one stroke',
     rules: 'Draw a circle with one finger, in one go. The closer it is to a perfect circle, the higher your score.',
     modes: ['duel', 'room'],
+    steps: ['Put one finger on the pad', 'Draw a circle in one stroke', 'The roundest circle wins'],
+    colors: ['#2fd2c4', '#3d8bff'],
   },
   {
     id: 'bluff',
@@ -51,6 +63,8 @@ export const GAMES: GameInfo[] = [
     tagline: 'Share or steal the pot',
     rules: 'Both share: you split the pot and get a bonus. One steals: the thief takes everything. Both steal: nobody gets anything.',
     modes: ['duel'],
+    steps: ['Talk it over, then choose in secret', 'Both share: split the pot, plus a bonus', 'One steals: takes it all. Both steal: nobody wins'],
+    colors: ['#ff3b8d', '#8b3dff'],
   },
   {
     id: 'coin',
@@ -58,6 +72,8 @@ export const GAMES: GameInfo[] = [
     tagline: 'Heads or tails, winner takes the pot',
     rules: 'The challenger picked a side. The coin decides.',
     modes: ['duel'],
+    steps: ['The challenger picked heads or tails', 'The coin flips on the TV', 'The right side takes the whole pot'],
+    colors: ['#ffc861', '#ff8a3a'],
   },
 ];
 
@@ -80,6 +96,9 @@ export interface GamePlayer {
   name: string;
   color: string;
 }
+
+/** Time the challenged guest has to answer */
+export const DUEL_INVITE_MS = 60_000;
 
 export interface DuelInvite {
   id: string;

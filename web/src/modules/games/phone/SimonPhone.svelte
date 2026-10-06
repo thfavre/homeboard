@@ -50,7 +50,7 @@
     <div class="msg">
       <span class="eye"><Eye size={44} /></span>
       <h1>Watch the lights</h1>
-      <p class="dim">{v.length} colors this round.</p>
+      <p class="dim">{v.length === 1 ? '1 color' : `${v.length} colors`} this round.</p>
     </div>
   {:else if v.step === 'between'}
     <div class="msg">
@@ -63,8 +63,8 @@
       <p class="dim">Waiting for the others.</p>
     </div>
   {:else}
-    <p class="dim center">Your turn: repeat the {v.length} colors.</p>
-    <ColorPad onpick={pick} {lit} />
+    <p class="dim center">Your turn: {v.length === 1 ? 'tap that color' : `repeat the ${v.length} colors`}. It counts when you lift your finger.</p>
+    <ColorPad onpick={pick} {lit} on="up" />
   {/if}
 </div>
 

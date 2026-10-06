@@ -1,8 +1,16 @@
 <script lang="ts">
   import { GAME_COLORS, type GameColor } from '$shared/games.ts';
 
-  /** Four big color buttons (Light Simon, Color Reflex). Reacts on touch down, not on release. */
-  let { onpick, disabled = false, lit = null }: { onpick: (c: GameColor) => void; disabled?: boolean; lit?: GameColor | null } = $props();
+  /**
+   * Four big color buttons (Light Simon, Color Reflex).
+   * `on`: 'down' counts the touch right away (speed games), 'up' when the finger is lifted.
+   */
+  let {
+    onpick,
+    disabled = false,
+    lit = null,
+    on = 'down',
+  }: { onpick: (c: GameColor) => void; disabled?: boolean; lit?: GameColor | null; on?: 'down' | 'up' } = $props();
 </script>
 
 <div class="pad">
@@ -15,7 +23,10 @@
       {disabled}
       onpointerdown={(e) => {
         e.preventDefault();
-        if (!disabled) onpick(c.id);
+        if (!disabled && on === 'down') onpick(c.id);
+      }}
+      onclick={() => {
+        if (!disabled && on === 'up') onpick(c.id);
       }}
     ></button>
   {/each}

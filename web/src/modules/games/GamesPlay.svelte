@@ -1,16 +1,21 @@
 <script lang="ts">
-  import { Check, Swords, Users, X } from '@lucide/svelte';
-  import { fade } from 'svelte/transition';
-  import { gameInfo } from '$shared/games.ts';
+  import { Check, Crown, Play, Swords, X } from '@lucide/svelte';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { DUEL_INVITE_MS, gameInfo, type GamePlayer } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
-  import { GAME_ICONS, Now, gamesState, local, myMatch, secondsLeft } from './store.svelte.ts';
+  import { Now, gamesState, local, myMatch, secondsLeft } from './store.svelte.ts';
   import { GAME_UI } from './registry.ts';
+  import GameCard from './ui/GameCard.svelte';
+  import Versus from './ui/Versus.svelte';
+  import PotPanel from './ui/PotPanel.svelte';
+  import Fuse from './ui/Fuse.svelte';
 
   /** Everything a phone shows for games: challenges, the room lobby, the game itself, the result */
   const s = $derived(gamesState());
   const me = $derived(hb.me?.id ?? '');
+  const meAsPlayer = $derived<GamePlayer>({ id: me, name: hb.me?.name ?? '', color: hb.me?.color ?? '#888' });
   const m = $derived(s?.match ?? null);
   const inMatch = $derived(!!myMatch());
   const received = $derived(s?.invites.find((i) => i.to.id === me));
@@ -19,6 +24,8 @@
   const now = new Now(250);
   let busy = $state(false);
 
+  const other = (side: 'heads' | 'tails') => (side === 'heads' ? 'tails' : 'heads');
+
   async function act(method: string, args?: unknown) {
     busy = true;
     await attempt(() => rpc('games', method, args));
@@ -26,42 +33,44 @@
   }
 </script>
 
-{#if m && inMatch}
-  {@const info = gameInfo(m.game)}
-  {@const Icon = GAME_ICONS[m.game]}
-  <div class="screen">
-    <div class="bar">
-      <span class="tag"><Icon size={16} /> {info?.name}</span>
-      {#if economy && m.pot > 0}<span class="pill">Pot <Money amount={m.pot} /></span>{/if}
+{#snippet faces(players: GamePlayer[])}
+  <div class="faces">
+    <div class="stack">
+      {#each players.slice(0, 7) as p (p.id)}
+        <span class="face" in:scale={{ start: 0.5 }}><Avatar name={p.name} color={p.color} id={p.id} size="2.3rem" /></span>
+      {/each}
     </div>
+    <span class="dim">{players.length === 1 ? '1 player' : `${players.length} players`}{players.length > 7 ? ` (${players.slice(7).length} more)` : ''}</span>
+  </div>
+{/snippet}
 
+{#if m && inMatch}
+  {@const info = gameInfo(m.game)!}
+  <div class="screen">
     {#if m.phase === 'lobby'}
-      <div class="center" in:fade>
-        <span class="eyebrow">You are in</span>
-        <h1>{info?.name}</h1>
-        <p class="dim">
-          {#if m.players.length < 2}
-            You are the only one so far. It needs at least 2 players, or it is cancelled in {secondsLeft(m.endsAt, now.value)}s.
-          {:else}
-            {m.players.length} players so far. Starts in {secondsLeft(m.endsAt, now.value)}s.
-          {/if}
-        </p>
-        <div class="faces">
-          {#each m.players as p (p.id)}<Avatar name={p.name} color={p.color} id={p.id} size="2.4rem" />{/each}
-        </div>
+      <div class="col" in:fade>
+        <GameCard game={info} eyebrow="You are in" />
+        {#if economy && m.stake > 0}<PotPanel inLabel="Your entry" stake={m.stake} outLabel="Pot so far" pot={m.pot} />{/if}
+        {@render faces(m.players)}
+        {#if m.endsAt}
+          <Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label={m.players.length < 2 ? 'Needs 2 players, cancelled in' : 'Starts in'} />
+        {/if}
         {#if m.starter?.id === me}
-          <button class="btn primary big" disabled={busy || m.players.length < 2} onclick={() => act('begin')}>Start now</button>
-          <button class="btn ghost" disabled={busy} onclick={() => act('leave')}>Cancel the game</button>
+          <button class="btn primary block big" disabled={busy || m.players.length < 2} onclick={() => act('begin')}><Play size={20} /> Start now</button>
+          <button class="btn ghost block" disabled={busy} onclick={() => act('leave')}>Cancel the game</button>
         {:else}
-          <button class="btn ghost" disabled={busy} onclick={() => act('leave')}>Leave</button>
+          <button class="btn ghost block" disabled={busy} onclick={() => act('leave')}>Leave</button>
         {/if}
       </div>
     {:else if m.phase === 'intro'}
-      <div class="center" in:fade>
-        <span class="eyebrow">Get ready</span>
-        <h1>{info?.name}</h1>
-        <p class="dim rules">{info?.rules}</p>
-        <span class="count mono">{secondsLeft(m.endsAt, now.value)}</span>
+      <div class="col" in:fade>
+        {#if m.mode === 'duel'}<Versus left={m.players[0]} right={m.players[1]} />{/if}
+        <GameCard game={info} eyebrow="Get ready" />
+        <div class="count-wrap">
+          {#key secondsLeft(m.endsAt, now.value)}
+            <span class="count mono" in:scale={{ start: 1.6, duration: 300 }}>{secondsLeft(m.endsAt, now.value)}</span>
+          {/key}
+        </div>
       </div>
     {:else if m.phase === 'play'}
       {@const Game = GAME_UI[m.game].phone}
@@ -70,60 +79,67 @@
       {@const r = m.result}
       {@const won = r.winners.includes(me)}
       {@const line = r.lines.find((l) => l.id === me)}
-      <div class="center" in:fade>
+      <div class="col result" class:won style:--g1={info.colors[0]} style:--g2={info.colors[1]} in:fade>
+        <div class="medal" in:scale={{ start: 0.4, duration: 500 }}>
+          {#if won}<Crown size={46} />{:else}<Avatar name={hb.me?.name ?? ''} color={hb.me?.color ?? '#888'} src={hb.me?.avatar} size="5.5rem" />{/if}
+        </div>
         <span class="eyebrow">{r.headline}</span>
-        <h1 class:won>{won ? (r.winners.length > 1 ? 'Shared win' : 'You won!') : 'Not this time'}</h1>
-        {#if line}<p class="mine mono">{line.label}</p>{#if line.detail}<p class="dim">{line.detail}</p>{/if}{/if}
-        {#if economy && r.payouts[me] > 0}<p class="gain"><Money amount={r.payouts[me]} sign /></p>{/if}
+        <h1>{won ? (r.winners.length > 1 ? 'Shared win' : 'You won!') : 'Not this time'}</h1>
+        {#if line}
+          <div class="stat">
+            <span class="mono">{line.label}</span>
+            {#if line.detail}<span class="dim">{line.detail}</span>{/if}
+          </div>
+        {/if}
+        {#if economy && r.payouts[me] > 0}<p class="gain" in:fly={{ y: 12, delay: 300 }}><Money amount={r.payouts[me]} sign /></p>{/if}
         <button class="btn block close" onclick={() => (local.closed = m.id)}>Close</button>
       </div>
     {/if}
   </div>
 {:else if received}
-  {@const info = gameInfo(received.game)}
-  {@const Icon = GAME_ICONS[received.game]}
+  {@const info = gameInfo(received.game)!}
   <div class="screen">
-    <div class="center" in:fade>
-      <Avatar name={received.from.name} color={received.from.color} id={received.from.id} size="5rem" />
-      <span class="eyebrow"><Swords size={14} /> Challenge</span>
-      <h1>{received.from.name} challenges you</h1>
-      <p class="game"><Icon size={20} /> {info?.name}</p>
-      <p class="dim rules">{info?.rules}</p>
-      {#if received.side}<p>They picked <strong>{received.side}</strong>, you get <strong>{received.side === 'heads' ? 'tails' : 'heads'}</strong>.</p>{/if}
-      {#if economy && received.stake > 0}
-        <p class="stake">You both put in <Money amount={received.stake} />, the winner takes <Money amount={received.stake * 2} />.</p>
-      {/if}
+    <div class="col" in:fly={{ y: 24, duration: 300 }}>
+      <span class="eyebrow center"><Swords size={14} /> You are challenged</span>
+      <Versus
+        left={received.from}
+        right={meAsPlayer}
+        leftLabel={received.side ?? 'Challenger'}
+        rightLabel={received.side ? other(received.side) : 'You'}
+      />
+      <GameCard game={info} />
+      {#if economy && received.stake > 0}<PotPanel inLabel="You put in" stake={received.stake} outLabel="Winner takes" pot={received.stake * 2} />{/if}
       <div class="answer">
-        <button class="btn" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={18} /> Decline</button>
-        <button class="btn primary" disabled={busy} onclick={() => act('respond', { id: received.id, accept: true })}><Check size={18} /> Accept</button>
+        <button class="btn decline" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={20} /> Decline</button>
+        <button class="btn primary accept" disabled={busy} onclick={() => act('respond', { id: received.id, accept: true })}><Check size={20} /> Accept</button>
       </div>
-      <p class="faint small">Expires in {secondsLeft(received.expiresAt, now.value)}s</p>
+      <Fuse endsAt={received.expiresAt} totalMs={DUEL_INVITE_MS} label="Expires in" />
     </div>
   </div>
 {:else if sent}
-  {@const info = gameInfo(sent.game)}
+  {@const info = gameInfo(sent.game)!}
   <div class="screen">
-    <div class="center" in:fade>
-      <Avatar name={sent.to.name} color={sent.to.color} id={sent.to.id} size="5rem" />
-      <span class="eyebrow">{info?.name}</span>
-      <h1>Waiting for {sent.to.name}</h1>
-      <p class="dim">They have {secondsLeft(sent.expiresAt, now.value)}s to accept.{#if m}{' A game is on the TV, the duel starts once it is over.'}{/if}</p>
-      <button class="btn ghost" disabled={busy} onclick={() => act('cancelInvite', { id: sent.id })}>Cancel the challenge</button>
+    <div class="col" in:fly={{ y: 24, duration: 300 }}>
+      <span class="eyebrow center"><Swords size={14} /> Challenge sent</span>
+      <Versus left={meAsPlayer} right={sent.to} leftLabel={sent.side ?? 'You'} rightLabel={sent.side ? other(sent.side) : 'Thinking...'} waiting />
+      <GameCard game={info} steps={false} />
+      {#if economy && sent.stake > 0}<PotPanel inLabel="You put in" stake={sent.stake} outLabel="Winner takes" pot={sent.stake * 2} />{/if}
+      <Fuse endsAt={sent.expiresAt} totalMs={DUEL_INVITE_MS} label={`Waiting for ${sent.to.name}`} />
+      {#if m}<p class="faint note">A game is on the TV: your duel starts once it is over.</p>{/if}
+      <button class="btn ghost block" disabled={busy} onclick={() => act('cancelInvite', { id: sent.id })}>Cancel the challenge</button>
+      {#if economy}<p class="faint note">You get everything back if they decline, do not answer, or you cancel.</p>{/if}
     </div>
   </div>
 {:else if m && m.mode === 'room' && m.phase === 'lobby'}
-  {@const info = gameInfo(m.game)}
-  {@const Icon = GAME_ICONS[m.game]}
+  {@const info = gameInfo(m.game)!}
   <div class="screen">
-    <div class="center" in:fade>
-      <span class="icon"><Icon size={34} /></span>
-      <span class="eyebrow"><Users size={14} /> {m.starter ? `${m.starter.name} started a game` : 'Game on the TV'}</span>
-      <h1>{info?.name}</h1>
-      <p class="dim rules">{info?.rules}</p>
-      {#if economy && m.stake > 0}<p class="stake">Entry <Money amount={m.stake} />, the winner takes the pot.</p>{/if}
-      <p class="faint">{m.players.length} in so far. Starts in {secondsLeft(m.endsAt, now.value)}s.</p>
-      <button class="btn primary big" disabled={busy} onclick={() => act('join')}>Join</button>
-      <button class="btn ghost" onclick={() => (local.skipped = m.id)}>Not this time</button>
+    <div class="col" in:fly={{ y: 24, duration: 300 }}>
+      <GameCard game={info} eyebrow={m.starter ? `${m.starter.name} started a game` : 'Game on the TV'} />
+      {#if economy && m.stake > 0}<PotPanel inLabel="Entry" stake={m.stake} outLabel="Pot so far" pot={m.pot} />{/if}
+      {@render faces(m.players)}
+      {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Join closes in" />{/if}
+      <button class="btn primary block big" disabled={busy} onclick={() => act('join')}><Play size={20} /> Join</button>
+      <button class="btn ghost block" onclick={() => (local.skipped = m.id)}>Not this time</button>
     </div>
   </div>
 {/if}
@@ -134,104 +150,122 @@
     align-content: center;
     gap: 1rem;
   }
-  .bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-  }
-  .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-weight: 600;
-    color: var(--text-dim);
-  }
-  .center {
+  .col {
     display: grid;
     justify-items: center;
-    text-align: center;
-    gap: 0.8rem;
-    padding: 1.5rem 0.25rem;
+    gap: 1rem;
+    padding: 0.5rem 0;
   }
   .eyebrow {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.4rem;
+  }
+  .faces {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .stack {
+    display: flex;
+  }
+  .face {
+    margin-left: -0.55rem;
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px var(--bg);
+  }
+  .face:first-child {
+    margin-left: 0;
+  }
+  .faces .dim {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .big {
+    min-height: 3.5rem;
+    font-size: 1.1rem;
+    border-radius: var(--radius);
+    background: var(--gradient);
+  }
+  .answer {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 0.7rem;
+    width: 100%;
+  }
+  .answer .btn {
+    min-height: 3.6rem;
+    font-size: 1.05rem;
+    border-radius: var(--radius);
+  }
+  .decline {
+    background: transparent;
+    color: var(--text-dim);
+  }
+  .accept {
+    background: var(--gradient);
+  }
+  .note {
+    font-size: 0.8rem;
+    text-align: center;
+  }
+  .count-wrap {
+    display: grid;
+    place-items: center;
+    height: 6rem;
+  }
+  .count {
+    grid-area: 1 / 1;
+    font-size: 5.5rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .result {
+    text-align: center;
+    padding-top: 1.5rem;
+  }
+  .medal {
+    display: grid;
+    place-items: center;
+    width: 6.5rem;
+    height: 6.5rem;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+  }
+  .won .medal {
+    background: linear-gradient(135deg, var(--coin), var(--coin-2));
+    border: 0;
+    color: #fff;
+    box-shadow: 0 18px 50px -14px var(--coin);
   }
   h1 {
-    font-size: 1.9rem;
-    line-height: 1.15;
+    font-size: 2.2rem;
+    line-height: 1.1;
   }
-  h1.won {
-    background: var(--gradient);
+  .won h1 {
+    background: linear-gradient(135deg, var(--g1), var(--g2));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
-  .icon {
+  .stat {
     display: grid;
-    place-items: center;
-    width: 4.2rem;
-    height: 4.2rem;
-    border-radius: 1.3rem;
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
-    color: var(--accent);
+    gap: 0.2rem;
+    padding: 0.8rem 1.6rem;
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid var(--border);
   }
-  .game {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-weight: 700;
-    font-size: 1.15rem;
-    color: var(--accent);
-  }
-  .rules {
-    font-size: 0.92rem;
-    max-width: 24rem;
-  }
-  .stake {
-    font-size: 0.95rem;
-  }
-  .faces {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.4rem;
-  }
-  .big {
-    min-height: 3.4rem;
-    padding: 0 2.4rem;
-    font-size: 1.1rem;
-    margin-top: 0.4rem;
-  }
-  .answer {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.7rem;
-    width: 100%;
-    margin-top: 0.4rem;
-  }
-  .answer .btn {
-    min-height: 3.3rem;
-  }
-  .count {
-    font-size: 5rem;
-    font-weight: 700;
-    line-height: 1;
-  }
-  .mine {
-    font-size: 2.2rem;
+  .stat .mono {
+    font-size: 1.8rem;
     font-weight: 700;
   }
   .gain {
-    font-size: 1.6rem;
+    font-size: 1.8rem;
     color: var(--success);
   }
   .close {
-    margin-top: 1rem;
-  }
-  .small {
-    font-size: 0.8rem;
+    margin-top: 0.8rem;
   }
 </style>

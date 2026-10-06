@@ -67,7 +67,7 @@ Environment variables: `PORT` (default 4300), `HB_TUNNEL=0` (no public tunnel),
 | **Lights** (WLED) | Pick an effect, on all lights or one | Devices, effect editor, test, stop |
 | **Soundboard** | Play a sound on the TV speakers, or search MyInstants | Volume, cooldown, upload sounds, add sounds from MyInstants, let guests search MyInstants and keep their own "My sounds" (with a length limit) |
 | **Quiz** | Answer; start a quiz (random trivia or custom) for a fee; create custom quizzes | Start, pause, live time per question, custom quiz library with pictures |
-| **Games** | Challenge someone to a 1 vs 1 duel with a stake, or start a game anyone can join: Blind Timer, Light Simon, Color Reflex, Perfect Circle, Bluff (duel), Coin Flip (duel) | Start a room game, stop with refund, choose which games guests can start, stake limit, light colors on the TV |
+| **Games** | Challenge someone to a 1 vs 1 duel with a bet, or start a game anyone can join: Blind Timer, Light Simon, Color Reflex, Perfect Circle, Bluff (duel), Coin Flip (duel) | Start a room game, stop with refund, choose which games guests can start, bet limit, light colors on the TV |
 
 Core features: session code, name + PIN to rejoin from another phone, live activity feed, leaderboard,
 money rain, gifts, kick, themes, and a full economy editor (currency name, every price and reward).
@@ -97,9 +97,9 @@ live. At the end, for 20 seconds: the winner drives their picture with a joystic
 
 ### Games
 
-**1 vs 1**: a guest picks a game, an opponent and a stake. They pay the challenge fee plus their
-stake; the opponent sees the challenge on their phone (and the TV announces it) and has a minute
-to accept by putting in the same stake. The winner takes the pot; a tie splits it. Declined or
+**1 vs 1**: a guest picks a game, an opponent and a bet. They pay the challenge fee plus their
+bet; the opponent sees the challenge on their phone (and the TV announces it) and has a minute
+to accept by matching the bet. The winner takes the pot; a tie splits it. Declined or
 expired challenges give everything back.
 
 **Everyone**: a guest (for the start fee) or the host starts a game with an entry amount, and every
