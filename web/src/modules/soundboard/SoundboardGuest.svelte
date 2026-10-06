@@ -37,7 +37,7 @@
     return () => clearInterval(t);
   });
 
-  const wait = $derived(mod ? Math.max(0, Math.ceil((mod.cooldownUntil - now) / 1000)) : 0);
+  const wait = $derived(mod && mod.cooldownSec > 0 ? Math.max(0, Math.ceil((mod.cooldownUntil - now) / 1000)) : 0);
 
   async function play(id: string, name: string) {
     const ok = await attempt(() => rpc('soundboard', 'play', { id }), `${name} is playing`);
@@ -62,7 +62,7 @@
       Sounds play through the TV speakers.
       {#if !mod.guestSearch && economy && partyCost}Each one costs <Money amount={partyCost} />.{/if}
     </p>
-    {#if mod.cooldownSec > 0 || wait}
+    {#if mod.cooldownSec > 0}
       <p class="faint wait">{wait ? `Next sound available in ${wait}s` : ''}</p>
     {/if}
 

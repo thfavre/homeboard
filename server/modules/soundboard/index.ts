@@ -109,7 +109,9 @@ export default defineModule<SoundboardSettings>({
     const guestPlays = (sound: Sound, guest: Guest, priceKey: 'soundboard.sound' | 'soundboard.search', maxSec?: number) => {
       checkCooldown();
       ctx.economy.charge(guest, priceKey, 1, `Sound: ${sound.name}`);
-      cooldownUntil = Date.now() + ctx.settings.get().cooldownSec * 1000;
+      // No pause: leave it at 0, so phones never show a "wait" for a moment
+      const cooldownSec = ctx.settings.get().cooldownSec;
+      cooldownUntil = cooldownSec > 0 ? Date.now() + cooldownSec * 1000 : 0;
       play(sound, guest.name, maxSec);
       ctx.activity(`{name} played ${sound.name}`, { guest });
       ctx.publish();
