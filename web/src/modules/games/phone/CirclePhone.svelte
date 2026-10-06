@@ -1,19 +1,24 @@
 <script lang="ts">
-  import { RotateCcw } from '@lucide/svelte';
+  import { Check } from '@lucide/svelte';
+  import { scale } from 'svelte/transition';
   import type { CircleView, MatchState } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Ring from '../../quiz/Ring.svelte';
 
+  /** Draw every circle within the minute; each is sent when the finger is lifted. Scores come on the TV. */
   let { m }: { m: MatchState } = $props();
   const v = $derived(m.view as CircleView);
-  const sent = $derived(v.done.includes(hb.me?.id ?? ''));
+  const me = $derived(hb.me?.id ?? '');
+  const sent = $derived(v.progress[me] ?? 0);
+  const done = $derived(sent >= v.count);
 
   let canvas = $state<HTMLCanvasElement | null>(null);
   let points: [number, number][] = [];
   let drawing = false;
   let hint = $state('');
-  let result = $state<{ score: number; note?: string } | null>(null);
   let busy = $state(false);
+  /** Short "Sent" flash between two circles */
+  let flash = $state(false);
 
   function size() {
     const c = canvas!;
@@ -50,10 +55,11 @@
   }
 
   function down(e: PointerEvent) {
-    if (sent || busy) return;
+    if (done || busy || v.step !== 'draw') return;
     canvas!.setPointerCapture(e.pointerId);
     drawing = true;
     hint = '';
+    flash = false;
     points = [at(e)];
     redraw();
   }
@@ -77,35 +83,53 @@
       return;
     }
     busy = true;
-    const r = await attempt(() => rpc<{ score: number; note?: string }>('games', 'play', { points: points.map(([x, y]) => [+x.toFixed(4), +y.toFixed(4)]) }));
+    const ok = await attempt(() => rpc('games', 'play', { points: points.map(([x, y]) => [+x.toFixed(4), +y.toFixed(4)]) }));
     busy = false;
-    if (r) result = r;
+    if (!ok) return;
+    // Clean pad for the next circle
+    flash = true;
+    setTimeout(() => {
+      points = [];
+      redraw();
+      flash = false;
+    }, 600);
   }
 
-  function clear() {
-    points = [];
-    hint = '';
-    redraw();
-  }
+  const mine = $derived(v.drawings?.[me] ?? []);
 </script>
 
 <div class="circle">
-  <div class="top">
-    <p class="dim">{sent ? 'Sent. Scores show on the TV.' : 'Draw a circle in one stroke.'}</p>
-    {#if m.endsAt && !sent}<Ring endsAt={m.endsAt} totalMs={m.phaseMs} size="3rem" />{/if}
-  </div>
-  <div class="pad" class:locked={sent}>
-    <canvas bind:this={canvas} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}></canvas>
-    {#if result}
-      <div class="score">
-        <span class="mono">{result.score.toFixed(1)} %</span>
-        {#if result.note}<span class="note">{result.note}</span>{/if}
+  {#if v.step === 'reveal'}
+    <div class="center">
+      <span class="eyebrow">Your circles</span>
+      <div class="scores">
+        {#each mine as d, i}
+          <span class="pill mono" in:scale={{ delay: i * 150 }}>{d.score.toFixed(1)}%</span>
+        {:else}
+          <span class="dim">No circle drawn</span>
+        {/each}
       </div>
-    {/if}
-  </div>
-  {#if hint}<p class="hint">{hint}</p>{/if}
-  {#if !sent && !result}
-    <button class="btn ghost small" onclick={clear}><RotateCcw size={16} /> Clear</button>
+      <p class="total mono">{(v.totals?.[me] ?? 0).toFixed(1)} pts</p>
+      <p class="dim">Look at the TV for everyone's circles.</p>
+    </div>
+  {:else}
+    <div class="top">
+      <div class="titles">
+        <span class="eyebrow">{done ? 'All done' : `Circle ${sent + 1} of ${v.count}`}</span>
+        <p class="dim">{done ? 'Waiting for the others. Scores on the TV.' : 'One stroke. It is sent when you lift your finger.'}</p>
+      </div>
+      {#if m.endsAt}<Ring endsAt={m.endsAt} totalMs={m.phaseMs} size="3rem" />{/if}
+    </div>
+    <div class="dots">
+      {#each Array(v.count) as _, i}<span class="dot" class:on={i < sent}></span>{/each}
+    </div>
+    <div class="pad" class:locked={done}>
+      <canvas bind:this={canvas} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}></canvas>
+      {#if flash || done}
+        <div class="sent" in:scale={{ start: 0.6, duration: 200 }}><Check size={done ? 64 : 48} /><span>{done ? 'All sent' : 'Sent'}</span></div>
+      {/if}
+    </div>
+    {#if hint}<p class="hint">{hint}</p>{/if}
   {/if}
 </div>
 
@@ -122,6 +146,24 @@
     justify-content: space-between;
     gap: 1rem;
     min-height: 3rem;
+  }
+  .titles {
+    display: grid;
+    gap: 0.2rem;
+  }
+  .dots {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .dot {
+    width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 50%;
+    background: var(--surface-3);
+    transition: background 0.2s ease;
+  }
+  .dot.on {
+    background: var(--accent);
   }
   .pad {
     position: relative;
@@ -144,25 +186,42 @@
   .locked canvas {
     pointer-events: none;
   }
-  .score {
+  .sent {
     position: absolute;
     inset: 0;
     display: grid;
     place-content: center;
     justify-items: center;
-    pointer-events: none;
-  }
-  .score .mono {
-    font-size: 3rem;
+    gap: 0.3rem;
+    color: var(--success);
     font-weight: 700;
-    text-shadow: 0 2px 12px var(--bg);
-  }
-  .note {
-    color: var(--text-dim);
-    font-weight: 600;
+    font-size: 1.3rem;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    pointer-events: none;
   }
   .hint {
     color: var(--warning);
     font-size: 0.9rem;
+  }
+  .center {
+    display: grid;
+    justify-items: center;
+    text-align: center;
+    gap: 1rem;
+    padding: 2rem 0;
+  }
+  .scores {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  .scores .pill {
+    font-size: 1rem;
+    padding: 0.35em 0.9em;
+  }
+  .total {
+    font-size: 3rem;
+    font-weight: 700;
   }
 </style>

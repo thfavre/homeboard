@@ -8,7 +8,14 @@
    * One round revealed with suspense: a clock needle sweeps the time axis and each
    * player's head drops onto their lane when the needle reaches the moment they stopped.
    */
-  let { r, players, totals, round, rounds }: { r: TimerRound; players: GamePlayer[]; totals: Record<string, number>; round: number; rounds: number } = $props();
+  let {
+    r,
+    players,
+    totals,
+    wins,
+    round,
+    rounds,
+  }: { r: TimerRound; players: GamePlayer[]; totals: Record<string, number>; wins: Record<string, number>; round: number; rounds: number } = $props();
 
   const SWEEP_MS = 5500;
   const sec = (ms: number) => (ms / 1000).toFixed(2);
@@ -76,7 +83,7 @@
         <span class="tick" style:left="{x(t)}%"><span class="mono">{t / 1000}s</span></span>
       {/each}
       <span class="target" class:hit={done} style:left="{x(r.target)}%"><span class="mono">{sec(r.target)}</span></span>
-      <span class="total-head">Total</span>
+      <span class="total-head">Rounds won</span>
       {#if !done}
         <span class="needle" style:left="{progress * 100}%" out:fade><span class="clock mono">{sec(needle)}</span></span>
       {/if}
@@ -103,7 +110,13 @@
           {/if}
         </div>
         <div class="total">
-          {#if done}<span class="mono" in:fade>{sec(totals[p.id] ?? 0)} s</span>{/if}
+          {#if done}
+            {@const w = wins[p.id] ?? 0}
+            <span class="wins" class:up={r.winners.includes(p.id)} in:fade>
+              <span class="mono">{w} {w === 1 ? 'win' : 'wins'}</span>
+              <small class="mono">gap {sec(totals[p.id] ?? 0)} s</small>
+            </span>
+          {/if}
         </div>
       </div>
     {/each}
@@ -298,10 +311,19 @@
     font-weight: 600;
     font-size: 1.1rem;
   }
-  .total {
+  .wins {
+    display: grid;
     font-size: 1.5rem;
     font-weight: 700;
-    color: var(--text-dim);
+    line-height: 1.15;
+  }
+  .wins small {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-faint);
+  }
+  .wins.up > .mono {
+    color: var(--coin);
   }
   .foot {
     text-align: center;

@@ -27,6 +27,7 @@ export const blindTimer: GameFactory = (m) => {
   let times = new Map<string, number>();
   const history: TimerRound[] = [];
   const totals = new Map<string, number>(m.players.map((p) => [p.id, 0]));
+  const wins = new Map<string, number>(m.players.map((p) => [p.id, 0]));
 
   const nextRound = () => {
     round += 1;
@@ -48,7 +49,10 @@ export const blindTimer: GameFactory = (m) => {
   const reveal = (r: number) => {
     if (r !== round || step === 'reveal') return;
     step = 'reveal';
-    history.push({ target, times: Object.fromEntries(m.players.map((p) => [p.id, times.get(p.id) ?? null])) });
+    // The closest stop wins the round (a tie gives the round to each of them)
+    const roundWinners = best(m.players, (id) => (times.has(id) ? Math.abs(times.get(id)! - target) : null), false);
+    for (const id of roundWinners) wins.set(id, wins.get(id)! + 1);
+    history.push({ target, times: Object.fromEntries(m.players.map((p) => [p.id, times.get(p.id) ?? null])), winners: roundWinners });
     for (const p of m.players) {
       const t = times.get(p.id);
       totals.set(p.id, totals.get(p.id)! + (t === undefined ? MISS_MS : Math.abs(t - target)));
@@ -57,17 +61,21 @@ export const blindTimer: GameFactory = (m) => {
     m.later(REVEAL_MS, () => (round < rounds ? nextRound() : end()));
   };
 
+  /** Most rounds won first, then the smallest total gap */
+  const compare = (a: string, b: string) => wins.get(b)! - wins.get(a)! || totals.get(a)! - totals.get(b)!;
+
   const end = () => {
-    const total = (id: string) => totals.get(id)!;
-    const order = [...m.players].sort((a, b) => total(a.id) - total(b.id));
+    const order = [...m.players].sort((a, b) => compare(a.id, b.id));
+    const top = order[0];
     m.finish({
-      winners: best(m.players, total, false),
+      winners: top && wins.get(top.id)! > 0 ? order.filter((p) => compare(p.id, top.id) === 0).map((p) => p.id) : [],
       lines: order.map((p) => {
+        const w = wins.get(p.id)!;
         const missed = history.filter((r) => r.times[p.id] === null).length;
         return {
           id: p.id,
-          label: `${gap(total(p.id))} off`,
-          detail: rounds > 1 ? `Over ${rounds} rounds${missed ? `, ${missed} missed` : ''}` : missed ? 'Did not stop' : undefined,
+          label: rounds > 1 ? `${w} ${w === 1 ? 'round' : 'rounds'} won` : `${gap(totals.get(p.id)!)} off`,
+          detail: rounds > 1 ? `Total gap ${gap(totals.get(p.id)!)}${missed ? `, ${missed} missed` : ''}` : missed ? 'Did not stop' : undefined,
         };
       }),
     });
@@ -93,7 +101,7 @@ export const blindTimer: GameFactory = (m) => {
     },
 
     view(): TimerView {
-      return { round, rounds, step, target, startAt, history, totals: Object.fromEntries(totals) };
+      return { round, rounds, step, target, startAt, history, totals: Object.fromEntries(totals), wins: Object.fromEntries(wins) };
     },
   };
 };

@@ -23,9 +23,9 @@ export const GAMES: GameInfo[] = [
     id: 'timer',
     name: 'Blind Timer',
     tagline: 'Stop the clock at the target time, without seeing it',
-    rules: 'A target time between 8 and 30 seconds is drawn. The timer starts on GO and is hidden: tap STOP when you think the target time has passed. Over several rounds, the smallest total gap wins.',
+    rules: 'A target time between 8 and 30 seconds is drawn. The timer starts on GO and is hidden: tap STOP when you think the target time has passed. The closest wins the round; the most rounds won wins the game (a tie goes to the smallest total gap).',
     modes: ['duel', 'room'],
-    steps: ['A target between 8 and 30 seconds is drawn', 'GO: the clock starts and stays hidden', 'Tap STOP when you feel it. Closest over all rounds wins'],
+    steps: ['A target between 8 and 30 seconds is drawn', 'GO: the clock starts and stays hidden. Tap STOP when you feel it', 'Closest wins the round. Most rounds won wins the game'],
     colors: ['#ff5f6d', '#ffa64d'],
   },
   {
@@ -52,9 +52,9 @@ export const GAMES: GameInfo[] = [
     id: 'circle',
     name: 'Perfect Circle',
     tagline: 'Draw the roundest circle in one stroke',
-    rules: 'Draw a circle with one finger, in one go. The closer it is to a perfect circle, the higher your score.',
+    rules: 'Draw your circles with one finger, one stroke each, within one minute: each is sent when you lift your finger. The rounder, the higher the score. The TV reveals them all and the best total wins.',
     modes: ['duel', 'room'],
-    steps: ['Put one finger on the pad', 'Draw a circle in one stroke', 'The roundest circle wins'],
+    steps: ['You have one minute to draw your circles, one stroke each', 'Each circle is sent when you lift your finger', 'The TV reveals them all: the best total wins'],
     colors: ['#2fd2c4', '#3d8bff'],
   },
   {
@@ -171,6 +171,8 @@ export interface GamesSettings {
   tvColors: boolean;
   /** Rounds of Blind Timer */
   timerRounds: number;
+  /** Circles each player draws in Perfect Circle */
+  circleCount: number;
 }
 
 // ------------------------------------------------------------ per game views
@@ -180,6 +182,8 @@ export interface TimerRound {
   target: number;
   /** Elapsed ms per player (null: did not stop) */
   times: Record<string, number | null>;
+  /** Closest player(s) of this round */
+  winners: string[];
 }
 
 export interface TimerView {
@@ -193,8 +197,10 @@ export interface TimerView {
   startAt: number;
   /** Rounds already revealed (the current one included during its reveal). Nobody sees who stopped before. */
   history: TimerRound[];
-  /** Total distance to the targets so far (ms) per player, over the revealed rounds */
+  /** Total distance to the targets so far (ms) per player, over the revealed rounds (breaks ties) */
   totals: Record<string, number>;
+  /** Rounds won so far per player: the most rounds won wins the game */
+  wins: Record<string, number>;
 }
 
 export interface SimonView {
@@ -226,11 +232,26 @@ export interface ReflexView {
   color: GameColor | null;
 }
 
+export interface CircleDrawing {
+  /** Normalised points (the shorter side of the pad is 1) */
+  points: [number, number][];
+  score: number;
+  note?: string;
+}
+
 export interface CircleView {
-  /** Players who sent their drawing */
-  done: string[];
-  /** After the game: each drawing (normalised points, 0..1) and its score */
-  drawings?: Record<string, { points: [number, number][]; score: number; note?: string }>;
+  /** Circles each player draws */
+  count: number;
+  /** draw: everyone draws at their own pace, reveal: the TV shows the circles one by one */
+  step: 'draw' | 'reveal';
+  /** Circles sent so far per player */
+  progress: Record<string, number>;
+  /** From the reveal on: every player's circles, and the sum of their scores */
+  drawings?: Record<string, CircleDrawing[]>;
+  totals?: Record<string, number>;
+  /** Reveal timing (server time): one circle every stepMs, in turns (1st circle of everyone, then 2nd...) */
+  revealAt?: number;
+  stepMs?: number;
 }
 
 export interface BluffView {

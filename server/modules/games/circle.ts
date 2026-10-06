@@ -1,11 +1,16 @@
-import type { CircleView } from '../../../shared/games.ts';
+import type { CircleDrawing, CircleView } from '../../../shared/games.ts';
 import { HbError, num } from '../../core/util.ts';
 import { best, type GameFactory } from './engine.ts';
 
-const DRAW_MS = 30_000;
+/** Time to draw every circle */
+const DRAW_MS = 60_000;
 const MAX_POINTS = 600;
 /** Points kept per drawing for the TV */
 const SHOWN_POINTS = 160;
+/** Reveal: one circle every STEP_MS at most, the whole reveal within REVEAL_MAX_MS, then the totals */
+const STEP_MS = 1300;
+const REVEAL_MAX_MS = 16_000;
+const REVEAL_HOLD_MS = 3500;
 
 type Pt = [number, number];
 
@@ -51,22 +56,42 @@ export function circleScore(points: Pt[]): { score: number; note?: string } {
   return { score: Math.max(0, Math.round(score * 10) / 10), note };
 }
 
-/** Perfect Circle: one stroke, the roundest wins */
+/**
+ * Perfect Circle: everyone draws their circles within one minute, at their own pace.
+ * The TV then reveals them one by one with their scores; the best total wins.
+ */
 export const perfectCircle: GameFactory = (m) => {
-  const drawings = new Map<string, { points: Pt[]; score: number; note?: string }>();
-  let over = false;
+  const count = Math.max(1, m.settings.circleCount);
+  let step: CircleView['step'] = 'draw';
+  const drawings = new Map<string, CircleDrawing[]>(m.players.map((p) => [p.id, []]));
+  const total = (id: string) => drawings.get(id)!.reduce((s, d) => s + d.score, 0);
+  let revealAt = 0;
+  let stepMs = 0;
+
+  const reveal = () => {
+    if (step === 'reveal') return;
+    step = 'reveal';
+    // One circle at a time, faster when there are many, then a moment on the final totals
+    const steps = m.players.length * count;
+    stepMs = Math.round(Math.min(STEP_MS, REVEAL_MAX_MS / steps));
+    revealAt = Date.now() + 1500;
+    m.deadline(null);
+    m.publish();
+    m.later(1500 + steps * stepMs + REVEAL_HOLD_MS, end);
+  };
 
   const end = () => {
-    if (over) return;
-    over = true;
-    const score = (id: string) => drawings.get(id)?.score ?? null;
     m.finish({
-      winners: best(m.players, (id) => score(id) || null),
+      winners: best(m.players, (id) => total(id) || null),
       lines: [...m.players]
-        .sort((a, b) => (score(b.id) ?? -1) - (score(a.id) ?? -1))
+        .sort((a, b) => total(b.id) - total(a.id))
         .map((p) => {
-          const d = drawings.get(p.id);
-          return { id: p.id, label: d ? `${d.score.toFixed(1)} %` : 'No drawing', detail: d?.note };
+          const n = drawings.get(p.id)!.length;
+          return {
+            id: p.id,
+            label: `${total(p.id).toFixed(1)} pts`,
+            detail: count > 1 ? `${n} of ${count} circles, average ${(total(p.id) / count).toFixed(1)} %` : drawings.get(p.id)![0]?.note,
+          };
         }),
     });
   };
@@ -74,12 +99,14 @@ export const perfectCircle: GameFactory = (m) => {
   return {
     start() {
       m.deadline(DRAW_MS);
-      m.later(DRAW_MS + 1000, end);
+      m.later(DRAW_MS + 500, reveal);
+      m.publish();
     },
 
     input(id, args) {
-      if (over) throw new HbError('Too late');
-      if (drawings.has(id)) throw new HbError('You already drew');
+      if (step !== 'draw') throw new HbError('Time is up');
+      const mine = drawings.get(id)!;
+      if (mine.length >= count) throw new HbError('You drew all your circles');
       // Points come normalised by the phone (the shorter side of the pad is 1)
       const raw: unknown[] = Array.isArray(args?.points) ? args.points.slice(0, MAX_POINTS) : [];
       const points: Pt[] = raw
@@ -87,22 +114,32 @@ export const perfectCircle: GameFactory = (m) => {
         .map((p) => [num(p[0]), num(p[1])] as Pt)
         .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y) && Math.abs(x) < 3 && Math.abs(y) < 3);
       const result = circleScore(points);
-      const step = Math.max(1, points.length / SHOWN_POINTS);
+      const every = Math.max(1, points.length / SHOWN_POINTS);
       const shown: Pt[] = [];
-      for (let i = 0; i < points.length; i += step) {
+      for (let i = 0; i < points.length; i += every) {
         const p = points[Math.floor(i)];
         shown.push([Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]);
       }
-      drawings.set(id, { points: shown, ...result });
-      if (drawings.size >= m.players.length) m.later(800, end);
-      else m.publish();
-      return result;
+      mine.push({ points: shown, ...result });
+      if (m.players.every((p) => drawings.get(p.id)!.length >= count)) m.later(800, reveal);
+      m.publish();
+      // The score stays secret until the reveal
+      return { sent: mine.length };
     },
 
     view(): CircleView {
       return {
-        done: [...drawings.keys()],
-        ...(over ? { drawings: Object.fromEntries(drawings) } : {}),
+        count,
+        step,
+        progress: Object.fromEntries(m.players.map((p) => [p.id, drawings.get(p.id)!.length])),
+        ...(step === 'reveal'
+          ? {
+              drawings: Object.fromEntries(drawings),
+              totals: Object.fromEntries(m.players.map((p) => [p.id, total(p.id)])),
+              revealAt,
+              stepMs,
+            }
+          : {}),
       };
     },
   };

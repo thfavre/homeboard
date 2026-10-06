@@ -100,14 +100,17 @@
         <AmountInput value={s.settings.maxStake} oncommit={(v) => setSettings({ maxStake: v })} />
       </div>
     {/if}
-    <div class="line">
-      <span>Blind Timer rounds <span class="faint small">1 to 10</span></span>
-      <span class="stepper">
-        <button class="btn small" disabled={s.settings.timerRounds <= 1} onclick={() => setSettings({ timerRounds: s.settings.timerRounds - 1 })}><Minus size={16} /></button>
-        <strong class="mono">{s.settings.timerRounds}</strong>
-        <button class="btn small" disabled={s.settings.timerRounds >= 10} onclick={() => setSettings({ timerRounds: s.settings.timerRounds + 1 })}><Plus size={16} /></button>
-      </span>
-    </div>
+    {#each [{ key: 'timerRounds', label: 'Blind Timer rounds' }, { key: 'circleCount', label: 'Perfect Circle: circles each' }] as const as r (r.key)}
+      {@const n = s.settings[r.key]}
+      <div class="line">
+        <span>{r.label} <span class="faint small">1 to 10</span></span>
+        <span class="stepper">
+          <button class="btn small" disabled={n <= 1} onclick={() => setSettings({ [r.key]: n - 1 })}><Minus size={16} /></button>
+          <strong class="mono">{n}</strong>
+          <button class="btn small" disabled={n >= 10} onclick={() => setSettings({ [r.key]: n + 1 })}><Plus size={16} /></button>
+        </span>
+      </div>
+    {/each}
     <div class="line">
       <span>
         Show the light colors on the TV too

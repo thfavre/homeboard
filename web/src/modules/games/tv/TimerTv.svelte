@@ -16,7 +16,7 @@
   <TimerFinal {m} />
 {:else if v.step === 'reveal'}
   {#key v.round}
-    <TimerReveal r={v.history[v.history.length - 1]} players={m.players} totals={v.totals} round={v.round} rounds={v.rounds} />
+    <TimerReveal r={v.history[v.history.length - 1]} players={m.players} totals={v.totals} wins={v.wins} round={v.round} rounds={v.rounds} />
   {/key}
 {:else}
   <div class="timer">

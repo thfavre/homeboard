@@ -50,7 +50,10 @@
         <span class="big mono">No stop</span>
         <span class="gap bad">Counts as 10 s off</span>
       {/if}
-      <p class="dim">Total so far: <strong class="mono">{sec(v.totals[me] ?? 0)} s</strong> off</p>
+      {#if last?.winners.includes(me)}<p class="won">You won this round!</p>{/if}
+      <p class="dim">
+        Rounds won: <strong class="mono">{v.wins[me] ?? 0}</strong> &middot; total gap <strong class="mono">{sec(v.totals[me] ?? 0)} s</strong>
+      </p>
       <p class="faint small">{v.round < v.rounds ? 'Next round in a moment.' : 'Final results on the TV.'}</p>
     </div>
   {:else if before}
@@ -151,6 +154,10 @@
   }
   .gap.bad {
     color: var(--danger);
+  }
+  .won {
+    font-weight: 700;
+    color: var(--coin);
   }
   .small {
     font-size: 0.82rem;

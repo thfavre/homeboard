@@ -13,6 +13,9 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] blind test
 - [ ] playing gifs
 - [ ] spin the wheel
+- [ ] Sync Selfie: Take a selfie on the same signal as everyone else, then see the mosaic of all the faces on the TV.
+- [ ] Custom stickers
+-- games ---
 - [x] 1vs1 someone on the TV (like a game show (and put some coins?))
 - [ ] gift for a condition? Like we can see somewhere that doing X gives a gift.
 - [ ] slot machine, it shows on a corner of the TV
@@ -26,7 +29,12 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [x] Perfect Circle: Draw the most perfect circle you can in one stroke, and the app scores your precision.
 - [ ] Beat Maker: Compose a rhythm on a grid without hearing a single sound, then let the room vote when it plays on the TV.
 - [ ] Horse Race: Bet on a horse and watch the race unfold on the TV, hoping yours crosses the line first.
-- [ ] Sync Selfie: Take a selfie on the same signal as everyone else, then see the mosaic of all the faces on the TV.
+
+# Bugs / improvements
+- [ ] pixelcanvas: should be able to use gesture to navigate the canvas, not just drag the finger to draw. (like pinch to zoom, two fingers to move)
+- [ ] When a user adds a song but spotify is not played anywhere, he sees a +10 on his money and the error. (He gets -10 for putting a song and instend of +10 for the error). Make sure this bug doesnt also appens somewhere else.
+- [ ] Let the admin choose the delay for the passive earning.
+- Add more fun emoji for the selfie avatars (like a crown, a hat, a mustache, a monocle, etc.)
 
 ## Quick start
 
@@ -106,9 +114,17 @@ expired challenges give everything back.
 phone gets a Join screen for 45 seconds. The winner takes the pot plus a prize paid by the house:
 the host chooses it when starting the game, otherwise it is the room-game reward.
 
+Before every game, players get 30 seconds to read the rules (on the TV and their phone) and
+press Ready; it starts as soon as everyone is ready.
+
 Blind Timer is played over several rounds (3 by default, set in the admin), each with a new
 target between 8 and 30 seconds. Nobody sees who stopped; after each round the TV sweeps a time
-axis and drops each player's face where they stopped, and the smallest total gap wins.
+axis and drops each player's face where they stopped. The closest wins the round, the most
+rounds won wins the game, and a tie goes to the smallest total gap.
+
+Perfect Circle: each player draws several circles (3 by default, set in the admin) within one
+minute, each sent when the finger is lifted. The scores stay secret until the TV reveals every
+circle one by one with its score while the totals count up; the best total wins.
 
 Light Simon and Color Reflex drive the WLED lights with solid colors (queued light effects wait,
 and every light goes back to what it was doing afterwards). The TV shows the colors too, or only

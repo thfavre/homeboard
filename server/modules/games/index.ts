@@ -81,7 +81,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -488,6 +488,7 @@ export default defineModule<GamesSettings>({
         maxStake: args?.maxStake !== undefined ? Math.max(0, Math.round(num(args.maxStake, 0))) : s.maxStake,
         tvColors: typeof args?.tvColors === 'boolean' ? args.tvColors : s.tvColors,
         timerRounds: args?.timerRounds !== undefined ? Math.min(10, Math.max(1, Math.round(num(args.timerRounds, 3)))) : s.timerRounds,
+        circleCount: args?.circleCount !== undefined ? Math.min(10, Math.max(1, Math.round(num(args.circleCount, 3)))) : s.circleCount,
       });
       ctx.publish();
     });
