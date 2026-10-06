@@ -33,7 +33,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] Horse Race: Bet on a horse and watch the race unfold on the TV, hoping yours crosses the line first.
 
 # Bugs / improvements
-- [ ] The TV page sometimes cahnge the layout and the right part become too big (for ex when I add a lot of music to the queue...) ![alt text](image.png)
+- [ ] The TV page sometimes cahnge the layout and the right part become too big (for ex when I add a lot of music to the queue...) ![alt text](image.png) (delete the image once it is fixed)
 - [ ] pixelcanvas: should be able to use gesture to navigate the canvas, not just drag the finger to draw. (like pinch to zoom, two fingers to move)
 - [ ] When a user adds a song but spotify is not played anywhere, he sees a +10 on his money and the error. (He gets -10 for putting a song and instend of +10 for the error). Make sure this bug doesnt also appens somewhere else.
 - [ ] Let the admin choose the delay for the passive earning.
