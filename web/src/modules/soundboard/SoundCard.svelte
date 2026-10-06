@@ -4,7 +4,9 @@
 
   /**
    * One sound on a board: tap to play. `aside` puts small buttons on the right of the card
-   * (listen, save, add to the board), `badge` one on its top-right corner (remove while editing).
+   * (listen, save, add to the board), on one line with the name cut with "..." if too long;
+   * with `asideBelow` they go under the name on phones instead. `badge` puts one on its
+   * top-right corner (remove while editing).
    */
   let {
     name,
@@ -13,11 +15,12 @@
     disabled = false,
     onclick,
     aside,
+    asideBelow = false,
     badge,
-  }: { name: string; hue: number; active?: boolean; disabled?: boolean; onclick: () => void; aside?: Snippet; badge?: Snippet } = $props();
+  }: { name: string; hue: number; active?: boolean; disabled?: boolean; onclick: () => void; aside?: Snippet; asideBelow?: boolean; badge?: Snippet } = $props();
 </script>
 
-<div class="sound card" class:active style:--h={hue}>
+<div class="sound card" class:active class:has-aside={!!aside} class:below={asideBelow} style:--h={hue}>
   <button class="main" {disabled} {onclick}>
     <span class="icon"><AudioLines size={20} /></span>
     <span class="name">{name}</span>
@@ -75,13 +78,34 @@
     font-size: 0.92rem;
     line-height: 1.2;
   }
-  /* Buttons passed in `aside`, stacked so the name keeps its room on narrow phones */
+  /* With buttons on the same line, the name stays on one line and ends with "..." */
+  .has-aside .name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   .aside {
     flex: none;
     display: flex;
-    flex-direction: column;
     gap: 0.1rem;
-    padding-right: 0.3rem;
+    padding-right: 0.4rem;
+  }
+  /* On phones, `asideBelow` moves the buttons under the name so it keeps the full width */
+  @media (max-width: 640px) {
+    .below {
+      flex-wrap: wrap;
+    }
+    .below .main {
+      flex-basis: 100%;
+      padding-bottom: 0.3rem;
+    }
+    .below .name {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .below .aside {
+      padding: 0 0.5rem 0.4rem;
+    }
   }
   .aside :global(button) {
     display: grid;
