@@ -11,6 +11,9 @@
   let destroyed = false;
   let activeUtterance: SpeechSynthesisUtterance | null = null;
 
+  /** Easter egg: a shoutout about pride scrolls in rainbow colors */
+  const RAINBOW = /\b(lgbt\w*|gays?|lesbi\w*|queers?|pride)\b/i;
+
   const voiceLang = (v: SpeechSynthesisVoice) => v.lang.toLowerCase().replace('_', '-');
 
   /** Best installed voice for a language: the system default if it fits, then an offline one */
@@ -199,7 +202,7 @@
               />
             {/if}
 
-            <span class="marquee-text">
+            <span class="marquee-text" class:rainbow={RAINBOW.test(current.text)}>
               {current.text}
             </span>
 
@@ -279,6 +282,22 @@
     text-shadow: 0 0 30px color-mix(in srgb, var(--accent) 30%, transparent);
     display: inline-block;
     flex-shrink: 0;
+  }
+
+  .marquee-text.rainbow {
+    color: transparent;
+    background: linear-gradient(90deg, #e40303, #ff8c00, #ffed00, #008026, #24408e, #732982, #e40303) 0 0 / 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    text-shadow: none;
+    filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.25));
+    animation: rainbow-flow 3s linear infinite;
+  }
+
+  @keyframes rainbow-flow {
+    to {
+      background-position: -200% 0;
+    }
   }
 
   /* Enters from the right and leaves on the left, like reading */
