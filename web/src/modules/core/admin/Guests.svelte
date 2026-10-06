@@ -27,6 +27,7 @@
     open = id;
     newName = name;
     reason = '';
+    newPin = '';
   }
 
   const give = (guestId: string, sign: 1 | -1) =>
