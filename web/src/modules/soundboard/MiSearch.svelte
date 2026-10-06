@@ -1,23 +1,11 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { Headphones, LoaderCircle, Search, Square } from '@lucide/svelte';
+  import { LoaderCircle, Search } from '@lucide/svelte';
   import type { MiPage, MiSound } from '$shared/soundboard.ts';
-  import { rpc, attempt } from '$lib/client.svelte.ts';
-  import InstantButton from './InstantButton.svelte';
+  import { rpc } from '$lib/client.svelte.ts';
 
-  /**
-   * Sound search (MyInstants), shown as a grid of round buttons like the site.
-   * Pressing a button calls `onpress`, or plays the sound on this phone when there is none.
-   * `actions` adds small buttons under each sound, after "listen on this phone".
-   * `item` replaces all of that with the caller's own markup for each sound (the guest board cards).
-   */
-  let {
-    onpress,
-    pressDisabled = false,
-    busyMp3 = null,
-    actions,
-    item,
-  }: { onpress?: (s: MiSound) => void; pressDisabled?: boolean; busyMp3?: string | null; actions?: Snippet<[MiSound]>; item?: Snippet<[MiSound, number]> } = $props();
+  /** Sound search (MyInstants). `item` draws each result (a SoundCard), in the same grid as the board. */
+  let { item }: { item: Snippet<[MiSound, number]> } = $props();
 
   let query = $state('');
   let items = $state<MiSound[]>([]);
@@ -53,37 +41,7 @@
   // Popular sounds before anything is typed
   load('', 1);
 
-  // ---------------------------------------------------------------- preview on this phone
-  let audio: HTMLAudioElement | null = null;
-  let previewing = $state<string | null>(null);
-  let fetching = $state<string | null>(null);
-
-  function stop() {
-    audio?.pause();
-    audio = null;
-    previewing = null;
-  }
-
-  async function preview(s: MiSound) {
-    if (previewing === s.id) return stop();
-    stop();
-    fetching = s.id;
-    const url = await attempt(() => rpc<string>('soundboard', 'preview', { mp3: s.mp3 }));
-    fetching = null;
-    if (!url) return;
-    audio = new Audio(url);
-    previewing = s.id;
-    const self = audio;
-    audio.addEventListener('ended', () => audio === self && stop());
-    audio.play().catch(() => audio === self && stop());
-  }
-
-  $effect(() => () => {
-    clearTimeout(timer);
-    stop();
-  });
-
-  const seconds = (d: number) => `${d < 10 ? d.toFixed(1) : Math.round(d)}s`;
+  $effect(() => () => clearTimeout(timer));
 </script>
 
 <div class="mi">
@@ -93,33 +51,9 @@
   </label>
   <p class="faint small">{query.trim() ? 'Results' : 'Popular sounds'}</p>
 
-  {#if item}
-    <div class="cards">
-      {#each items as s, i (s.id)}{@render item(s, i)}{/each}
-    </div>
-  {:else}
   <div class="grid">
-    {#each items as s (s.id)}
-      <div class="instant">
-        <InstantButton
-          seed={s.mp3}
-          label={onpress ? `Play ${s.title}` : `Listen to ${s.title}`}
-          active={previewing === s.id || busyMp3 === s.mp3}
-          disabled={onpress ? pressDisabled || busyMp3 === s.mp3 : false}
-          onpress={() => (onpress ? onpress(s) : preview(s))}
-        />
-        <span class="title" title={s.title}>{s.title}</span>
-        <span class="len">{s.duration ? seconds(s.duration) : ''}</span>
-        <div class="tools">
-          <button type="button" class="tool" aria-label={previewing === s.id ? 'Stop' : 'Listen on this phone'} onclick={() => preview(s)}>
-            {#if fetching === s.id}<LoaderCircle size={20} class="spin" />{:else if previewing === s.id}<Square size={18} />{:else}<Headphones size={20} />{/if}
-          </button>
-          {@render actions?.(s)}
-        </div>
-      </div>
-    {/each}
+    {#each items as s, i (s.id)}{@render item(s, i)}{/each}
   </div>
-  {/if}
 
   {#if loading}
     <p class="faint small loading"><LoaderCircle size={15} class="spin" /> Searching...</p>
@@ -154,76 +88,8 @@
   }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
-    gap: 1.1rem 0.5rem;
-  }
-  .cards {
-    display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 0.6rem;
-  }
-  /* Every cell has the same rows, so buttons, names and tools line up across the grid */
-  .instant {
-    display: grid;
-    grid-template-rows: auto auto auto auto;
-    justify-items: center;
-    align-content: start;
-    gap: 0.3rem;
-    min-width: 0;
-    padding-top: 0.2rem;
-  }
-  .instant > :global(:first-child) {
-    margin-bottom: 0.3rem;
-  }
-  .title {
-    width: 100%;
-    font-size: 0.82rem;
-    font-weight: 600;
-    line-height: 1.25;
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .tools {
-    display: flex;
-    justify-content: center;
-    width: 100%;
-    gap: 0.25rem;
-  }
-  /* Shared with the buttons passed in `actions` */
-  .tools :global(.tool) {
-    display: grid;
-    place-items: center;
-    /* Shrinks a little when three tools share a narrow cell (admin) */
-    flex: 0 1 2.6rem;
-    min-width: 0;
-    height: 2.6rem;
-    padding: 0;
-    border: 1px solid var(--border);
-    border-radius: 50%;
-    background: var(--surface-2);
-    color: var(--text-dim);
-    cursor: pointer;
-  }
-  .tools :global(.tool:active) {
-    background: var(--border);
-  }
-  .tools :global(.tool.on) {
-    color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-    background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
-  }
-  .tools :global(.tool:disabled) {
-    opacity: 0.4;
-  }
-  .len {
-    min-height: 1em;
-    margin-top: -0.2rem;
-    font-size: 0.72rem;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    color: var(--text-faint);
   }
   .small {
     font-size: 0.85rem;

@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { AudioLines, BookmarkCheck, BookmarkPlus, X } from '@lucide/svelte';
+  import { BookmarkCheck, BookmarkPlus, X } from '@lucide/svelte';
   import type { MiSound, SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, onEvent, price, serverNow } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import MiSearch from './MiSearch.svelte';
+  import SoundCard from './SoundCard.svelte';
 
   const mod = $derived(hb.modules.soundboard as SoundboardState | undefined);
   const economy = $derived(!!hb.core?.economyEnabled);
@@ -80,15 +81,13 @@
       </div>
       <MiSearch>
         {#snippet item(s, i)}
-          <div class="mine">
-            <button class="sound card saveable" class:last={last === `mi:${s.mp3}`} disabled={wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)} style:--h={(i * 47 + 200) % 360}>
-              <span class="icon"><AudioLines size={20} /></span>
-              <span class="name">{s.title}</span>
-            </button>
-            <button class="save" class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>
-              {#if saved(s.mp3)}<BookmarkCheck size={16} />{:else}<BookmarkPlus size={16} />{/if}
-            </button>
-          </div>
+          <SoundCard name={s.title} hue={(i * 47 + 200) % 360} active={last === `mi:${s.mp3}`} disabled={wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)}>
+            {#snippet aside()}
+              <button class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>
+                {#if saved(s.mp3)}<BookmarkCheck size={16} />{:else}<BookmarkPlus size={16} />{/if}
+              </button>
+            {/snippet}
+          </SoundCard>
         {/snippet}
       </MiSearch>
     {:else}
@@ -101,13 +100,10 @@
       </div>
       <div class="grid">
         {#each mine as s, i (s.mp3)}
-          <div class="mine">
-            <button class="sound card" class:last={last === `mi:${s.mp3}`} disabled={editing || wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)} style:--h={(i * 47 + 200) % 360}>
-              <span class="icon"><AudioLines size={20} /></span>
-              <span class="name">{s.title}</span>
-            </button>
-            {#if editing}<button class="remove" aria-label={`Remove ${s.title}`} onclick={() => toggleSaved(s)}><X size={14} /></button>{/if}
-          </div>
+          <SoundCard name={s.title} hue={(i * 47 + 200) % 360} active={last === `mi:${s.mp3}`} disabled={editing || wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)} badge={editing ? removeBadge : undefined} />
+          {#snippet removeBadge()}
+            <button class="remove" aria-label={`Remove ${s.title}`} onclick={() => toggleSaved(s)}><X size={14} /></button>
+          {/snippet}
         {:else}
           <button class="card empty mine-empty" onclick={() => (tab = 'search')}>
             <BookmarkPlus size={18} /> Search for sounds and save them here. Only you see them.
@@ -118,10 +114,7 @@
     {/if}
     <div class="grid">
       {#each mod.sounds as s, i (s.id)}
-        <button class="sound card" class:last={last === s.id} disabled={wait > 0} onclick={() => play(s.id, s.name)} style:--h={(i * 47) % 360}>
-          <span class="icon"><AudioLines size={20} /></span>
-          <span class="name">{s.name}</span>
-        </button>
+        <SoundCard name={s.name} hue={(i * 47) % 360} active={last === s.id} disabled={wait > 0} onclick={() => play(s.id, s.name)} />
       {:else}
         <div class="card empty">No sounds available.</div>
       {/each}
@@ -196,10 +189,6 @@
     margin: 0;
     font-size: 0.95rem;
   }
-  .mine {
-    position: relative;
-    display: grid;
-  }
   .mine-empty {
     grid-column: 1 / -1;
     display: flex;
@@ -211,32 +200,7 @@
     font-size: 0.88rem;
     border-style: dashed;
   }
-  /* Save to My sounds, in the corner of a search result */
-  .saveable {
-    padding-right: 2.2rem;
-  }
-  .save {
-    position: absolute;
-    top: 50%;
-    right: 0.45rem;
-    translate: 0 -50%;
-    display: grid;
-    place-items: center;
-    width: 1.8rem;
-    height: 1.8rem;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: none;
-    color: var(--text-faint);
-  }
-  .save.on {
-    color: var(--accent);
-  }
   .remove {
-    position: absolute;
-    top: -0.4rem;
-    right: -0.4rem;
     display: grid;
     place-items: center;
     width: 1.6rem;
@@ -267,39 +231,5 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 0.6rem;
-  }
-  .sound {
-    display: flex;
-    align-items: center;
-    gap: 0.7rem;
-    padding: 0.9rem 0.9rem;
-    text-align: left;
-    transition: transform 0.1s ease;
-  }
-  .sound:active:not(:disabled) {
-    transform: scale(0.96);
-  }
-  .sound:disabled {
-    opacity: 0.5;
-  }
-  .icon {
-    flex: none;
-    display: grid;
-    place-items: center;
-    width: 2.4rem;
-    height: 2.4rem;
-    border-radius: 0.8rem;
-    background: hsl(var(--h) 80% 60% / 0.16);
-    color: hsl(var(--h) 85% 68%);
-  }
-  .name {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    font-weight: 600;
-    font-size: 0.92rem;
-    line-height: 1.2;
-  }
-  .last {
-    border-color: var(--accent);
   }
 </style>

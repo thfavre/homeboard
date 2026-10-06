@@ -12,12 +12,26 @@ interface SoundboardSettings {
   volume: number;
   cooldownSec: number;
   disabledBuiltins: string[];
-  /** Built-ins the host deleted: hidden everywhere until restored */
+  /** Built-ins the host deleted: hidden everywhere (restorable while still in `trash`) */
   deletedBuiltins: string[];
-  custom: { id: string; name: string; file: string; myinstants?: boolean }[];
+  custom: CustomSound[];
+  /** Recently deleted sounds, newest first. Uploaded files are kept on disk until they leave it. */
+  trash: TrashItem[];
   guestSearch: boolean;
   searchMaxSec: number;
 }
+
+interface CustomSound {
+  id: string;
+  name: string;
+  file: string;
+  myinstants?: boolean;
+}
+
+type TrashItem = { kind: 'builtin'; id: string; name: string } | ({ kind: 'file' } & CustomSound);
+
+/** How many deleted sounds can be restored */
+const TRASH_SIZE = 10;
 
 /** Sounds a guest can keep on their own board */
 const MAX_MINE = 30;
@@ -40,7 +54,7 @@ export default defineModule<SoundboardSettings>({
   id: 'soundboard',
   name: 'Soundboard',
   description: 'Guests play sound effects through the TV speakers',
-  settings: { volume: 0.8, cooldownSec: 4, disabledBuiltins: [], deletedBuiltins: [], custom: [], guestSearch: false, searchMaxSec: 10 },
+  settings: { volume: 0.8, cooldownSec: 4, disabledBuiltins: [], deletedBuiltins: [], custom: [], trash: [], guestSearch: false, searchMaxSec: 10 },
 
   setup(ctx) {
     const media = ctx.mediaDir();
@@ -96,7 +110,7 @@ export default defineModule<SoundboardSettings>({
         cooldownSec: s.cooldownSec,
         guestSearch: s.guestSearch,
         searchMaxSec: s.searchMaxSec,
-        ...(role === 'admin' ? { builtins: builtins().map((b) => ({ id: b.id, name: b.name, enabled: !s.disabledBuiltins.includes(b.id) })), deletedBuiltins: s.deletedBuiltins.length } : {}),
+        ...(role === 'admin' ? { builtins: builtins().map((b) => ({ id: b.id, name: b.name, enabled: !s.disabledBuiltins.includes(b.id) })), trash: s.trash.map((t) => ({ id: t.id, name: t.name, kind: t.kind })) } : {}),
       };
     });
 
@@ -142,12 +156,6 @@ export default defineModule<SoundboardSettings>({
       return searchMyInstants(args.q, args.page, ctx.settings.get().searchMaxSec);
     });
     ctx.onAdmin('search', (args) => searchMyInstants(args.q, args.page));
-
-    ctx.onGuest('preview', (args) => {
-      guestSearchOn();
-      return cached(args.mp3);
-    });
-    ctx.onAdmin('preview', (args) => cached(args.mp3));
 
     ctx.onGuest('playSearch', async (args, guest) => {
       guestSearchOn();
@@ -216,16 +224,28 @@ export default defineModule<SoundboardSettings>({
       ctx.publish();
     });
 
-    ctx.onAdmin('deleteBuiltin', (args) => {
-      const id = String(args.id);
-      const s = ctx.settings.get();
-      if (!SYNTH_SOUNDS.some((b) => b.id === id) || s.deletedBuiltins.includes(id)) return;
-      ctx.settings.update({ deletedBuiltins: [...s.deletedBuiltins, id] });
-      ctx.publish();
-    });
+    /** Put a deleted sound on top of the history; the oldest one beyond TRASH_SIZE is gone for good */
+    const toTrash = (item: TrashItem) => {
+      const trash = [item, ...ctx.settings.get().trash.filter((t) => t.id !== item.id)];
+      for (const old of trash.slice(TRASH_SIZE)) {
+        if (old.kind === 'file') removeFile(old.file);
+      }
+      return trash.slice(0, TRASH_SIZE);
+    };
 
-    ctx.onAdmin('restoreBuiltins', () => {
-      ctx.settings.update({ deletedBuiltins: [] });
+    const removeFile = (file: string) => {
+      try {
+        unlinkSync(join(media, file));
+      } catch {
+        // already gone
+      }
+    };
+
+    ctx.onAdmin('deleteBuiltin', (args) => {
+      const s = ctx.settings.get();
+      const b = SYNTH_SOUNDS.find((x) => x.id === args.id);
+      if (!b || s.deletedBuiltins.includes(b.id)) return;
+      ctx.settings.update({ deletedBuiltins: [...s.deletedBuiltins, b.id], trash: toTrash({ kind: 'builtin', id: b.id, name: b.name }) });
       ctx.publish();
     });
 
@@ -233,12 +253,21 @@ export default defineModule<SoundboardSettings>({
       const s = ctx.settings.get();
       const c = s.custom.find((x) => x.id === args.id);
       if (!c) return;
-      try {
-        unlinkSync(join(media, c.file));
-      } catch {
-        // already gone
+      ctx.settings.update({ custom: s.custom.filter((x) => x.id !== c.id), trash: toTrash({ kind: 'file', ...c }) });
+      ctx.publish();
+    });
+
+    ctx.onAdmin('restore', (args) => {
+      const s = ctx.settings.get();
+      const t = s.trash.find((x) => x.id === args.id);
+      if (!t) throw new HbError('That sound is no longer in the history');
+      const trash = s.trash.filter((x) => x !== t);
+      if (t.kind === 'builtin') {
+        ctx.settings.update({ deletedBuiltins: s.deletedBuiltins.filter((id) => id !== t.id), trash });
+      } else {
+        const { kind: _, ...c } = t;
+        ctx.settings.update({ custom: [...s.custom, c], trash });
       }
-      ctx.settings.update({ custom: s.custom.filter((x) => x.id !== c.id) });
       ctx.publish();
     });
 
