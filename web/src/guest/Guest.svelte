@@ -226,7 +226,8 @@
     position: fixed;
     left: 50%;
     bottom: 0;
-    transform: translateX(-50%);
+    transform: translate3d(-50%, 0, 0);
+    will-change: transform;
     width: min(34rem, 100%);
     display: flex;
     justify-content: space-around;
@@ -236,6 +237,18 @@
     -webkit-backdrop-filter: blur(16px);
     border-top: 1px solid var(--border);
     z-index: 20;
+  }
+  /* The phone's toolbar slides in and out on fast scrolls and the bar can lag a frame behind:
+     this skirt fills the gap below it so the page never shows through. */
+  nav::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: 50vh;
+    background: var(--bg);
+    pointer-events: none;
   }
   nav button {
     display: grid;
