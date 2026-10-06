@@ -9,13 +9,15 @@
    * Sound search (MyInstants), shown as a grid of round buttons like the site.
    * Pressing a button calls `onpress`, or plays the sound on this phone when there is none.
    * `actions` adds small buttons under each sound, after "listen on this phone".
+   * `item` replaces all of that with the caller's own markup for each sound (the guest board cards).
    */
   let {
     onpress,
     pressDisabled = false,
     busyMp3 = null,
     actions,
-  }: { onpress?: (s: MiSound) => void; pressDisabled?: boolean; busyMp3?: string | null; actions?: Snippet<[MiSound]> } = $props();
+    item,
+  }: { onpress?: (s: MiSound) => void; pressDisabled?: boolean; busyMp3?: string | null; actions?: Snippet<[MiSound]>; item?: Snippet<[MiSound, number]> } = $props();
 
   let query = $state('');
   let items = $state<MiSound[]>([]);
@@ -91,6 +93,11 @@
   </label>
   <p class="faint small">{query.trim() ? 'Results' : 'Popular sounds'}</p>
 
+  {#if item}
+    <div class="cards">
+      {#each items as s, i (s.id)}{@render item(s, i)}{/each}
+    </div>
+  {:else}
   <div class="grid">
     {#each items as s (s.id)}
       <div class="instant">
@@ -112,6 +119,7 @@
       </div>
     {/each}
   </div>
+  {/if}
 
   {#if loading}
     <p class="faint small loading"><LoaderCircle size={15} class="spin" /> Searching...</p>
@@ -148,6 +156,11 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
     gap: 1.1rem 0.5rem;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.6rem;
   }
   /* Every cell has the same rows, so buttons, names and tools line up across the grid */
   .instant {

@@ -78,11 +78,17 @@
         <h4>Tap a sound to play it</h4>
         {@render tag(searchCost)}
       </div>
-      <MiSearch onpress={(s) => playSearch(s.mp3, s.title)} pressDisabled={wait > 0} busyMp3={sending}>
-        {#snippet actions(s)}
-          <button type="button" class="tool" class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>
-            {#if saved(s.mp3)}<BookmarkCheck size={20} />{:else}<BookmarkPlus size={20} />{/if}
-          </button>
+      <MiSearch>
+        {#snippet item(s, i)}
+          <div class="mine">
+            <button class="sound card saveable" class:last={last === `mi:${s.mp3}`} disabled={wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)} style:--h={(i * 47 + 200) % 360}>
+              <span class="icon"><AudioLines size={20} /></span>
+              <span class="name">{s.title}</span>
+            </button>
+            <button class="save" class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>
+              {#if saved(s.mp3)}<BookmarkCheck size={16} />{:else}<BookmarkPlus size={16} />{/if}
+            </button>
+          </div>
         {/snippet}
       </MiSearch>
     {:else}
@@ -205,6 +211,28 @@
     font-size: 0.88rem;
     border-style: dashed;
   }
+  /* Save to My sounds, in the corner of a search result */
+  .saveable {
+    padding-right: 2.2rem;
+  }
+  .save {
+    position: absolute;
+    top: 50%;
+    right: 0.45rem;
+    translate: 0 -50%;
+    display: grid;
+    place-items: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: var(--text-faint);
+  }
+  .save.on {
+    color: var(--accent);
+  }
   .remove {
     position: absolute;
     top: -0.4rem;
@@ -265,6 +293,8 @@
     color: hsl(var(--h) 85% 68%);
   }
   .name {
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-weight: 600;
     font-size: 0.92rem;
     line-height: 1.2;
