@@ -46,6 +46,8 @@ const ALL_READY_MS = 3_000;
 const RESULT_MS = 15_000;
 /** When the Perfect Circle winner scratches, the result closes once it has been up this long */
 const RESULT_SCRATCH_MS = 7000;
+/** The lights prize fades from one color to the next */
+const PERK_FADE_MS = 2000;
 
 interface Invite extends DuelInvite {
   charges: Charge[];
@@ -607,7 +609,8 @@ export default defineModule<GamesSettings>({
       const c = GAME_COLORS.find((x) => x.id === args?.color);
       if (!c) throw new HbError('Pick a color');
       p.color = c.id;
-      lights()?.color(c.led);
+      // A soft fade, not a flash: the whole room changes color
+      lights()?.color(c.led, PERK_FADE_MS);
       ctx.publish();
       return true;
     });

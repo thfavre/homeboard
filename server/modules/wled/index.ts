@@ -37,8 +37,8 @@ export interface LightsApi {
   available(): boolean;
   /** Pause the effect queue and keep the lights for a game */
   claim(): void;
-  /** Solid color on every light (null: dark). Latest call wins, never queued up. */
-  color(hex: string | null): void;
+  /** Solid color on every light (null: dark). Latest call wins, never queued up. `fadeMs`: fade to it (default: at once). */
+  color(hex: string | null, fadeMs?: number): void;
   /** Give the lights back: previous state restored, queued effects resume */
   release(): Promise<void>;
   /** The configured lights */
@@ -275,7 +275,7 @@ export default defineModule<WledSettings>({
     // ------------------------------------------------------------ games
 
     /** Color each device should show next (null: dark); one request in flight per device */
-    const wanted = new Map<string, string | null>();
+    const wanted = new Map<string, { hex: string | null; fadeMs: number }>();
     const sending = new Set<string>();
 
     const sendSolid = async (deviceId: string) => {
@@ -285,7 +285,7 @@ export default defineModule<WledSettings>({
       sending.add(deviceId);
       try {
         while (wanted.has(deviceId) && held) {
-          const hex = wanted.get(deviceId) ?? null;
+          const { hex, fadeMs } = wanted.get(deviceId)!;
           wanted.delete(deviceId);
           try {
             pending.delete(d.id);
@@ -293,7 +293,7 @@ export default defineModule<WledSettings>({
             const col = [hex ? hexToRgb(hex) : [0, 0, 0], [0, 0, 0], [0, 0, 0]];
             const seg = (saved.get(d.id)!.before.seg ?? [{ id: 0 }]).map((s: any) => ({ id: s.id, on: true, fx: 0, col }));
             const bri = ctx.settings.get().brightness;
-            saved.sent(d.id, await wled(d.host, '/json/state', { on: true, transition: 0, ...(bri > 0 ? { bri } : {}), seg, v: true }));
+            saved.sent(d.id, await wled(d.host, '/json/state', { on: true, transition: Math.round(fadeMs / 100), ...(bri > 0 ? { bri } : {}), seg, v: true }));
           } catch (err) {
             ctx.log.warn(`Could not reach ${d.name}`, (err as Error).message);
           }
@@ -337,11 +337,11 @@ export default defineModule<WledSettings>({
           ctx.publish();
         }
       },
-      color: (hex) => {
+      color: (hex, fadeMs = 0) => {
         if (!held) return;
         for (const d of devices()) {
           if (!health.get(d.id)?.online) continue;
-          wanted.set(d.id, hex);
+          wanted.set(d.id, { hex, fadeMs });
           void sendSolid(d.id);
         }
       },
