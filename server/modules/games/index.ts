@@ -47,7 +47,7 @@ const RESULT_MS = 15_000;
 /** When the Perfect Circle winner scratches, the result closes once it has been up this long */
 const RESULT_SCRATCH_MS = 7000;
 /** The lights prize fades from one color to the next */
-const PERK_FADE_MS = 2000;
+const PERK_FADE_MS = 1000;
 
 interface Invite extends DuelInvite {
   charges: Charge[];
