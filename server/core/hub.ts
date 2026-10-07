@@ -420,9 +420,10 @@ export class Hub {
       socket.join(`role:${role}`);
       if (role === 'tv') this.tvSockets.push(socket);
       this.sendSnapshot(socket, role);
-      // The TV window stays open for days: it reloads itself when the web app was rebuilt
-      if (role === 'tv') socket.emit('build', this.buildId());
     }
+    // Screens stay open for hours (the TV for days): each one reloads itself when it reconnects
+    // and the web app was rebuilt meanwhile, so it never runs old screens against a new server
+    socket.emit('build', this.buildId());
 
     socket.on('rpc', async (req: RpcRequest, ack: (r: RpcResponse) => void) => {
       if (typeof ack !== 'function') return;
