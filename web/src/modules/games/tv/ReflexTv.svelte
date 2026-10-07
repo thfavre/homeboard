@@ -11,7 +11,7 @@
 
   /**
    * While playing: the color, and who has tapped (no times, they stay secret).
-   * Then the reveal: every round's time appears one by one (round 1 of everyone, then round 2...),
+   * Then the reveal: a round at a time, everyone's time of it popping in one after the other,
    * totals counting up; once all are out the rows sort themselves and the fastest gets the crown.
    */
   let { m }: { m: MatchState } = $props();
@@ -23,11 +23,10 @@
   const lit = $derived(showColors && hex && (v.step === 'go' || v.step === 'done'));
 
   const revealing = $derived(v.step === 'reveal' || m.phase === 'result');
-  const shownSteps = $derived(
-    m.phase === 'result' ? Infinity : v.revealAt && v.stepMs ? Math.max(0, Math.floor((now.value - v.revealAt) / v.stepMs) + 1) : 0,
-  );
-  const visible = (playerIndex: number, round: number) => round * m.players.length + playerIndex < shownSteps;
-  const allOut = $derived(shownSteps >= m.players.length * v.rounds);
+  // A round at a time for everyone, each player's time a moment after the previous one
+  const shownAt = (playerIndex: number, round: number) => (v.revealAt ?? Infinity) + round * (v.stepMs ?? 0) + playerIndex * (v.cascadeMs ?? 0);
+  const visible = (playerIndex: number, round: number) => m.phase === 'result' || now.value >= shownAt(playerIndex, round);
+  const allOut = $derived(visible(m.players.length - 1, v.rounds - 1));
   const cost = (t: ReflexTap) => t.ms ?? v.penaltyMs;
   const shownTotal = (id: string, i: number) => (v.taps?.[id] ?? []).reduce((sum, t, r) => sum + (visible(i, r) ? cost(t) : 0), 0);
   const rows = $derived.by(() => {

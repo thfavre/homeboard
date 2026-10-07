@@ -265,10 +265,12 @@ export interface ReflexView {
   color: GameColor | null;
   /** A miss counts as this many ms */
   penaltyMs: number;
-  /** From the reveal on: every round of every player, revealed one by one (round 1 of everyone, then round 2...) */
+  /** From the reveal on: every round of every player */
   taps?: Record<string, ReflexTap[]>;
+  /** Reveal timing (server time): round r at revealAt + r * stepMs, player i of it cascadeMs * i later */
   revealAt?: number;
   stepMs?: number;
+  cascadeMs?: number;
 }
 
 export interface CircleDrawing {

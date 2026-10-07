@@ -7,9 +7,14 @@ const GO_MS = 3000;
 /** A miss (too early, wrong color, no tap) counts as this */
 const PENALTY_MS = GO_MS;
 const DONE_MS = 1400;
-/** Reveal: one time every STEP_MS at most, the whole reveal within REVEAL_MAX_MS, then the totals */
-const STEP_MS = 900;
-const REVEAL_MAX_MS = 15_000;
+/**
+ * Reveal: one round at a time for everyone (the times pop in quickly one after the other), so it
+ * lasts the same with 2 or 10 players: about 9 s for 5 rounds, 14.5 s at most
+ */
+const ROUND_MS = 1300;
+const ROUNDS_MAX_MS = 12_000;
+const CASCADE_MS = 150;
+const REVEAL_LEAD_MS = 1000;
 const REVEAL_HOLD_MS = 1500;
 
 /** Color Reflex: everyone taps the color of the lights as fast as they can; times stay secret until the reveal */
@@ -25,6 +30,7 @@ export const colorReflex: GameFactory = (m) => {
   const history = new Map<string, ReflexTap[]>(m.players.map((p) => [p.id, []]));
   let revealAt = 0;
   let stepMs = 0;
+  let cascadeMs = 0;
 
   const score = (t: ReflexTap) => t.ms ?? PENALTY_MS;
   const total = (id: string) => history.get(id)!.reduce((s, t) => s + score(t), 0);
@@ -73,11 +79,12 @@ export const colorReflex: GameFactory = (m) => {
   const reveal = () => {
     step = 'reveal';
     m.light(null);
-    const steps = m.players.length * rounds;
-    stepMs = Math.round(Math.min(STEP_MS, REVEAL_MAX_MS / steps));
-    revealAt = Date.now() + 1200;
+    stepMs = Math.round(Math.min(ROUND_MS, ROUNDS_MAX_MS / rounds));
+    // Everyone's time of a round shows within the first 60% of it
+    cascadeMs = Math.round(Math.min(CASCADE_MS, (stepMs * 0.6) / m.players.length));
+    revealAt = Date.now() + REVEAL_LEAD_MS;
     m.publish();
-    m.later(1200 + steps * stepMs + REVEAL_HOLD_MS, end);
+    m.later(REVEAL_LEAD_MS + rounds * stepMs + REVEAL_HOLD_MS, end);
   };
 
   const end = () => {
@@ -130,7 +137,7 @@ export const colorReflex: GameFactory = (m) => {
         // Phones only learn the color once the round is over
         color: role === 'guest' && step === 'go' ? null : color,
         penaltyMs: PENALTY_MS,
-        ...(step === 'reveal' ? { taps: Object.fromEntries(history), revealAt, stepMs } : {}),
+        ...(step === 'reveal' ? { taps: Object.fromEntries(history), revealAt, stepMs, cascadeMs } : {}),
       };
     },
   };

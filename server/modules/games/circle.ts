@@ -7,9 +7,14 @@ const DRAW_MS = 60_000;
 const MAX_POINTS = 600;
 /** Points kept per drawing for the TV */
 const SHOWN_POINTS = 160;
-/** Reveal: one circle every STEP_MS at most, the whole reveal within REVEAL_MAX_MS, then the totals */
-const STEP_MS = 1300;
-const REVEAL_MAX_MS = 16_000;
+/**
+ * Reveal, crown included: 5 s plus 0.4 s per circle, 15 s at most (about 7 s for 2 players, 15 s for 10),
+ * a moment before the first circle and one on the final totals
+ */
+const REVEAL_BASE_MS = 5000;
+const REVEAL_PER_CIRCLE_MS = 400;
+const REVEAL_MAX_MS = 15_000;
+const REVEAL_LEAD_MS = 1000;
 const REVEAL_HOLD_MS = 1500;
 
 type Pt = [number, number];
@@ -173,11 +178,12 @@ export const perfectCircle: GameFactory = (m) => {
     step = 'reveal';
     // One circle at a time, faster when there are many, then a moment on the final totals
     const steps = m.players.length * count;
-    stepMs = Math.round(Math.min(STEP_MS, REVEAL_MAX_MS / steps));
-    revealAt = Date.now() + 1500;
+    const total = Math.min(REVEAL_MAX_MS, REVEAL_BASE_MS + REVEAL_PER_CIRCLE_MS * steps);
+    stepMs = Math.round((total - REVEAL_LEAD_MS - REVEAL_HOLD_MS) / steps);
+    revealAt = Date.now() + REVEAL_LEAD_MS;
     m.deadline(null);
     m.publish();
-    m.later(1500 + steps * stepMs + REVEAL_HOLD_MS, end);
+    m.later(REVEAL_LEAD_MS + steps * stepMs + REVEAL_HOLD_MS, end);
   };
 
   const end = () => {
