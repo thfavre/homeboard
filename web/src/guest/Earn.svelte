@@ -3,7 +3,8 @@
   import type { LedgerEntry } from '$shared/protocol.ts';
   import { hb, rpc } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
-  import { ago } from '$lib/time.ts';
+  import { ago, clock } from '$lib/time.ts';
+  import { passiveTimer } from './passive.svelte.ts';
 
   let history = $state<LedgerEntry[]>([]);
 
@@ -15,6 +16,7 @@
 
   const icons: Record<string, typeof Gift> = { 'core.join': Gift, 'core.passive': Clock };
   const currency = $derived(hb.core?.currency);
+  const timer = $derived(passiveTimer());
 </script>
 
 <div class="earn">
@@ -32,6 +34,15 @@
         <div class="text">
           <strong>{r.label}</strong>
           <span class="dim">{r.description}</span>
+          {#if r.key === 'core.passive' && timer}
+            <span class="timer">
+              <!-- A fresh bar after each payout: starts empty instead of sliding back -->
+              {#key hb.me?.passiveSince}
+                <span class="bar"><span style:width="{timer.progress * 100}%"></span></span>
+              {/key}
+              <span class="faint mono">{hb.connected ? `next in ${clock(timer.remainingMs)}` : 'paused'}</span>
+            </span>
+          {/if}
         </div>
         <span class="value"><Money amount={r.amount} sign /></span>
       </div>
@@ -108,6 +119,27 @@
   }
   .text strong {
     font-size: 0.98rem;
+  }
+  .timer {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+  }
+  .bar {
+    flex: 1;
+    height: 0.3rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--coin) 18%, transparent);
+    overflow: hidden;
+  }
+  .bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--coin);
+    transition: width 1s linear;
   }
   .value {
     color: var(--success);

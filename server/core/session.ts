@@ -235,7 +235,7 @@ export class Session extends EventEmitter {
   }
 
   me(g: Guest): Me {
-    return { id: g.id, name: g.name, color: g.color, balance: g.balance, earned: g.earned, spent: g.spent, hasPin: !!g.pin, pin: typeof g.pin === 'string' ? g.pin : null, avatar: g.avatar?.url, avatarParams: g.avatar?.params };
+    return { id: g.id, name: g.name, color: g.color, balance: g.balance, earned: g.earned, spent: g.spent, hasPin: !!g.pin, pin: typeof g.pin === 'string' ? g.pin : null, avatar: g.avatar?.url, avatarParams: g.avatar?.params, passiveSince: Date.now() - g.onlineAccum * 1000 };
   }
 
   publicGuest(g: Guest): PublicGuest {

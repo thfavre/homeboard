@@ -33,8 +33,8 @@ export interface CoreSettings {
   prices: Record<string, number>;
   earn: Record<string, number>;
   passiveMinutes: number;
-  /** Passive income keeps going this many hours while a guest is away (0 = only while online) */
-  passiveAwayHours: number;
+  /** Passive income keeps going this many minutes while a guest is away (0 = only while online) */
+  passiveAwayMinutes: number;
   leaderboardMode: LeaderboardMode;
   privacy: PrivacySettings;
   qrIncludesCode: boolean;
@@ -53,7 +53,7 @@ const CORE_DEFAULTS: CoreSettings = {
   prices: {},
   earn: {},
   passiveMinutes: 5,
-  passiveAwayHours: 1,
+  passiveAwayMinutes: 60,
   leaderboardMode: 'balance',
   privacy: { activity: 'names', photoNames: true, stickerNames: true, songNames: true, effectNames: true },
   qrIncludesCode: true,

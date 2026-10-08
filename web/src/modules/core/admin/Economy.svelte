@@ -24,7 +24,7 @@
   const currencyName = new Synced(() => hb.core?.currency.name, '');
   const currencySymbol = new Synced(() => hb.core?.currency.symbol, '');
   const passive = new Synced(() => hb.core?.admin?.passiveMinutes, 5);
-  const passiveAway = new Synced(() => hb.core?.admin?.passiveAwayHours, 1);
+  const passiveAway = new Synced(() => hb.core?.admin?.passiveAwayMinutes, 60);
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('core', 'setGeneral', args));
 </script>
@@ -53,8 +53,8 @@
       <input class="input" type="number" min="0" max="120" bind:value={passive.value} onfocus={passive.start} onblur={() => { set({ passiveMinutes: Number(passive.value) }); passive.end(); }} />
     </label>
     <label class="field">
-      <span>Keeps paying while away (hours, 0 = only online)</span>
-      <input class="input" type="number" min="0" max="24" step="0.5" bind:value={passiveAway.value} onfocus={passiveAway.start} onblur={() => { set({ passiveAwayHours: Number(passiveAway.value) }); passiveAway.end(); }} />
+      <span>Keeps paying while away (minutes, 0 = only online)</span>
+      <input class="input" type="number" min="0" max="1440" step="5" bind:value={passiveAway.value} onfocus={passiveAway.start} onblur={() => { set({ passiveAwayMinutes: Number(passiveAway.value) }); passiveAway.end(); }} />
     </label>
   </div>
   <div class="grid2">

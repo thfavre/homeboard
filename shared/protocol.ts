@@ -68,6 +68,8 @@ export interface Me {
   avatar?: string;
   /** How the avatar was made, to edit it again */
   avatarParams?: AvatarParams;
+  /** Server time the passive income timer started counting towards the next payout */
+  passiveSince: number;
 }
 
 export interface ActivityItem {
@@ -110,6 +112,8 @@ export interface CoreState {
   features: FeatureInfo[];
   prices: Record<string, PriceInfo>;
   earn: EarnRuleInfo[];
+  /** Time between passive income payouts (0 = off) */
+  passiveMs: number;
   leaderboardMode: LeaderboardMode;
   leaderboard: PublicGuest[];
   privacy: PrivacySettings;
@@ -132,7 +136,7 @@ export interface CoreAdminState {
   tunnel: 'off' | 'starting' | 'up' | 'error';
   sessionStartedAt: number;
   passiveMinutes: number;
-  passiveAwayHours: number;
+  passiveAwayMinutes: number;
   qrIncludesCode: boolean;
   requireCode: boolean;
   prices: PriceInfo[];
@@ -174,6 +178,11 @@ export interface WelcomeBack {
   awayMs: number;
   /** Part of the time away that was paid (capped by the host) */
   paidMs: number;
+  amount: number;
+}
+
+/** Sent to a guest when passive income pays them */
+export interface PassivePaid {
   amount: number;
 }
 
