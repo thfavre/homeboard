@@ -31,8 +31,8 @@ export interface SpotifyState {
   connected: boolean;
   now: NowPlaying | null;
   queue: Track[];
-  /** How many songs are queued in all (the public queue is cut short) */
-  queueLength: number;
+  /** How many queued songs guests added (they play before the playlist; the public queue is cut short) */
+  guestQueued: number;
   allowSkip: boolean;
   /** Admin only */
   admin?: {

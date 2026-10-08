@@ -353,7 +353,7 @@ export default defineModule<SpotifySettings>({
         connected: connected(),
         now,
         queue: fullQueue().slice(0, PUBLIC_QUEUE),
-        queueLength: fullQueue().length,
+        guestQueued: spotifyQueue.filter((t) => handedOver.has(t.uri)).length + held.length,
         allowSkip: s.allowSkip,
         ...(role === 'admin'
           ? {

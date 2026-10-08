@@ -8,8 +8,8 @@
   const SHOWN = 4;
   const spotify = $derived(hb.modules.spotify as SpotifyState | undefined);
   const queue = $derived((spotify?.queue ?? []).slice(0, SHOWN));
-  // The public queue is cut short, so count from the total the server sends
-  const more = $derived((spotify?.queueLength ?? spotify?.queue.length ?? 0) - queue.length);
+  // Guest songs play first, so the ones past the list are the guest total minus the rows shown
+  const more = $derived(Math.max(0, (spotify?.guestQueued ?? 0) - SHOWN));
 </script>
 
 {#if hb.modules.spotify?.connected && queue.length}
