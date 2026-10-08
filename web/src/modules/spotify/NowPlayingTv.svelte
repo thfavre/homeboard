@@ -42,6 +42,8 @@
 
 <style>
   .np {
+    /* Never squeezed by a full side column (overflow: hidden would let it shrink); the leaderboard gives way instead */
+    flex: none;
     position: relative;
     display: flex;
     gap: 1.1rem;
