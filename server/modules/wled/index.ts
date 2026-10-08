@@ -138,6 +138,12 @@ export default defineModule<WledSettings>({
 
     const devices = () => ctx.settings.get().devices;
     const device = (id: string) => devices().find((d) => d.id === id);
+    /** The saved segments Homeboard may change on a device: the picked ones, or all when none of them exists */
+    const targets = (d: WledDevice, before: any): any[] => {
+      const all: any[] = before.seg ?? [{ id: 0 }];
+      const picked = all.filter((s) => d.segments?.includes(s.id));
+      return picked.length ? picked : all;
+    };
     const pub = (j: Job): WledJob => ({ id: j.id, effect: j.effect, devices: j.devices, guest: j.guest });
 
     // ------------------------------------------------------------ health
@@ -172,7 +178,7 @@ export default defineModule<WledSettings>({
         pending.delete(d.id);
         if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
         const col = effect.colors.length ? effect.colors.map(hexToRgb) : undefined;
-        const seg = (saved.get(d.id)!.before.seg ?? [{ id: 0 }]).map((s: any) => ({ id: s.id, on: true, fx: effect.fx, pal: effect.pal, sx: effect.sx, ix: effect.ix, ...(col ? { col } : {}) }));
+        const seg = targets(d, saved.get(d.id)!.before).map((s) => ({ id: s.id, on: true, fx: effect.fx, pal: effect.pal, sx: effect.sx, ix: effect.ix, ...(col ? { col } : {}) }));
         const bri = ctx.settings.get().brightness;
         // v: WLED answers with its new state
         saved.sent(d.id, await wled(d.host, '/json/state', { on: true, transition: 3, ...(bri > 0 ? { bri } : {}), seg, v: true }));
@@ -291,7 +297,7 @@ export default defineModule<WledSettings>({
             pending.delete(d.id);
             if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
             const col = [hex ? hexToRgb(hex) : [0, 0, 0], [0, 0, 0], [0, 0, 0]];
-            const seg = (saved.get(d.id)!.before.seg ?? [{ id: 0 }]).map((s: any) => ({ id: s.id, on: true, fx: 0, col }));
+            const seg = targets(d, saved.get(d.id)!.before).map((s) => ({ id: s.id, on: true, fx: 0, col }));
             const bri = ctx.settings.get().brightness;
             saved.sent(d.id, await wled(d.host, '/json/state', { on: true, transition: Math.round(fadeMs / 100), ...(bri > 0 ? { bri } : {}), seg, v: true }));
           } catch (err) {
@@ -410,12 +416,23 @@ export default defineModule<WledSettings>({
       if (!/^[\w.-]+(:\d+)?$/.test(host)) throw new HbError('Enter an IP address like 192.168.1.50');
       const list = [...devices()];
       const existing = list.find((d) => d.id === args.id);
+      const segments = Array.isArray(args.segments) ? [...new Set(args.segments.map((n: unknown) => Math.round(num(n, -1))).filter((n: number) => n >= 0 && n < 32))] as number[] : undefined;
       let name = cleanName(args.name, 30);
       if (!name) name = await wled(host, '/json/info').then((i) => cleanName(i.name, 30)).catch(() => '');
-      if (existing) Object.assign(existing, { host, name: name || existing.name });
-      else list.push({ id: uid(4), host, name: name || host });
+      if (existing) Object.assign(existing, { host, name: name || existing.name, ...(segments ? { segments } : {}) });
+      else list.push({ id: uid(4), host, name: name || host, ...(segments ? { segments } : {}) });
       ctx.settings.update({ devices: list });
       await poll();
+    });
+
+    /** The segments a light has now, to pick where effects play */
+    ctx.onAdmin('segments', async (args) => {
+      const host = device(args.id)?.host;
+      if (!host) throw new HbError('Unknown light');
+      const state = await wled(host, '/json/state').catch(() => {
+        throw new HbError('This light is not answering');
+      });
+      return (state.seg ?? []).map((s: any) => ({ id: s.id, name: typeof s.n === 'string' && s.n ? s.n : `Segment ${s.id}`, leds: s.len ?? s.stop - s.start }));
     });
 
     ctx.onAdmin('removeDevice', (args) => {

@@ -2,7 +2,7 @@
   import { Synced } from '$lib/synced.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import { Pencil, Play, Plus, RotateCcw, SkipForward, Square, Trash2 } from '@lucide/svelte';
-  import type { WledEffect, WledState } from '$shared/wled.ts';
+  import type { WledDevice, WledEffect, WledState } from '$shared/wled.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Sheet from '$lib/ui/Sheet.svelte';
@@ -14,7 +14,20 @@
   const brightness = new Synced(() => hb.modules.wled?.brightness, 255);
 
   // Device form
-  let devForm = $state<{ id?: string; host: string; name: string } | null>(null);
+  let devForm = $state<{ id?: string; host: string; name: string; segments: number[] } | null>(null);
+  /** Segments of the light being edited (null: loading or not reachable) */
+  let segList = $state<{ id: number; name: string; leds: number }[] | null>(null);
+
+  async function editDevice(d?: WledDevice) {
+    devForm = d ? { id: d.id, host: d.host, name: d.name, segments: [...(d.segments ?? [])] } : { host: '', name: '', segments: [] };
+    segList = null;
+    if (d) segList = (await attempt(() => rpc<{ id: number; name: string; leds: number }[]>('wled', 'segments', { id: d.id }))) ?? null;
+  }
+
+  function toggleSegment(id: number, on: boolean) {
+    if (!devForm) return;
+    devForm.segments = on ? [...devForm.segments, id] : devForm.segments.filter((s) => s !== id);
+  }
 
   // Effect editor
   let catalog = $state<{ effects: string[]; palettes: string[] } | null>(null);
@@ -66,7 +79,7 @@
 
   <Section title="Lights">
     {#snippet actions()}
-      <button class="btn small" onclick={() => (devForm = { host: '', name: '' })}><Plus size={16} /> Add</button>
+      <button class="btn small" onclick={() => editDevice()}><Plus size={16} /> Add</button>
     {/snippet}
     {#each mod.devices as d (d.id)}
       <div class="line">
@@ -75,7 +88,7 @@
           <strong>{d.name}</strong>
           <p class="faint small mono">{d.host}{d.leds ? ` · ${d.leds} LEDs` : ''}{d.online ? '' : ' · offline'}</p>
         </div>
-        <button class="btn ghost small" aria-label="Edit" onclick={() => (devForm = { id: d.id, host: d.host, name: d.name })}><Pencil size={15} /></button>
+        <button class="btn ghost small" aria-label="Edit" onclick={() => editDevice(d)}><Pencil size={15} /></button>
         <button class="btn ghost small" aria-label="Remove" onclick={async () => (await ask({ title: `Remove ${d.name}?`, confirm: 'Remove', danger: true })) && attempt(() => rpc('wled', 'removeDevice', { id: d.id }))}>
           <Trash2 size={15} />
         </button>
@@ -95,6 +108,18 @@
       >
         <label class="field"><span>IP address</span><input class="input" bind:value={devForm.host} placeholder="192.168.1.50" /></label>
         <label class="field"><span>Name</span><input class="input" bind:value={devForm.name} placeholder="Read from WLED if empty" /></label>
+        {#if segList && segList.length > 1}
+          <div class="field">
+            <span>Effects play on</span>
+            {#each segList as s (s.id)}
+              <label class="check">
+                <input type="checkbox" checked={devForm.segments.includes(s.id)} onchange={(e) => toggleSegment(s.id, e.currentTarget.checked)} />
+                {s.name}<span class="faint small">{s.leds} LEDs</span>
+              </label>
+            {/each}
+            <p class="faint small">{devForm.segments.length ? 'The other segments keep what they show.' : 'None ticked: the whole light.'}</p>
+          </div>
+        {/if}
         <div class="row">
           <button class="btn primary">Save</button>
           <button type="button" class="btn ghost" onclick={() => (devForm = null)}>Cancel</button>
@@ -230,6 +255,14 @@
   }
   .block {
     display: block;
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .check input {
+    accent-color: var(--accent);
   }
   .grid2 {
     display: grid;
