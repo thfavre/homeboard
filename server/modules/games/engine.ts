@@ -32,6 +32,12 @@ export interface MatchApi {
   deadline(ms: number | null): void;
   /** setTimeout that is cancelled when the match ends */
   later(ms: number, fn: () => void): void;
+  /** setInterval, stopped when the match closes or by calling the returned function */
+  every(ms: number, fn: () => void): () => void;
+  /** A WLED light to draw live pixels on (null: unknown or offline) */
+  strip(deviceId: string): { leds: number; send(rgb: Uint8Array): void } | null;
+  /** One-off event to the TV that plays the sound */
+  sound(name: string, data: unknown): void;
   publish(): void;
   finish(outcome: Outcome): void;
   /** Earn rule amount (0 when the economy is off) */

@@ -1,6 +1,6 @@
 // Mini games: 1 vs 1 duels with a stake, or room games that anyone can join.
 
-export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin';
+export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm';
 export type GameMode = 'duel' | 'room';
 
 export interface GameInfo {
@@ -74,6 +74,16 @@ export const GAMES: GameInfo[] = [
     modes: ['duel'],
     steps: ['The TV picks who calls heads or tails', 'The other one swipes the coin up to the TV', 'The right side takes the whole pot'],
     colors: ['#ffc861', '#ff8a3a'],
+  },
+  {
+    id: 'rhythm',
+    name: 'Rhythm Rain',
+    tagline: 'Hit the notes when they reach the top of the light',
+    rules: 'Colored notes climb the light strip from the bottom. Tap the same color on your phone when a note crosses the zone near the top: green is perfect, orange is good, red is just in time. Hits in a row raise your multiplier, a wrong tap or a missed note resets it. Highest score wins.',
+    modes: ['duel'],
+    lights: true,
+    steps: ['Notes climb the light strip from the bottom', 'Tap their color when they cross the zone at the top', 'Green is perfect. Keep the streak going for x4'],
+    colors: ['#3dff9b', '#8b3dff'],
   },
 ];
 
@@ -203,6 +213,12 @@ export interface GamesSettings {
   scratchLight: string;
   /** Colors in the first sequence of Light Simon */
   simonStart: number;
+  /** WLED light the Rhythm Rain notes climb ('' = the TV only) */
+  rhythmLight: string;
+  /** The rhythm light's first LED is at the top (the notes go the other way) */
+  rhythmReverse: boolean;
+  /** Length of a Rhythm Rain song in seconds */
+  rhythmSec: number;
 }
 
 // ------------------------------------------------------------ per game views
@@ -319,4 +335,83 @@ export interface CoinView {
   power: number;
   /** Set when the coin lands */
   outcome: CoinSide | null;
+}
+
+// ------------------------------------------------------------ Rhythm Rain
+
+/** The four frets, left to right, like the guitar game */
+export const RHYTHM_LANES: GameColor[] = ['green', 'red', 'yellow', 'blue'];
+
+/**
+ * Timing of Rhythm Rain. A note climbs from the bottom of the strip to the middle of the hit zone in
+ * `travelMs`, then goes on to the top. The zone is drawn with the windows below: green within
+ * `perfectMs` of the middle, orange within `goodMs`, red within `okMs`.
+ */
+export const RHYTHM = {
+  travelMs: 1800,
+  perfectMs: 70,
+  goodMs: 140,
+  okMs: 210,
+  /** Middle of the hit zone, from the bottom of the strip (0 to 1) */
+  zoneAt: 0.8,
+  /** Time before the first note reaches the zone */
+  leadMs: 4000,
+};
+
+export type RhythmGrade = 'perfect' | 'good' | 'ok' | 'miss';
+export const RHYTHM_POINTS: Record<RhythmGrade, number> = { perfect: 100, good: 60, ok: 30, miss: 0 };
+/** x1, then one more every 8 hits in a row, up to x4 */
+export const rhythmMultiplier = (combo: number) => Math.min(4, 1 + Math.floor(combo / 8));
+
+export interface RhythmNote {
+  /** Server time it crosses the middle of the zone */
+  at: number;
+  color: GameColor;
+}
+
+export const rhythmGradeOf = (gapMs: number): RhythmGrade => {
+  const g = Math.abs(gapMs);
+  return g <= RHYTHM.perfectMs ? 'perfect' : g <= RHYTHM.goodMs ? 'good' : g <= RHYTHM.okMs ? 'ok' : 'miss';
+};
+
+/** The note a tap of `color` at server time `at` hits (index), or -1: the closest one of that color in the zone not hit yet */
+export function rhythmTarget(notes: RhythmNote[], at: number, color: GameColor, hit: (i: number) => boolean): number {
+  let found = -1;
+  let gap = Infinity;
+  for (let i = 0; i < notes.length; i++) {
+    const d = Math.abs(notes[i].at - at);
+    if (notes[i].at - at > RHYTHM.okMs) break;
+    if (d <= RHYTHM.okMs && d < gap && notes[i].color === color && !hit(i)) {
+      found = i;
+      gap = d;
+    }
+  }
+  return found;
+}
+
+export interface RhythmScore {
+  score: number;
+  combo: number;
+  bestCombo: number;
+  perfect: number;
+  good: number;
+  ok: number;
+  /** Notes that went by */
+  missed: number;
+  /** Taps with no note of that color in the zone */
+  wrong: number;
+  /** Latest judgement, for the TV pop */
+  last: { grade: RhythmGrade; at: number; seq: number } | null;
+}
+
+export interface RhythmView {
+  /** Every note of the song, sorted (the lights show them anyway) */
+  notes: RhythmNote[];
+  bpm: number;
+  /** Server time of the first beat of the count-in, and the end of the song */
+  startAt: number;
+  endAt: number;
+  scores: Record<string, RhythmScore>;
+  /** Pixels of the light the notes climb (null: no light, the TV shows them) */
+  leds: number | null;
 }

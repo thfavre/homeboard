@@ -33,6 +33,10 @@
   const PERK_STEPS = [0, 15, 30, 45, 60, 90, 120, 180, 300];
   const perkStep = (now: number, dir: 1 | -1) =>
     dir > 0 ? (PERK_STEPS.find((x) => x > now) ?? now) : ([...PERK_STEPS].reverse().find((x) => x < now) ?? now);
+  /** Rhythm Rain song lengths, in seconds */
+  const SONG_STEPS = [20, 30, 45, 60, 75, 90, 120];
+  const songStep = (now: number, dir: 1 | -1) =>
+    dir > 0 ? (SONG_STEPS.find((x) => x > now) ?? now) : ([...SONG_STEPS].reverse().find((x) => x < now) ?? now);
   const PHASES = { lobby: 'Waiting for players', intro: 'Showing the rules', play: 'Playing', result: 'Showing the result' } as const;
   const setSettings = (patch: object) => attempt(() => rpc('games', 'setSettings', patch));
 
@@ -149,8 +153,35 @@
     </div>
     <div class="line">
       <span>
+        Rhythm Rain light
+        <span class="faint small">The WLED strip the notes climb, best hung upright. None: the notes only show on the TV</span>
+      </span>
+      <select class="input light" value={s.settings.rhythmLight} onchange={(e) => setSettings({ rhythmLight: e.currentTarget.value })}>
+        <option value="">None</option>
+        {#each s.lightDevices ?? [] as d (d.id)}<option value={d.id}>{d.name}{d.online ? '' : ' (offline)'}</option>{/each}
+      </select>
+    </div>
+    {#if s.settings.rhythmLight}
+      <div class="line">
+        <span>
+          Rhythm Rain: first LED at the top
+          <span class="faint small">Turn it on if the notes fall instead of climbing</span>
+        </span>
+        <Toggle checked={s.settings.rhythmReverse} onchange={(v) => setSettings({ rhythmReverse: v })} label="First LED at the top" />
+      </div>
+    {/if}
+    <div class="line">
+      <span>Rhythm Rain: song length <span class="faint small">Seconds, 20 to 120</span></span>
+      <span class="stepper">
+        <button class="btn small" disabled={s.settings.rhythmSec <= 20} onclick={() => setSettings({ rhythmSec: songStep(s.settings.rhythmSec, -1) })}><Minus size={16} /></button>
+        <strong class="mono">{s.settings.rhythmSec}</strong>
+        <button class="btn small" disabled={s.settings.rhythmSec >= 120} onclick={() => setSettings({ rhythmSec: songStep(s.settings.rhythmSec, 1) })}><Plus size={16} /></button>
+      </span>
+    </div>
+    <div class="line">
+      <span>
         Show the light colors on the TV too
-        <span class="faint small">{s.lights ? 'Light Simon and Color Reflex use your WLED lights' : 'No light reachable: the TV always shows the colors'}</span>
+        <span class="faint small">{s.lights ? 'Light Simon, Color Reflex and Rhythm Rain use your WLED lights' : 'No light reachable: the TV always shows the colors'}</span>
       </span>
       <Toggle checked={s.settings.tvColors} onchange={(v) => setSettings({ tvColors: v })} label="Colors on the TV" />
     </div>

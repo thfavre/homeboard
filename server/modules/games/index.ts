@@ -28,6 +28,7 @@ import { colorReflex } from './reflex.ts';
 import { perfectCircle } from './circle.ts';
 import { bluff } from './bluff.ts';
 import { coinFlip } from './coin.ts';
+import { rhythmRain } from './rhythm.ts';
 import { Turntable } from './turntable.ts';
 
 const FACTORIES: Record<GameId, GameFactory> = {
@@ -37,6 +38,7 @@ const FACTORIES: Record<GameId, GameFactory> = {
   circle: perfectCircle,
   bluff,
   coin: coinFlip,
+  rhythm: rhythmRain,
 };
 
 const LOBBY_MS = 45_000;
@@ -86,7 +88,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '' },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmSec: 45 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -288,6 +290,20 @@ export default defineModule<GamesSettings>({
         },
         deadline: (ms) => deadline(m, ms),
         later: (ms, fn) => later(m, ms, fn),
+        every: (ms, fn) => {
+          const t = setInterval(() => (match === m ? fn() : stop()), ms);
+          const stop = () => {
+            clearInterval(t);
+            m.timers.delete(t);
+          };
+          m.timers.add(t);
+          return stop;
+        },
+        strip: (id) => {
+          const d = lights()?.list().find((x) => x.id === id && x.online);
+          return d ? { leds: Math.min(490, d.leds ?? 60), send: (rgb) => lights()?.frame(d.id, rgb) } : null;
+        },
+        sound: (name, data) => ctx.emit('tv-audio', name, data),
         publish: () => ctx.publish(),
         finish: (outcome) => finish(m, outcome),
         reward: (key) => (ctx.economy.enabled ? ctx.economy.earnAmount(key) : 0),
@@ -545,6 +561,12 @@ export default defineModule<GamesSettings>({
           typeof args?.scratchLight === 'string' && (args.scratchLight === '' || lights()?.list().some((d) => d.id === args.scratchLight))
             ? args.scratchLight
             : s.scratchLight,
+        rhythmLight:
+          typeof args?.rhythmLight === 'string' && (args.rhythmLight === '' || lights()?.list().some((d) => d.id === args.rhythmLight))
+            ? args.rhythmLight
+            : s.rhythmLight,
+        rhythmReverse: typeof args?.rhythmReverse === 'boolean' ? args.rhythmReverse : s.rhythmReverse,
+        rhythmSec: args?.rhythmSec !== undefined ? Math.min(120, Math.max(20, Math.round(num(args.rhythmSec, 45)))) : s.rhythmSec,
       });
       ctx.publish();
     });

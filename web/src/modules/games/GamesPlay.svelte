@@ -49,7 +49,7 @@
   <div class="screen"><div class="col"><PerkPanel perk={myPerk} /></div></div>
 {:else if m && inMatch}
   {@const info = gameInfo(m.game)!}
-  <div class="screen">
+  <div class="screen" class:fill={m.phase === 'play' && GAME_UI[m.game].fill}>
     {#if m.phase === 'lobby'}
       <div class="col" in:fade>
         <GameCard game={info} eyebrow="You are in" />
@@ -167,6 +167,9 @@
     display: grid;
     align-content: center;
     gap: 1rem;
+  }
+  .screen.fill {
+    align-content: stretch;
   }
   .col {
     display: grid;
