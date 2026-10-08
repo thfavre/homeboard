@@ -10,7 +10,7 @@
 
 {#if current}
   {#key current.id}
-    <div class="chip card" transition:fly={{ y: -30, duration: 400 }}>
+    <div class="wled-chip card" transition:fly={{ x: 40, duration: 300 }}>
       <span class="swatch" style:background={effectSwatch(current.effect)}></span>
       <span><strong>{current.effect.name}</strong>{#if showNames('effectNames')}<span class="dim">{` by ${current.guest.name}`}</span>{/if}</span>
       <span class="time dim"><Countdown until={current.until} /></span>
@@ -19,12 +19,12 @@
 {/if}
 
 <style>
-  .chip {
+  .wled-chip {
     position: fixed;
-    top: 1.3rem;
-    left: 50%;
-    translate: -50% 0;
-    z-index: 35;
+    /* Bottom right like the soundboard card, which stacks above it while both show */
+    right: 2rem;
+    bottom: 1.6rem;
+    z-index: 45;
     display: flex;
     align-items: center;
     gap: 0.7rem;

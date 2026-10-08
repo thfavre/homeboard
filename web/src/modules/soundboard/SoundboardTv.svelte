@@ -62,6 +62,11 @@
     border-radius: 999px;
     font-size: 0.95rem;
   }
+  /* Sit above the light effect chip, which takes the same corner */
+  :global(.wled-chip) ~ .unlock,
+  :global(.wled-chip) ~ .playing {
+    bottom: 4.9rem;
+  }
   .unlock {
     color: var(--warning);
     cursor: pointer;
