@@ -7,6 +7,7 @@
   import AmountInput from '$lib/ui/AmountInput.svelte';
   import Money from '$lib/ui/Money.svelte';
   import { ago } from '$lib/time.ts';
+  import { formatAmount } from '$shared/money.ts';
 
   const core = $derived(hb.core!);
   const admin = $derived(core.admin!);
@@ -19,7 +20,8 @@
   }
 
   const prices = $derived(group<PriceInfo>(admin.prices.filter((p) => p.active !== false)));
-  const earn = $derived(group<EarnRuleInfo>(admin.earnRules));
+  const passiveRule = $derived(admin.earnRules.find((r) => r.key === 'core.passive'));
+  const earn = $derived(group<EarnRuleInfo>(admin.earnRules.filter((r) => r.key !== 'core.passive')));
 
   const currencyName = new Synced(() => hb.core?.currency.name, '');
   const currencySymbol = new Synced(() => hb.core?.currency.symbol, '');
@@ -27,6 +29,17 @@
   const passiveAway = new Synced(() => hb.core?.admin?.passiveAwayMinutes, 60);
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('core', 'setGeneral', args));
+  const setEarn = (key: string, amount: number) => attempt(() => rpc('core', 'setEarn', { key, amount }));
+
+  const minutes = (m: number) => (m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min`);
+  const passiveSummary = $derived.by(() => {
+    const amount = passiveRule?.amount ?? 0;
+    if (!amount || !admin.passiveMinutes) return 'Off: guests earn nothing just for being here.';
+    const each = `${formatAmount(amount)} ${core.currency.name} every ${minutes(admin.passiveMinutes)} while their page is open`;
+    return admin.passiveAwayMinutes
+      ? `Guests get ${each}, and keep earning for up to ${minutes(admin.passiveAwayMinutes)} after they leave.`
+      : `Guests get ${each}. Nothing while they are away.`;
+  });
 </script>
 
 <Section title="Economy">
@@ -49,16 +62,6 @@
   </div>
   <div class="grid2">
     <label class="field">
-      <span>Passive income every (minutes, 0 = off)</span>
-      <input class="input" type="number" min="0" max="120" bind:value={passive.value} onfocus={passive.start} onblur={() => { set({ passiveMinutes: Number(passive.value) }); passive.end(); }} />
-    </label>
-    <label class="field">
-      <span>Keeps paying while away (minutes, 0 = only online)</span>
-      <input class="input" type="number" min="0" max="1440" step="5" bind:value={passiveAway.value} onfocus={passiveAway.start} onblur={() => { set({ passiveAwayMinutes: Number(passiveAway.value) }); passiveAway.end(); }} />
-    </label>
-  </div>
-  <div class="grid2">
-    <label class="field">
       <span>TV leaderboard</span>
       <select class="input" value={core.leaderboardMode} onchange={(e) => set({ leaderboardMode: e.currentTarget.value })}>
         <option value="balance">Richest guests</option>
@@ -70,21 +73,43 @@
   </div>
 </Section>
 
-<Section title="Prices" hint="What each action costs guests.">
-  {#each prices as [mod, items] (mod)}
-    <div class="group">
-      <span class="eyebrow">{moduleName(mod)}</span>
-      {#each items as p (p.key)}
-        <div class="line">
-          <span>{p.label}{#if p.unit}<span class="faint">{` / ${p.unit}`}</span>{/if}</span>
-          <AmountInput value={p.amount} oncommit={(v) => attempt(() => rpc('core', 'setPrice', { key: p.key, amount: v }))} />
-        </div>
-      {/each}
-    </div>
-  {/each}
-</Section>
-
 <Section title="Earning" hint="How guests get money. They see these rules on their Earn tab.">
+  {#if passiveRule}
+    <div class="passive">
+      <span class="eyebrow">Passive income</span>
+      <p class="summary">{passiveSummary}</p>
+      <div class="line">
+        <div>
+          <span>Amount</span>
+          <p class="faint small">Paid each time the timer fills up.</p>
+        </div>
+        <span class="unit">
+          <AmountInput value={passiveRule.amount} oncommit={(v) => setEarn('core.passive', v)} />
+          <span class="faint">{core.currency.symbol}</span>
+        </span>
+      </div>
+      <div class="line">
+        <div>
+          <span>Every</span>
+          <p class="faint small">Minutes the page must stay open. 0 turns passive income off.</p>
+        </div>
+        <span class="unit">
+          <input class="input num" type="number" min="0" max="120" bind:value={passive.value} onfocus={passive.start} onblur={() => { set({ passiveMinutes: Number(passive.value) }); passive.end(); }} />
+          <span class="faint">min</span>
+        </span>
+      </div>
+      <div class="line">
+        <div>
+          <span>Keeps paying while away</span>
+          <p class="faint small">Up to this many minutes after a guest closes the page. 0 = only while it is open.</p>
+        </div>
+        <span class="unit">
+          <input class="input num" type="number" min="0" max="1440" step="5" bind:value={passiveAway.value} onfocus={passiveAway.start} onblur={() => { set({ passiveAwayMinutes: Number(passiveAway.value) }); passiveAway.end(); }} />
+          <span class="faint">min</span>
+        </span>
+      </div>
+    </div>
+  {/if}
   {#each earn as [mod, items] (mod)}
     <div class="group">
       <span class="eyebrow">{moduleName(mod)}</span>
@@ -94,7 +119,21 @@
             <span>{r.label}</span>
             <p class="faint small">{r.description}</p>
           </div>
-          <AmountInput value={r.amount} oncommit={(v) => attempt(() => rpc('core', 'setEarn', { key: r.key, amount: v }))} />
+          <AmountInput value={r.amount} oncommit={(v) => setEarn(r.key, v)} />
+        </div>
+      {/each}
+    </div>
+  {/each}
+</Section>
+
+<Section title="Prices" hint="What each action costs guests.">
+  {#each prices as [mod, items] (mod)}
+    <div class="group">
+      <span class="eyebrow">{moduleName(mod)}</span>
+      {#each items as p (p.key)}
+        <div class="line">
+          <span>{p.label}{#if p.unit}<span class="faint">{` / ${p.unit}`}</span>{/if}</span>
+          <AmountInput value={p.amount} oncommit={(v) => attempt(() => rpc('core', 'setPrice', { key: p.key, amount: v }))} />
         </div>
       {/each}
     </div>
@@ -131,6 +170,32 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.8rem;
+  }
+  .passive {
+    display: grid;
+    gap: 0.2rem;
+    margin-bottom: 0.9rem;
+    padding: 0.8rem 1rem;
+    border-radius: 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--coin) 30%, var(--border));
+    background: color-mix(in srgb, var(--coin) 6%, transparent);
+  }
+  .summary {
+    margin: 0.1rem 0 0.3rem;
+    font-size: 0.88rem;
+  }
+  .unit {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .unit > .faint {
+    min-width: 1.8rem;
+  }
+  .num {
+    width: 6.5rem;
+    text-align: right;
   }
   .group {
     display: grid;
