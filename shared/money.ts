@@ -1,11 +1,15 @@
 import type { Currency } from './protocol.ts';
 
-/** Format an amount in hundredths: 150 => "1.5", 1000 => "10", 5 => "0.05" */
+/** Format an amount in hundredths for display, rounded to whole units with Swiss grouping: 198990 => "1’990" */
 export function formatAmount(amount: number): string {
-  const v = amount / 100;
-  const abs = Math.abs(v);
-  const decimals = Number.isInteger(v) ? 0 : abs * 10 === Math.round(abs * 10) ? 1 : 2;
-  return v.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  const n = Math.round(Math.abs(amount) / 100);
+  const digits = String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '’');
+  return amount < 0 && n > 0 ? `-${digits}` : digits;
+}
+
+/** Exact plain decimal for editing: 150 => "1.5", 1000 => "10", 5 => "0.05" */
+export function amountToInput(amount: number): string {
+  return String(amount / 100);
 }
 
 export function formatMoney(amount: number, currency: Currency): string {

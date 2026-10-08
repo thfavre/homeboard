@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatAmount, parseAmount } from '$shared/money.ts';
+  import { amountToInput, parseAmount } from '$shared/money.ts';
 
   /** Edits an amount in hundredths as a decimal number. Commits on blur or Enter. */
   let {
@@ -13,14 +13,14 @@
   let focused = $state(false);
 
   $effect(() => {
-    if (!focused) text = formatAmount(value).replace(/,/g, '');
+    if (!focused) text = amountToInput(value);
   });
 
   function commit() {
     let v = parseAmount(text);
     if (!allowNegative) v = Math.max(0, v);
     if (v !== value) oncommit(v);
-    text = formatAmount(v).replace(/,/g, '');
+    text = amountToInput(v);
   }
 </script>
 
