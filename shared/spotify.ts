@@ -31,6 +31,8 @@ export interface SpotifyState {
   connected: boolean;
   now: NowPlaying | null;
   queue: Track[];
+  /** How many songs are queued in all (the public queue is cut short) */
+  queueLength: number;
   allowSkip: boolean;
   /** Admin only */
   admin?: {

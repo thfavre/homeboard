@@ -5,7 +5,11 @@
   import { hb, showNames } from '$lib/client.svelte.ts';
   import Cover from './Cover.svelte';
 
-  const queue = $derived(((hb.modules.spotify as SpotifyState | undefined)?.queue ?? []).slice(0, 4));
+  const SHOWN = 4;
+  const spotify = $derived(hb.modules.spotify as SpotifyState | undefined);
+  const queue = $derived((spotify?.queue ?? []).slice(0, SHOWN));
+  // The public queue is cut short, so count from the total the server sends
+  const more = $derived((spotify?.queueLength ?? spotify?.queue.length ?? 0) - queue.length);
 </script>
 
 {#if hb.modules.spotify?.connected && queue.length}
@@ -23,6 +27,7 @@
         </li>
       {/each}
     </ol>
+    {#if more > 0}<span class="more" in:fade>+{more} more</span>{/if}
   </div>
 {/if}
 
@@ -56,6 +61,12 @@
   .artist {
     font-size: 0.82rem;
     color: var(--text-dim);
+  }
+  .more {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    padding-left: 3.3rem;
   }
   .dot {
     flex: none;

@@ -353,6 +353,7 @@ export default defineModule<SpotifySettings>({
         connected: connected(),
         now,
         queue: fullQueue().slice(0, PUBLIC_QUEUE),
+        queueLength: fullQueue().length,
         allowSkip: s.allowSkip,
         ...(role === 'admin'
           ? {
