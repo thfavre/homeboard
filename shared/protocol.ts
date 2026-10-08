@@ -132,6 +132,7 @@ export interface CoreAdminState {
   tunnel: 'off' | 'starting' | 'up' | 'error';
   sessionStartedAt: number;
   passiveMinutes: number;
+  passiveAwayHours: number;
   qrIncludesCode: boolean;
   requireCode: boolean;
   prices: PriceInfo[];
@@ -166,6 +167,14 @@ export interface EventMessage {
   module: string;
   name: string;
   data: unknown;
+}
+
+/** Sent to a guest who comes back after a while: what passive income paid meanwhile */
+export interface WelcomeBack {
+  awayMs: number;
+  /** Part of the time away that was paid (capped by the host) */
+  paidMs: number;
+  amount: number;
 }
 
 export interface ToastMessage {

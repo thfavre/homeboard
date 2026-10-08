@@ -13,6 +13,7 @@
   import Earn from './Earn.svelte';
   import Profile from './Profile.svelte';
   import AvatarFlow from './AvatarFlow.svelte';
+  import WelcomeBack from './WelcomeBack.svelte';
   import { Camera } from '@lucide/svelte';
   import { avatarFlow } from './avatar.svelte.ts';
 
@@ -65,6 +66,7 @@
 <Toasts top={hb.me && hb.core && !hb.needJoin && headerHeight ? headerHeight : undefined} />
 <EdgeFlash />
 <DialogHost />
+<WelcomeBack paused={hb.needJoin || !!takeover || !!avatarFlow.mode || (hb.offerAvatar && !!hb.me && !hb.me.avatar)} />
 
 {#if avatarFlow.mode}
   <AvatarFlow mode={avatarFlow.mode} onclose={() => (avatarFlow.mode = null)} />

@@ -70,11 +70,13 @@ function freshSession(): SessionData {
  * The current party session: guests, balances and the ledger.
  * Reset by the admin with "New session"; persisted so a server restart keeps it.
  *
- * Events: 'guest-changed' (guest), 'guests-changed' (), 'reset' ()
+ * Events: 'guest-changed' (guest), 'guests-changed' (), 'reset' (),
+ * 'guest-online' (guest, awayMs): a guest with no open page opened one
  */
 export class Session extends EventEmitter {
   private file = new JsonFile<SessionData>(join(DATA_DIR, 'session.json'), freshSession());
   guests = new Map<string, Guest>();
+  private bootAt = Date.now();
 
   constructor() {
     super();
@@ -184,8 +186,13 @@ export class Session extends EventEmitter {
   }
 
   setOnline(guest: Guest, delta: 1 | -1): void {
+    const wasOnline = guest.sockets > 0;
+    const now = Date.now();
+    // Time the server was off does not count as away
+    const awayMs = wasOnline ? 0 : now - Math.max(guest.lastSeen, this.bootAt);
     guest.sockets = Math.max(0, guest.sockets + delta);
-    guest.lastSeen = Date.now();
+    guest.lastSeen = now;
+    if (!wasOnline && guest.sockets > 0) this.emit('guest-online', guest, awayMs);
     this.emit('guests-changed');
   }
 

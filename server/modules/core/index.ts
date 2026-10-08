@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import QRCode from 'qrcode';
 import { AVATAR_EFFECTS, type AvatarParams } from '../../../shared/avatar.ts';
 import { ensureDir } from '../../core/paths.ts';
-import type { CoreState, Currency, JoinResult, LeaderboardMode, NameCheck, PublicGuest } from '../../../shared/protocol.ts';
+import type { CoreState, Currency, JoinResult, LeaderboardMode, NameCheck, PublicGuest, WelcomeBack } from '../../../shared/protocol.ts';
 import { THEMES } from '../../../shared/themes.ts';
 import type { CoreSettings } from '../../core/hub.ts';
 import { defineModule } from '../../core/module.ts';
@@ -12,6 +12,10 @@ import { HbError, cleanName, clamp, num, uid } from '../../core/util.ts';
 
 const TICK_SECONDS = 15;
 const MAX_JOIN_FAILURES = 8;
+/** Away at least this long: the guest gets a welcome back card instead of the usual toast */
+const AWAY_CARD_MS = 60_000;
+
+const hoursText = (h: number) => (h >= 1 ? `${+h.toFixed(2)} h` : `${Math.round(h * 60)} min`);
 
 /**
  * Core features: joining, profiles, leaderboard, passive income and every
@@ -43,24 +47,48 @@ export default defineModule({
       key: 'core.passive',
       label: 'Hanging out',
       default: 200,
-      describe: (a) => `${a} every ${core().passiveMinutes} min while this page is open`,
+      describe: (a) => {
+        const away = core().passiveAwayHours;
+        return `${a} every ${core().passiveMinutes} min while this page is open` + (away > 0 ? `, and for up to ${hoursText(away)} while you are away` : '');
+      },
     });
 
-    setInterval(() => {
+    // Paid quietly while a game or quiz is on: a pop-up would get in the way
+    const busy = (g: Guest) => !!hub.takeover || !!ctx.use<{ busy(guestId: string): boolean }>('games')?.busy(g.id);
+    const thanks = (g: Guest, amount: number) => {
+      if (!busy(g)) ctx.toast(g, { text: 'Thanks for hanging out', amount, kind: 'success' });
+    };
+
+    /** Counts seconds of hanging out and pays every full interval reached. Returns the amount paid. */
+    const accrue = (g: Guest, seconds: number, reason?: string): number => {
       const interval = core().passiveMinutes * 60;
-      if (interval <= 0) return;
+      if (interval <= 0) return 0;
+      g.onlineAccum += seconds;
+      const payouts = Math.floor(g.onlineAccum / interval);
+      if (!payouts) return 0;
+      g.onlineAccum -= payouts * interval;
+      return economy.reward(g, 'core.passive', payouts, reason);
+    };
+
+    setInterval(() => {
       for (const g of session.guests.values()) {
         if (g.sockets === 0) continue;
-        g.onlineAccum += TICK_SECONDS;
-        if (g.onlineAccum >= interval) {
-          g.onlineAccum -= interval;
-          const amount = economy.reward(g, 'core.passive');
-          // Paid quietly while a game or quiz is on: a pop-up would get in the way
-          const busy = !!hub.takeover || !!ctx.use<{ busy(guestId: string): boolean }>('games')?.busy(g.id);
-          if (amount && !busy) ctx.toast(g, { text: 'Thanks for hanging out', amount, kind: 'success' });
-        }
+        const amount = accrue(g, TICK_SECONDS);
+        if (amount) thanks(g, amount);
       }
     }, TICK_SECONDS * 1000);
+
+    // Coming back: the time away counts too, up to the host's limit.
+    // A quick reload just carries on; a real absence gets a welcome back card.
+    session.on('guest-online', (g: Guest, awayMs: number) => {
+      const paidMs = Math.min(awayMs, core().passiveAwayHours * 3_600_000);
+      if (paidMs <= 0) return;
+      const longAway = awayMs >= AWAY_CARD_MS;
+      const amount = accrue(g, paidMs / 1000, longAway ? 'Hanging out (while away)' : undefined);
+      if (!amount) return;
+      if (longAway) ctx.emit({ guest: g.id }, 'welcomeBack', { awayMs, paidMs, amount } satisfies WelcomeBack);
+      else thanks(g, amount);
+    });
 
     // ------------------------------------------------------------ state
 
@@ -117,6 +145,7 @@ export default defineModule({
           tunnel: hub.tunnel.status,
           sessionStartedAt: session.startedAt,
           passiveMinutes: c.passiveMinutes,
+          passiveAwayHours: c.passiveAwayHours,
           qrIncludesCode: c.qrIncludesCode,
           requireCode: c.requireCode,
           prices: economy.adminPriceList(),
@@ -319,6 +348,7 @@ export default defineModule({
       }
       if (args.economyEnabled !== undefined) patch.economyEnabled = !!args.economyEnabled;
       if (args.passiveMinutes !== undefined) patch.passiveMinutes = clamp(num(args.passiveMinutes, 5), 0, 120);
+      if (args.passiveAwayHours !== undefined) patch.passiveAwayHours = clamp(num(args.passiveAwayHours, 1), 0, 24);
       if (args.leaderboardMode !== undefined && ['balance', 'spent', 'earned', 'off'].includes(args.leaderboardMode)) {
         patch.leaderboardMode = args.leaderboardMode;
       }
