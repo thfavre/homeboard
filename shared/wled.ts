@@ -4,6 +4,8 @@ export interface WledDevice {
   name: string;
   /** WLED segment ids effects and games play on, the others are left as they are (empty: every segment) */
   segments?: number[];
+  /** Their names when picked, shown in the admin */
+  segmentNames?: string[];
 }
 
 export interface WledEffect {

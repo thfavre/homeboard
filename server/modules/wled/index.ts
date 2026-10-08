@@ -417,10 +417,12 @@ export default defineModule<WledSettings>({
       const list = [...devices()];
       const existing = list.find((d) => d.id === args.id);
       const segments = Array.isArray(args.segments) ? [...new Set(args.segments.map((n: unknown) => Math.round(num(n, -1))).filter((n: number) => n >= 0 && n < 32))] as number[] : undefined;
+      const segmentNames = segments && Array.isArray(args.segmentNames) ? args.segmentNames.slice(0, segments.length).map((n: unknown) => cleanName(n, 30)) : undefined;
       let name = cleanName(args.name, 30);
       if (!name) name = await wled(host, '/json/info').then((i) => cleanName(i.name, 30)).catch(() => '');
-      if (existing) Object.assign(existing, { host, name: name || existing.name, ...(segments ? { segments } : {}) });
-      else list.push({ id: uid(4), host, name: name || host, ...(segments ? { segments } : {}) });
+      const picked = segments ? { segments, segmentNames } : {};
+      if (existing) Object.assign(existing, { host, name: name || existing.name, ...picked });
+      else list.push({ id: uid(4), host, name: name || host, ...picked });
       ctx.settings.update({ devices: list });
       await poll();
     });

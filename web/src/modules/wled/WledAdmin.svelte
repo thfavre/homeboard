@@ -46,7 +46,9 @@
 
   async function saveDevice() {
     if (!devForm) return;
-    const ok = await attempt(() => rpc('wled', 'saveDevice', devForm).then(() => true), 'Saved');
+    // Names saved with the pick, so the list shows them without asking the light
+    const segmentNames = devForm.segments.map((id) => segList?.find((s) => s.id === id)?.name ?? `Segment ${id}`);
+    const ok = await attempt(() => rpc('wled', 'saveDevice', { ...devForm, segmentNames }).then(() => true), 'Saved');
     if (ok) devForm = null;
   }
 
@@ -87,6 +89,9 @@
         <div class="grow">
           <strong>{d.name}</strong>
           <p class="faint small mono">{d.host}{d.leds ? ` · ${d.leds} LEDs` : ''}{d.online ? '' : ' · offline'}</p>
+          {#if d.segments?.length}
+            <p class="small accent">Effects only on {(d.segmentNames ?? d.segments.map((id) => `segment ${id}`)).join(', ')}</p>
+          {/if}
         </div>
         <button class="btn ghost small" aria-label="Edit" onclick={() => editDevice(d)}><Pencil size={15} /></button>
         <button class="btn ghost small" aria-label="Remove" onclick={async () => (await ask({ title: `Remove ${d.name}?`, confirm: 'Remove', danger: true })) && attempt(() => rpc('wled', 'removeDevice', { id: d.id }))}>
@@ -255,6 +260,9 @@
   }
   .block {
     display: block;
+  }
+  .accent {
+    color: var(--accent);
   }
   .check {
     display: flex;
