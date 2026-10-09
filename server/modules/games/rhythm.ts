@@ -107,22 +107,55 @@ export function chartFor(song: Song, difficulty: RhythmDifficulty): { id: Rhythm
 /** Two notes this much closer than the difficulty's gap still count as far enough (a 158 bpm beat is 379.7 ms) */
 const GAP_TOLERANCE = 0.9;
 
-/** How much a note's place in the bar matters: on a bar, on a beat, on a half beat, on a quarter, elsewhere */
-function strength(ms: number, beatMs: number): number {
-  const beats = ms / beatMs;
+/**
+ * Where the chart's beats fall (ms of a beat line, modulo a beat). Mappers often shift their grid (an editor
+ * offset baked into the notes), so it is read from the notes: the most common place within a quarter beat
+ * gives the grid, and of its four quarters the one most notes fall on is the beat.
+ */
+export function gridPhase(chart: BsNote[], beatMs: number): number {
+  const q = beatMs / 4;
+  const bins = new Map<number, number>();
+  for (const n of chart) {
+    const r = Math.round((((n.ms % q) + q) % q) / 5) % Math.round(q / 5);
+    bins.set(r, (bins.get(r) ?? 0) + 1);
+  }
+  const sub = ([...bins.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? 0) * 5;
+  const quarters = [0, 0, 0, 0];
+  for (const n of chart) quarters[((Math.round((n.ms - sub) / q) % 4) + 4) % 4]++;
+  return sub + quarters.indexOf(Math.max(...quarters)) * q;
+}
+
+/** How much a note's place in the bar matters: on a beat, on a half beat, on a quarter, elsewhere */
+function strength(ms: number, beatMs: number, phase: number): number {
+  const beats = (ms - phase) / beatMs;
   const on = (step: number) => Math.abs(beats / step - Math.round(beats / step)) * step < 0.03;
-  return on(4) ? 4 : on(1) ? 3 : on(0.5) ? 2 : on(0.25) ? 1 : 0;
+  return on(1) ? 3 : on(0.5) ? 2 : on(0.25) ? 1 : 0;
 }
 
 /**
  * The notes of a chart that are played here: Beat Saber is played with two arms, here with thumbs, so notes
- * closer than `minGapMs` are thinned out. The strongest ones stay (on the beat first, then half beats...),
- * then the others where they fit, so what is left still falls on the music's beats. Sorted by time.
+ * closer than `minGapMs` are thinned out. Notes standing on their own go first (a syncopated note with room
+ * around it is the melody; notes of a fast run are the filler), then by their place in the bar (on the beat,
+ * then half beats...: only for charts on a grid), each one only where it fits: what is left still follows
+ * the music. Sorted by time.
  */
 export function playable(chart: BsNote[], bpm: number, minGapMs: number): BsNote[] {
   const beatMs = 60_000 / bpm;
   const gap = minGapMs * GAP_TOLERANCE;
-  const order = chart.map((n, i) => ({ n, i, s: strength(n.ms, beatMs) })).sort((a, b) => b.s - a.s || a.n.ms - b.n.ms || a.i - b.i);
+  const phase = gridPhase(chart, beatMs);
+  // Charts mapped by ear (or drifting from their tempo) have no grid to go by: then only the room counts
+  const onGrid = chart.filter((n) => strength(n.ms, beatMs, phase) > 0).length / Math.max(1, chart.length);
+  const gridded = onGrid >= 0.8;
+  // Room around each note: the smaller gap to the notes before and after (notes of a chord count as one), in eighth beats up to a beat
+  const times = [...new Set(chart.map((n) => n.ms))].sort((x, y) => x - y);
+  const room = new Map<number, number>();
+  times.forEach((t, i) => {
+    const r = Math.min(i > 0 ? t - times[i - 1] : Infinity, i < times.length - 1 ? times[i + 1] - t : Infinity);
+    room.set(t, Math.min(8, Math.round((r / beatMs) * 8)));
+  });
+  const order = chart
+    .map((n, i) => ({ n, i, r: room.get(n.ms)!, s: gridded ? strength(n.ms, beatMs, phase) : 0 }))
+    .sort((x, y) => y.r - x.r || y.s - x.s || x.n.ms - y.n.ms || x.i - y.i);
   // Kept times, sorted: a note goes in when it is far enough from its neighbours there
   const kept: BsNote[] = [];
   for (const { n } of order) {
