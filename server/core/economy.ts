@@ -147,7 +147,12 @@ export class Economy {
   }
 
   refund(charge: Charge): void {
-    if (charge.amount > 0) this.session.applyAmount(charge.guest, charge.amount, `Refund: ${charge.reason}`);
+    this.giveBack(charge.guest, charge.amount, `Refund: ${charge.reason}`);
+  }
+
+  /** Give back money a guest paid earlier: undoes the spending, it does not count as earned */
+  giveBack(guest: Guest, amount: number, reason: string): void {
+    if (amount > 0) this.session.applyAmount(guest, amount, reason, 'refund');
   }
 
   /** countStats false: a host correction that should not move the earned/spent leaderboard */

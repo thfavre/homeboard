@@ -77,7 +77,7 @@ function freshSession(): SessionData {
  * The current party session: guests, balances and the ledger.
  * Reset by the admin with "New session"; persisted so a server restart keeps it.
  *
- * Events: 'guest-changed' (guest), 'guests-changed' (), 'reset' (),
+ * Events: 'guest-changed' (guest), 'guests-changed' (), 'guest-removed' (guest), 'reset' (),
  * 'guest-online' (guest, awayMs): a guest with no open page opened one
  */
 export class Session extends EventEmitter {
@@ -204,7 +204,9 @@ export class Session extends EventEmitter {
 
   remove(guest: Guest): void {
     this.guests.delete(guest.id);
+    this.pinFails.delete(guest.id);
     this.save();
+    this.emit('guest-removed', guest);
     this.emit('guests-changed');
   }
 
@@ -222,10 +224,12 @@ export class Session extends EventEmitter {
   /**
    * Low-level balance change. Use Economy for anything user-facing.
    * countStats false: the balance moves but earned/spent (the leaderboard) do not.
+   * 'refund': money given back, so it was never really spent (and is not earned either).
    */
-  applyAmount(guest: Guest, amount: number, reason: string, countStats = true): LedgerEntry {
+  applyAmount(guest: Guest, amount: number, reason: string, countStats: boolean | 'refund' = true): LedgerEntry {
     guest.balance += amount;
-    if (countStats && amount > 0) guest.earned += amount;
+    if (countStats === 'refund') guest.spent = Math.max(0, guest.spent - amount);
+    else if (countStats && amount > 0) guest.earned += amount;
     else if (countStats) guest.spent += -amount;
     const entry: LedgerEntry = {
       id: ++this.file.data.ledgerSeq,
@@ -246,6 +250,14 @@ export class Session extends EventEmitter {
   count(guest: Guest, stat: GuestStat, n = 1): void {
     if (n <= 0) return;
     guest.stats = { ...guest.stats, [stat]: (guest.stats?.[stat] ?? 0) + n };
+    this.changed(guest);
+  }
+
+  /** Undo a count: the thing was removed by the host (a song taken out of the queue, a photo deleted) */
+  uncount(guest: Guest, stat: GuestStat, n = 1): void {
+    const had = guest.stats?.[stat] ?? 0;
+    if (n <= 0 || !had || !this.guests.has(guest.id)) return;
+    guest.stats = { ...guest.stats, [stat]: Math.max(0, had - n) };
     this.changed(guest);
   }
 

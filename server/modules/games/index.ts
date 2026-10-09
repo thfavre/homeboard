@@ -109,6 +109,8 @@ const songBoard = (song: string, chart: string, colors: number) => `rhythm:${son
 /** What the games share with other modules */
 export interface GamesApi {
   busy(guestId: string): boolean;
+  /** Name of the game being played, also the ones that leave the TV free (Coin Flip, Rhythm Rain...) */
+  playing(): string | null;
   /** The song of a Rhythm Rain board (see songBoard), null when it is not one of the host's songs any more */
   songBoard(board: string): { title: string; artist: string; cover?: string; chart: string; colors: number } | null;
 }
@@ -518,7 +520,9 @@ export default defineModule<GamesSettings>({
       for (const [id, amount] of Object.entries(payouts)) {
         const guest = ctx.session.guests.get(id);
         if (!guest || amount <= 0) continue;
-        ctx.economy.credit(guest, amount, `${name}: ${outcome.winners.includes(id) ? 'winnings' : 'bet back'}`);
+        // A bet coming back was never really spent: it does not count as earned
+        if (outcome.winners.includes(id)) ctx.economy.credit(guest, amount, `${name}: winnings`);
+        else ctx.economy.giveBack(guest, amount, `${name}: bet back`);
         ctx.toast(guest, { text: outcome.winners.includes(id) ? `${name}: you won` : `${name}: bet back`, amount, kind: 'success' });
       }
 
@@ -883,6 +887,7 @@ export default defineModule<GamesSettings>({
     ctx.provide<GamesApi>('games', {
       busy: (guestId: string) =>
         !!match?.players.some((p) => p.id === guestId) || [...invites.values()].some((i) => i.from.id === guestId || i.to.id === guestId),
+      playing: () => (match ? (gameInfo(match.game)?.name ?? 'A game') : null),
       songBoard: (board) => {
         const [, key, chart, colors] = board.split(':');
         const info = songs.get(key)?.info;
@@ -920,6 +925,28 @@ export default defineModule<GamesSettings>({
         online: role === 'tv' ? [] : [...ctx.session.guests.values()].filter((g) => g.sockets > 0).map((g) => ({ ...player(g), balance: g.balance })),
         settings: ctx.settings.get(),
       };
+    });
+
+    // A guest removed by the host: their challenges go (the other side gets their money back),
+    // and they leave a game that has not started yet
+    ctx.session.on('guest-removed', (g: Guest) => {
+      for (const inv of [...invites.values()]) {
+        if (inv.from.id === g.id) dropInvite(inv, null);
+        else if (inv.to.id === g.id) dropInvite(inv, `${g.name} left the party`);
+      }
+      const m = match;
+      if (!m || !m.players.some((p) => p.id === g.id)) return;
+      if (m.phase !== 'lobby' && m.phase !== 'intro') return;
+      const left = m.players.filter((p) => p.id !== g.id);
+      // A duel or solo game without its player, or a room game left with one: the others get their money back
+      if (m.mode !== 'room' || (m.phase === 'lobby' ? m.starter?.id === g.id : left.length < 2)) {
+        cancel(`${g.name} left the party, game cancelled`);
+        return;
+      }
+      m.players = left;
+      m.charges = m.charges.filter((c) => c.guest.id !== g.id);
+      m.ready.delete(g.id);
+      ctx.publish();
     });
 
     // Opponents come and go and their balance changes: keep the list fresh (publish is throttled)

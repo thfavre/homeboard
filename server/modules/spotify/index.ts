@@ -473,7 +473,11 @@ export default defineModule<SpotifySettings>({
       accessToken = '';
       now = null;
       spotifyQueue = [];
-      for (const t of held) if (t.charge) ctx.economy.refund(t.charge);
+      for (const t of held) {
+        if (!t.charge) continue;
+        ctx.economy.refund(t.charge);
+        ctx.session.uncount(t.charge.guest, 'songs');
+      }
       held = [];
       handedOver.clear();
       ctx.publish();
@@ -532,7 +536,10 @@ export default defineModule<SpotifySettings>({
     /** Remove a held song and give the guest their money back */
     ctx.onAdmin('queueRemove', (args) => {
       const [t] = held.splice(heldIndex(args.qid), 1);
-      if (t.charge) ctx.economy.refund(t.charge);
+      if (t.charge) {
+        ctx.economy.refund(t.charge);
+        ctx.session.uncount(t.charge.guest, 'songs');
+      }
       requests.delete(t.uri);
       ctx.publish();
       return t.charge?.amount ? `${t.title} removed, ${t.requestedBy?.name ?? 'the guest'} got refunded` : `${t.title} removed`;
