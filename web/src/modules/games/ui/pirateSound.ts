@@ -20,6 +20,29 @@ export function loadPirateSound(url: string): Promise<AudioBuffer | null> {
   return job;
 }
 
+/**
+ * Where the sound of a file starts (seconds): picked files often begin with a little silence (and an MP3
+ * with the encoder's delay), which would put a drum hit late on its beat. It plays from just before.
+ */
+const leads = new WeakMap<AudioBuffer, number>();
+function leadOf(buffer: AudioBuffer): number {
+  let lead = leads.get(buffer);
+  if (lead === undefined) {
+    const chans = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+    let peak = 0;
+    for (const ch of chans) for (let i = 0; i < ch.length; i++) peak = Math.max(peak, Math.abs(ch[i]));
+    let first = buffer.length;
+    for (const ch of chans) {
+      let i = 0;
+      while (i < first && Math.abs(ch[i]) < peak * 0.1) i++;
+      first = Math.min(first, i);
+    }
+    lead = peak > 0 ? Math.max(0, first / buffer.sampleRate - 0.003) : 0;
+    leads.set(buffer, lead);
+  }
+  return lead;
+}
+
 /** A decoded file, or null while it loads (or when it cannot be) */
 const ready = new Map<string, AudioBuffer | null>();
 function bufferNow(url: string): AudioBuffer | null {
@@ -53,9 +76,10 @@ export function pirateSound(kind: PirateSoundId, o: PirateSoundOptions = {}): vo
     const src = ac.createBufferSource();
     src.buffer = file;
     src.connect(out);
-    src.start(t);
+    const lead = leadOf(file);
+    src.start(t, lead);
     const max = o.maxSec ?? (kind === 'drum' || kind === 'oar' ? 1.2 : 6);
-    if (file.duration > max) {
+    if (file.duration - lead > max) {
       out.gain.setValueAtTime(out.gain.value, t + max - 0.15);
       out.gain.linearRampToValueAtTime(0.0001, t + max);
       src.stop(t + max + 0.02);

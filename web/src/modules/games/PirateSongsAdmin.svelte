@@ -42,50 +42,59 @@
     }
   }
 
-  // Hearing a song here: from its first beat, with a click on every beat so the grid can be heard
+  // Hearing a song here: from its first beat, with a click on every beat so the grid can be heard. The
+  // song and the clicks go through the same audio clock, so what is heard is exactly where the beats are.
   let playing = $state<string | null>(null);
-  let preview: { audio: HTMLAudioElement; ac: AudioContext; timer: ReturnType<typeof setInterval> } | null = null;
+  let preview: { ac: AudioContext; timer: ReturnType<typeof setInterval> | null } | null = null;
   function stopPreview() {
     if (!preview) return;
-    preview.audio.pause();
-    clearInterval(preview.timer);
+    if (preview.timer) clearInterval(preview.timer);
     void preview.ac.close();
     preview = null;
     playing = null;
   }
-  function listen(song: PirateSong) {
+  async function listen(song: PirateSong) {
     const was = playing;
     stopPreview();
     if (was === song.id) return;
-    const audio = new Audio(song.url);
     const ac = new AudioContext();
-    audio.currentTime = song.beats[0];
-    // A soft tick on every beat, the first of each 4 higher
+    const mine = { ac, timer: null as ReturnType<typeof setInterval> | null };
+    preview = mine;
+    playing = song.id;
+    let buffer: AudioBuffer;
+    try {
+      buffer = await ac.decodeAudioData(await (await fetch(song.url)).arrayBuffer());
+    } catch {
+      if (preview === mine) stopPreview();
+      return;
+    }
+    if (preview !== mine) return;
+    const from = song.beats[0];
+    const t0 = ac.currentTime + 0.15;
+    const src = ac.createBufferSource();
+    src.buffer = buffer;
+    src.connect(ac.destination);
+    src.start(t0, from);
+    src.onended = () => preview === mine && stopPreview();
+    // A soft tick on every beat, the first of each 4 higher, scheduled a second ahead
     let next = 0;
     const tick = () => {
-      if (audio.paused) return;
-      const pos = audio.currentTime;
-      while (next < song.beats.length && song.beats[next] < pos - 0.02) next++;
-      const beat = next;
-      if (beat >= song.beats.length) return;
-      const wait = song.beats[beat] - pos;
-      if (wait > 0.12) return;
-      next = beat + 1;
-      const t = ac.currentTime + Math.max(0, wait);
-      const o = ac.createOscillator();
-      const g = ac.createGain();
-      o.frequency.value = beat % 4 === 0 ? 1500 : 1000;
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.25, t + 0.003);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
-      o.connect(g).connect(ac.destination);
-      o.start(t);
-      o.stop(t + 0.08);
+      while (next < song.beats.length && t0 + song.beats[next] - from < ac.currentTime + 1) {
+        const t = t0 + song.beats[next] - from;
+        const o = ac.createOscillator();
+        const g = ac.createGain();
+        o.frequency.value = next % 4 === 0 ? 1500 : 1000;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.25, t + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+        o.connect(g).connect(ac.destination);
+        o.start(t);
+        o.stop(t + 0.08);
+        next++;
+      }
     };
-    void audio.play().catch(() => stopPreview());
-    audio.onended = stopPreview;
-    preview = { audio, ac, timer: setInterval(tick, 20) };
-    playing = song.id;
+    tick();
+    mine.timer = setInterval(tick, 250);
   }
   $effect(() => () => stopPreview());
 
@@ -97,7 +106,7 @@
   {#each songs as song (song.id)}
     <div class="song">
       <div class="head">
-        <button class="btn small ghost" aria-label={playing === song.id ? 'Stop' : 'Hear it here, with a tick on each beat'} title="Hear it here, with a tick on each beat" onclick={() => listen(song)}>
+        <button class="btn small ghost" aria-label={playing === song.id ? 'Stop' : 'Hear it here, with a tick on each beat'} title="Hear it here, with a tick on each beat" onclick={() => void listen(song)}>
           {#if playing === song.id}<Pause size={16} />{:else}<Play size={16} />{/if}
         </button>
         <span class="label">
