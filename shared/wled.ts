@@ -158,14 +158,14 @@ export const DEFAULT_WLED_SCENES: WledEffect[] = [
     variants: [{}, { fx: 67, pal: 50, sx: 12, ix: 200, colors: ['#66ccff', '#05ffb2', '#ffffff'] }, { pal: 55 }],
   },
   {
+    // Twinklefox: pale stars (color 1) fading in and out over a night sky (color 2, which it dims)
     id: 'night',
     name: 'Starry night',
-    fx: 67,
-    pal: 46,
-    sx: 12,
-    ix: 100,
-    colors: [],
-    variants: [{}, { fx: 68, sx: 35, ix: 45 }, { fx: 107, sx: 20, ix: 60 }, { fx: 74, pal: 46, sx: 16, ix: 40 }],
+    fx: 80,
+    pal: 2,
+    sx: 50,
+    ix: 110,
+    colors: ['#e8eeff', '#0e2080'],
   },
   {
     id: 'sea',

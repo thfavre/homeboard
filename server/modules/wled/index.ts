@@ -187,11 +187,14 @@ export default defineModule<WledSettings>({
       // New default scenes go where they are in the defaults: after the default before them still in the list
       const knownScenes = new Set(s.knownScenes.length ? s.knownScenes : LEGACY_WLED_SCENES);
       // Default scenes that were changed since, still as they were shipped: the new version
-      const sameLook = (a: WledEffect, b: Omit<WledLook, 'colors'>) => a.fx === b.fx && a.pal === b.pal && a.sx === b.sx && a.ix === b.ix && !a.variants;
-      const upgrades: Record<string, Omit<WledLook, 'colors'>> = { forest: { fx: 112, pal: 14, sx: 20, ix: 40 } };
+      const lookKey = (e: Pick<WledEffect, 'fx' | 'pal' | 'sx' | 'ix' | 'colors' | 'variants'>) => JSON.stringify([e.fx, e.pal, e.sx, e.ix, e.colors, e.variants ?? null]);
+      const upgrades: Record<string, Pick<WledEffect, 'fx' | 'pal' | 'sx' | 'ix' | 'colors' | 'variants'>> = {
+        forest: { fx: 112, pal: 14, sx: 20, ix: 40, colors: [] },
+        night: { fx: 67, pal: 46, sx: 12, ix: 100, colors: [], variants: [{}, { fx: 68, sx: 35, ix: 45 }, { fx: 107, sx: 20, ix: 60 }, { fx: 74, pal: 46, sx: 16, ix: 40 }] },
+      };
       const scenes = s.scenes.map((x) => {
         const was = upgrades[x.id];
-        return was && sameLook(x, was) ? { ...DEFAULT_WLED_SCENES.find((d) => d.id === x.id)!, name: x.name } : x;
+        return was && lookKey(x) === lookKey(was) ? { ...DEFAULT_WLED_SCENES.find((d) => d.id === x.id)!, name: x.name } : x;
       });
       const upgraded = scenes.some((x, i) => x !== s.scenes[i]);
       DEFAULT_WLED_SCENES.forEach((e, i) => {
