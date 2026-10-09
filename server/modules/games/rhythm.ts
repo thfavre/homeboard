@@ -105,6 +105,28 @@ export function chartFor(song: Song, difficulty: RhythmDifficulty): { id: Rhythm
 }
 
 /** Notes a second of a chart as played here (closer notes are left out), over the whole song */
+/**
+ * How steady a chart's rhythm is as played here (closer notes left out): the share of the gaps between
+ * notes that have the most common length, in quarter beats (pauses over 4 beats are left out). 1: the
+ * same gap all along, too regular to be fun; under about 0.55: a varied rhythm.
+ */
+export function chartSteadiness(chart: BsNote[], bpm: number, minGapMs: number): number {
+  const beatMs = 60_000 / bpm;
+  const counts = new Map<number, number>();
+  let gaps = 0;
+  let last = -Infinity;
+  for (const n of chart) {
+    if (n.ms - last < minGapMs) continue;
+    const beats = (n.ms - last) / beatMs;
+    last = n.ms;
+    if (beats > 4) continue;
+    const q = Math.round(beats * 4);
+    counts.set(q, (counts.get(q) ?? 0) + 1);
+    gaps++;
+  }
+  return gaps ? Math.round((Math.max(...counts.values()) / gaps) * 100) / 100 : 1;
+}
+
 export function chartNps(chart: BsNote[], minGapMs: number): number {
   if (chart.length < 2) return 0;
   let kept = 0;

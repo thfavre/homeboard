@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Check, Music, Pause, Play, Plus, RotateCw, Search, ThumbsUp, X } from '@lucide/svelte';
-  import { rhythmDifficulty, type RhythmSongInfo } from '$shared/games.ts';
+  import { rhythmDifficulty, rhythmFeel, type RhythmSongInfo } from '$shared/games.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
 
   /**
@@ -84,7 +84,7 @@
 
 <div class="part">
   <h4 class="group">Songs</h4>
-  <p class="faint small">Guests pick one of these when they pay for a duel or a solo game with music, at one of the difficulties listed under it (with its notes per second). Tap a cover to hear it.</p>
+  <p class="faint small">Guests pick one of these when they pay for a duel or a solo game with music, at one of the difficulties listed under it (with its notes per second). Rhythm: Varied is the most fun, Steady means nearly the same gap between all notes. Tap a cover to hear it.</p>
   <div class="list">
     {#each songs as x (x.key)}
       <div class="row">
@@ -95,6 +95,11 @@
             <span class="faint small truncate">{x.artist}{x.durationSec ? ` · ${length(x.durationSec)}` : ''}</span>
             {#if x.charts?.length}
               <span class="meta" title="Difficulties guests can play this song at, with the notes per second">
+                {#each [rhythmFeel(x.charts)] as feel}
+                  {#if feel}
+                    <span class="feel {feel.label.toLowerCase()}" title={`${Math.round(feel.steady * 100)}% of the gaps between notes have the same length`}>Rhythm: {feel.label}</span>
+                  {/if}
+                {/each}
                 {#each x.charts as c (c.id)}<span class="diff">{rhythmDifficulty(c.id).name} <span class="nps">{c.nps.toFixed(1)}/s</span></span>{/each}
               </span>
             {/if}
@@ -238,6 +243,22 @@
     font-size: 0.7rem;
     font-weight: 700;
     color: var(--text-dim);
+  }
+  .feel {
+    padding: 0 0.4rem;
+    border-radius: 0.3rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border: 1px solid currentColor;
+  }
+  .feel.varied {
+    color: var(--success);
+  }
+  .feel.mixed {
+    color: var(--coin);
+  }
+  .feel.steady {
+    color: var(--danger);
   }
   .nps {
     font-weight: 500;

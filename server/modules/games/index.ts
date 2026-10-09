@@ -33,7 +33,7 @@ import { colorReflex } from './reflex.ts';
 import { perfectCircle } from './circle.ts';
 import { bluff } from './bluff.ts';
 import { coinFlip } from './coin.ts';
-import { chartFor, chartNps, rhythmRain } from './rhythm.ts';
+import { chartFor, chartNps, chartSteadiness, rhythmRain } from './rhythm.ts';
 import { Turntable } from './turntable.ts';
 import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
 
@@ -136,7 +136,7 @@ export default defineModule<GamesSettings>({
         if (!songs.has(key)) return;
         songs.set(key, {
           info: { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`), cover: s.cover, preview: s.preview, previewMs: s.previewMs, durationSec: s.durationSec,
-            charts: RHYTHM_DIFFICULTIES.filter((d) => s.charts[d.id]?.length).map((d) => ({ id: d.id, nps: chartNps(s.charts[d.id]!, d.minGapMs) })) },
+            charts: RHYTHM_DIFFICULTIES.filter((d) => s.charts[d.id]?.length).map((d) => ({ id: d.id, nps: chartNps(s.charts[d.id]!, d.minGapMs), steady: chartSteadiness(s.charts[d.id]!, s.bpm, d.minGapMs) })) },
           song: s,
         });
       } catch (err) {

@@ -399,6 +399,12 @@ export const RHYTHM_DIFFICULTIES = [
 ] as const;
 export type RhythmDifficulty = (typeof RHYTHM_DIFFICULTIES)[number]['id'];
 export const RHYTHM_DEFAULT_DIFFICULTY: RhythmDifficulty = 'Normal';
+/** How varied a song's rhythm is, from the steadiness of its charts (their average) */
+export function rhythmFeel(charts: { steady: number }[] | undefined): { label: 'Varied' | 'Mixed' | 'Steady'; steady: number } | null {
+  if (!charts?.length) return null;
+  const steady = charts.reduce((sum, c) => sum + c.steady, 0) / charts.length;
+  return { label: steady < 0.55 ? 'Varied' : steady < 0.72 ? 'Mixed' : 'Steady', steady };
+}
 export const rhythmDifficulty = (id: unknown) => RHYTHM_DIFFICULTIES.find((d) => d.id === id) ?? RHYTHM_DIFFICULTIES[1];
 /** Colors from what a phone sent: 1 to 4 */
 export const rhythmColors = (n: unknown) => Math.min(RHYTHM_MAX_COLORS, Math.max(1, Math.round(Number(n) || RHYTHM_DEFAULT_COLORS)));
@@ -502,8 +508,11 @@ export interface RhythmSongInfo {
   preview?: string;
   /** Where the map's best part starts in the song (ms), to preview it from the audio file */
   previewMs?: number;
-  /** The difficulties the map has, easiest first, with their notes per second as played here */
-  charts?: { id: RhythmDifficulty; nps: number }[];
+  /**
+   * The difficulties the map has, easiest first, with their notes per second as played here and how
+   * steady their rhythm is (share of the gaps between notes of the most common length, 0 to 1)
+   */
+  charts?: { id: RhythmDifficulty; nps: number; steady: number }[];
   durationSec?: number;
   error?: string;
 }
