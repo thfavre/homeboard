@@ -289,6 +289,7 @@ export default defineModule<GamesSettings>({
       turntable = null;
       fireworks?.stop();
       fireworks = null;
+      if (p.kind === 'fireworks') void lights()?.unboost(ctx.settings.get().rhythmLight);
       if (p.kind === 'lights' && !keepLights) void lights()?.release();
       ctx.publish();
     };
@@ -470,7 +471,13 @@ export default defineModule<GamesSettings>({
       if (m.usesLights) {
         m.usesLights = false;
         // A lights prize keeps them: released when it ends
-        if (!(prize && perk?.kind === 'lights')) void lights()?.release();
+        if (prize && perk?.kind === 'fireworks') {
+          // The fireworks at full brightness, once the lights are back to how they were
+          const p = perk;
+          void lights()
+            ?.release()
+            .then(() => (perk === p ? lights()?.boost(ctx.settings.get().rhythmLight) : undefined));
+        } else if (!(prize && perk?.kind === 'lights')) void lights()?.release();
       }
       const top = outcome.winners.length === 1 ? ctx.session.guests.get(outcome.winners[0]) : undefined;
       if (top) ctx.activity(`{name} won ${name}${pot ? ` and a pot of ${fmt(pot)}` : ''}`, { guest: top });

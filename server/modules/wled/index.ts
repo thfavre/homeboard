@@ -48,6 +48,12 @@ export interface LightsApi {
    * Nothing to give back: the light goes back to what it was doing 2 s after the last frame.
    */
   frame(deviceId: string, rgb: Uint8Array): void;
+  /**
+   * Full brightness on one light, for live pixels: WLED scales them by its brightness. Its state is
+   * saved first and put back by `unboost`; effects leave the light alone meanwhile.
+   */
+  boost(deviceId: string): Promise<void>;
+  unboost(deviceId: string): Promise<void>;
 }
 
 /** WLED's UDP realtime port, and the DRGB protocol (up to 490 LEDs) */
@@ -135,6 +141,8 @@ export default defineModule<WledSettings>({
     let catalog: { effects: string[]; palettes: string[] } | null = null;
     /** A game holds the lights: no effect starts meanwhile */
     let held = false;
+    /** Lights at full brightness for live pixels (a game prize): effects and restores leave them alone */
+    const boosted = new Set<string>();
 
     const devices = () => ctx.settings.get().devices;
     const device = (id: string) => devices().find((d) => d.id === id);
@@ -173,7 +181,7 @@ export default defineModule<WledSettings>({
 
     const apply = async (deviceId: string, effect: WledEffect) => {
       const d = device(deviceId);
-      if (!d) return false;
+      if (!d || boosted.has(d.id)) return false;
       try {
         pending.delete(d.id);
         if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
@@ -192,7 +200,7 @@ export default defineModule<WledSettings>({
 
     const restore = async (deviceId: string) => {
       // In use again (a retry can come in while an effect or a game holds the light)
-      if (held || current?.devices.includes(deviceId)) return;
+      if (held || boosted.has(deviceId) || current?.devices.includes(deviceId)) return;
       const snap = saved.get(deviceId);
       const d = device(deviceId);
       if (!snap || !d) {
@@ -350,6 +358,22 @@ export default defineModule<WledSettings>({
           wanted.set(d.id, { hex, fadeMs });
           void sendSolid(d.id);
         }
+      },
+      boost: async (deviceId) => {
+        const d = device(deviceId);
+        if (!d || !ctx.enabled() || !health.get(d.id)?.online) return;
+        boosted.add(d.id);
+        try {
+          if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
+          if (!boosted.has(d.id)) return;
+          saved.sent(d.id, await wled(d.host, '/json/state', { on: true, bri: 255, v: true }));
+        } catch (err) {
+          ctx.log.warn(`Could not reach ${d.name}`, (err as Error).message);
+        }
+      },
+      unboost: async (deviceId) => {
+        if (!boosted.delete(deviceId)) return;
+        await restore(deviceId);
       },
       release: async () => {
         if (!held) return;
