@@ -4,7 +4,7 @@
   import { audioContext } from '../soundboard/player.ts';
   import { gamesState } from './store.svelte.ts';
   import { loadPirateSound, pirateSound } from './ui/pirateSound.ts';
-  import { SongOnBeats } from './ui/pirateSong.ts';
+  import { FADE_OUT_SEC, SongOnBeats } from './ui/pirateSong.ts';
 
   /**
    * The sound of Pirate Race on the TV, with nothing on screen: the drum on every beat (scheduled on the
@@ -25,7 +25,7 @@
 
   /** The race songs playing or about to, by the drum beat their beat 0 falls on */
   const playing = new Map<number, SongOnBeats>();
-  const stopSongs = (fadeSec = 1.5) => {
+  const stopSongs = (fadeSec = FADE_OUT_SEC) => {
     for (const p of playing.values()) p.stop(fadeSec);
     playing.clear();
   };

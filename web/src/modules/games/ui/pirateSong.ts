@@ -2,7 +2,9 @@ import { audioContext } from '../../soundboard/player.ts';
 import { loadPirateSound } from './pirateSound.ts';
 
 /** The song fades in over this long from its start */
-const FADE_IN_SEC = 6;
+const FADE_IN_SEC = 9;
+/** And out over this long when the race ends */
+export const FADE_OUT_SEC = 3;
 
 /**
  * A race song played once, from its very start, in step with the drum: its beat 0 falls on drum beat
@@ -76,7 +78,7 @@ export class SongOnBeats {
   }
 
   /** Fades out and stops */
-  stop(fadeSec = 1.5): void {
+  stop(fadeSec = FADE_OUT_SEC): void {
     this.stopped = true;
     const { src, out } = this;
     this.src = null;
