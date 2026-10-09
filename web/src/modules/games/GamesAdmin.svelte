@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronDown, Minus, Play, Plus, Square, X } from '@lucide/svelte';
-  import { GAMES, PIRATE_LENGTHS, gameInfo, pirateLength, type GameId, type GamesSettings } from '$shared/games.ts';
+  import { GAMES, PIRATE_LENGTHS, gameInfo, isCardGame, pirateLength, type GameId, type GamesSettings } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -8,13 +8,12 @@
   import Money from '$lib/ui/Money.svelte';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { formatAmount } from '$shared/money.ts';
-  import { GAME_ICONS, gamesState } from './store.svelte.ts';
+  import { GAME_ICONS, Now, gamesState } from './store.svelte.ts';
   import RhythmSongsAdmin from './RhythmSongsAdmin.svelte';
   import PirateSoundsAdmin from './PirateSoundsAdmin.svelte';
   import PirateSongsAdmin from './PirateSongsAdmin.svelte';
 
   const s = $derived(gamesState());
-  const m = $derived(s?.match ?? null);
   const roomGames = GAMES.filter((g) => g.modes.includes('room'));
   let game = $state<GameId>('timer');
   let stake = $state(0);
@@ -42,8 +41,13 @@
 
   // The game whose options are open (one at a time keeps the list short on a phone)
   let open = $state<GameId | null>(null);
-  // Bluff's only option is its reward, which needs the money system
-  const hasOptions = (id: GameId) => id !== 'coin' && (id !== 'bluff' || !!hb.core?.economyEnabled);
+  const hasOptions = (id: GameId) => id !== 'coin';
+  /** Bluff bonus: x times the bet, on top of the fixed bonus */
+  const MULT_STEPS = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+  /** Minutes between two Bluff games */
+  const COOLDOWN_STEPS = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
+  const now = new Now(10_000);
+  const bluffWait = $derived(s?.bluffReadyAt && s.bluffReadyAt > now.value ? Math.ceil((s.bluffReadyAt - now.value) / 60_000) : 0);
   /** Bonus each player gets when both share in Bluff (also listed in Prices and rewards) */
   const bluffBonus = $derived(hb.core?.admin?.earnRules.find((r) => r.key === 'games.bluff'));
 
@@ -70,7 +74,7 @@
       case 'circle':
         return `${plural(st.circleCount, 'circle')} each, ${perkText(st.circlePerkSec)}`;
       case 'bluff':
-        return `${formatAmount(bluffBonus?.amount ?? 0)} each if both share`;
+        return `${hb.core?.economyEnabled ? `${formatAmount(bluffBonus?.amount ?? 0)} + ${st.bluffMultiplier}x the bet each if both share, ` : ''}${st.bluffCooldownMin ? `every ${st.bluffCooldownMin} min` : 'no wait'}`;
       case 'rhythm':
         return st.rhythmLight
           ? `on ${lightName(st.rhythmLight)}, ${plural(s?.rhythmSongs.length ?? 0, 'song')}, ${st.rhythmFullSong ? 'whole songs' : `${clock(st.rhythmMinSec)} to ${clock(st.rhythmMaxSec)}`}, ${perkText(st.rhythmPerkSec)}`
@@ -172,11 +176,38 @@
     {@render count('Circles each', 'circleCount', 10)}
     {@render perk('Winner scratches their circle on the TV', 'circlePerkSec')}
     {@render lightSelect('Scratch light', 'A WLED light that turns with the record, following every scratch', 'scratchLight')}
-  {:else if id === 'bluff' && bluffBonus}
+  {:else if id === 'bluff'}
+    {#if hb.core?.economyEnabled && bluffBonus}
+      <p class="faint small">When both share, each gets their bet back plus a bonus paid by you: the fixed part, plus a number of times their bet. One steals: the thief takes the pot (both bets). Under 1x, stealing pays more than sharing, which is what makes it a bluff.</p>
+      <div class="line">
+        <span class="label">Fixed bonus <span class="faint small">Each player, whatever the bet</span></span>
+        <AmountInput value={bluffBonus.amount} oncommit={(v) => attempt(() => rpc('core', 'setEarn', { key: 'games.bluff', amount: v }))} />
+      </div>
+      {@const mult = s!.settings.bluffMultiplier}
+      <div class="line">
+        <span class="label">Plus times the bet <span class="faint small">0 = only the fixed bonus</span></span>
+        <span class="stepper">
+          <button class="btn small" aria-label="Less" disabled={mult <= MULT_STEPS[0]} onclick={() => setSettings({ bluffMultiplier: stepIn(MULT_STEPS, mult, -1) })}><Minus size={16} /></button>
+          <strong class="mono">{mult}x</strong>
+          <button class="btn small" aria-label="More" disabled={mult >= MULT_STEPS[MULT_STEPS.length - 1]} onclick={() => setSettings({ bluffMultiplier: stepIn(MULT_STEPS, mult, 1) })}><Plus size={16} /></button>
+        </span>
+      </div>
+    {/if}
+    {@const cd = s!.settings.bluffCooldownMin}
     <div class="line">
-      <span class="label">Bonus when both share <span class="faint small">Paid by you to each player, on top of their half of the pot</span></span>
-      <AmountInput value={bluffBonus.amount} oncommit={(v) => attempt(() => rpc('core', 'setEarn', { key: 'games.bluff', amount: v }))} />
+      <span class="label">Wait between two games <span class="faint small">Minutes, for the whole party. 0 = no wait</span></span>
+      <span class="stepper">
+        <button class="btn small" aria-label="Less" disabled={cd <= 0} onclick={() => setSettings({ bluffCooldownMin: stepIn(COOLDOWN_STEPS, cd, -1) })}><Minus size={16} /></button>
+        <strong class="mono">{cd}</strong>
+        <button class="btn small" aria-label="More" disabled={cd >= COOLDOWN_STEPS[COOLDOWN_STEPS.length - 1]} onclick={() => setSettings({ bluffCooldownMin: stepIn(COOLDOWN_STEPS, cd, 1) })}><Plus size={16} /></button>
+      </span>
     </div>
+    {#if bluffWait}
+      <div class="line">
+        <span class="label">Next Bluff in {bluffWait} min</span>
+        <button class="btn small" onclick={() => attempt(() => rpc('games', 'resetBluff'))}>Allow now</button>
+      </div>
+    {/if}
   {:else if id === 'rhythm'}
     <h4 class="group">Light</h4>
     {@render lightSelect('Light strip', 'The WLED strip the game is played on, best hung upright. The game can only start when it is reachable', 'rhythmLight')}
@@ -235,23 +266,24 @@
 {/snippet}
 
 {#if s}
-  {#if m}
-    <Section title="On the TV now" hint={`${gameInfo(m.game)?.name} (${MODE_NAMES[m.mode]}): ${PHASES[m.phase]}`}>
+  {#each s.matches as m (m.id)}
+    <Section title={isCardGame(m.game) ? 'Playing now' : 'On the TV now'} hint={`${gameInfo(m.game)?.name} (${MODE_NAMES[m.mode]}): ${PHASES[m.phase]}`}>
       <div class="players">
         {#each m.players as p (p.id)}<span class="pill" style:border-color={p.color}>{p.name}</span>{:else}<span class="faint">No player yet</span>{/each}
       </div>
       {#if hb.core?.economyEnabled && m.pot > 0}<p class="dim">Pot: <Money amount={m.pot} /></p>{/if}
       <div class="row">
         {#if m.phase === 'lobby'}
-          <button class="btn primary" disabled={m.players.length < 2} onclick={() => attempt(() => rpc('games', 'begin'))}><Play size={18} /> Start now</button>
+          <button class="btn primary" disabled={m.players.length < 2} onclick={() => attempt(() => rpc('games', 'begin', { id: m.id }))}><Play size={18} /> Start now</button>
         {/if}
-        <TwoStepButton class="danger" onconfirm={() => attempt(() => rpc('games', 'stop'))}>
+        <TwoStepButton class="danger" onconfirm={() => attempt(() => rpc('games', 'stop', { id: m.id }))}>
           <Square size={16} /> Stop
           {#snippet armed()}Stop and refund?{/snippet}
         </TwoStepButton>
       </div>
     </Section>
-  {:else}
+  {/each}
+  {#if !s.matches.length}
     <Section title="Start a game for the room" hint="Free for you. Guests join from their phone; the winner takes the pot and your prize.">
       <div class="choices">
         {#each roomGames as g (g.id)}

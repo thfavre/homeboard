@@ -5,14 +5,14 @@
   import { hb } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
-  import { Now, gamesState } from './store.svelte.ts';
+  import { Now, gameMatch } from './store.svelte.ts';
   import { coinDraw } from './ui/coinDraw.ts';
 
   /**
    * Coin Flip is played on the two phones: the TV keeps its screen and shows this small card above
    * the main widget, until the throw (CoinTossTv) takes the middle of the screen.
    */
-  const m = $derived(gamesState()?.match ?? null);
+  const m = $derived(gameMatch('coin'));
   const v = $derived(m?.phase === 'play' || m?.phase === 'result' ? (m.view as CoinView | null) : null);
   const now = new Now(50);
   const draw = $derived(v && m ? coinDraw(v, m.players, now.value) : null);
@@ -58,8 +58,7 @@
 
 <style>
   .coin {
-    width: 50%;
-    margin: 0 auto;
+    min-width: 0;
     display: grid;
     grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
     align-items: center;

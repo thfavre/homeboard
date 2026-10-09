@@ -10,26 +10,29 @@ import ScratchCard from './perk/ScratchCard.svelte';
 import RhythmCard from './RhythmCard.svelte';
 import RhythmPreload from './RhythmPreload.svelte';
 import CoinCard from './CoinCard.svelte';
+import BluffCard from './BluffCard.svelte';
 import PirateAudio from './PirateAudio.svelte';
 import CoinTossTv from './tv/CoinTossTv.svelte';
 import type { CoinView } from '$shared/games.ts';
-import { gamesState, showGamesScreen } from './store.svelte.ts';
+import { gameMatch, gamesState, showGamesScreen } from './store.svelte.ts';
 
 export default {
   id: 'games',
   tv: [
     { slot: 'overlay', order: 40, component: InviteTv },
     // Rhythm Rain is played on a light: just a card with the scores above the main widget
-    { slot: 'above', order: 10, component: RhythmCard, visible: () => gamesState()?.match?.game === 'rhythm' },
+    { slot: 'above', order: 10, component: RhythmCard, visible: () => !!gameMatch('rhythm') },
     // Coin Flip is played on the two phones: a card, then the throw itself in the middle of the TV
-    { slot: 'above', order: 11, component: CoinCard, visible: () => gamesState()?.match?.game === 'coin' },
+    { slot: 'above', order: 11, component: CoinCard, visible: () => !!gameMatch('coin') },
+    // Bluff is played on the two phones: a card shows who has chosen, then turns both choices over
+    { slot: 'above', order: 12, component: BluffCard, visible: () => !!gameMatch('bluff') },
     {
       slot: 'overlay',
       order: 35,
       component: CoinTossTv,
       visible: () => {
-        const m = gamesState()?.match;
-        return m?.game === 'coin' && (m.view as CoinView | null)?.step === 'flight';
+        const m = gameMatch('coin');
+        return !!m && (m.view as CoinView | null)?.step === 'flight';
       },
     },
     // Keeps the sound awake on the TV and gets a duel's song ready, so the music starts on time

@@ -5,7 +5,7 @@
   import { hb, onEvent } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
-  import { Now, gamesState } from './store.svelte.ts';
+  import { Now, gameMatch } from './store.svelte.ts';
   import { rhythmSound } from './ui/rhythmSound.ts';
   import { playMusic, stopMusic, type MusicCue } from './ui/rhythmMusic.ts';
 
@@ -15,7 +15,7 @@
    * the song in time with the notes on the light; solo with music, it also plucks each tap (in a duel
    * or without music, each phone plays its own taps).
    */
-  const m = $derived(gamesState()?.match ?? null);
+  const m = $derived(gameMatch('rhythm'));
   const v = $derived(m?.phase === 'play' || m?.phase === 'result' ? (m.view as RhythmView | null) : null);
   const now = new Now(250);
   const economy = $derived(!!hb.core?.economyEnabled);
@@ -95,8 +95,7 @@
 <style>
   .rhythm {
     position: relative;
-    width: 50%;
-    margin: 0 auto;
+    min-width: 0;
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto minmax(0, 1fr) auto;
     align-items: center;

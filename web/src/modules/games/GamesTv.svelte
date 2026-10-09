@@ -6,11 +6,11 @@
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
   import Ring from '../quiz/Ring.svelte';
-  import { GAME_ICONS, gamesState } from './store.svelte.ts';
+  import { GAME_ICONS, tvMatch } from './store.svelte.ts';
   import { GAME_UI } from './registry.ts';
   import RulesPoster from './tv/RulesPoster.svelte';
 
-  const m = $derived(gamesState()?.match ?? null);
+  const m = $derived(tvMatch());
   const info = $derived(m ? gameInfo(m.game) : undefined);
   const ui = $derived(m ? GAME_UI[m.game] : undefined);
   const economy = $derived(!!hb.core?.economyEnabled);

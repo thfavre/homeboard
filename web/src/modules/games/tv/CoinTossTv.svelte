@@ -7,7 +7,7 @@
   import Avatar from '$lib/ui/Avatar.svelte';
   import Coin from '$lib/ui/Coin.svelte';
   import Money from '$lib/ui/Money.svelte';
-  import { gamesState } from '../store.svelte.ts';
+  import { gameMatch } from '../store.svelte.ts';
   import Coin3D from '../ui/Coin3D.svelte';
 
   /**
@@ -15,7 +15,7 @@
    * tumbling end over end, wobbling a little, never quite the same way twice. When the server tells
    * where it landed, it bounces and settles on that face, and the pot flies to the winner.
    */
-  const live = $derived(gamesState()?.match ?? null);
+  const live = $derived(gameMatch('coin'));
   // Kept from the moment the coin is thrown: the show goes on while the match closes
   const m: MatchState = untrack(() => live!);
   const v = $derived(live?.id === m.id && live.game === 'coin' ? (live.view as CoinView) : (m.view as CoinView));

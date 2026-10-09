@@ -7,6 +7,8 @@
     RHYTHM_DEFAULT_DIFFICULTY,
     RHYTHM_DIFFICULTIES,
     RHYTHM_MAX_COLORS,
+    bluffDeal,
+    isCardGame,
     rhythmDifficulty,
     type GameInfo,
     type GameMode,
@@ -18,8 +20,9 @@
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
   import Sheet from '$lib/ui/Sheet.svelte';
-  import { GAME_ICONS, gamesState } from './store.svelte.ts';
+  import { GAME_ICONS, Now, gamesState } from './store.svelte.ts';
   import GameCard from './ui/GameCard.svelte';
+  import BluffOdds from './ui/BluffOdds.svelte';
 
   let mode = $state<GameMode>('duel');
   let picked = $state<GameInfo | null>(null);
@@ -62,7 +65,17 @@
   const stake = $derived(economy ? Math.max(0, parseAmount(stakeText || '0')) : 0);
   const fee = $derived(price(mode === 'room' ? 'games.room' : withMusic ? 'games.rhythmMusic' : isSolo ? 'games.solo' : 'games.duel'));
   const maxStake = $derived(s?.settings.maxStake ?? 0);
-  const tvBusy = $derived(!!s?.match || (!!hb.core?.takeover && hb.core.takeover !== 'games'));
+  /** A game on the whole TV blocks every other one; card games (Bluff, Coin Flip, Rhythm Rain) only block another of their kind */
+  const tvBusy = $derived.by(() => {
+    if (hb.core?.takeover && hb.core.takeover !== 'games') return true;
+    const card = !!picked && isCardGame(picked.id);
+    return (s?.matches ?? []).some((m) => !card || !isCardGame(m.game) || m.game === picked?.id);
+  });
+  /** Bluff waits a while between two games: minutes left (0: it can be played) */
+  const now = new Now(5000);
+  const bluffWait = $derived(s?.bluffReadyAt && s.bluffReadyAt > now.value ? Math.ceil((s.bluffReadyAt - now.value) / 60_000) : 0);
+  const waiting = $derived(picked?.id === 'bluff' && bluffWait > 0);
+  const deal = $derived(picked?.id === 'bluff' ? bluffDeal(stake, s?.bluffBase ?? 0, s?.settings.bluffMultiplier ?? 0) : null);
 
   function open(g: GameInfo) {
     picked = g;
@@ -178,6 +191,7 @@
           <span class="title">{g.name}</span>
           <span class="tagline">{g.tagline}</span>
         </span>
+        {#if g.id === 'bluff' && bluffWait}<span class="wait">in {bluffWait} min</span>{/if}
         <ChevronRight size={18} class="chev" />
       </button>
     {:else}
@@ -346,7 +360,7 @@
         <input class="input mono" inputmode="decimal" placeholder="0" bind:value={stakeText} />
         <span class="faint small">
           {#if mode === 'duel'}
-            {#if stake > 0}{opponentName ?? 'Your opponent'} has to match it to accept. Winner takes {formatAmount(stake * 2)}.{/if}
+            {#if stake > 0}{opponentName ?? 'Your opponent'} has to match it to accept.{picked.id === 'bluff' ? '' : ` Winner takes ${formatAmount(stake * 2)}.`}{/if}
           {:else}
             Every player puts this in. Winner takes the pot.
           {/if}
@@ -365,10 +379,17 @@
       </p>
     {/if}
 
+    {#if deal}
+      <div class="field">
+        <span class="label">What you can win <span class="faint">{economy ? 'with this bet' : ''}</span></span>
+        <BluffOdds {deal} other={opponentName ?? 'Opponent'} {economy} />
+      </div>
+    {/if}
+    {#if waiting}<p class="error">Bluff can be played again in {bluffWait} min.</p>{/if}
     {#if tvBusy}<p class="faint small">A game is on the TV right now. {mode === 'duel' ? 'They can accept once it is over.' : 'Wait for it to end.'}</p>{/if}
     {#if error}<p class="error">{error}</p>{/if}
 
-    <button class="btn primary block go" disabled={busy || ((mode === 'room' || isSolo) && tvBusy)} onclick={send}>
+    <button class="btn primary block go" disabled={busy || waiting || ((mode === 'room' || isSolo) && tvBusy)} onclick={send}>
       {#if isSolo}<Play size={18} /> Play now{:else if mode === 'duel'}<Swords size={18} /> Send the challenge{:else}<Users size={18} /> Start for everyone{/if}
     </button>
   </Sheet>
@@ -444,6 +465,15 @@
   .tagline {
     font-size: 0.83rem;
     color: var(--text-dim);
+  }
+  .wait {
+    flex: none;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    font-weight: 600;
   }
   .tile :global(.chev) {
     color: var(--text-faint);
