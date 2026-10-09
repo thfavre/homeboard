@@ -1,30 +1,47 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { Eraser, Hand, Paintbrush, ZoomIn, ZoomOut } from '@lucide/svelte';
+  import { Eraser, Maximize, Palette, ZoomIn, ZoomOut } from '@lucide/svelte';
   import type { CanvasState } from '$shared/canvas.ts';
   import { hb, moneyAlert, rpc, price, toast } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import { PixelBoard } from './board.ts';
 
   const SEND_MS = 150;
+  /** A second finger landing this soon after the first means a gesture, not a stroke */
+  const GESTURE_MS = 120;
+  const MAX_SCALE = 40;
+  const RECENT = 6;
 
   const mod = $derived(hb.modules.canvas as CanvasState | undefined);
   const board = new PixelBoard(hb.modules.canvas?.palette ?? []);
 
+  let root = $state<HTMLDivElement>();
   let el = $state<HTMLCanvasElement>();
   let viewport = $state<HTMLDivElement>();
   let color = $state(6);
-  let mode = $state<'paint' | 'move'>('paint');
-  let scale = $state(0);
+  let recent = $state([6, 8, 10, 13, 1, 5]);
+  let paletteOpen = $state(false);
   let painted = $state(0);
+  let spent = $state(0);
+
+  // View: canvas pixel size on screen and offset of the canvas in the viewport
+  let scale = $state(0);
+  let tx = $state(0);
+  let ty = $state(0);
+  let vw = $state(0);
+  let vh = $state(0);
+
+  // The panel fills exactly what is left between the header and the bottom bar, so nothing below it moves
+  let height = $state(0);
+  let navHeight = $state(0);
 
   const unit = $derived(price('canvas.pixel'));
+  const economy = $derived(!!hb.core?.economyEnabled && unit > 0);
 
   // Pixels painted locally and not yet confirmed by the server
   let pending = new Map<number, [number, number, number]>();
   let inFlight = 0;
   let sendTimer: ReturnType<typeof setTimeout> | null = null;
-  let last: [number, number] | null = null;
 
   $effect(() => {
     if (!mod) return;
@@ -35,10 +52,33 @@
     if (el) board.attach(el);
   });
 
-  // Start zoomed to fit the screen width
+  function measure() {
+    if (!root) return;
+    const top = root.getBoundingClientRect().top + window.scrollY;
+    navHeight = (document.querySelector('.app > nav') as HTMLElement | null)?.offsetHeight ?? 0;
+    height = Math.max(320, window.innerHeight - top - navHeight - 12);
+  }
+
   $effect(() => {
-    if (!viewport || !mod || scale) return;
-    scale = Math.max(1, viewport.clientWidth / mod.width);
+    if (!root) return;
+    const node = root;
+    measure();
+    // Older iOS zooms the whole page on pinch even with touch-action set
+    const noPageZoom = (e: Event) => e.preventDefault();
+    window.addEventListener('resize', measure);
+    node.addEventListener('gesturestart', noPageZoom);
+    return () => {
+      window.removeEventListener('resize', measure);
+      node.removeEventListener('gesturestart', noPageZoom);
+    };
+  });
+
+  // Wheel listeners added by Svelte are passive: this one has to stop the page from scrolling
+  $effect(() => {
+    if (!viewport) return;
+    const node = viewport;
+    node.addEventListener('wheel', wheel, { passive: false });
+    return () => node.removeEventListener('wheel', wheel);
   });
 
   onDestroy(() => {
@@ -46,30 +86,83 @@
     board.destroy();
   });
 
-  function zoom(factor: number) {
-    if (!viewport || !mod) return;
-    const min = viewport.clientWidth / mod.width;
-    const cx = (viewport.scrollLeft + viewport.clientWidth / 2) / scale;
-    const cy = (viewport.scrollTop + viewport.clientHeight / 2) / scale;
-    scale = Math.min(40, Math.max(min, scale * factor));
-    requestAnimationFrame(() => {
-      if (!viewport) return;
-      viewport.scrollLeft = cx * scale - viewport.clientWidth / 2;
-      viewport.scrollTop = cy * scale - viewport.clientHeight / 2;
+  // Track the viewport size; start (and stay, after a size change) fitted when not zoomed in
+  $effect(() => {
+    if (!viewport) return;
+    const ro = new ResizeObserver(() => {
+      const fitted = !scale || scale <= fitScale() + 0.001;
+      vw = viewport!.clientWidth;
+      vh = viewport!.clientHeight;
+      if (fitted) fit();
+      else clampView();
     });
+    ro.observe(viewport);
+    return () => ro.disconnect();
+  });
+
+  // Canvas resized by the host: fit again
+  const size = $derived(mod ? `${mod.width}x${mod.height}` : '');
+  let fittedSize = '';
+  $effect(() => {
+    if (!size || !vw || size === fittedSize) return;
+    fittedSize = size;
+    fit();
+  });
+
+  function fitScale(): number {
+    if (!mod || !vw || !vh) return 1;
+    return Math.min(vw / mod.width, vh / mod.height);
   }
 
+  function fit() {
+    if (!mod || !vw) return;
+    scale = fitScale();
+    tx = (vw - mod.width * scale) / 2;
+    ty = (vh - mod.height * scale) / 2;
+  }
+
+  /** Keep the canvas on screen: centered when smaller than the viewport, edge to edge otherwise */
+  function clampView() {
+    if (!mod) return;
+    const cw = mod.width * scale;
+    const ch = mod.height * scale;
+    tx = cw <= vw ? (vw - cw) / 2 : Math.min(0, Math.max(vw - cw, tx));
+    ty = ch <= vh ? (vh - ch) / 2 : Math.min(0, Math.max(vh - ch, ty));
+  }
+
+  /** Zoom around a point of the viewport (in viewport px) */
+  function zoomAt(next: number, px: number, py: number) {
+    const s = Math.min(MAX_SCALE, Math.max(fitScale(), next));
+    tx = px - ((px - tx) / scale) * s;
+    ty = py - ((py - ty) / scale) * s;
+    scale = s;
+    clampView();
+  }
+
+  function zoom(factor: number) {
+    zoomAt(scale * factor, vw / 2, vh / 2);
+  }
+
+  // ---- Painting ----
+
   function canAfford(): boolean {
-    if (!hb.core?.economyEnabled || unit === 0) return true;
-    const committed = (pending.size + inFlight) * unit;
+    if (!economy) return true;
+    const committed = (pending.size + inFlight + (stroke?.cells.size ?? 0)) * unit;
     return (hb.me?.balance ?? 0) - committed >= unit;
   }
 
+  /** The current finger stroke. Kept apart until we know it is not the start of a pinch. */
+  let stroke: { cells: Map<number, [number, number, number, number]>; confirmed: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
+  let last: [number, number] | null = null;
   let warned = false;
+
   function paint(x: number, y: number) {
-    if (!mod || x < 0 || y < 0 || x >= mod.width || y >= mod.height) return;
-    if (board.get(x, y) === color) return;
-    if (!canAfford()) {
+    if (!mod || !stroke || x < 0 || y < 0 || x >= mod.width || y >= mod.height) return;
+    const old = board.get(x, y);
+    if (old === color) return;
+    const i = y * mod.width + x;
+    // A cell already waiting to be sent is only recolored, it costs nothing more
+    if (!pending.has(i) && !stroke.cells.has(i) && !canAfford()) {
       if (!warned) {
         toast({ text: `Out of ${hb.core?.currency.name}. Check the Earn tab.`, kind: 'error' });
         moneyAlert();
@@ -78,8 +171,48 @@
       return;
     }
     board.set(x, y, color);
-    pending.set(y * mod.width + x, [x, y, color]);
+    if (stroke.confirmed) queue(i, x, y);
+    else if (!stroke.cells.has(i)) stroke.cells.set(i, [x, y, color, old]);
+    else stroke.cells.get(i)![2] = color;
+  }
+
+  function queue(i: number, x: number, y: number) {
+    pending.set(i, [x, y, color]);
     sendTimer ??= setTimeout(flush, SEND_MS);
+  }
+
+  function startStroke(c: [number, number]) {
+    warned = false;
+    stroke = { cells: new Map(), confirmed: false, timer: setTimeout(confirmStroke, GESTURE_MS) };
+    last = c;
+    paint(...c);
+    if (color) remember(color);
+  }
+
+  function confirmStroke() {
+    if (!stroke || stroke.confirmed) return;
+    clearTimeout(stroke.timer);
+    stroke.confirmed = true;
+    for (const [i, [x, y, c]] of stroke.cells) {
+      pending.set(i, [x, y, c]);
+      sendTimer ??= setTimeout(flush, SEND_MS);
+    }
+    stroke.cells.clear();
+  }
+
+  /** A second finger came down right away: that was a pinch, undo the dot */
+  function cancelStroke() {
+    if (!stroke) return;
+    clearTimeout(stroke.timer);
+    if (!stroke.confirmed) for (const [x, y, , old] of [...stroke.cells.values()].reverse()) board.set(x, y, old);
+    stroke = null;
+    last = null;
+  }
+
+  function endStroke() {
+    confirmStroke();
+    stroke = null;
+    last = null;
   }
 
   async function flush() {
@@ -91,6 +224,7 @@
     try {
       const r = await rpc<{ painted: number }>('canvas', 'paint', { pixels: batch });
       painted += r.painted;
+      if (economy) spent += r.painted * unit;
     } catch (err) {
       toast({ text: (err as Error).message, kind: 'error' });
       board.reload();
@@ -99,9 +233,9 @@
     }
   }
 
-  function cell(e: PointerEvent): [number, number] {
+  function cell(x: number, y: number): [number, number] {
     const r = el!.getBoundingClientRect();
-    return [Math.floor(((e.clientX - r.left) / r.width) * mod!.width), Math.floor(((e.clientY - r.top) / r.height) * mod!.height)];
+    return [Math.floor(((x - r.left) / r.width) * mod!.width), Math.floor(((y - r.top) / r.height) * mod!.height)];
   }
 
   /** Paint every cell on the line between two points so fast strokes have no gaps */
@@ -126,101 +260,214 @@
     }
   }
 
+  // ---- Gestures: one finger paints, two fingers pinch and move ----
+
+  const pointers = new Map<number, { x: number; y: number }>();
+  let gesture: { dist: number; mx: number; my: number } | null = null;
+  /** Mouse: the right or middle button drags the view */
+  let dragging: { x: number; y: number } | null = null;
+
+  function local(e: { clientX: number; clientY: number }) {
+    const r = viewport!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  function pinchInfo() {
+    const [a, b] = [...pointers.values()];
+    return { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  }
+
   function down(e: PointerEvent) {
-    if (mode !== 'paint' || !mod) return;
+    if (!mod || !viewport) return;
     e.preventDefault();
-    warned = false;
-    el!.setPointerCapture(e.pointerId);
-    last = cell(e);
-    paint(...last);
+    paletteOpen = false;
+    viewport.setPointerCapture(e.pointerId);
+    if (e.pointerType === 'mouse' && e.button !== 0) {
+      dragging = local(e);
+      return;
+    }
+    pointers.set(e.pointerId, local(e));
+    if (pointers.size === 1) {
+      startStroke(cell(e.clientX, e.clientY));
+    } else if (pointers.size === 2) {
+      if (stroke && !stroke.confirmed) cancelStroke();
+      else endStroke();
+      gesture = pinchInfo();
+    }
   }
 
   function move(e: PointerEvent) {
-    if (mode !== 'paint' || !last) return;
-    const c = cell(e);
-    if (c[0] === last[0] && c[1] === last[1]) return;
-    line(last, c);
-    last = c;
+    if (dragging) {
+      const p = local(e);
+      tx += p.x - dragging.x;
+      ty += p.y - dragging.y;
+      dragging = p;
+      clampView();
+      return;
+    }
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, local(e));
+    if (gesture && pointers.size >= 2) {
+      const g = pinchInfo();
+      tx += g.mx - gesture.mx;
+      ty += g.my - gesture.my;
+      zoomAt(scale * (g.dist / gesture.dist), g.mx, g.my);
+      gesture = g;
+      return;
+    }
+    if (stroke && last) {
+      const c = cell(e.clientX, e.clientY);
+      if (c[0] === last[0] && c[1] === last[1]) return;
+      line(last, c);
+      last = c;
+    }
   }
 
-  function up() {
-    last = null;
+  function up(e: PointerEvent) {
+    if (dragging) {
+      dragging = null;
+      return;
+    }
+    if (!pointers.delete(e.pointerId)) return;
+    if (pointers.size < 2) gesture = null;
+    // Lifting the fingers of a pinch one at a time must not start painting
+    if (stroke) endStroke();
   }
+
+  function wheel(e: WheelEvent) {
+    if (!viewport) return;
+    e.preventDefault();
+    const p = local(e);
+    if (e.ctrlKey || Math.abs(e.deltaY) > Math.abs(e.deltaX)) zoomAt(scale * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002)), p.x, p.y);
+    else {
+      tx -= e.deltaX;
+      clampView();
+    }
+  }
+
+  // ---- Colors ----
+
+  function remember(c: number) {
+    if (recent.includes(c)) return;
+    recent = [c, ...recent].slice(0, RECENT);
+  }
+
+  function pick(c: number) {
+    color = c;
+    if (c) remember(c);
+    paletteOpen = false;
+  }
+
+  const zoomed = $derived(scale > fitScale() + 0.001);
 </script>
 
 {#if mod}
-  <div class="draw">
-    <p class="dim intro">
-      Everything you paint shows up live on the TV.
-      {#if hb.core?.economyEnabled && unit}Each pixel costs <Money amount={unit} />.{/if}
-    </p>
-
+  <div class="draw" bind:this={root} style:height={height ? `${height}px` : undefined} style:--nav="{navHeight}px">
     <div
       class="viewport card"
-      class:moving={mode === 'move'}
-      style:height="min(58dvh, {Math.ceil(mod.height * scale) + 2}px)"
       bind:this={viewport}
+      onpointerdown={down}
+      onpointermove={move}
+      onpointerup={up}
+      onpointercancel={up}
+      oncontextmenu={(e) => e.preventDefault()}
+      role="application"
+      aria-label="Pixel canvas"
     >
       <div
         class="paper"
-        class:grid={scale >= 6}
+        class:grid={scale >= 8}
         style:width="{mod.width * scale}px"
         style:height="{mod.height * scale}px"
+        style:transform="translate3d({tx}px, {ty}px, 0)"
         style:background-size="{scale}px {scale}px"
       >
-        <canvas bind:this={el} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}></canvas>
+        <canvas bind:this={el}></canvas>
       </div>
+
+      <div class="zoom">
+        <button onclick={() => zoom(1 / 1.6)} onpointerdown={(e) => e.stopPropagation()} aria-label="Zoom out"><ZoomOut size={17} /></button>
+        <button onclick={() => zoom(1.6)} onpointerdown={(e) => e.stopPropagation()} aria-label="Zoom in"><ZoomIn size={17} /></button>
+        {#if zoomed}
+          <button onclick={fit} onpointerdown={(e) => e.stopPropagation()} aria-label="Show the whole canvas"><Maximize size={16} /></button>
+        {/if}
+      </div>
+
+      {#if paletteOpen}
+        <div class="sheet card" onpointerdown={(e) => e.stopPropagation()} role="dialog" tabindex="-1" aria-label="All colors">
+          {#each mod.palette as c, i}
+            <button
+              class="swatch"
+              class:active={color === i}
+              style:--c={i === 0 ? 'transparent' : c}
+              aria-label={i === 0 ? 'Eraser' : c}
+              onclick={() => pick(i)}
+            >
+              {#if i === 0}<Eraser size={16} />{/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
 
-    <div class="tools">
-      <div class="seg">
-        <button class:active={mode === 'paint'} onclick={() => (mode = 'paint')} aria-label="Paint"><Paintbrush size={18} /></button>
-        <button class:active={mode === 'move'} onclick={() => (mode = 'move')} aria-label="Move"><Hand size={18} /></button>
-      </div>
-      <div class="seg">
-        <button onclick={() => zoom(1 / 1.6)} aria-label="Zoom out"><ZoomOut size={18} /></button>
-        <button onclick={() => zoom(1.6)} aria-label="Zoom in"><ZoomIn size={18} /></button>
-      </div>
-      <span class="spacer"></span>
-      {#if painted}<span class="faint count">{painted} painted</span>{/if}
+    <div class="status faint">
+      {#if painted}
+        <span>{painted} {painted === 1 ? 'pixel' : 'pixels'} painted</span>
+        {#if economy}<span class="spent"><Money amount={-spent} /></span>{/if}
+      {:else}
+        <span>Pinch to zoom, two fingers to move</span>
+        {#if economy}<span class="spent"><Money amount={unit} /> / pixel</span>{/if}
+      {/if}
     </div>
 
-    <div class="palette">
-      {#each mod.palette as c, i}
-        <button
-          class="swatch"
-          class:active={color === i}
-          style:--c={i === 0 ? 'transparent' : c}
-          aria-label={i === 0 ? 'Eraser' : c}
-          onclick={() => {
-            color = i;
-            mode = 'paint';
-          }}
-        >
-          {#if i === 0}<Eraser size={16} />{/if}
-        </button>
-      {/each}
+    <div class="colors">
+      <button class="current" class:open={paletteOpen} onclick={() => (paletteOpen = !paletteOpen)} aria-label="All colors" aria-expanded={paletteOpen}>
+        <span class="dot" style:--c={color === 0 ? 'transparent' : mod.palette[color]}>
+          {#if color === 0}<Eraser size={14} />{/if}
+        </span>
+        <Palette size={18} />
+      </button>
+      <div class="recent">
+        {#each recent as c (c)}
+          <button class="swatch" class:active={color === c} style:--c={mod.palette[c]} aria-label={mod.palette[c]} onclick={() => pick(c)}></button>
+        {/each}
+      </div>
+      <button class="swatch eraser" class:active={color === 0} style:--c="transparent" aria-label="Eraser" onclick={() => pick(0)}>
+        <Eraser size={16} />
+      </button>
     </div>
   </div>
 {/if}
 
 <style>
   .draw {
-    display: grid;
-    gap: 0.8rem;
-  }
-  .intro {
-    font-size: 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    min-height: 0;
+    /* main keeps room for the bottom bar; take back the part the bar does not cover so the page never scrolls */
+    margin-bottom: calc(var(--nav, 0px) - 6.5rem + 12px);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
   }
   .viewport {
-    overflow: auto;
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
     padding: 0;
     border-radius: var(--radius-sm);
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
+    touch-action: none;
+    cursor: crosshair;
   }
   .paper {
+    position: absolute;
+    left: 0;
+    top: 0;
     background-color: var(--surface-2);
+    box-shadow: 0 0 0 1px var(--border);
+    will-change: transform;
   }
   .paper.grid {
     background-image:
@@ -232,50 +479,104 @@
     width: 100%;
     height: 100%;
     image-rendering: pixelated;
-    touch-action: none;
-    cursor: crosshair;
+    pointer-events: none;
   }
-  .moving canvas {
-    touch-action: auto;
-    cursor: grab;
-  }
-  .tools {
+  .zoom {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.5rem;
     display: flex;
-    align-items: center;
-    gap: 0.6rem;
+    gap: 0.35rem;
   }
-  .seg {
-    display: flex;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
-  .seg button {
+  .zoom button {
     display: grid;
     place-items: center;
-    width: 2.8rem;
-    height: 2.5rem;
-    border: 0;
+    width: 2.3rem;
+    height: 2.3rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .sheet {
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--bg);
+    background-image: linear-gradient(var(--surface), var(--surface));
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    cursor: default;
+    animation: sheet-in 0.16s ease-out;
+  }
+  @keyframes sheet-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.6rem);
+    }
+  }
+  .status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    padding: 0 0.15rem;
+    min-height: 1.2rem;
+  }
+  .spent {
+    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .colors {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .current {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 2.75rem;
+    padding: 0 0.7rem 0 0.45rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
     background: var(--surface-2);
     color: var(--text-dim);
+    flex: none;
   }
-  .seg button + button {
-    border-left: 1px solid var(--border-strong);
+  .current.open {
+    border-color: var(--accent);
+    color: var(--accent);
   }
-  .seg button.active {
-    background: var(--accent);
-    color: var(--accent-contrast);
-  }
-  .count {
-    font-size: 0.85rem;
-  }
-  .palette {
+  .dot {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 0.45rem;
+    place-items: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--c);
+  }
+  .recent {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.4rem;
   }
   .swatch {
     aspect-ratio: 1;
+    max-height: 2.75rem;
     border-radius: 0.6rem;
     border: 1px solid var(--border-strong);
     background: var(--c);
@@ -283,6 +584,11 @@
     place-items: center;
     color: var(--text-dim);
     transition: transform 0.1s ease;
+    padding: 0;
+  }
+  .eraser {
+    width: 2.75rem;
+    flex: none;
   }
   .swatch.active {
     outline: 2.5px solid var(--text);

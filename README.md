@@ -41,7 +41,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 
 # Bugs / improvements
 - [x] The TV page sometimes cahnge the layout and the right part become too big (for ex when I add a lot of music to the queue...)
-- [ ] pixelcanvas: should be able to use gesture to navigate the canvas, not just drag the finger to draw. (like pinch to zoom, two fingers to move), and imrpove the UI, Like the bottom part should never move, even when moving, and better way to display all those colors. And when I paint a few pixels, it show price 0, write the correct prize reduction on the phone guest
+- [x] pixelcanvas: should be able to use gesture to navigate the canvas, not just drag the finger to draw. (like pinch to zoom, two fingers to move), and imrpove the UI, Like the bottom part should never move, even when moving, and better way to display all those colors. And when I paint a few pixels, it show price 0, write the correct prize reduction on the phone guest
 - [x] When a user adds a song but spotify is not played anywhere, he sees a +10 on his money and the error. (He gets -10 for putting a song and instend of +10 for the error). Make sure this bug doesnt also appens somewhere else.
 - [x] Let the admin choose the delay for the passive earning.
 - Add more fun emoji for the selfie avatars (like a crown, a hat, a mustache, a monocle, etc.)
@@ -89,7 +89,7 @@ Environment variables: `PORT` (default 4300), `HB_TUNNEL=0` (no public tunnel),
 | Module | Guests | Host |
 | --- | --- | --- |
 | **Music** (Spotify) | Search and queue songs, skip | Connect account, playback controls, explicit filter |
-| **Pixel canvas** | Paint pixel by pixel (r/place style) | Clear, resize |
+| **Pixel canvas** | Paint pixel by pixel (r/place style), pinch to zoom and two fingers to move | Clear, resize |
 | **Stickers** | Built-in vector stickers, text, their own face, or stickers they make (cut out of a photo, drawn with a finger, or imported like a WhatsApp sticker, animated ones stay animated), bouncing for X minutes | Duration, limit, upload your own, turn guest-made stickers on or off, delete one from a guest's collection |
 | **Photos** | Photo with caption shown big on the TV | Remove (with refund), replay, duration |
 | **Lights** (WLED) | Pick an effect, on all lights or one | Devices, effect editor, test, stop |
