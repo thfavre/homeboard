@@ -116,7 +116,7 @@ export const pirateRace: GameFactory = (m) => {
     progress: 0,
     distance: 0,
     streak: 0,
-    boostUntil: 0,
+    boosted: false,
     stroke: { seq: 0, power: 0, synced: false, at: 0, rowers: 0 },
     finishedAt: null,
     place: null,
@@ -177,16 +177,14 @@ export const pirateRace: GameFactory = (m) => {
       // The average: a crew of 3 rows as far as a crew of 4
       power /= c.members.length;
       const synced = onBeat >= pirateSyncNeed(c.members.length);
-      const boosted = beats[i] < c.boostUntil;
+      // The boost goes on while the crew stays in sync; the first stroke out of sync ends it
+      const boosted = c.boosted && synced;
       c.distance += power * (synced ? PIRATE.syncBonus : 1) * (boosted ? PIRATE.boostSpeed : 1);
       c.progress = Math.min(1, c.distance / goal);
       c.stroke = { seq: c.stroke.seq + 1, power, synced, at: now, rowers };
       c.streak = synced ? c.streak + 1 : 0;
-      if (c.streak >= PIRATE.boostStreak) {
-        c.streak = 0;
-        c.boostUntil = beats[Math.min(beats.length - 1, i + 1 + PIRATE.boostBeats)];
-        m.sound('pirateBoost', { ship: c.ship });
-      }
+      c.boosted = c.streak >= PIRATE.boostStreak;
+      if (c.streak === PIRATE.boostStreak) m.sound('pirateBoost', { ship: c.ship });
       if (c.distance >= goal && c.finishedAt === null) c.finishedAt = now;
     }
   };
@@ -265,7 +263,7 @@ export const pirateRace: GameFactory = (m) => {
       const shown = g[Math.floor(now / 420) % g.length];
       for (const { c, pos } of g) {
         const rgb = SHIP_LED[c.ship];
-        const boosted = now < c.boostUntil;
+        const boosted = c.boosted;
         // The wake behind the ship, longer after a strong stroke and during a boost
         const since = now - c.stroke.at;
         const surge = c.stroke.seq ? Math.max(0, 1 - since / 600) * c.stroke.power : 0;

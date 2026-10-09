@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { ArrowDown, ArrowUp, Crown, Drum, Zap } from '@lucide/svelte';
+  import { Crown, Drum } from '@lucide/svelte';
   import { fade, fly, scale } from 'svelte/transition';
-  import { PIRATE, PIRATE_SHIPS, formationName, type MatchState, type PirateCrew, type PirateView } from '$shared/games.ts';
+  import { PIRATE, PIRATE_SHIPS, type MatchState, type PirateCrew, type PirateView } from '$shared/games.ts';
   import { hb, serverNow } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
@@ -11,7 +11,8 @@
    * Pirate Race on the TV: a sea map seen from above. The crews wait on the harbor beach on the left, and
    * their small ships row along a route to the treasure island on the right, the oars moving on the beat.
    * A ship surges after each stroke of its crew (its wake grows with its speed), its route behind it fills
-   * with its color, and it glows during a boost. Art: Kenney's Pirate Pack (CC0) in web/public/pirates.
+   * with its color, a synchronized stroke sends out a golden ring, a stroke off the beat a splash, and
+   * a boosted ship burns with a halo. No text on the sea: everything is shown on the ships. Art: Kenney's Pirate Pack (CC0) in web/public/pirates.
    */
   let { m }: { m: MatchState } = $props();
   const v = $derived(m.view as PirateView | null);
@@ -132,7 +133,6 @@
     return { x: p0.x + (p1.x - p0.x) * f, y: p0.y + (p1.y - p0.y) * f, deg: (Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180) / Math.PI };
   }
 
-  const strokeText = (c: PirateCrew) => (c.stroke.synced ? 'In sync!' : c.stroke.power >= 0.6 ? 'Good stroke' : c.stroke.power > 0 ? 'Out of time' : 'Splash!');
   const placeText = (n: number | null) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
 
   /** Rocks and reefs around the routes (fractions of the sea) */
@@ -161,15 +161,7 @@
           <strong class="mono">{v.step === 'crew' ? '--' : v.bpm}</strong>
           <span class="faint">beats a minute</span>
         </span>
-        {#if v.step === 'race' && v.trend !== 'steady'}
-          <span class="trend {v.trend}" in:scale>
-            {#if v.trend === 'faster'}<ArrowUp size="1.4rem" /> Faster!{:else}<ArrowDown size="1.4rem" /> Slower...{/if}
-          </span>
-        {/if}
       </div>
-      <span class="spacer"></span>
-      <span class="pill">{formationName(m.players.length)}</span>
-      <span class="pill">Row on the beat · {PIRATE.boostStreak} in sync = boost</span>
     </div>
 
     <div class="sea" bind:clientWidth={sw} bind:clientHeight={sh} style:--len="{map.len}px" style:--wid="{map.wid}px">
@@ -246,18 +238,23 @@
       <!-- The ships -->
       {#each v.crews as c, i (c.ship)}
         {@const ship = shipOf(c)}
-        {@const boosted = now < c.boostUntil}
+        {@const boosted = c.boosted}
         {@const at = along(i, shown[c.ship] ?? c.progress)}
-        <div class="boat" style:left="{at.x}px" style:top="{at.y}px" style:rotate="{at.deg - 90}deg">
+        <div class="boat" style:left="{at.x}px" style:top="{at.y}px" style:rotate="{at.deg - 90}deg" style:--team={ship.hex}>
+          {#if boosted}<span class="aura" transition:fade></span>{/if}
           <PirateShip ship={c.ship} color={ship.hex} phase={rowing(c)} power={c.stroke.power} messy={!!c.stroke.seq && !c.stroke.synced} {boosted} speed={speed[c.ship] ?? 0} />
         </div>
         <div class="over" style:left="{at.x}px" style:top="{at.y}px" style:--team={ship.hex}>
-          {#if c.stroke.rowers && m.phase === 'play'}
+          {#if c.stroke.rowers && m.phase === 'play' && (c.stroke.synced || c.stroke.power === 0)}
             {#key c.stroke.seq}
-              <span class="pop" class:sync={c.stroke.synced} class:bad={c.stroke.power === 0}>{strokeText(c)}</span>
+              {#if c.stroke.synced}
+                <span class="ring"></span>
+                {#each [0, 72, 144, 216, 288] as a (a)}<span class="star" style:--a="{a + 20}deg"></span>{/each}
+              {:else}
+                <span class="splash"></span>
+              {/if}
             {/key}
           {/if}
-          {#if boosted}<span class="boost" in:scale={{ start: 0.4 }}><Zap size="1.1rem" /> BOOST</span>{/if}
           {#if c.place && m.phase === 'result'}<span class="place" class:first={c.place === 1}>{placeText(c.place)}</span>{/if}
         </div>
       {/each}
@@ -341,13 +338,6 @@
     align-items: center;
     gap: 1rem;
   }
-  .spacer {
-    flex: 1;
-  }
-  .bar .pill {
-    font-size: 1.1rem;
-    padding: 0.4em 1em;
-  }
   .drum {
     display: flex;
     align-items: center;
@@ -370,29 +360,6 @@
   }
   .tempo strong {
     font-size: 2rem;
-  }
-  .trend {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.3rem 0.9rem;
-    border-radius: 999px;
-    font-weight: 700;
-    font-size: 1.2rem;
-  }
-  .trend.faster {
-    background: color-mix(in srgb, var(--danger) 22%, transparent);
-    color: var(--danger);
-    animation: shake 0.5s ease-in-out infinite;
-  }
-  .trend.slower {
-    background: color-mix(in srgb, var(--accent) 22%, transparent);
-    color: var(--accent);
-  }
-  @keyframes shake {
-    50% {
-      transform: translateY(-2px);
-    }
   }
 
   /* ------------------------------------------------ The sea, from above */
@@ -663,60 +630,99 @@
     width: 0;
     height: 0;
   }
-  .pop {
+  /* A synchronized stroke: a golden ring and sparks */
+  .ring {
     position: absolute;
     left: 0;
-    bottom: calc(var(--len) * 0.45);
-    translate: -50% 0;
-    white-space: nowrap;
-    padding: 0.15rem 0.7rem;
-    border-radius: 999px;
-    background: rgb(0 20 40 / 0.6);
-    color: #fff;
-    font-weight: 700;
-    font-size: 1.05rem;
-    animation: rise 1.1s ease-out forwards;
+    top: 0;
+    width: calc(var(--len) * 1.1);
+    aspect-ratio: 1;
+    translate: -50% -50%;
+    border-radius: 50%;
+    border: 4px solid #ffe14d;
+    box-shadow:
+      0 0 12px #ffe14d,
+      inset 0 0 12px rgb(255 225 77 / 0.6);
+    pointer-events: none;
+    animation: ring 0.8s ease-out forwards;
   }
-  .pop.sync {
-    background: var(--team);
-    color: #111;
-  }
-  .pop.bad {
-    color: #9fd6ff;
-  }
-  @keyframes rise {
-    0% {
-      transform: translateY(10px) scale(0.8);
-      opacity: 0;
-    }
-    20% {
-      transform: translateY(0) scale(1.05);
+  @keyframes ring {
+    from {
+      transform: scale(0.35);
       opacity: 1;
     }
-    100% {
-      transform: translateY(-16px);
+    to {
+      transform: scale(1.7);
       opacity: 0;
     }
   }
-  .boost {
+  .star {
     position: absolute;
     left: 0;
-    top: calc(var(--len) * 0.42);
-    translate: -50% 0;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.2rem;
-    padding: 0.1rem 0.55rem;
-    border-radius: 999px;
-    background: linear-gradient(90deg, #ffe14d, #ff8a3a);
-    color: #3a1a00;
-    font-weight: 800;
-    font-size: 0.95rem;
-    animation: pulse 0.4s ease-in-out infinite alternate;
+    top: 0;
+    width: 0.9rem;
+    height: 0.9rem;
+    margin: -0.45rem 0 0 -0.45rem;
+    background: #fff6b0;
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+    filter: drop-shadow(0 0 4px #ffe14d);
+    pointer-events: none;
+    animation: burst 0.75s ease-out forwards;
   }
-  @keyframes pulse {
+  @keyframes burst {
+    from {
+      transform: rotate(var(--a)) translateX(calc(var(--len) * 0.25)) scale(0.4);
+      opacity: 1;
+    }
     to {
-      transform: scale(1.1);
+      transform: rotate(var(--a)) translateX(calc(var(--len) * 0.85)) scale(1.1) rotate(90deg);
+      opacity: 0;
+    }
+  }
+  /* A stroke off the beat: the blades slap the water */
+  .splash {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: calc(var(--len) * 0.9);
+    aspect-ratio: 1;
+    translate: -50% -50%;
+    border-radius: 50%;
+    border: 3px dashed rgb(200 235 255 / 0.9);
+    pointer-events: none;
+    animation: slap 0.6s ease-out forwards;
+  }
+  @keyframes slap {
+    from {
+      transform: scale(0.5) rotate(0);
+      opacity: 0.9;
+    }
+    to {
+      transform: scale(1.25) rotate(25deg);
+      opacity: 0;
+    }
+  }
+  /* A boost: the ship burns in a halo of its color */
+  .aura {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: -1;
+    width: calc(var(--len) * 1.5);
+    aspect-ratio: 1;
+    translate: -50% -50%;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, #fff8 0%, color-mix(in srgb, var(--team) 80%, #ffb347) 40%, transparent 100%);
+    animation: aura 0.35s ease-in-out infinite alternate;
+  }
+  @keyframes aura {
+    from {
+      transform: scale(0.9);
+      opacity: 0.75;
+    }
+    to {
+      transform: scale(1.12);
+      opacity: 1;
     }
   }
   .place {

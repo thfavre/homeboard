@@ -100,12 +100,12 @@ export const GAMES: GameInfo[] = [
     id: 'pirates',
     name: 'Pirate Race',
     tagline: 'Row in time with the drum, first ship to the treasure wins',
-    rules: 'The players are split into pirate crews, one ship each: your phone shows your ship color. A drum beats the rhythm on the TV, sometimes speeding up or slowing down little by little. Tap ROW exactly on each beat: the closer to the beat, the stronger the stroke. A ship moves with the average stroke of its crew, so a small crew is as fast as a big one. When the whole crew (or nearly) rows on the beat, the stroke is synchronized and goes further; 5 synchronized strokes in a row give a speed boost. Tapping off the beat splashes and wastes the stroke. The first ship to reach the treasure wins, and its crew shares the pot.',
+    rules: 'The players are split into pirate crews, one ship each: your phone shows your ship color. A drum beats the rhythm on the TV, sometimes speeding up or slowing down little by little. Tap ROW exactly on each beat: the closer to the beat, the stronger the stroke. A ship moves with the average stroke of its crew, so a small crew is as fast as a big one. When the whole crew (or nearly) rows on the beat, the stroke is synchronized and goes further; 5 synchronized strokes in a row start a speed boost, which lasts as long as the crew stays in sync. Tapping off the beat splashes and wastes the stroke. The first ship to reach the treasure wins, and its crew shares the pot.',
     modes: ['room', 'duel'],
     lights: true,
     pausesMusic: true,
     maxPlayers: 12,
-    steps: ['Find your crew: your phone shows your ship color', 'Tap ROW on every beat of the drum, all together', '5 synchronized strokes in a row: speed boost!'],
+    steps: ['Find your crew: your phone shows your ship color', 'Tap ROW on every beat of the drum, all together', '5 synchronized strokes in a row: speed boost, as long as you stay in sync!'],
     colors: ['#2fb4ff', '#c98a2b'],
   },
 ];
@@ -617,10 +617,8 @@ export const PIRATE = {
   perfectMs: 70,
   goodMs: 140,
   okMs: 220,
-  /** Synchronized strokes in a row for a boost */
+  /** Synchronized strokes in a row for a boost; it lasts until a stroke is out of sync */
   boostStreak: 5,
-  /** A boost lasts this many beats */
-  boostBeats: 4,
   /** A synchronized stroke goes this much further */
   syncBonus: 1.2,
   /** And a boosted one */
@@ -650,10 +648,10 @@ export interface PirateCrew {
   members: string[];
   /** 0 to 1: at the treasure */
   progress: number;
-  /** Synchronized strokes in a row (back to 0 after a boost) */
+  /** Synchronized strokes in a row (back to 0 on a stroke out of sync) */
   streak: number;
-  /** Server time the boost ends (0: none) */
-  boostUntil: number;
+  /** Boosted: the crew made boostStreak synchronized strokes in a row and has stayed in sync since */
+  boosted: boolean;
   /** Strokes judged so far, and the last one: its power (0 to 1), whether it was synchronized, and how many of the crew tapped */
   stroke: { seq: number; power: number; synced: boolean; at: number; rowers: number };
   /** Server time it reached the treasure */
