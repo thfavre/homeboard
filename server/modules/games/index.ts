@@ -11,6 +11,7 @@ import {
   rhythmDifficulty,
   gameInfo,
   PIRATE_LENGTHS,
+  PIRATE_SONG_TEST_SEC,
   PIRATE_SOUNDS,
   type PirateSoundId,
   type DuelInvite,
@@ -885,10 +886,20 @@ export default defineModule<GamesSettings>({
       ctx.publish();
     });
     /** The TV plays a song from its first beat with the drum on top, to check they match */
+    /** The last song tried on the TV, so a random pick is another one when there are several */
+    let lastTried = '';
     ctx.onAdmin('testPirateSong', (args) => {
-      const song = songOf(args?.id);
       const s = ctx.settings.get();
+      let song;
+      if (args?.id) song = songOf(args.id);
+      else {
+        const pool = s.pirateSongs.length > 1 ? s.pirateSongs.filter((x) => x.id !== lastTried) : s.pirateSongs;
+        song = pool[Math.floor(Math.random() * pool.length)];
+        if (!song) throw new HbError('Add a song first');
+      }
+      lastTried = song.id;
       ctx.emit('tv-audio', 'pirateSongTest', { id: song.id, drum: s.pirateSounds.drum?.url ?? null, accent: s.pirateSounds.drumAccent?.url ?? null });
+      return { title: song.title, sec: PIRATE_SONG_TEST_SEC };
     });
     ctx.onAdmin('stopPirateSongTest', () => ctx.emit('tv-audio', 'pirateSongTest', null));
 

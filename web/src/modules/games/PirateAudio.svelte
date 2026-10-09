@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PIRATE, type PirateSoundId, type PirateView } from '$shared/games.ts';
+  import { PIRATE, PIRATE_SONG_TEST_SEC, type PirateSoundId, type PirateView } from '$shared/games.ts';
   import { onEvent, serverNow } from '$lib/client.svelte.ts';
   import { audioContext } from '../soundboard/player.ts';
   import { gamesState } from './store.svelte.ts';
@@ -154,7 +154,7 @@
     const ac = audioContext();
     if (ac.state !== 'running') await ac.resume().catch(() => {});
     const player = new SongOnBeats(pick.url, pick.beats, s?.settings.pirateSongVolume ?? 70, 0);
-    const beats = player.ownBeats(ac.currentTime + 0.3 + pick.beats[0]).filter((b) => b.time < ac.currentTime + 20.5);
+    const beats = player.ownBeats(ac.currentTime + 0.3 + pick.beats[0]).filter((b) => b.time < ac.currentTime + PIRATE_SONG_TEST_SEC + 0.5);
     const count = beats.length - 1;
     void player.beats(beats);
     // The drum a second ahead at a time, so stopping the test stops it too
@@ -168,6 +168,6 @@
     };
     drums();
     const tick = setInterval(drums, 250);
-    test = { song: player, timer: setTimeout(stopTest, 20_000), tick };
+    test = { song: player, timer: setTimeout(stopTest, PIRATE_SONG_TEST_SEC * 1000), tick };
   }
 </script>

@@ -640,6 +640,8 @@ export interface PirateSong {
 }
 /** The drum drifts this far around a song's own pace (the song's speed moves with it) */
 export const PIRATE_SONG_DRIFT = { slower: 0.9, faster: 1.1 };
+/** How long trying a song on the TV lasts */
+export const PIRATE_SONG_TEST_SEC = 20;
 
 
 /** A picked sound: its local URL and its name (null: the built-in one) */

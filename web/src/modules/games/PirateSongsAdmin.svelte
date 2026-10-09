@@ -98,11 +98,37 @@
   }
   $effect(() => () => stopPreview());
 
+  // Trying the race sound on the TV: a random song (another one than last time) with the drum, as loud as
+  // in a race, for a few seconds. The button turns into Stop meanwhile.
+  let onTv = $state<{ title: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  function endTv() {
+    if (onTv) clearTimeout(onTv.timer);
+    onTv = null;
+  }
+  async function tryOnTv() {
+    if (onTv) {
+      endTv();
+      await attempt(() => rpc('games', 'stopPirateSongTest'));
+      return;
+    }
+    const r = await attempt(() => rpc<{ title: string; sec: number }>('games', 'testPirateSong', {}));
+    if (r) onTv = { title: r.title, timer: setTimeout(endTv, r.sec * 1000) };
+  }
+  $effect(() => () => endTv());
+
   const shift = (song: PirateSong, ms: number) => attempt(() => rpc('games', 'shiftPirateSong', { id: song.id, ms }));
   const range = (bpm: number) => `${Math.round(bpm * PIRATE_SONG_DRIFT.slower)} to ${Math.round(bpm * PIRATE_SONG_DRIFT.faster)}`;
 </script>
 
 <div class="songs">
+  {#if songs.length}
+    <div class="tv">
+      <button class="btn small" class:primary={!!onTv} onclick={() => void tryOnTv()}>
+        {#if onTv}<Square size={14} /> Stop{:else}<Tv size={16} /> Try on TV{/if}
+      </button>
+      <span class="faint small truncate">{onTv ? `Playing ${onTv.title} with the drum` : 'A random song with the drum, as loud as in a race'}</span>
+    </div>
+  {/if}
   {#each songs as song (song.id)}
     <div class="song">
       <div class="head">
@@ -113,8 +139,6 @@
           <strong class="truncate">{song.title}</strong>
           <span class="faint small">{song.steady ? `Steady ${song.bpm} BPM` : `About ${Math.round(song.bpm)} BPM, follows the singers`} · the drum plays {range(song.bpm)}</span>
         </span>
-        <button class="btn small ghost" aria-label="Try it on the TV with the drum" title="Try it on the TV with the drum" onclick={() => attempt(() => rpc('games', 'testPirateSong', { id: song.id }))}><Tv size={16} /></button>
-        <button class="btn small ghost" aria-label="Stop the TV" title="Stop the TV" onclick={() => attempt(() => rpc('games', 'stopPirateSongTest'))}><Square size={14} /></button>
         <TwoStepButton class="small ghost" onconfirm={() => attempt(() => rpc('games', 'removePirateSong', { id: song.id }))}>
           <Trash2 size={16} />
           {#snippet armed()}Remove?{/snippet}
@@ -151,6 +175,12 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface);
+  }
+  .tv {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
   }
   .head {
     display: flex;
