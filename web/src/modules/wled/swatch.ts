@@ -11,6 +11,20 @@ const NAMED: Record<string, string> = {
   lightning: 'linear-gradient(135deg, #1e1b4b, #c7d2fe 50%, #1e1b4b)',
   aurora: 'linear-gradient(160deg, #00f5a0, #00d9f5, #9b5cff)',
   disco: 'conic-gradient(from 0deg, #ff0080, #ffcc00, #00ff88, #00b3ff, #a100ff, #ff0080)',
+  blackout: 'radial-gradient(circle at 50% 120%, #1c1c24, #000 60%)',
+  police: 'linear-gradient(90deg, #ff1a1a 0 45%, #0b0b14 45% 55%, #1a3dff 55%)',
+  'fire-ice': 'linear-gradient(120deg, #ff3d00, #ffb300 45%, #7fe7ff 55%, #1565ff)',
+  storm: 'linear-gradient(160deg, transparent 45%, #e0e7ff 48%, transparent 52%), linear-gradient(180deg, #111a3a, #2d3f7a)',
+  glitch: 'repeating-linear-gradient(90deg, #ff00c8 0 12%, #00f0ff 12% 22%, #ffe600 22% 30%, #120024 30% 38%)',
+  // Scenes
+  embers: 'radial-gradient(circle at 30% 70%, #ffb347, transparent 55%), linear-gradient(135deg, #ff6500, #550d00)',
+  northern: 'linear-gradient(170deg, #0b1d3a 10%, #05ffb2 45%, #66ccff 65%, #7b3fe4)',
+  night: 'radial-gradient(circle at 25% 30%, #fff 0 3%, transparent 4%), radial-gradient(circle at 70% 55%, #c7d2fe 0 3%, transparent 4%), linear-gradient(135deg, #0b1033, #3b2a7a)',
+  sea: 'linear-gradient(180deg, #2fd3ff, #0a5aa8 50%, #031a40)',
+  sunset: 'linear-gradient(180deg, #ffcf6b, #ff6a3d 45%, #b3245f 75%, #3a1650)',
+  vapor: 'linear-gradient(135deg, #ff9de2, #b18cff 50%, #6ae4ff)',
+  cyber: 'linear-gradient(135deg, #ff6a00, #3a0ca3 55%, #00c2c7)',
+  candles: 'radial-gradient(circle at 50% 60%, #ffd27a, #ff8a1c 30%, #2b0c00 75%)',
 };
 
 /** A CSS background that suggests what an effect looks like */

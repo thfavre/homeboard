@@ -1,16 +1,37 @@
 import { createSocket, type Socket } from 'node:dgram';
 import { join } from 'node:path';
-import { DEFAULT_WLED_EFFECTS, type WledDevice, type WledEffect, type WledJob, type WledState } from '../../../shared/wled.ts';
+import {
+  DEFAULT_WLED_EFFECTS,
+  DEFAULT_WLED_SCENES,
+  LEGACY_WLED_EFFECTS,
+  WLED_LIVE,
+  type WledDevice,
+  type WledEffect,
+  type WledJob,
+  type WledLive,
+  type WledLook,
+  type WledState,
+} from '../../../shared/wled.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { defineModule } from '../../core/module.ts';
 import { HbError, clamp, cleanName, num, uid } from '../../core/util.ts';
+import { Fireworks } from './fireworks.ts';
 
 interface WledSettings {
   devices: WledDevice[];
   effects: WledEffect[];
+  scenes: WledEffect[];
+  /** The scene on now: it stays, across restarts, until another one is picked */
+  scene: { id: string; by: string } | null;
+  /** Guests may change the scene (for a price) */
+  guestScenes: boolean;
   durationSec: number;
   /** Brightness during effects (0 keeps the current brightness) */
   brightness: number;
+  /** Brightness of scenes (0 keeps the current brightness) */
+  sceneBrightness: number;
+  /** Default effects this list has already been offered (empty: the ones from before this was kept) */
+  knownEffects: string[];
 }
 
 interface Job extends WledJob {
@@ -73,6 +94,38 @@ function look(state: any): string | undefined {
   return JSON.stringify([state.on, state.bri, state.ps, state.pl, seg]);
 }
 
+/** The k-th look of an effect: its variants are dealt out in turn */
+function lookAt(e: WledEffect, k: number): WledLook {
+  const v = e.variants?.length ? e.variants[k % e.variants.length] : {};
+  return { fx: v.fx ?? e.fx, pal: v.pal ?? e.pal, sx: v.sx ?? e.sx, ix: v.ix ?? e.ix, colors: v.colors ?? e.colors };
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const cleanColors = (c: unknown): string[] => (Array.isArray(c) ? c : []).filter((x: unknown) => typeof x === 'string' && HEX.test(x)).slice(0, 3);
+const byte = (v: unknown, fallback: number) => clamp(Math.round(num(v, fallback)), 0, 255);
+
+/** An effect or a scene sent by the admin, checked */
+function cleanEffect(e: any): WledEffect {
+  const base: WledEffect = {
+    id: typeof e.id === 'string' && e.id ? e.id : uid(4),
+    name: cleanName(e.name, 30) || 'Effect',
+    fx: byte(e.fx, 0),
+    pal: byte(e.pal, 0),
+    sx: byte(e.sx, 128),
+    ix: byte(e.ix, 128),
+    colors: cleanColors(e.colors),
+  };
+  const variants = (Array.isArray(e.variants) ? e.variants : []).slice(0, 8).map((v: any): Partial<WledLook> => {
+    const out: Partial<WledLook> = {};
+    for (const k of ['fx', 'pal', 'sx', 'ix'] as const) if (v?.[k] !== undefined) out[k] = byte(v[k], 0);
+    if (Array.isArray(v?.colors)) out.colors = cleanColors(v.colors);
+    return out;
+  });
+  if (variants.length > 1) base.variants = variants;
+  if (typeof e.live === 'string' && e.live in WLED_LIVE) base.live = e.live as WledLive;
+  return base;
+}
+
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.replace('#', ''), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -105,11 +158,30 @@ export default defineModule<WledSettings>({
       { id: 'light4', host: '192.168.1.121', name: 'Light 4' },
     ],
     effects: DEFAULT_WLED_EFFECTS,
+    scenes: DEFAULT_WLED_SCENES,
+    scene: null,
+    guestScenes: true,
     durationSec: 30,
     brightness: 255,
+    sceneBrightness: 140,
+    knownEffects: [],
   },
 
   setup(ctx) {
+    // Default effects added since this list was saved join it once (deleting one afterwards keeps it out),
+    // and the old twinkling fireworks become the real ones
+    {
+      const s = ctx.settings.get();
+      const known = new Set(s.knownEffects.length ? s.knownEffects : LEGACY_WLED_EFFECTS);
+      const fireworks = DEFAULT_WLED_EFFECTS.find((e) => e.id === 'fireworks')!;
+      const effects = s.effects.map((e) => (e.id === 'fireworks' && e.fx === 42 && !e.live ? { ...fireworks, name: e.name } : e));
+      const added = DEFAULT_WLED_EFFECTS.filter((e) => !known.has(e.id) && !effects.some((x) => x.id === e.id));
+      const ids = DEFAULT_WLED_EFFECTS.map((e) => e.id);
+      if (added.length || effects.some((e, i) => e !== s.effects[i]) || ids.some((id) => !s.knownEffects.includes(id))) {
+        ctx.settings.update({ effects: [...effects, ...added], knownEffects: ids });
+      }
+    }
+
     const health = new Map<string, Health>();
     // Kept on disk at once, so lights left on an effect by a crash or a power cut are put back at the next start
     const store = new JsonFile<{ devices: Record<string, Snapshot> }>(join(ctx.dataDir, 'snapshots.json'), { devices: {} });
@@ -143,6 +215,10 @@ export default defineModule<WledSettings>({
     let held = false;
     /** Lights at full brightness for live pixels (a game prize): effects and restores leave them alone */
     const boosted = new Set<string>();
+    /** Live shows Homeboard draws on a light during an effect */
+    const live = new Map<string, { show: Fireworks; leds: number }>();
+    /** Lights on the scene now */
+    const inScene = new Set<string>();
 
     const devices = () => ctx.settings.get().devices;
     const device = (id: string) => devices().find((d) => d.id === id);
@@ -167,11 +243,14 @@ export default defineModule<WledSettings>({
           }
         }),
       );
+      // A light that went away may come back on its own preset: the scene goes on it again
+      for (const d of devices()) if (!health.get(d.id)?.online) inScene.delete(d.id);
       for (const id of pending) {
         if (!health.get(id)?.online && device(id)) continue;
         pending.delete(id);
-        void restore(id);
+        void settle(id);
       }
+      if (sceneNow()) for (const d of devices()) if (health.get(d.id)?.online && !inScene.has(d.id)) void settle(d.id);
       ctx.publish();
     };
     void poll();
@@ -179,23 +258,109 @@ export default defineModule<WledSettings>({
 
     // ------------------------------------------------------------ effects
 
-    const apply = async (deviceId: string, effect: WledEffect) => {
+    /**
+     * An effect or a scene on a light: its k-th look on the first segment, the next ones on the others
+     * (`bri` 0 keeps the brightness, `transition` in tenths of a second)
+     */
+    const apply = async (deviceId: string, effect: WledEffect, k: number, bri: number, transition: number) => {
       const d = device(deviceId);
       if (!d || boosted.has(d.id)) return false;
       try {
         pending.delete(d.id);
         if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
-        const col = effect.colors.length ? effect.colors.map(hexToRgb) : undefined;
-        const seg = targets(d, saved.get(d.id)!.before).map((s) => ({ id: s.id, on: true, fx: effect.fx, pal: effect.pal, sx: effect.sx, ix: effect.ix, ...(col ? { col } : {}) }));
-        const bri = ctx.settings.get().brightness;
+        const seg = targets(d, saved.get(d.id)!.before).map((s, j) => {
+          const l = lookAt(effect, k + j);
+          return { id: s.id, on: true, fx: l.fx, pal: l.pal, sx: l.sx, ix: l.ix, ...(l.colors.length ? { col: l.colors.map(hexToRgb) } : {}) };
+        });
         // v: WLED answers with its new state
-        saved.sent(d.id, await wled(d.host, '/json/state', { on: true, transition: 3, ...(bri > 0 ? { bri } : {}), seg, v: true }));
+        saved.sent(d.id, await wled(d.host, '/json/state', { on: true, transition, ...(bri > 0 ? { bri } : {}), seg, v: true }));
         return true;
       } catch (err) {
         ctx.log.warn(`Could not reach ${d.name}`, (err as Error).message);
         health.set(d.id, { online: false });
         return false;
       }
+    };
+
+    // ------------------------------------------------------------ live shows
+
+    let udp: Socket | null = null;
+    ctx.onShutdown(() => {
+      udp?.close();
+      udp = null;
+    });
+
+    /** Pixels on a light over WLED's UDP realtime protocol; it goes back to its own state `timeoutSec` after the last one */
+    const realtime = (d: WledDevice, rgb: Uint8Array, timeoutSec = REALTIME_TIMEOUT_SEC) => {
+      if (!udp) {
+        udp = createSocket('udp4');
+        udp.on('error', (err) => ctx.log.warn('Realtime lights', err.message));
+      }
+      const packet = Buffer.alloc(2 + Math.min(rgb.length, 490 * 3));
+      packet[0] = DRGB;
+      packet[1] = timeoutSec;
+      packet.set(rgb.subarray(0, packet.length - 2), 2);
+      // The host may carry the HTTP port: realtime has its own
+      udp.send(packet, REALTIME_PORT, d.host.replace(/:\d+$/, ''));
+    };
+
+    /** Realtime pixels cover the whole light: not for one where effects stay on some segments */
+    const canLive = (d: WledDevice) => !d.segments?.length && !!health.get(d.id)?.leds;
+
+    const startLive = async (d: WledDevice) => {
+      if (boosted.has(d.id)) return false;
+      try {
+        pending.delete(d.id);
+        if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
+        // WLED scales realtime pixels by its brightness
+        const bri = ctx.settings.get().brightness;
+        saved.sent(d.id, await wled(d.host, '/json/state', { on: true, ...(bri > 0 ? { bri } : {}), v: true }));
+        stopLive(d.id);
+        const leds = Math.min(490, health.get(d.id)?.leds ?? 60);
+        live.set(d.id, { show: new Fireworks(leds, null, false, (rgb) => realtime(d, rgb), true), leds });
+        return true;
+      } catch (err) {
+        ctx.log.warn(`Could not reach ${d.name}`, (err as Error).message);
+        health.set(d.id, { online: false });
+        return false;
+      }
+    };
+
+    const stopLive = (deviceId: string) => {
+      const l = live.get(deviceId);
+      if (!l) return;
+      live.delete(deviceId);
+      l.show.stop(false);
+      // Dark for a second, then the light fades back to its own state
+      const d = device(deviceId);
+      if (d && udp) realtime(d, new Uint8Array(l.leds * 3), 1);
+    };
+
+    // ------------------------------------------------------------ scenes
+
+    const sceneNow = (): WledEffect | null => {
+      const s = ctx.settings.get();
+      return (ctx.enabled() && s.scene && s.scenes.find((x) => x.id === s.scene!.id)) || null;
+    };
+
+    /** Once nothing uses a light any more: back on the scene, or as it was without one */
+    const settle = async (deviceId: string) => {
+      if (held || boosted.has(deviceId) || current?.devices.includes(deviceId)) return;
+      const scene = sceneNow();
+      if (!scene || !device(deviceId)) {
+        inScene.delete(deviceId);
+        return restore(deviceId);
+      }
+      // Each light starts on another of the scene's looks
+      const k = Math.max(0, devices().findIndex((d) => d.id === deviceId));
+      if (await apply(deviceId, scene, k, ctx.settings.get().sceneBrightness, 15)) inScene.add(deviceId);
+    };
+
+    const setScene = async (id: string | null, by: string) => {
+      ctx.settings.update({ scene: id ? { id, by } : null });
+      inScene.clear();
+      ctx.publish();
+      await Promise.all(devices().filter((d) => health.get(d.id)?.online || saved.has(d.id)).map((d) => settle(d.id)));
     };
 
     const restore = async (deviceId: string) => {
@@ -239,7 +404,18 @@ export default defineModule<WledSettings>({
         return;
       }
       const effect = ctx.settings.get().effects.find((e) => e.id === job.effect.id);
-      const results = effect ? await Promise.all(job.devices.map((id) => apply(id, effect))) : [];
+      // Looks dealt from a random one, so the same light does not always get the same
+      const k = Math.floor(Math.random() * 64);
+      const bri = ctx.settings.get().brightness;
+      const results = effect
+        ? await Promise.all(
+            job.devices.map((id, i) => {
+              inScene.delete(id);
+              const d = device(id);
+              return effect.live && d && canLive(d) ? startLive(d) : apply(id, effect, k + i, bri, 3);
+            }),
+          )
+        : [];
       if (!results.some(Boolean)) {
         // Nothing reachable: give the money back and move on
         const guest = job.guestId ? ctx.session.guests.get(job.guestId) : undefined;
@@ -259,9 +435,10 @@ export default defineModule<WledSettings>({
       if (timer) clearTimeout(timer);
       timer = null;
       current = null;
-      // Devices used by the next job keep their saved state, so they do not blink back in between
+      for (const id of [...live.keys()]) stopLive(id);
+      // Devices used by the next job keep their saved state, so they do not blink back in between; the ones on the scene stay on it
       const next = new Set(queue[0]?.devices ?? []);
-      await Promise.all([...saved.keys()].filter((id) => !next.has(id)).map(restore));
+      await Promise.all([...saved.keys()].filter((id) => !next.has(id) && !inScene.has(id)).map(settle));
       await runNext();
     };
 
@@ -275,7 +452,7 @@ export default defineModule<WledSettings>({
         }
       }
       if (current) await finish();
-      else await Promise.all([...saved.keys()].map(restore));
+      else await Promise.all([...saved.keys()].filter((id) => !inScene.has(id)).map(settle));
       ctx.publish();
     };
 
@@ -317,31 +494,19 @@ export default defineModule<WledSettings>({
       }
     };
 
-    let udp: Socket | null = null;
-    ctx.onShutdown(() => {
-      udp?.close();
-    });
-
     ctx.provide<LightsApi>('lights', {
       available: () => ctx.enabled() && devices().some((d) => health.get(d.id)?.online),
       list: () => devices().map((d) => ({ id: d.id, name: d.name, online: !!health.get(d.id)?.online, leds: health.get(d.id)?.leds ?? null })),
       frame: (deviceId, rgb) => {
         const d = device(deviceId);
         if (!ctx.enabled() || !d || !health.get(d.id)?.online) return;
-        if (!udp) {
-          udp = createSocket('udp4');
-          udp.on('error', (err) => ctx.log.warn('Realtime lights', err.message));
-        }
-        const packet = Buffer.alloc(2 + Math.min(rgb.length, 490 * 3));
-        packet[0] = DRGB;
-        packet[1] = REALTIME_TIMEOUT_SEC;
-        packet.set(rgb.subarray(0, packet.length - 2), 2);
-        // The host may carry the HTTP port: realtime has its own
-        udp.send(packet, REALTIME_PORT, d.host.replace(/:\d+$/, ''));
+        realtime(d, rgb);
       },
       claim: () => {
         if (held) return;
         held = true;
+        inScene.clear();
+        for (const id of [...live.keys()]) stopLive(id);
         if (current) {
           // The effect on now plays again (in full) after the game
           if (timer) clearTimeout(timer);
@@ -363,6 +528,8 @@ export default defineModule<WledSettings>({
         const d = device(deviceId);
         if (!d || !ctx.enabled() || !health.get(d.id)?.online) return;
         boosted.add(d.id);
+        inScene.delete(d.id);
+        stopLive(d.id);
         try {
           if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
           if (!boosted.has(d.id)) return;
@@ -373,7 +540,7 @@ export default defineModule<WledSettings>({
       },
       unboost: async (deviceId) => {
         if (!boosted.delete(deviceId)) return;
-        await restore(deviceId);
+        await settle(deviceId);
       },
       release: async () => {
         if (!held) return;
@@ -381,7 +548,7 @@ export default defineModule<WledSettings>({
         wanted.clear();
         // Let a color on its way land first, so it does not cover the restored state
         for (let i = 0; sending.size && i < 50; i++) await new Promise((r) => setTimeout(r, 40));
-        await Promise.all([...saved.keys()].map(restore));
+        await Promise.all([...saved.keys()].map(settle));
         await runNext();
       },
     });
@@ -390,16 +557,21 @@ export default defineModule<WledSettings>({
 
     ctx.price({ key: 'wled.all', label: 'Light effect on every light', default: 1500 });
     ctx.price({ key: 'wled.one', label: 'Light effect on one light', default: 800 });
+    ctx.price({ key: 'wled.scene', label: 'Change the light scene', default: 2500, active: () => ctx.settings.get().guestScenes });
 
     ctx.state((role): WledState => {
       const s = ctx.settings.get();
+      const scene = sceneNow();
       return {
         devices: s.devices.map((d) => ({ ...d, online: health.get(d.id)?.online ?? false, leds: health.get(d.id)?.leds })),
         effects: s.effects,
+        scenes: s.scenes,
+        scene: scene && s.scene ? { id: scene.id, name: scene.name, by: s.scene.by } : null,
+        guestScenes: s.guestScenes,
         durationSec: s.durationSec,
         current: current ? { ...pub(current), until: current.until } : null,
         queue: queue.map(pub),
-        ...(role === 'admin' ? { brightness: s.brightness } : {}),
+        ...(role === 'admin' ? { brightness: s.brightness, sceneBrightness: s.sceneBrightness } : {}),
       };
     });
 
@@ -422,6 +594,24 @@ export default defineModule<WledSettings>({
       return enqueue(job);
     });
 
+    ctx.onGuest('setScene', async (args, guest) => {
+      const s = ctx.settings.get();
+      if (!s.guestScenes) throw new HbError('Only the host can change the scene');
+      const scene = s.scenes.find((x) => x.id === args.sceneId);
+      if (!scene) throw new HbError('Unknown scene');
+      if (s.scene?.id === scene.id) throw new HbError(`${scene.name} is already on`);
+      if (!devices().some((d) => health.get(d.id)?.online)) throw new HbError('No lights are reachable right now');
+      ctx.economy.charge(guest, 'wled.scene', 1, `Scene: ${scene.name}`);
+      ctx.activity(`{name} set the mood: ${scene.name}`, { guest });
+      await setScene(scene.id, guest.name);
+    });
+
+    ctx.onAdmin('setScene', async (args) => {
+      const id = typeof args.sceneId === 'string' ? args.sceneId : null;
+      if (id && !ctx.settings.get().scenes.some((x) => x.id === id)) throw new HbError('Unknown scene');
+      await setScene(id, 'Host');
+    });
+
     ctx.onAdmin('test', (args) => enqueue(makeJob(args.effectId, args.target ?? 'all', { name: 'Host', color: '#8b7cff' }, null)));
     ctx.onAdmin('stop', (args) => stopAll(args.refund !== false));
     ctx.onAdmin('skip', () => finish());
@@ -431,8 +621,12 @@ export default defineModule<WledSettings>({
       ctx.settings.update({
         durationSec: args.durationSec !== undefined ? clamp(num(args.durationSec, 30), 5, 600) : s.durationSec,
         brightness: args.brightness !== undefined ? clamp(num(args.brightness, 255), 0, 255) : s.brightness,
+        sceneBrightness: args.sceneBrightness !== undefined ? clamp(num(args.sceneBrightness, 140), 0, 255) : s.sceneBrightness,
+        guestScenes: args.guestScenes !== undefined ? args.guestScenes === true : s.guestScenes,
       });
       ctx.publish();
+      // The scene on now, at its new brightness
+      if (args.sceneBrightness !== undefined && s.scene) void setScene(s.scene.id, s.scene.by);
     });
 
     ctx.onAdmin('saveDevice', async (args) => {
@@ -466,34 +660,37 @@ export default defineModule<WledSettings>({
       ctx.publish();
     });
 
+    /** Effects and scenes are kept in two lists of the same shape */
+    const listOf = (kind: unknown) => (kind === 'scene' ? 'scenes' : 'effects') as 'scenes' | 'effects';
+
     ctx.onAdmin('saveEffect', (args) => {
-      const e = args.effect ?? {};
-      const effect: WledEffect = {
-        id: typeof e.id === 'string' && e.id ? e.id : uid(4),
-        name: cleanName(e.name, 30) || 'Effect',
-        fx: clamp(Math.round(num(e.fx)), 0, 255),
-        pal: clamp(Math.round(num(e.pal)), 0, 255),
-        sx: clamp(Math.round(num(e.sx, 128)), 0, 255),
-        ix: clamp(Math.round(num(e.ix, 128)), 0, 255),
-        colors: (Array.isArray(e.colors) ? e.colors : []).filter((c: unknown) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)).slice(0, 3),
-      };
-      const list = [...ctx.settings.get().effects];
+      const effect = cleanEffect(args.effect ?? {});
+      const key = listOf(args.kind);
+      const list = [...ctx.settings.get()[key]];
       const i = list.findIndex((x) => x.id === effect.id);
       if (i >= 0) list[i] = effect;
       else list.push(effect);
-      ctx.settings.update({ effects: list });
+      ctx.settings.update({ [key]: list });
       ctx.publish();
+      // The scene on now, as just edited
+      const on = ctx.settings.get().scene;
+      if (key === 'scenes' && on?.id === effect.id) void setScene(on.id, on.by);
       return effect;
     });
 
-    ctx.onAdmin('removeEffect', (args) => {
-      ctx.settings.update({ effects: ctx.settings.get().effects.filter((e) => e.id !== args.id) });
+    ctx.onAdmin('removeEffect', async (args) => {
+      const key = listOf(args.kind);
+      ctx.settings.update({ [key]: ctx.settings.get()[key].filter((e) => e.id !== args.id) });
       ctx.publish();
+      if (key === 'scenes' && ctx.settings.get().scene?.id === args.id) await setScene(null, 'Host');
     });
 
-    ctx.onAdmin('resetEffects', () => {
-      ctx.settings.update({ effects: DEFAULT_WLED_EFFECTS });
+    ctx.onAdmin('resetEffects', async (args) => {
+      const key = listOf(args.kind);
+      ctx.settings.update(key === 'scenes' ? { scenes: DEFAULT_WLED_SCENES } : { effects: DEFAULT_WLED_EFFECTS });
       ctx.publish();
+      const on = ctx.settings.get().scene;
+      if (key === 'scenes' && on) await setScene(DEFAULT_WLED_SCENES.some((x) => x.id === on.id) ? on.id : null, on.by);
     });
 
     /** WLED effect and palette names, read from the first reachable device */
@@ -512,7 +709,9 @@ export default defineModule<WledSettings>({
     });
 
     ctx.onToggle((on) => {
+      inScene.clear();
       if (!on) void stopAll(true);
+      else if (sceneNow()) for (const d of devices()) if (health.get(d.id)?.online) void settle(d.id);
     });
     ctx.onSessionReset(() => void stopAll(false));
     ctx.onShutdown(() => stopAll(true));

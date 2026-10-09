@@ -43,7 +43,7 @@ import { bluff } from './bluff.ts';
 import { coinFlip } from './coin.ts';
 import { chartFor, chartNps, chartSteadiness, rhythmRain } from './rhythm.ts';
 import { Turntable } from './turntable.ts';
-import { Fireworks } from './fireworks.ts';
+import { Fireworks, rgbOf } from '../wled/fireworks.ts';
 import { dealPirateCrews, pirateRace, pirateWaitingLights } from './pirates.ts';
 import { cleanMp3, downloadMp3 } from '../soundboard/myinstants.ts';
 import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
@@ -346,7 +346,7 @@ export default defineModule<GamesSettings>({
             : { ...base, kind: 'fireworks', colors: RHYTHM_COLORS.slice(0, 4).map((c) => c.id) };
       perkTimer = setTimeout(() => endPerk(), sec * 1000);
       if (perk.kind === 'fireworks' && gameStrip) {
-        fireworks = new Fireworks(Math.min(490, gameStrip.leds ?? 60), winner.color, s.rhythmReverse, (rgb) => lights()?.frame(gameStrip.id, rgb));
+        fireworks = new Fireworks(Math.min(490, gameStrip.leds ?? 60), rgbOf(winner.color), s.rhythmReverse, (rgb) => lights()?.frame(gameStrip.id, rgb));
       }
       const strip = lights()?.list().find((d) => d.id === s.scratchLight && d.online);
       if (perk.kind === 'scratch' && strip) {
@@ -1045,7 +1045,8 @@ export default defineModule<GamesSettings>({
       if (perk?.kind !== 'fireworks' || perk.guest.id !== guest.id) return false;
       const color = String(args?.color ?? '') as RhythmColor;
       if (!perk.colors.includes(color)) return false;
-      fireworks?.shoot(color);
+      const led = RHYTHM_COLORS.find((c) => c.id === color)?.led;
+      if (led) fireworks?.shoot(rgbOf(led));
       return true;
     });
 

@@ -11,12 +11,20 @@
   let busy = $state(false);
 
   const cost = $derived(price(target === 'all' ? 'wled.all' : 'wled.one'));
+  const sceneCost = $derived(price('wled.scene'));
   const deviceName = (id: string) => mod?.devices.find((d) => d.id === id)?.name ?? id;
 
   // Fall back to all lights when the selected one goes offline
   $effect(() => {
     if (target !== 'all' && !online.some((d) => d.id === target)) target = 'all';
   });
+
+  async function pickScene(sceneId: string, name: string) {
+    busy = true;
+    const ok = await attempt(() => rpc('wled', 'setScene', { sceneId }).then(() => true));
+    busy = false;
+    if (ok) toast({ text: `${name} is on`, kind: 'success' });
+  }
 
   async function trigger(effectId: string, name: string) {
     busy = true;
@@ -71,6 +79,26 @@
           </button>
         {/each}
       </div>
+
+      {#if mod.guestScenes && mod.scenes.length}
+        <div class="scenes-head">
+          <h3>Scenes</h3>
+          <p class="faint">A calm mood that stays on until someone picks another. Effects play over it.</p>
+          {#if hb.core?.economyEnabled && sceneCost}
+            <p class="faint price">Costs <Money amount={sceneCost} /></p>
+          {/if}
+        </div>
+        <div class="grid">
+          {#each mod.scenes as s (s.id)}
+            {@const on = mod.scene?.id === s.id}
+            <button class="effect card" class:on disabled={busy || on} onclick={() => pickScene(s.id, s.name)}>
+              <span class="swatch big" style:background={effectSwatch(s)}></span>
+              <span class="name">{s.name}</span>
+              {#if on}<span class="faint small">On now{showNames('effectNames') ? `, by ${mod.scene?.by}` : ''}</span>{/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
     {/if}
   </div>
 {/if}
@@ -150,6 +178,24 @@
   }
   .effect:active:not(:disabled) {
     transform: scale(0.97);
+  }
+  .effect.on {
+    box-shadow: 0 0 0 2px var(--accent);
+    opacity: 1;
+  }
+  .scenes-head {
+    display: grid;
+    gap: 0.3rem;
+    margin-top: 0.6rem;
+    font-size: 0.88rem;
+  }
+  .scenes-head h3 {
+    font-size: 1.05rem;
+  }
+  .small {
+    font-size: 0.78rem;
+    padding: 0 0.3rem;
+    margin-top: -0.35rem;
   }
   .name {
     font-weight: 600;

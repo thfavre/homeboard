@@ -2,7 +2,7 @@
   import { Synced } from '$lib/synced.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import { Pencil, Play, Plus, RotateCcw, SkipForward, Square, Trash2 } from '@lucide/svelte';
-  import type { WledDevice, WledEffect, WledState } from '$shared/wled.ts';
+  import { WLED_LIVE, type WledDevice, type WledEffect, type WledLook, type WledState } from '$shared/wled.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Sheet from '$lib/ui/Sheet.svelte';
@@ -12,6 +12,7 @@
   const mod = $derived(hb.modules.wled as WledState | undefined);
   const duration = new Synced(() => hb.modules.wled?.durationSec, 30);
   const brightness = new Synced(() => hb.modules.wled?.brightness, 255);
+  const sceneBrightness = new Synced(() => hb.modules.wled?.sceneBrightness, 140);
 
   // Device form
   let devForm = $state<{ id?: string; host: string; name: string; segments: number[] } | null>(null);
@@ -29,20 +30,51 @@
     devForm.segments = on ? [...devForm.segments, id] : devForm.segments.filter((s) => s !== id);
   }
 
-  // Effect editor
+  // Effect and scene editor: one look, or several dealt out to the lights in turn
+  type Kind = 'effect' | 'scene';
   let catalog = $state<{ effects: string[]; palettes: string[] } | null>(null);
-  let editing = $state<WledEffect | null>(null);
+  let editing = $state<{ kind: Kind; id: string; name: string; live: string; looks: WledLook[] } | null>(null);
+  let lookIdx = $state(0);
+  const look = $derived(editing?.looks[Math.min(lookIdx, editing.looks.length - 1)]);
 
-  async function edit(e?: WledEffect) {
+  const lookOf = (e: WledEffect, v: Partial<WledLook> = {}): WledLook => ({
+    fx: v.fx ?? e.fx,
+    pal: v.pal ?? e.pal,
+    sx: v.sx ?? e.sx,
+    ix: v.ix ?? e.ix,
+    colors: [...(v.colors ?? e.colors)],
+  });
+
+  async function edit(kind: Kind, e?: WledEffect) {
     catalog ??= (await attempt(() => rpc<{ effects: string[]; palettes: string[] }>('wled', 'catalog'))) ?? null;
-    editing = e ? { ...e, colors: [...e.colors] } : { id: '', name: '', fx: 9, pal: 0, sx: 128, ix: 128, colors: [] };
+    lookIdx = 0;
+    editing = e
+      ? { kind, id: e.id, name: e.name, live: e.live ?? '', looks: e.variants?.length ? e.variants.map((v) => lookOf(e, v)) : [lookOf(e)] }
+      : { kind, id: '', name: '', live: '', looks: [{ fx: kind === 'scene' ? 67 : 9, pal: 0, sx: kind === 'scene' ? 20 : 128, ix: 128, colors: [] }] };
+  }
+
+  function addLook() {
+    if (!editing || !look) return;
+    editing.looks = [...editing.looks, { ...look, colors: [...look.colors] }];
+    lookIdx = editing.looks.length - 1;
+  }
+
+  function removeLook() {
+    if (!editing || editing.looks.length < 2) return;
+    editing.looks = editing.looks.filter((_, i) => i !== lookIdx);
+    lookIdx = Math.max(0, lookIdx - 1);
   }
 
   async function saveEffect() {
     if (!editing) return;
-    const saved = await attempt(() => rpc<WledEffect>('wled', 'saveEffect', { effect: editing }), 'Effect saved');
+    const { kind, id, name, live, looks } = editing;
+    const effect = { id, name, ...looks[0], variants: looks.length > 1 ? looks : undefined, live: live || undefined };
+    const saved = await attempt(() => rpc<WledEffect>('wled', 'saveEffect', { effect, kind }), kind === 'scene' ? 'Scene saved' : 'Effect saved');
     if (saved) editing = null;
   }
+
+  const remove = async (kind: Kind, e: WledEffect) =>
+    (await ask({ title: `Delete ${e.name}?`, confirm: 'Delete', danger: true })) && attempt(() => rpc('wled', 'removeEffect', { id: e.id, kind }));
 
   async function saveDevice() {
     if (!devForm) return;
@@ -76,6 +108,14 @@
       </button>
       <span class="spacer"></span>
       <span class="faint small">{mod.queue.length ? `${mod.queue.length} waiting` : 'Nothing waiting'}</span>
+    </div>
+    <div class="line">
+      <span class="swatch" style:background={mod.scene ? effectSwatch({ id: mod.scene.id, colors: mod.scenes.find((s) => s.id === mod.scene?.id)?.colors ?? [] }) : 'var(--surface-3)'}></span>
+      <div class="grow">
+        <strong class="truncate block">{mod.scene ? `Scene: ${mod.scene.name}` : 'No scene'}</strong>
+        <p class="faint small truncate">{mod.scene ? `Picked by ${mod.scene.by}, stays until another one is picked` : 'Between effects the lights do their usual thing'}</p>
+      </div>
+      <button class="btn small" disabled={!mod.scene} onclick={() => attempt(() => rpc('wled', 'setScene', { sceneId: null }), 'Scene off')}><Square size={16} /> Off</button>
     </div>
   </Section>
 
@@ -135,18 +175,16 @@
 
   <Section title="Effects guests can pick">
     {#snippet actions()}
-      <button class="btn small" onclick={() => edit()}><Plus size={16} /> New</button>
+      <button class="btn small" onclick={() => edit('effect')}><Plus size={16} /> New</button>
     {/snippet}
     <div class="effects">
       {#each mod.effects as e (e.id)}
         <div class="effect">
           <span class="swatch" style:background={effectSwatch(e)}></span>
-          <span class="grow truncate">{e.name}</span>
+          <span class="grow truncate">{e.name}{#if e.live}<span class="faint small"> · live</span>{:else if e.variants?.length}<span class="faint small"> · {e.variants.length} looks</span>{/if}</span>
           <button class="btn ghost small" aria-label="Test" onclick={() => attempt(() => rpc('wled', 'test', { effectId: e.id }))}><Play size={15} /></button>
-          <button class="btn ghost small" aria-label="Edit" onclick={() => edit(e)}><Pencil size={15} /></button>
-          <button class="btn ghost small" aria-label="Delete" onclick={async () => (await ask({ title: `Delete ${e.name}?`, confirm: 'Delete', danger: true })) && attempt(() => rpc('wled', 'removeEffect', { id: e.id }))}>
-            <Trash2 size={15} />
-          </button>
+          <button class="btn ghost small" aria-label="Edit" onclick={() => edit('effect', e)}><Pencil size={15} /></button>
+          <button class="btn ghost small" aria-label="Delete" onclick={() => remove('effect', e)}><Trash2 size={15} /></button>
         </div>
       {/each}
     </div>
@@ -155,11 +193,33 @@
         <RotateCcw size={15} /> Restore defaults
       </button>
     </div>
-
   </Section>
 
-  {#if editing && catalog}
-    <Sheet title={editing.id ? `Edit ${editing.name}` : 'New effect'} onclose={() => (editing = null)}>
+  <Section title="Scenes">
+    {#snippet actions()}
+      <button class="btn small" onclick={() => edit('scene')}><Plus size={16} /> New</button>
+    {/snippet}
+    <p class="faint small">Calm looks that stay on until another scene is picked. Effects and games play over them, then the lights go back to the scene.</p>
+    <div class="effects">
+      {#each mod.scenes as e (e.id)}
+        <div class="effect">
+          <span class="swatch" class:on={mod.scene?.id === e.id} style:background={effectSwatch(e)}></span>
+          <span class="grow truncate">{e.name}{#if e.variants?.length}<span class="faint small"> · {e.variants.length} looks</span>{/if}</span>
+          <button class="btn ghost small" aria-label="Turn on" disabled={mod.scene?.id === e.id} onclick={() => attempt(() => rpc('wled', 'setScene', { sceneId: e.id }))}><Play size={15} /></button>
+          <button class="btn ghost small" aria-label="Edit" onclick={() => edit('scene', e)}><Pencil size={15} /></button>
+          <button class="btn ghost small" aria-label="Delete" onclick={() => remove('scene', e)}><Trash2 size={15} /></button>
+        </div>
+      {/each}
+    </div>
+    <div>
+      <button class="btn ghost small" onclick={async () => (await ask({ title: 'Restore the default scenes?', message: 'Your own scenes are removed.', confirm: 'Restore' })) && attempt(() => rpc('wled', 'resetEffects', { kind: 'scene' }))}>
+        <RotateCcw size={15} /> Restore defaults
+      </button>
+    </div>
+  </Section>
+
+  {#if editing && catalog && look}
+    <Sheet title={editing.id ? `Edit ${editing.name}` : editing.kind === 'scene' ? 'New scene' : 'New effect'} onclose={() => (editing = null)}>
       <form
         novalidate
         class="form"
@@ -169,36 +229,56 @@
         }}
       >
         <label class="field"><span>Name</span><input class="input" bind:value={editing.name} maxlength="30" required /></label>
+        {#if editing.kind === 'effect'}
+          <label class="field">
+            <span>Drawn by</span>
+            <select class="input" bind:value={editing.live}>
+              <option value="">WLED, with the looks below</option>
+              {#each Object.entries(WLED_LIVE) as [id, name] (id)}<option value={id}>Homeboard: {name}, a different show on each light</option>{/each}
+            </select>
+            {#if editing.live}<span class="faint small">Lights where effects stay on some segments use the WLED look below.</span>{/if}
+          </label>
+        {/if}
+        <div class="field">
+          <span class="dim small">Looks: with several, each light (and each segment) gets the next one, so they do not all look the same</span>
+          <div class="row">
+            {#each editing.looks as _, i}
+              <button type="button" class="chip" class:active={i === lookIdx} onclick={() => (lookIdx = i)}>{i + 1}</button>
+            {/each}
+            <button type="button" class="btn ghost small" disabled={editing.looks.length >= 8} onclick={addLook}><Plus size={15} /> Add a look</button>
+            <button type="button" class="btn ghost small" disabled={editing.looks.length < 2} onclick={removeLook}>Remove this one</button>
+          </div>
+        </div>
         <div class="grid2">
           <label class="field">
             <span>WLED effect</span>
-            <select class="input" bind:value={editing.fx}>
+            <select class="input" bind:value={look.fx}>
               {#each catalog.effects as name, i}{#if name !== 'RSVD'}<option value={i}>{name}</option>{/if}{/each}
             </select>
           </label>
           <label class="field">
             <span>Palette</span>
-            <select class="input" bind:value={editing.pal}>
+            <select class="input" bind:value={look.pal}>
               {#each catalog.palettes as name, i}<option value={i}>{name}</option>{/each}
             </select>
           </label>
         </div>
         <div class="grid2">
-          <label class="field"><span>Speed {editing.sx}</span><input type="range" min="0" max="255" bind:value={editing.sx} /></label>
-          <label class="field"><span>Intensity {editing.ix}</span><input type="range" min="0" max="255" bind:value={editing.ix} /></label>
+          <label class="field"><span>Speed {look.sx}</span><input type="range" min="0" max="255" bind:value={look.sx} /></label>
+          <label class="field"><span>Intensity {look.ix}</span><input type="range" min="0" max="255" bind:value={look.ix} /></label>
         </div>
         <div class="field">
           <span class="dim small">Colors (used by effects that follow the segment colors)</span>
           <div class="row">
-            {#each editing.colors as _, i}
-              <input type="color" bind:value={editing.colors[i]} />
+            {#each look.colors as _, i}
+              <input type="color" bind:value={look.colors[i]} />
             {/each}
-            <button type="button" class="btn ghost small" disabled={editing.colors.length >= 3} onclick={() => editing && (editing.colors = [...editing.colors, '#ff3366'])}>Add color</button>
-            <button type="button" class="btn ghost small" disabled={!editing.colors.length} onclick={() => editing && (editing.colors = editing.colors.slice(0, -1))}>Remove</button>
+            <button type="button" class="btn ghost small" disabled={look.colors.length >= 3} onclick={() => look && (look.colors = [...look.colors, '#ff3366'])}>Add color</button>
+            <button type="button" class="btn ghost small" disabled={!look.colors.length} onclick={() => look && (look.colors = look.colors.slice(0, -1))}>Remove</button>
           </div>
         </div>
         <div class="row">
-          <button class="btn primary">Save effect</button>
+          <button class="btn primary">{editing.kind === 'scene' ? 'Save scene' : 'Save effect'}</button>
           <button type="button" class="btn ghost" onclick={() => (editing = null)}>Cancel</button>
         </div>
       </form>
@@ -214,6 +294,14 @@
       <label class="field">
         <span>Brightness during effects (0 = keep current)</span>
         <input class="input" type="number" min="0" max="255" bind:value={brightness.value} onfocus={brightness.start} onblur={() => { set({ brightness: Number(brightness.value) }); brightness.end(); }} />
+      </label>
+      <label class="field">
+        <span>Brightness of scenes (0 = keep current)</span>
+        <input class="input" type="number" min="0" max="255" bind:value={sceneBrightness.value} onfocus={sceneBrightness.start} onblur={() => { set({ sceneBrightness: Number(sceneBrightness.value) }); sceneBrightness.end(); }} />
+      </label>
+      <label class="check">
+        <input type="checkbox" checked={mod.guestScenes} onchange={(e) => set({ guestScenes: e.currentTarget.checked })} />
+        Guests can change the scene
       </label>
     </div>
   </Section>
@@ -238,6 +326,22 @@
     width: 2rem;
     height: 2rem;
     border-radius: 0.6rem;
+  }
+  .swatch.on {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .chip {
+    min-width: 2.2rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    font-weight: 600;
+  }
+  .chip.active {
+    background: var(--accent);
+    border-color: transparent;
+    color: var(--accent-contrast);
   }
   .status {
     flex: none;

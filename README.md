@@ -46,7 +46,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [x] When a user adds a song but spotify is not played anywhere, he sees a +10 on his money and the error. (He gets -10 for putting a song and instend of +10 for the error). Make sure this bug doesnt also appens somewhere else.
 - [x] Let the admin choose the delay for the passive earning.
 - Add more fun emoji for the selfie avatars (like a crown, a hat, a mustache, a monocle, etc.)
-- [ ] add some lights effects (dark, a better fiework that uses the firework effect, some effects that are not just copied on all devices the same). and also some scene that will be stay until a new scene is selected, only chill thigs
+- [x] add some lights effects (dark, a better fiework that uses the firework effect, some effects that are not just copied on all devices the same). and also some scene that will be stay until a new scene is selected, only chill thigs
 - [x] show a +x to the music queue when there is more than the screen can display in te queue.
 - [ ] buy domain name
 - [ ] redo a more fair economy
