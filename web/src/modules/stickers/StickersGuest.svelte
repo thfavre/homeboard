@@ -54,6 +54,7 @@
     {#if mod.allowCustom}
       <div class="head">
         <h4>My stickers</h4>
+        {#if mine.length}<span class="faint count">{mine.length}/{MAX_GUEST_STICKERS}</span>{/if}
         <span class="spacer"></span>
         {#if mine.length}<button class="btn ghost small" onclick={() => (editing = !editing)}>{editing ? 'Done' : 'Edit'}</button>{/if}
       </div>
@@ -62,6 +63,11 @@
           <button class="item card make" disabled={editing} onclick={() => (making = true)}>
             <div class="art plus"><Plus size={30} /></div>
             <span class="name">Make one</span>
+          </button>
+        {:else}
+          <!-- Full: say why there is no new sticker, and how to make room -->
+          <button class="item card make full" onclick={() => (editing = true)}>
+            <span class="name">{MAX_GUEST_STICKERS} max. Delete one to make another.</span>
           </button>
         {/if}
         {#each mine as s (s.id)}
@@ -184,6 +190,13 @@
   }
   .make {
     border-style: dashed;
+  }
+  .full {
+    align-content: center;
+    text-align: center;
+  }
+  .count {
+    font-size: 0.8rem;
   }
   .plus {
     display: grid;

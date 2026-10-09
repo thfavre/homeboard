@@ -1,14 +1,16 @@
 <script lang="ts">
   import { Circle, Image, Lasso } from '@lucide/svelte';
   import { untrack } from 'svelte';
-  import { makeCanvas } from './stickerImage.ts';
+  import { borderFor, makeCanvas } from './stickerImage.ts';
 
   /**
    * Cuts a sticker out of a photo: trace around it with a finger, or keep a circle or the whole
    * photo. The parent calls render() to get the cut-out (transparent outside the shape).
    * Mount it again (with {#key}) for another photo.
    */
-  let { photo }: { photo: HTMLCanvasElement } = $props();
+  let { photo, border }: { photo: HTMLCanvasElement; border: boolean } = $props();
+  // Room around the photo, so the border of a shape touching the edge still shows
+  const margin = $derived(Math.ceil(borderFor(Math.max(photo.width, photo.height))));
 
   type Shape = 'trace' | 'circle' | 'whole';
   let shape = $state<Shape>('trace');
@@ -55,15 +57,32 @@
     return out;
   }
 
+  /** Longest side of the shape, which sets how wide the border ends up */
+  function shapeSide(): number {
+    if (shape === 'circle') return radius * 2;
+    if (shape === 'whole') return Math.max(photo.width, photo.height);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of points) {
+      x0 = Math.min(x0, p.x);
+      y0 = Math.min(y0, p.y);
+      x1 = Math.max(x1, p.x);
+      y1 = Math.max(y1, p.y);
+    }
+    return Math.max(x1 - x0, y1 - y0);
+  }
+
   $effect(() => {
     void version;
     void radius;
     void circle.x;
     void circle.y;
+    void border;
     if (!view) return;
     const ctx = view.getContext('2d')!;
     const line = minSide / 120;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, view.width, view.height);
+    ctx.translate(margin, margin);
     ctx.drawImage(photo, 0, 0);
     if (shape === 'trace' && (tracing || !traced)) {
       // The line being drawn
@@ -83,10 +102,24 @@
     }
     // Dim everything outside the shape
     ctx.beginPath();
-    ctx.rect(0, 0, photo.width, photo.height);
+    ctx.rect(-margin, -margin, photo.width + margin * 2, photo.height + margin * 2);
     addShape(ctx);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.62)';
     ctx.fill('evenodd');
+    if (border) {
+      // The white border as it will be on the sticker: a thick line, the photo drawn back over its inner half
+      ctx.beginPath();
+      addShape(ctx);
+      ctx.lineWidth = borderFor(shapeSide()) * 2;
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+      ctx.save();
+      ctx.clip();
+      ctx.drawImage(photo, 0, 0);
+      ctx.restore();
+      return;
+    }
     ctx.beginPath();
     addShape(ctx);
     ctx.lineWidth = line;
@@ -98,7 +131,10 @@
 
   function toPhoto(e: PointerEvent) {
     const r = view!.getBoundingClientRect();
-    return { x: ((e.clientX - r.left) / r.width) * photo.width, y: ((e.clientY - r.top) / r.height) * photo.height };
+    return {
+      x: ((e.clientX - r.left) / r.width) * view!.width - margin,
+      y: ((e.clientY - r.top) / r.height) * view!.height - margin,
+    };
   }
 
   function down(e: PointerEvent) {
@@ -159,9 +195,9 @@
   <div class="frame">
     <canvas
       bind:this={view}
-      width={photo.width}
-      height={photo.height}
-      style:aspect-ratio={`${photo.width} / ${photo.height}`}
+      width={photo.width + margin * 2}
+      height={photo.height + margin * 2}
+      style:aspect-ratio={`${photo.width + margin * 2} / ${photo.height + margin * 2}`}
       onpointerdown={down}
       onpointermove={move}
       onpointerup={up}

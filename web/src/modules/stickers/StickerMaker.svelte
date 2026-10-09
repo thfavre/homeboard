@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { ArrowLeft, ClipboardPaste, Camera, ImageUp, Pencil } from '@lucide/svelte';
+  import { ArrowLeft, Brush, ClipboardPaste, Camera, ImageUp, Pencil } from '@lucide/svelte';
   import type { GuestSticker } from '$shared/stickers.ts';
   import { attempt, upload } from '$lib/client.svelte.ts';
   import Sheet from '$lib/ui/Sheet.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import DrawPad from './DrawPad.svelte';
   import PhotoCutout from './PhotoCutout.svelte';
-  import { finish, readImage, toPng } from './stickerImage.ts';
+  import { finish, readImage, toPng, trim } from './stickerImage.ts';
 
   /**
    * Makes a sticker for the guest's own collection: imported as is (a WhatsApp sticker, any image),
@@ -33,6 +33,20 @@
   let photo = $state<HTMLCanvasElement | null>(null);
   let cutout = $state<PhotoCutout>();
   let pad = $state<DrawPad>();
+  // Draw: a picture to draw over (a cut-out photo, or one picked in the pad)
+  let drawOn = $state.raw<HTMLCanvasElement | null>(null);
+
+  function drawOnCutout() {
+    const raw = cutout?.render();
+    const cut = raw && trim(raw);
+    if (!cut) {
+      error = 'Trace around something first';
+      return;
+    }
+    error = '';
+    drawOn = cut;
+    mode = 'draw';
+  }
 
   let fileInput = $state<HTMLInputElement>();
   let pickingFor: 'import' | 'photo' = 'import';
@@ -144,7 +158,7 @@
   function back() {
     mode = 'pick';
     error = '';
-    original = imported = photo = null;
+    original = imported = photo = drawOn = null;
     preview = '';
   }
 
@@ -165,11 +179,12 @@
         class="card choice"
         onclick={() => {
           border = true;
+          drawOn = null;
           mode = 'draw';
         }}
       >
         <span class="icon"><Pencil size={22} /></span>
-        <span><strong>Draw one</strong><span class="faint">With your finger, in any color</span></span>
+        <span><strong>Draw one</strong><span class="faint">With your finger, on a blank sticker or over a picture</span></span>
       </button>
       <button class="card choice" onclick={() => choose('import')}>
         <span class="icon"><ImageUp size={22} /></span>
@@ -188,9 +203,9 @@
       {#if mode === 'import'}
         <div class="preview">{#if preview}<img src={preview} alt="Your sticker" />{/if}</div>
       {:else if mode === 'photo' && photo}
-        {#key photo}<PhotoCutout bind:this={cutout} {photo} />{/key}
+        {#key photo}<PhotoCutout bind:this={cutout} {photo} {border} />{/key}
       {:else if mode === 'draw'}
-        <DrawPad bind:this={pad} />
+        <DrawPad bind:this={pad} {border} picture={drawOn} />
       {/if}
 
       <label class="field">
@@ -199,10 +214,7 @@
       </label>
       {#if !original}
         <div class="line">
-          <div>
-            <strong>White border</strong>
-            <p class="faint small">Cut out like a real sticker.</p>
-          </div>
+          <strong>White border</strong>
           <Toggle checked={border} label="White border" onchange={(v) => (border = v)} />
         </div>
       {/if}
@@ -213,7 +225,7 @@
     {#if mode !== 'pick'}
       <div class="actions">
         <button class="btn ghost" onclick={back}><ArrowLeft size={18} /> Back</button>
-        {#if mode === 'photo'}<button class="btn ghost" onclick={() => choose('photo')}>Other photo</button>{/if}
+        {#if mode === 'photo'}<button class="btn ghost" onclick={drawOnCutout}><Brush size={18} /> Draw on it</button>{/if}
         <span class="spacer"></span>
         <button class="btn primary" disabled={busy} onclick={save}>{busy ? 'Saving...' : 'Save'}</button>
       </div>

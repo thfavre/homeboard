@@ -48,6 +48,14 @@ export function fit(src: HTMLCanvasElement, max: number): HTMLCanvasElement {
   return out;
 }
 
+/**
+ * How wide the finished border is in the source's pixels, for a shape whose longest side is
+ * `side` (the sticker is scaled down to fit, the border is not): used to preview it.
+ */
+export function borderFor(side: number): number {
+  return BORDER * Math.max(1, side / (STICKER_SIZE - BORDER * 2));
+}
+
 /** Adds the white die-cut border that follows the shape, like a real sticker */
 export function outline(src: HTMLCanvasElement, width = BORDER): HTMLCanvasElement {
   const out = makeCanvas(src.width + width * 2, src.height + width * 2);
