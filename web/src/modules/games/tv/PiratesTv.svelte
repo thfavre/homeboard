@@ -37,7 +37,7 @@
           const cur = shown[c.ship] ?? c.progress;
           const gap = c.progress - cur;
           shown[c.ship] = Math.abs(gap) < 1e-4 ? c.progress : cur + gap * (1 - Math.exp(-dt / 380));
-          const target = c.finishedAt ? 0 : Math.min(1, 0.12 + Math.abs(gap) * v.strokes * 0.9);
+          const target = c.finishedAt ? 0 : Math.min(1, Math.abs(gap) * v.strokes * 0.9);
           speed[c.ship] = (speed[c.ship] ?? 0) + (target - (speed[c.ship] ?? 0)) * (1 - Math.exp(-dt / 160));
         }
       }
@@ -61,12 +61,14 @@
     }
     return { last, next };
   });
-  /** Where the stroke is: 0 on the beat. Before the drum (and after the race) the crews row slowly. */
-  const phase = $derived.by(() => {
-    const { last, next } = beat;
-    if (!v || v.step !== 'race' || !last || !next) return (now / 1600) % 1;
-    return (now - last.at) / Math.max(1, next.at - last.at);
-  });
+  /** How long a beat lasts now (ms) */
+  const beatMs = $derived(beat.last && beat.next ? Math.max(200, beat.next.at - beat.last.at) : 600);
+  /** Where a crew's last stroke is (0 to 1), or null when nobody in it tapped: the oars stay still */
+  const rowing = (c: PirateCrew) => {
+    if (!c.stroke.rowers) return null;
+    const t = (now - c.stroke.at) / Math.min(900, beatMs);
+    return t < 1 ? t : null;
+  };
   const drumKick = $derived(beat.last && v?.step === 'race' ? Math.exp(-(now - beat.last.at) / 130) : 0);
 
   /** The count-in: 4, 3, 2, 1, then ROW! */
@@ -247,10 +249,10 @@
         {@const boosted = now < c.boostUntil}
         {@const at = along(i, shown[c.ship] ?? c.progress)}
         <div class="boat" style:left="{at.x}px" style:top="{at.y}px" style:rotate="{at.deg - 90}deg">
-          <PirateShip ship={c.ship} color={ship.hex} {phase} power={c.stroke.seq ? c.stroke.power : 0.45} messy={!!c.stroke.seq && !c.stroke.synced} {boosted} speed={speed[c.ship] ?? 0} />
+          <PirateShip ship={c.ship} color={ship.hex} phase={rowing(c)} power={c.stroke.power} messy={!!c.stroke.seq && !c.stroke.synced} {boosted} speed={speed[c.ship] ?? 0} />
         </div>
         <div class="over" style:left="{at.x}px" style:top="{at.y}px" style:--team={ship.hex}>
-          {#if c.stroke.seq && m.phase === 'play'}
+          {#if c.stroke.rowers && m.phase === 'play'}
             {#key c.stroke.seq}
               <span class="pop" class:sync={c.stroke.synced} class:bad={c.stroke.power === 0}>{strokeText(c)}</span>
             {/key}
@@ -269,7 +271,7 @@
           {#each v.crews as c, k (c.ship)}
             {@const ship = shipOf(c)}
             <div class="crew-card" style:--team={ship.hex} in:scale={{ delay: 200 + k * 180, start: 0.7 }}>
-              <span class="mini"><span><PirateShip ship={c.ship} color={ship.hex} phase={(now / 1600) % 1} speed={0.3} /></span></span>
+              <span class="mini"><span><PirateShip ship={c.ship} color={ship.hex} speed={0} /></span></span>
               <strong>{ship.name} ship</strong>
               <span class="names">
                 {#each c.members as id (id)}

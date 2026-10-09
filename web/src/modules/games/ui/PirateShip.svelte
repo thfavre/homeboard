@@ -2,19 +2,20 @@
   /**
    * A pirate galley seen from above, its bow pointing down (the parent turns it to its heading). The hull
    * and sails are Kenney's Pirate Pack sprites (CC0, web/public/pirates); the oars are drawn on the water
-   * and row with the drum. `phase`: where the stroke is (0: blades go in on the beat, pulled back until
-   * 0.45, then lifted and swung forward again). `power`: how hard the last stroke was (0 to 1); `messy`:
-   * the crew is out of time, so the oars are not together. `speed` (0 to 1) sizes the wake.
+   * and make one stroke each time the crew rows. `phase`: where that stroke is (0: blades go in, pulled
+   * back until 0.45, then lifted and brought back to rest at 1); null: nobody is rowing, the oars rest.
+   * `power`: how hard the stroke is (0 to 1); `messy`: the crew is out of time, so the oars are not
+   * together. `speed` (0 to 1) sizes the wake.
    */
   let {
     ship,
     color,
-    phase = 0,
+    phase = null,
     power = 0.5,
     messy = false,
     boosted = false,
     speed = 0,
-  }: { ship: string; color: string; phase?: number; power?: number; messy?: boolean; boosted?: boolean; speed?: number } = $props();
+  }: { ship: string; color: string; phase?: number | null; power?: number; messy?: boolean; boosted?: boolean; speed?: number } = $props();
 
   /** Ships with their own sail in the pack; the others get the plain sail dyed in their color */
   const SPRITES = ['red', 'yellow', 'green', 'white'];
@@ -25,9 +26,12 @@
   /** Where the oars go through the hull (sprite pixels, the sprite is 66 x 113) */
   const PORTS = [38, 50, 62, 74];
   const OAR = 28;
+  /** Oars at rest: held a little forward, blades just above the water */
+  const REST = { angle: 18, lift: 0.35 };
   /** The sweep of an oar (deg, + toward the bow) and how far its blade is out of the water (0 to 1) */
-  function stroke(p: number, amp: number): { angle: number; lift: number } {
-    const x = ((p % 1) + 1) % 1;
+  function stroke(p: number | null, amp: number): { angle: number; lift: number } {
+    if (p === null || p < 0 || p >= 1) return REST;
+    const x = p;
     const catchAt = 34 * amp + 6;
     const finishAt = -24 * amp - 4;
     if (x < 0.45) {
@@ -36,15 +40,16 @@
     }
     const k = (x - 0.45) / 0.55;
     const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
-    return { angle: finishAt + (catchAt - finishAt) * e, lift: Math.sin(k * Math.PI) };
+    return { angle: finishAt + (REST.angle - finishAt) * e, lift: Math.sin(k * Math.PI) * (1 - k) + REST.lift * k };
   }
   const amp = $derived(0.35 + 0.65 * Math.min(1, Math.max(0, power)));
   const MESS = [0, 0.09, -0.07, 0.12];
-  const oars = $derived(PORTS.map((y, i) => ({ y, ...stroke(phase - (messy ? MESS[i] : 0), amp) })));
+  const oars = $derived(PORTS.map((y, i) => ({ y, ...stroke(phase === null ? null : phase - (messy ? MESS[i] : 0), amp) })));
   /** The blades just went in: rings on the water */
   const splash = $derived.by(() => {
-    const x = ((phase % 1) + 1) % 1;
-    return x < 0.3 ? 1 - x / 0.3 : 0;
+    if (phase === null) return 0;
+    const x = phase;
+    return x >= 0 && x < 0.3 ? 1 - x / 0.3 : 0;
   });
   /** The tip of an oar, on the left side (side -1) or the right (1) */
   const tip = (o: { y: number; angle: number }, side: number) => {

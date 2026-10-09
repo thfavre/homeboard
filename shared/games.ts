@@ -646,8 +646,8 @@ export interface PirateCrew {
   streak: number;
   /** Server time the boost ends (0: none) */
   boostUntil: number;
-  /** Strokes judged so far, and the last one: its power (0 to 1) and whether it was synchronized */
-  stroke: { seq: number; power: number; synced: boolean; at: number };
+  /** Strokes judged so far, and the last one: its power (0 to 1), whether it was synchronized, and how many of the crew tapped */
+  stroke: { seq: number; power: number; synced: boolean; at: number; rowers: number };
   /** Server time it reached the treasure */
   finishedAt: number | null;
   /** Place at the end (1: winner) */

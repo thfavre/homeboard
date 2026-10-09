@@ -101,7 +101,7 @@ export const pirateRace: GameFactory = (m) => {
     distance: 0,
     streak: 0,
     boostUntil: 0,
-    stroke: { seq: 0, power: 0, synced: false, at: 0 },
+    stroke: { seq: 0, power: 0, synced: false, at: 0, rowers: 0 },
     finishedAt: null,
     place: null,
   }));
@@ -143,12 +143,14 @@ export const pirateRace: GameFactory = (m) => {
     for (const c of crews) {
       let power = 0;
       let onBeat = 0;
+      let rowers = 0;
       for (const id of c.members) {
         const grade = marks.get(id)?.get(i);
         marks.get(id)?.delete(i);
         const s = stats.get(id)!;
         s.beats += 1;
         if (!grade) continue;
+        rowers += 1;
         power += PIRATE_POWER[grade];
         if (grade === 'perfect' || grade === 'good') {
           onBeat += 1;
@@ -162,7 +164,7 @@ export const pirateRace: GameFactory = (m) => {
       const boosted = beats[i] < c.boostUntil;
       c.distance += power * (synced ? PIRATE.syncBonus : 1) * (boosted ? PIRATE.boostSpeed : 1);
       c.progress = Math.min(1, c.distance / goal);
-      c.stroke = { seq: c.stroke.seq + 1, power, synced, at: now };
+      c.stroke = { seq: c.stroke.seq + 1, power, synced, at: now, rowers };
       c.streak = synced ? c.streak + 1 : 0;
       if (c.streak >= PIRATE.boostStreak) {
         c.streak = 0;
