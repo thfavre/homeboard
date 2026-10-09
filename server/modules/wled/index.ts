@@ -190,6 +190,7 @@ export default defineModule<WledSettings>({
       const lookKey = (e: Pick<WledEffect, 'fx' | 'pal' | 'sx' | 'ix' | 'colors' | 'variants'>) => JSON.stringify([e.fx, e.pal, e.sx, e.ix, e.colors, e.variants ?? null]);
       const upgrades: Record<string, Pick<WledEffect, 'fx' | 'pal' | 'sx' | 'ix' | 'colors' | 'variants'>> = {
         forest: { fx: 112, pal: 14, sx: 20, ix: 40, colors: [] },
+        moodlamp: { fx: 8, pal: 0, sx: 6, ix: 230, colors: [] },
         night: { fx: 67, pal: 46, sx: 12, ix: 100, colors: [], variants: [{}, { fx: 68, sx: 35, ix: 45 }, { fx: 107, sx: 20, ix: 60 }, { fx: 74, pal: 46, sx: 16, ix: 40 }] },
       };
       const scenes = s.scenes.map((x) => {
@@ -299,7 +300,7 @@ export default defineModule<WledSettings>({
           // Colors the look leaves out are black, not what the light had (its own background would show through);
           // with none at all, the first one stays the light's (an empty slot leaves it as it is)
           const col = [0, 1, 2].map((i) => (l.colors[i] ? hexToRgb(l.colors[i]) : i === 0 && !l.colors.length ? [] : [0, 0, 0]));
-          return { id: s.id, on: true, fx: l.fx, pal: l.pal, sx: l.sx, ix: l.ix, col };
+          return { id: s.id, on: true, fx: l.fx, pal: l.pal, sx: l.sx, ix: l.ix, col, ...(d.group ? { grp: d.group, spc: 0 } : {}) };
         });
         // v: WLED answers with its new state
         saved.sent(d.id, await wled(d.host, '/json/state', { on: true, transition, ...(bri > 0 ? { bri } : {}), seg, v: true }));
@@ -667,7 +668,8 @@ export default defineModule<WledSettings>({
       const segmentNames = segments && Array.isArray(args.segmentNames) ? args.segmentNames.slice(0, segments.length).map((n: unknown) => cleanName(n, 30)) : undefined;
       let name = cleanName(args.name, 30);
       if (!name) name = await wled(host, '/json/info').then((i) => cleanName(i.name, 30)).catch(() => '');
-      const picked = segments ? { segments, segmentNames } : {};
+      const n = clamp(Math.round(num(args.group, 1)), 1, 10);
+      const picked = { ...(segments ? { segments, segmentNames } : {}), ...(args.group !== undefined ? { group: n > 1 ? n : undefined } : {}) };
       if (existing) Object.assign(existing, { host, name: name || existing.name, ...picked });
       else list.push({ id: uid(4), host, name: name || host, ...picked });
       ctx.settings.update({ devices: list });

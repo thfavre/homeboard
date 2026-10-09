@@ -15,12 +15,12 @@
   const sceneBrightness = new Synced(() => hb.modules.wled?.sceneBrightness, 140);
 
   // Device form
-  let devForm = $state<{ id?: string; host: string; name: string; segments: number[] } | null>(null);
+  let devForm = $state<{ id?: string; host: string; name: string; segments: number[]; group: number } | null>(null);
   /** Segments of the light being edited (null: loading or not reachable) */
   let segList = $state<{ id: number; name: string; leds: number }[] | null>(null);
 
   async function editDevice(d?: WledDevice) {
-    devForm = d ? { id: d.id, host: d.host, name: d.name, segments: [...(d.segments ?? [])] } : { host: '', name: '', segments: [] };
+    devForm = d ? { id: d.id, host: d.host, name: d.name, segments: [...(d.segments ?? [])], group: d.group ?? 1 } : { host: '', name: '', segments: [], group: 1 };
     segList = null;
     if (d) segList = (await attempt(() => rpc<{ id: number; name: string; leds: number }[]>('wled', 'segments', { id: d.id }))) ?? null;
   }
@@ -132,6 +132,7 @@
           {#if d.segments?.length}
             <p class="small accent">Effects only on {(d.segmentNames ?? d.segments.map((id) => `segment ${id}`)).join(', ')}</p>
           {/if}
+          {#if d.group}<p class="small accent">{d.group} LEDs lit together</p>{/if}
         </div>
         <button class="btn ghost small" aria-label="Edit" onclick={() => editDevice(d)}><Pencil size={15} /></button>
         <button class="btn ghost small" aria-label="Remove" onclick={async () => (await ask({ title: `Remove ${d.name}?`, confirm: 'Remove', danger: true })) && attempt(() => rpc('wled', 'removeDevice', { id: d.id }))}>
@@ -153,6 +154,11 @@
       >
         <label class="field"><span>IP address</span><input class="input" bind:value={devForm.host} placeholder="192.168.1.50" /></label>
         <label class="field"><span>Name</span><input class="input" bind:value={devForm.name} placeholder="Read from WLED if empty" /></label>
+        <label class="field">
+          <span>LEDs lit together: {devForm.group === 1 ? 'each LED on its own' : devForm.group}</span>
+          <input type="range" min="1" max="10" bind:value={devForm.group} />
+          <span class="faint small">For a dense strip close to its diffuser, where single LEDs show as dots: effects and scenes are stretched to match.</span>
+        </label>
         {#if segList && segList.length > 1}
           <div class="field">
             <span>Effects play on</span>

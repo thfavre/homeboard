@@ -6,6 +6,11 @@ export interface WledDevice {
   segments?: number[];
   /** Their names when picked, shown in the admin */
   segmentNames?: string[];
+  /**
+   * LEDs lit together as one during effects and scenes (WLED grouping): stretches the patterns on a dense
+   * strip close to its diffuser, where single LEDs show as dots. Unset: the light's own
+   */
+  group?: number;
 }
 
 /** What a WLED segment shows */
@@ -131,11 +136,13 @@ export const DEFAULT_WLED_SCENES: WledEffect[] = [
   { id: 'flow-ocean', name: 'Ocean flow', fx: 110, pal: 51, sx: 6, ix: 12, colors: [] },
   { id: 'flow-lavender', name: 'Lavender flow', fx: 110, pal: 4, sx: 5, ix: 12, colors: ['#9b5cff', '#ff4fa3', '#2a0a5e'] },
   { id: 'pastel', name: 'Pastel drift', fx: 9, pal: 20, sx: 8, ix: 40, colors: [] },
-  { id: 'moodlamp', name: 'Mood lamp', fx: 8, pal: 0, sx: 6, ix: 230, colors: [] },
+  // One color at a time, its changes drifting along the strip instead of every LED stepping at once
+  { id: 'moodlamp', name: 'Mood lamp', fx: 9, pal: 0, sx: 4, ix: 0, colors: [] },
   { id: 'lagoon', name: 'Lagoon', fx: 46, pal: 0, sx: 12, ix: 200, colors: ['#00c2b8', '#00233a'] },
   { id: 'lava', name: 'Lava lamp', fx: 107, pal: 41, sx: 10, ix: 0, colors: [] },
   { id: 'forest', name: 'Forest shade', fx: 67, pal: 10, sx: 10, ix: 60, colors: [] },
   { id: 'waves', name: 'Slow waves', fx: 15, pal: 0, sx: 20, ix: 8, colors: ['#ff9a3c', '#3a0a5a'] },
+  { id: 'crossing', name: 'Crossing waves', fx: 52, pal: 0, sx: 20, ix: 8, colors: ['#ff6f61', '#0b1d3a', '#2ec4b6'] },
   { id: 'tide', name: 'Rainbow tide', fx: 63, pal: 0, sx: 18, ix: 128, colors: [] },
   {
     id: 'embers',
