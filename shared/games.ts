@@ -362,12 +362,16 @@ export interface CoinView {
 
 // ------------------------------------------------------------ Rhythm Rain
 
-/** The keys, left to right (a level uses the first few). `led` is what the light strip shows. */
+/**
+ * The keys, left to right (a game uses the first few). `led` is what the light strip shows. Ordered
+ * so the colors in play stay easy to tell apart on the strip: blue always, yellow (closest to the
+ * orange and red of the zone) only with 4 colors.
+ */
 export const RHYTHM_COLORS = [
-  { id: 'green', name: 'Green', hex: '#2fd27a', led: '#00ff00' },
-  { id: 'red', name: 'Red', hex: '#ff3b5c', led: '#ff0000' },
-  { id: 'yellow', name: 'Yellow', hex: '#ffd23d', led: '#ffb000' },
   { id: 'blue', name: 'Blue', hex: '#3d8bff', led: '#0000ff' },
+  { id: 'red', name: 'Red', hex: '#ff3b5c', led: '#ff0000' },
+  { id: 'green', name: 'Green', hex: '#2fd27a', led: '#00ff00' },
+  { id: 'yellow', name: 'Yellow', hex: '#ffd23d', led: '#ffb000' },
   { id: 'orange', name: 'Orange', hex: '#ff7a2f', led: '#ff3c00' },
   { id: 'purple', name: 'Purple', hex: '#a35bff', led: '#8c00ff' },
   { id: 'cyan', name: 'Cyan', hex: '#2fe0e0', led: '#00ffd0' },

@@ -335,7 +335,7 @@
         <input class="input mono" inputmode="decimal" placeholder="0" bind:value={stakeText} />
         <span class="faint small">
           {#if mode === 'duel'}
-            {stake > 0 ? `${opponentName ?? 'Your opponent'} has to match it to accept. Winner takes ${formatAmount(stake * 2)}.` : 'Leave it at 0 to play just for fun.'}
+            {#if stake > 0}{opponentName ?? 'Your opponent'} has to match it to accept. Winner takes {formatAmount(stake * 2)}.{/if}
           {:else}
             Every player puts this in. Winner takes the pot.
           {/if}
