@@ -126,7 +126,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -942,6 +942,7 @@ export default defineModule<GamesSettings>({
         pirateTreasure: args?.pirateTreasure !== undefined ? Math.min(100, Math.max(10, Math.round(num(args.pirateTreasure, 100)))) : s.pirateTreasure,
         pirateLength: PIRATE_LENGTHS.some((l) => l.id === args?.pirateLength) ? args.pirateLength : s.pirateLength,
         pirateSongVolume: args?.pirateSongVolume !== undefined ? Math.round(clamp(num(args.pirateSongVolume, 70), 0, 100)) : s.pirateSongVolume,
+        pirateDrumVolume: args?.pirateDrumVolume !== undefined ? Math.round(clamp(num(args.pirateDrumVolume, 100), 0, 100)) : s.pirateDrumVolume,
         pirateAudioOffset:
           args?.pirateAudioOffset !== undefined ? Math.min(1000, Math.max(-1000, Math.round(num(args.pirateAudioOffset, 0)))) : s.pirateAudioOffset,
       });

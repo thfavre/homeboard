@@ -279,6 +279,8 @@ export interface GamesSettings {
   pirateSongs: PirateSong[];
   /** Its volume on the TV, 0 to 100 */
   pirateSongVolume: number;
+  /** The drum's volume on the TV, 0 to 100 (100: as loud as it was made) */
+  pirateDrumVolume: number;
 }
 
 // ------------------------------------------------------------ per game views

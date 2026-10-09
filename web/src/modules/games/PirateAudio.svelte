@@ -15,6 +15,8 @@
   const s = $derived(gamesState());
   const v = $derived(s?.match?.game === 'pirates' && s.match.phase === 'play' ? (s.match.view as PirateView | null) : null);
   const url = (kind: PirateSoundId) => s?.settings.pirateSounds?.[kind]?.url ?? null;
+  /** The drum at the host's level */
+  const drum = (volume: number) => (volume * (s?.settings.pirateDrumVolume ?? 100)) / 100;
 
   // The picked files are decoded as soon as they are known, so the first beat is not late
   $effect(() => {
@@ -93,7 +95,7 @@
       if (ahead > 1200) break;
       lastBeat = b.i;
       if (ahead < -40) continue;
-      pirateSound('drum', { url: url('drum'), when: at(b.at), accent: b.i < PIRATE.countIn, volume: b.i < PIRATE.countIn ? 0.95 : 0.85 });
+      pirateSound('drum', { url: url('drum'), when: at(b.at), accent: b.i < PIRATE.countIn, volume: drum(b.i < PIRATE.countIn ? 0.95 : 0.85) });
     }
     if (!roared && v.raceAt - early - now < 1200) {
       roared = true;
@@ -112,7 +114,7 @@
     const offs = [
       onEvent('games', 'pirateBoost', () => pirateSound('boost', { url: url('boost'), volume: 0.75 })),
       onEvent('games', 'pirateFinish', () => pirateSound('finish', { url: url('finish'), volume: 0.85 })),
-      onEvent<{ kind: PirateSoundId; url: string | null }>('games', 'pirateTest', (d) => pirateSound(d.kind, { url: d.url, volume: 0.85 })),
+      onEvent<{ kind: PirateSoundId; url: string | null }>('games', 'pirateTest', (d) => pirateSound(d.kind, { url: d.url, volume: d.kind === 'drum' ? drum(0.85) : 0.85 })),
       onEvent<SongTest | null>('games', 'pirateSongTest', (d) => void testSong(d)),
     ];
     return () => {
@@ -150,7 +152,7 @@
     let next = 0;
     const drums = () => {
       while (next < count && beats[next].time < ac.currentTime + 1.2) {
-        pirateSound('drum', { url: d.drum, when: beats[next].time, volume: 0.85, accent: next % 4 === 0 });
+        pirateSound('drum', { url: d.drum, when: beats[next].time, volume: drum(0.85), accent: next % 4 === 0 });
         next++;
       }
     };
