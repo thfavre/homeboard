@@ -35,8 +35,6 @@ const NOTE_TAIL_MS = 110;
 const TAIL_START = 0.3;
 /** Longest a whole song goes on after its last note (its outro, fading out) */
 const SONG_TAIL_MS = 6000;
-/** Best part ("preview start") the map editors set when the mapper picks none */
-const DEFAULT_PREVIEW_MS = 12_000;
 /** The music starts this long after the TV gets its cue (time for the message to get there) */
 const MUSIC_CUE_MS = 1000;
 /** Longest wait for the TV to have the song ready before starting anyway */
@@ -121,7 +119,7 @@ export function chartNps(chart: BsNote[], minGapMs: number): number {
 
 /**
  * The part of the song to play, in ms of the song: between `minMs` and `maxMs` long, around the map's
- * "best part" (the preview its mapper picked, usually the chorus or the drop). It starts and ends on
+ * "best part" (where its preview starts, usually the chorus, the drop or the famous riff). It starts and ends on
  * whole bars, preferably where the notes pause (a phrase starts or ends there) or at the song's end.
  * The whole song when it fits in `maxMs` or when `whole` is set. `toEnd`: it goes to the song's end.
  */
@@ -151,9 +149,10 @@ export function pickSection(
     const after = i < chart.length ? chart[i].ms : Infinity;
     return Math.min(after - before, 2 * bar) / bar;
   };
-  // 12 s is the map editors' default: the mapper did not pick one. Then the busiest part (the chorus, usually).
-  const picked = previewMs > first && previewMs < last && Math.abs(previewMs - DEFAULT_PREVIEW_MS) > 1;
-  let anchor = picked ? previewMs : first;
+  // The best part is where BeatSaver's preview starts, the one guests hear when they pick the song: the game
+  // must have it. Before the first note: the song's start. Past the last one (a broken map): the busiest part.
+  const picked = previewMs < last;
+  let anchor = Math.max(first, previewMs);
   if (!picked) {
     let most = -1;
     for (let t = Math.floor(first / bar) * bar; t + minMs <= end; t += bar) {

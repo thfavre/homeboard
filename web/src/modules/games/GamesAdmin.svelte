@@ -189,7 +189,7 @@
     </div>
     {#if !s!.settings.rhythmFullSong}
       <p class="faint small">
-        Song length. With music, the game plays the part of the song around its best part (the one the map's author marked, else its busiest part) that fits best between
+        Song length. With music, the game plays the part of the song around its best part (where the song's preview starts, the part guests hear when they pick it) that fits best between
         these two, cut where the music pauses. A shorter song is played whole. Without music, a game lasts the shortest.
       </p>
       {@render length('Shortest', 'rhythmMinSec')}
