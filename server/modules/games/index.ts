@@ -7,6 +7,9 @@ import {
   rhythmColors,
   rhythmDifficulty,
   gameInfo,
+  PIRATE_LENGTHS,
+  PIRATE_SOUNDS,
+  type PirateSoundId,
   type DuelInvite,
   type GameColor,
   type GameId,
@@ -38,6 +41,8 @@ import { coinFlip } from './coin.ts';
 import { chartFor, chartNps, chartSteadiness, rhythmRain } from './rhythm.ts';
 import { Turntable } from './turntable.ts';
 import { Fireworks } from './fireworks.ts';
+import { pirateRace } from './pirates.ts';
+import { cleanMp3, downloadMp3 } from '../soundboard/myinstants.ts';
 import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
 
 /** Songs a new party starts with: well known, well rated maps with charts from Easy or Normal to Expert */
@@ -51,6 +56,7 @@ const FACTORIES: Record<GameId, GameFactory> = {
   bluff,
   coin: coinFlip,
   rhythm: rhythmRain,
+  pirates: pirateRace,
 };
 
 const LOBBY_MS = 45_000;
@@ -113,7 +119,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {} },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -436,6 +442,8 @@ export default defineModule<GamesSettings>({
           const d = lights()?.list().find((x) => x.id === id && x.online);
           return d ? { leds: Math.min(490, d.leds ?? 60), send: (rgb) => lights()?.frame(d.id, rgb) } : null;
         },
+        strips: () =>
+          (lights()?.list() ?? []).filter((d) => d.online).map((d) => ({ id: d.id, leds: Math.min(490, d.leds ?? 60), send: (rgb: Uint8Array) => lights()?.frame(d.id, rgb) })),
         sound: (name, data) => ctx.emit('tv-audio', name, data),
         publish: () => ctx.publish(),
         finish: (outcome) => finish(m, outcome),
@@ -665,6 +673,8 @@ export default defineModule<GamesSettings>({
       if (!m || m.mode !== 'room' || m.phase !== 'lobby') throw new HbError('Too late to join');
       if (m.players.some((p) => p.id === guest.id)) return true;
       checkFree(guest.id, null);
+      const most = gameInfo(m.game)?.maxPlayers;
+      if (most && m.players.length >= most) throw new HbError(`The game is full (${most} players)`);
       m.charges.push(ctx.economy.pay(guest, m.stake, `${gameInfo(m.game)!.name}: entry`));
       m.players.push(player(guest));
       ctx.publish();
@@ -750,6 +760,30 @@ export default defineModule<GamesSettings>({
       ctx.publish();
     });
 
+    // Pirate Race sounds: a MyInstants sound in place of a built-in one, kept for every later party
+    const pirateDir = ctx.mediaDir('pirates');
+    ctx.onAdmin('setPirateSound', async (args) => {
+      const kind = String(args?.kind ?? '') as PirateSoundId;
+      if (!PIRATE_SOUNDS.some((x) => x.id === kind)) throw new HbError('Unknown sound');
+      const sounds = { ...ctx.settings.get().pirateSounds };
+      if (!args?.mp3) {
+        delete sounds[kind];
+      } else {
+        const mp3 = cleanMp3(args.mp3);
+        const file = await downloadMp3(mp3, pirateDir);
+        sounds[kind] = { file, url: ctx.mediaUrl(`pirates/${encodeURIComponent(file)}`), title: String(args?.title ?? mp3).slice(0, 60) };
+      }
+      ctx.settings.update({ pirateSounds: sounds });
+      ctx.publish();
+      return sounds[kind] ?? null;
+    });
+    /** Let the TV play one of the race sounds, to try it */
+    ctx.onAdmin('testPirateSound', (args) => {
+      const kind = String(args?.kind ?? '');
+      if (!PIRATE_SOUNDS.some((x) => x.id === kind)) throw new HbError('Unknown sound');
+      ctx.emit('tv-audio', 'pirateTest', { kind, url: ctx.settings.get().pirateSounds[kind as PirateSoundId]?.url ?? null });
+    });
+
     ctx.onTv('play', (args) => {
       match?.runtime?.tvInput?.(args);
       return true;
@@ -792,6 +826,15 @@ export default defineModule<GamesSettings>({
         rhythmMinSec: args?.rhythmMinSec !== undefined ? Math.min(600, Math.max(20, Math.round(num(args.rhythmMinSec, 60)))) : s.rhythmMinSec,
         rhythmMaxSec: args?.rhythmMaxSec !== undefined ? Math.min(600, Math.max(20, Math.round(num(args.rhythmMaxSec, 120)))) : s.rhythmMaxSec,
         rhythmFullSong: typeof args?.rhythmFullSong === 'boolean' ? args.rhythmFullSong : s.rhythmFullSong,
+        pirateLight:
+          typeof args?.pirateLight === 'string' && (args.pirateLight === '' || lights()?.list().some((d) => d.id === args.pirateLight))
+            ? args.pirateLight
+            : s.pirateLight,
+        pirateReverse: typeof args?.pirateReverse === 'boolean' ? args.pirateReverse : s.pirateReverse,
+        pirateTreasure: args?.pirateTreasure !== undefined ? Math.min(100, Math.max(10, Math.round(num(args.pirateTreasure, 100)))) : s.pirateTreasure,
+        pirateLength: PIRATE_LENGTHS.some((l) => l.id === args?.pirateLength) ? args.pirateLength : s.pirateLength,
+        pirateAudioOffset:
+          args?.pirateAudioOffset !== undefined ? Math.min(1000, Math.max(-1000, Math.round(num(args.pirateAudioOffset, 0)))) : s.pirateAudioOffset,
       });
       // The shortest stays below the longest, whichever was moved
       const n = ctx.settings.get();

@@ -1,5 +1,5 @@
 import type { Component } from 'svelte';
-import { CircleDashed, Coins, Guitar, Lightbulb, Timer, VenetianMask, Zap } from '@lucide/svelte';
+import { CircleDashed, Coins, Guitar, Lightbulb, Ship, Timer, VenetianMask, Zap } from '@lucide/svelte';
 import type { GameId, GamesState, MatchState } from '$shared/games.ts';
 import { hb, serverNow } from '$lib/client.svelte.ts';
 
@@ -11,6 +11,7 @@ export const GAME_ICONS: Record<GameId, Component<any>> = {
   bluff: VenetianMask,
   coin: Coins,
   rhythm: Guitar,
+  pirates: Ship,
 };
 
 export const gamesState = () => hb.modules.games as GamesState | undefined;

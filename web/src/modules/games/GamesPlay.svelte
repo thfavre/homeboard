@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Check, Crown, Play, Swords, X } from '@lucide/svelte';
   import { fade, fly, scale } from 'svelte/transition';
-  import { DUEL_INVITE_MS, gameInfo, rhythmDifficulty, type GamePlayer } from '$shared/games.ts';
+  import { DUEL_INVITE_MS, formationName, gameInfo, rhythmDifficulty, type GamePlayer } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
@@ -55,6 +55,7 @@
         <GameCard game={info} eyebrow="You are in" />
         {#if economy && (m.stake > 0 || m.prize > 0)}<PotPanel inLabel="Your entry" stake={m.stake} outLabel="Winner takes" pot={m.pot + m.prize} />{/if}
         {@render faces(m.players)}
+        {#if m.game === 'pirates' && m.players.length >= 2}<p class="dim note">Crews right now: {formationName(m.players.length)} · up to {info.maxPlayers} players</p>{/if}
         {#if m.endsAt}
           <Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label={m.players.length < 2 ? 'Needs 2 players, cancelled in' : 'Starts in'} />
         {/if}
@@ -161,6 +162,7 @@
       <GameCard game={info} eyebrow={m.starter ? `${m.starter.name} started a game` : 'Game on the TV'} />
       {#if economy && (m.stake > 0 || m.prize > 0)}<PotPanel inLabel="Entry" stake={m.stake} outLabel="Winner takes" pot={m.pot + m.prize} />{/if}
       {@render faces(m.players)}
+      {#if m.game === 'pirates' && m.players.length >= 2}<p class="dim note">Crews right now: {formationName(m.players.length)} · up to {info.maxPlayers} players</p>{/if}
       {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Join closes in" />{/if}
       <button class="btn primary block big" disabled={busy} onclick={() => act('join')}><Play size={20} /> Join</button>
       <button class="btn ghost block" onclick={() => (local.skipped = m.id)}>Not this time</button>

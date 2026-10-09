@@ -32,6 +32,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [x] Perfect Circle: Draw the most perfect circle you can in one stroke, and the app scores your precision.
 - [ ] Beat Maker: Compose a rhythm on a grid without hearing a single sound, then let the room vote when it plays on the TV.
 - [ ] Horse Race: Bet on a horse and watch the race unfold on the TV, hoping yours crosses the line first.
+- [x] Pirate Race: crews of pirates (1 vs 1 up to 4 vs 4 vs 4) row in time with a drum that speeds up and slows down; the ships sail on the TV and on a WLED light (the other lights play a sea wave), first to the treasure wins.
 
 - [ ] on the a selecatble Wled device  Tir à la corde, spammer(possible de le faire en 1vs1, 2vs2,.. ou même nombre impair)
 - [ ] on the a selecatble Wled deviceZone cible : un point lumineux monte et descend, et il faut presser pile quand il traverse la zone verte. La zone rétrécit et la vitesse augmente à chaque réussite.
