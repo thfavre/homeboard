@@ -178,7 +178,7 @@
     {@render lightSelect('Scratch light', 'A WLED light that turns with the record, following every scratch', 'scratchLight')}
   {:else if id === 'bluff'}
     {#if hb.core?.economyEnabled && bluffBonus}
-      <p class="faint small">When both share, each gets their bet back plus a bonus paid by you: the fixed part, plus a number of times their bet. One steals: the thief takes the pot (both bets). Under 1x, stealing pays more than sharing, which is what makes it a bluff.</p>
+      <p class="faint small">You add a bonus for each player to the pot: the fixed part, plus a number of times their bet. Both share: each gets their bet back plus their bonus. One steals: the thief takes everything, both bets and both bonuses, so stealing always pays twice as much as sharing. Both steal: nobody gets anything.</p>
       <div class="line">
         <span class="label">Fixed bonus <span class="faint small">Each player, whatever the bet</span></span>
         <AmountInput value={bluffBonus.amount} oncommit={(v) => attempt(() => rpc('core', 'setEarn', { key: 'games.bluff', amount: v }))} />

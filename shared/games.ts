@@ -69,10 +69,10 @@ export const GAMES: GameInfo[] = [
     id: 'bluff',
     name: 'Bluff',
     tagline: 'Share or steal the pot',
-    rules: 'You both put the same bet in the pot, then choose in secret: share or steal. Both share: each gets their bet back plus a bonus. One steals: the thief takes the whole pot, the other gets nothing. Both steal: nobody gets anything.',
+    rules: 'You both put the same bet in the pot, then choose in secret: share or steal. The house adds a bonus for each of you to the pot. Both share: each gets half (their bet back plus a bonus). One steals: the thief takes the whole pot, both bonuses included, the other gets nothing. Both steal: nobody gets anything.',
     modes: ['duel'],
     phoneOnly: true,
-    steps: ['Talk it over, then choose in secret: share or steal', 'Both share: your bet back, plus a bonus', 'One steals: takes it all. Both steal: nobody wins'],
+    steps: ['Talk it over, then choose in secret: share or steal', 'Both share: your bet back, plus a bonus', 'One steals: takes it all, twice as much. Both steal: nobody wins'],
     colors: ['#ff3b8d', '#8b3dff'],
   },
   {
@@ -402,13 +402,13 @@ export interface BluffDeal {
   bonus: number;
   /** Both share: each gets this (their bet back + the bonus) */
   share: number;
-  /** One steals: the thief gets this (the whole pot) */
+  /** One steals: the thief gets this (the whole pot with both bonuses: always twice sharing, so stealing tempts) */
   steal: number;
 }
 
 export const bluffDeal = (stake: number, base: number, multiplier: number): BluffDeal => {
   const bonus = Math.max(0, base) + Math.round(stake * Math.max(0, multiplier));
-  return { stake, bonus, share: stake + bonus, steal: stake * 2 };
+  return { stake, bonus, share: stake + bonus, steal: (stake + bonus) * 2 };
 };
 
 /** Bluff payout of one player, from both choices */

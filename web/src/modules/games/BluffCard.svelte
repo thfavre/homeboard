@@ -33,7 +33,7 @@
     <div class="title">
       <span class="icon"><VenetianMask size="1.1rem" /></span>
       <span class="what">
-        <span class="eyebrow">Bluff{#if economy && m.pot > 0}<span>{' · pot '}</span><Money amount={m.pot} />{/if}</span>
+        <span class="eyebrow">Bluff{#if economy && (m.bluff?.steal ?? m.pot) > 0}<span>{' · pot '}</span><Money amount={m.bluff?.steal ?? m.pot} />{/if}</span>
         {#key status}<strong class="truncate" in:scale={{ start: 0.9, duration: 250 }}>{status}</strong>{/key}
       </span>
     </div>

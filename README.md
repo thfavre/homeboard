@@ -153,7 +153,8 @@ what is there), tumbling on its way, then the pot flies to the face it landed on
 
 Bluff is played on the two phones too: the phones explain the rules with what each outcome pays
 (both share: your bet back plus a bonus, the fixed bonus plus a number of times the bet, set in the
-admin; one steals: the thief takes the pot; both steal: nothing), then each picks Share or Steal in
+admin; one steals: the thief takes the whole pot, both bets and both bonuses, twice what sharing
+pays; both steal: nothing), then each picks Share or Steal in
 secret. The TV only shows a small card at the top: who has chosen, then both cards turned over.
 A Bluff can be played once every 30 minutes for the whole party (set in the admin).
 
