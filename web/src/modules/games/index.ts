@@ -4,6 +4,7 @@ import GamesTv from './GamesTv.svelte';
 import GamesPlay from './GamesPlay.svelte';
 import GamesGuest from './GamesGuest.svelte';
 import GamesAdmin from './GamesAdmin.svelte';
+import GamesPrices from './GamesPrices.svelte';
 import InviteTv from './InviteTv.svelte';
 import ScratchCard from './perk/ScratchCard.svelte';
 import RhythmCard from './RhythmCard.svelte';
@@ -25,5 +26,5 @@ export default {
   guestTakeover: GamesPlay,
   showGuestTakeover: showGamesScreen,
   guest: { title: 'Games', tagline: 'Duel someone for money, or start a game for everyone', icon: Gamepad2, order: 65, component: GamesGuest, priceKey: 'games.duel' },
-  admin: { title: 'Games', icon: Gamepad2, order: 65, component: GamesAdmin },
+  admin: { title: 'Games', icon: Gamepad2, order: 65, component: GamesAdmin, prices: GamesPrices },
 } satisfies ClientModule;

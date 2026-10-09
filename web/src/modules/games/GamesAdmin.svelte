@@ -252,15 +252,6 @@
       {/each}
     </div>
   </Section>
-
-  {#if hb.core?.economyEnabled}
-    <Section title="For every game">
-      <div class="line">
-        <span class="label">Highest bet <span class="faint small">0 = no limit</span></span>
-        <AmountInput value={s.settings.maxStake} oncommit={(v) => setSettings({ maxStake: v })} />
-      </div>
-    </Section>
-  {/if}
 {/if}
 
 <style>

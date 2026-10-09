@@ -23,6 +23,8 @@
     component: Component;
     /** Module id, when the section belongs to a toggleable module */
     module?: string;
+    /** The module's own lines in its "Prices and rewards" section */
+    prices?: Component;
   }
 
   const sections: Section[] = [
@@ -32,7 +34,7 @@
     ...clientModules
       .filter((m) => m.admin)
       .sort((a, b) => a.admin!.order - b.admin!.order)
-      .map((m) => ({ id: m.id, title: m.admin!.title, icon: m.admin!.icon, component: m.admin!.component, module: m.id })),
+      .map((m) => ({ id: m.id, title: m.admin!.title, icon: m.admin!.icon, component: m.admin!.component, module: m.id, prices: m.admin!.prices })),
     { id: 'appearance', title: 'Appearance', icon: Palette, component: Appearance },
     { id: 'privacy', title: 'Privacy', icon: EyeOff, component: Privacy },
     { id: 'access', title: 'Access', icon: KeyRound, component: Access },
@@ -107,7 +109,7 @@
       </header>
       <main>
         {#key section.id}
-          {#if section.module}<ModulePrices module={section.module} />{/if}
+          {#if section.module}<ModulePrices module={section.module} extra={section.prices} />{/if}
           <section.component />
         {/key}
       </main>

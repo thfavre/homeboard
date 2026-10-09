@@ -32,6 +32,8 @@ export interface AdminSection {
   icon: Component<any>;
   order: number;
   component: Component;
+  /** Extra lines at the end of the module's "Prices and rewards" section, at the top of its page */
+  prices?: Component;
 }
 
 /**
