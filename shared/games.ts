@@ -14,6 +14,8 @@ export interface GameInfo {
   lights?: boolean;
   /** Played on a light only: no full screen on the TV, just a small card above the main widget */
   lightOnly?: boolean;
+  /** Played on the phones: no full screen on the TV, just a small card and the big moment (Coin Flip: the throw) */
+  phoneOnly?: boolean;
   /** Has its own sound: the Spotify music is paused while it is played, and resumed after */
   pausesMusic?: boolean;
   /** How to play in 3 short steps, for the phones */
@@ -73,10 +75,11 @@ export const GAMES: GameInfo[] = [
   {
     id: 'coin',
     name: 'Coin Flip',
-    tagline: 'Heads or tails, winner takes the pot',
-    rules: 'The TV picks who calls heads or tails. The other one flips the coin from their phone. The coin decides.',
+    tagline: 'Your face on one side, theirs on the other',
+    rules: 'Each player has their face on one side of the coin. One of you is picked at random to throw it: swipe it up from your phone and it flies on the TV. The face it lands on takes the whole pot.',
     modes: ['duel'],
-    steps: ['The TV picks who calls heads or tails', 'The other one swipes the coin up to the TV', 'The right side takes the whole pot'],
+    phoneOnly: true,
+    steps: ['Your face is on one side of the coin, theirs on the other', 'One of you is picked to swipe the coin up to the TV', 'The face it lands on takes the whole pot'],
     colors: ['#ffc861', '#ff8a3a'],
   },
   {
@@ -346,17 +349,18 @@ export interface BluffView {
 export type CoinSide = 'heads' | 'tails';
 
 export interface CoinView {
-  /** draw: the TV picks the caller. call: they pick a side. toss: the flipper swipes. flight: the coin is in the air. */
-  step: 'draw' | 'call' | 'toss' | 'flight';
-  /** Who calls the side (the result of the draw) */
-  caller: string;
-  /** Who flips the coin */
+  /** draw: the phones pick who throws. toss: they swipe the coin up. flight: it flies on the TV (and lands). */
+  step: 'draw' | 'toss' | 'flight';
+  /** Who throws the coin (the result of the draw) */
   flipper: string;
+  /** The player whose face is on each side of the coin */
+  heads: string;
+  tails: string;
   drawAt: number | null;
   drawMs: number;
-  /** The caller's side, once called */
-  side: CoinSide | null;
+  /** Server time of the throw, and how long the coin flies before it lands */
   flipAt: number | null;
+  flipMs: number;
   /** How hard the coin was swiped (0 to 1) */
   power: number;
   /** Set when the coin lands */

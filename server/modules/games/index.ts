@@ -361,8 +361,8 @@ export default defineModule<GamesSettings>({
       // A new game ends the prize; a light game takes the lights straight from it
       const handOver = perk?.kind === 'lights' && !!gameInfo(game)?.lights;
       endPerk(handOver);
-      // Light-only games leave the TV as it is (a small card shows the score)
-      if (!gameInfo(game)?.lightOnly) ctx.takeover.start();
+      // Light-only and phone games leave the TV as it is (a small card shows how it goes)
+      if (!gameInfo(game)?.lightOnly && !gameInfo(game)?.phoneOnly) ctx.takeover.start();
       match = {
         id: uid(6),
         game,

@@ -16,7 +16,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] Sync Selfie: Take a selfie on the same signal as everyone else, then see the mosaic of all the faces on the TV.
 - [ ] Custom stickers (like the same as the one on that the user creted for whatsapp, or he can create one from a photo, or from a drawing)
 - [ ] Add something that cost a lot, like 1000, and advertise it as a big thing, but it will just like stop the lights, and do a fart sound, or something like that. (like a joke for the rich people)
-- [ ] ! Make the leaderboard more divers. Like sometimes it changes to the leaderboardt of the most pixels draw in the canas, or more stickers sent, most games done,... (with a smooth transtition, and not just a hard change) (and also when a song has been played on guitar hero by more than 5 players (in 1vs1 save both player score of course, with the same difficulty / numbers of colors), allow it to show on the leaderboard with the score (show the cover and song name))
+- [x] ! Make the leaderboard more divers. Like sometimes it changes to the leaderboardt of the most pixels draw in the canas, or more stickers sent, most games done,... (with a smooth transtition, and not just a hard change) (and also when a song has been played on guitar hero by more than 5 players (in 1vs1 save both player score of course, with the same difficulty / numbers of colors), allow it to show on the leaderboard with the score (show the cover and song name))
 
 -- games ---
 - [x] 1vs1 someone on the TV (like a game show (and put some coins?))
@@ -26,7 +26,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [x] Light Simon: Repeat the color sequence shown by the WLED lights, which grows longer each round until someone slips up.
 - [x] Color Reflex: Tap the button matching the color the lights turn, faster than your opponent.
 - [x] Bluff: Secretly choose to share or steal the pot, hoping to guess what the other player will do.
-- [x] Coin Flip: the challenger calls heads or tails, the winner takes the pot.
+- [x] Coin Flip: each player's face is on one side of the coin, one of them throws it to the TV, the face it lands on takes the pot.
 - [ ] Blind Drawing: Draw the given word on a black screen, then discover the result in full on the TV.
 - [ ] From Memory: Study an image for 5 seconds, redraw it, then compare your drawing to the original on the TV.
 - [x] Perfect Circle: Draw the most perfect circle you can in one stroke, and the app scores your precision.
@@ -50,7 +50,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] buy domain name
 - [ ] redo a more fair economy
 - [x] WLED on ChillGuy should only change the eye segment effect/color
-- [ ] ! for the coin flip, just put the face of the participans so easier to undertand who won. And still ranomly choose who trow the coin. Also I dont think we need the whole screen to do that, like we could do everything on the 2 participant phone, just the trow the coin on the big TV, and show a small animation of the money going to the winner. (so it would be more like a duel, and not a game for the whole room), also make the coin with the head on it look a bit nicer, like 3D, and make the coin flip animation a bit more realistic, like it should be a bit more random, and not just go up and down, but also rotate a bit.
+- [x] ! for the coin flip, just put the face of the participans so easier to undertand who won. And still ranomly choose who trow the coin. Also I dont think we need the whole screen to do that, like we could do everything on the 2 participant phone, just the trow the coin on the big TV, and show a small animation of the money going to the winner. (so it would be more like a duel, and not a game for the whole room), also make the coin with the head on it look a bit nicer, like 3D, and make the coin flip animation a bit more realistic, like it should be a bit more random, and not just go up and down, but also rotate a bit.
 - [x] change the passive incom, makes that he doesnt need to be always online, if not online, it will increase what he would gain when he comes back online. up to X hours (admin can change it, 1h by deauflt) and user get a nice message when he comes back online, like "you were offline for 2h, you earned +20 coins while you were away"
 - [ ] idea, think if its good, amin desactivable of course: make prices degressives when the feature is not used.. until its 1 or even free
 - improve the game settings admin side
@@ -97,8 +97,8 @@ Environment variables: `PORT` (default 4300), `HB_TUNNEL=0` (no public tunnel),
 | **Quiz** | Answer; start a quiz (random trivia or custom) for a fee; create custom quizzes | Start, pause, live time per question, custom quiz library with pictures |
 | **Games** | Challenge someone to a 1 vs 1 duel with a bet, or start a game anyone can join: Blind Timer, Light Simon, Color Reflex, Perfect Circle, Bluff (duel), Coin Flip (duel) | Start a room game, stop with refund, choose which games guests can start, bet limit, light colors on the TV |
 
-Core features: session code, name + PIN to rejoin from another phone, live activity feed, leaderboard,
-money rain, gifts, kick, themes, and a full economy editor (currency name, every price and reward).
+Core features: session code, name + PIN to rejoin from another phone, live activity feed, leaderboard
+(it takes turns with other boards, see below), money rain, gifts, kick, themes, and a full economy editor (currency name, every price and reward).
 
 ### How guests are recognized
 
@@ -146,10 +146,23 @@ Perfect Circle: each player draws several circles (3 by default, set in the admi
 minute, each sent when the finger is lifted. The scores stay secret until the TV reveals every
 circle one by one with its score while the totals count up; the best total wins.
 
+Coin Flip is played on the two phones: each player's face is on one side of the coin, one of them
+is drawn to swipe it up, and only the throw shows on the TV (in the middle of the screen, over
+what is there), tumbling on its way, then the pot flies to the face it landed on.
+
 Light Simon and Color Reflex drive the WLED lights with solid colors (queued light effects wait,
 and every light goes back to what it was doing afterwards). The TV shows the colors too, or only
 when no light is reachable if the host turns that off. Each game is one file in
 `server/modules/games/` plus a phone and a TV screen in `web/src/modules/games/`.
+
+### Leaderboard
+
+The TV leaderboard takes turns, with a crossfade, between the money board (richest, big spenders or
+top earners, set in Economy) and every other board with at least two guests on it: pixels painted,
+stickers sent, games played, games won, songs queued, sounds played and photos shared. A Rhythm Rain
+song played with music gets its own board (cover, title, best score of each guest) once enough guests
+played it at the same difficulty and number of colors (6 by default); in a duel both scores count.
+The host can turn the rotation off and choose how long each board stays, in Economy.
 
 ### Selfie avatars
 

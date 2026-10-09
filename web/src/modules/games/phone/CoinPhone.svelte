@@ -1,29 +1,26 @@
 <script lang="ts">
   import { fade, scale } from 'svelte/transition';
-  import type { CoinSide, CoinView, MatchState } from '$shared/games.ts';
+  import type { CoinView, MatchState } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import { Now } from '../store.svelte.ts';
   import { coinDraw } from '../ui/coinDraw.ts';
   import Fuse from '../ui/Fuse.svelte';
-  import Coin from '../tv/CoinFace.svelte';
+  import Coin3D from '../ui/Coin3D.svelte';
 
-  /** The draw for who calls, the call itself, then the flipper swipes the coin up to send it to the TV */
+  /** The draw for who throws, then the thrower swipes the coin up to send it flying on the TV */
   let { m }: { m: MatchState } = $props();
   const v = $derived(m.view as CoinView);
   const me = $derived(hb.me?.id ?? '');
   const now = new Now(50);
   const draw = $derived(coinDraw(v, m.players, now.value));
-  const nameOf = (id: string) => m.players.find((p) => p.id === id)?.name ?? '';
-  const mySide = $derived(!v.side ? null : v.caller === me ? v.side : v.side === 'heads' ? 'tails' : 'heads');
-  const SIDES: CoinSide[] = ['heads', 'tails'];
-  let busy = $state(false);
-
-  async function call(side: CoinSide) {
-    busy = true;
-    await attempt(() => rpc('games', 'play', { side }));
-    busy = false;
-  }
+  const player = (id: string) => m.players.find((p) => p.id === id) ?? m.players[0];
+  const heads = $derived(player(v.heads));
+  const tails = $derived(player(v.tails));
+  const other = $derived(m.players.find((p) => p.id !== me) ?? m.players[0]);
+  /** The thrower holds the coin with their own face up */
+  const mine = $derived(v.tails === me ? 'rotateX(180deg)' : 'rotateX(0deg)');
+  const landed = $derived(v.outcome ? player(v.outcome === 'heads' ? v.heads : v.tails) : null);
 
   // Swipe: the coin follows the finger, a quick flick upwards throws it
   let dy = $state(0);
@@ -67,8 +64,8 @@
 </script>
 
 <div class="coin">
-  {#if v.step === 'draw' || (v.step === 'call' && v.caller !== me)}
-    <span class="eyebrow">{v.step === 'draw' && !draw.settled ? 'Who calls it?' : v.caller === me ? 'You call it!' : `${nameOf(v.caller)} calls it`}</span>
+  {#if v.step === 'draw'}
+    <span class="eyebrow">{!draw.settled ? 'Who throws the coin?' : v.flipper === me ? 'You throw it!' : `${player(v.flipper).name} throws it`}</span>
     <div class="duo">
       {#each m.players as p (p.id)}
         <span class="pick" class:lit={draw.highlighted === p.id}>
@@ -77,27 +74,13 @@
         </span>
       {/each}
     </div>
-    {#if v.step === 'call'}
-      <p class="dim" in:fade>{nameOf(v.caller)} is choosing heads or tails. Then you flip the coin.</p>
-      {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Chosen at random in" />{/if}
-    {/if}
-  {:else if v.step === 'call'}
-    <span class="eyebrow">You call it</span>
-    <h1>Heads or tails?</h1>
-    <div class="sides">
-      {#each SIDES as side (side)}
-        <button class="side" disabled={busy} onclick={() => call(side)} in:scale={{ start: 0.6, duration: 400 }}>
-          <Coin outcome={side} size="7.5rem" />
-          <strong>{side === 'heads' ? 'Heads' : 'Tails'}</strong>
-        </button>
-      {/each}
-    </div>
-    {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Chosen at random in" />{/if}
+    <Coin3D {heads} {tails} size="7.5rem" idle />
+    <p class="dim">Your face is on one side of the coin, {other.name}'s on the other. It lands on yours: you win.</p>
   {:else if v.flipper === me && (v.step === 'toss' || (thrown && !v.outcome))}
     <!-- Stays after the throw so the coin can leave the screen; it lands on the TV -->
-    <span class="eyebrow">You have {mySide}</span>
-    <h1>{thrown ? 'Look at the TV!' : 'Flip it!'}</h1>
-    <p class="dim">{thrown ? 'The coin is in the air' : 'Swipe the coin up to the TV'}</p>
+    <span class="eyebrow">You throw it</span>
+    <h1>{thrown ? 'Look at the TV!' : 'Throw it!'}</h1>
+    <p class="dim">{thrown ? 'The coin is in the air' : 'Swipe the coin up to the TV. Harder, higher.'}</p>
     <div class="pad">
       <span
         class="flick"
@@ -110,22 +93,26 @@
         onpointercancel={up}
         role="button"
         tabindex="-1"
-        aria-label="Swipe up to flip the coin"
+        aria-label="Swipe up to throw the coin"
       >
-        <Coin outcome={null} still size="9rem" />
+        <span class:spinning={thrown}><Coin3D {heads} {tails} size="10rem" transform="rotateY(-14deg) {mine} rotateX(16deg)" /></span>
       </span>
     </div>
-    {#if m.endsAt && !thrown}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Flips by itself in" />{/if}
+    {#if m.endsAt && !thrown}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Thrown by itself in" />{/if}
+  {:else if landed}
+    <span class="eyebrow">It landed on</span>
+    <h1>{landed.id === me ? 'Your face!' : `${landed.name}'s face`}</h1>
+    <span in:scale={{ start: 0.5, duration: 600 }}>
+      <Coin3D {heads} {tails} size="10rem" transform="rotateX({v.outcome === 'tails' ? 180 : 0}deg) rotateX(12deg)" />
+    </span>
+    <p class="dim">{landed.id === me ? 'The pot is yours!' : 'Not this time...'}</p>
   {:else}
-    <span class="eyebrow">You have</span>
-    <h1>{mySide === 'heads' ? 'Heads' : 'Tails'}</h1>
-    {#if v.outcome}
-      <Coin outcome={v.outcome} size="10rem" />
-      <p class="dim">{v.outcome === mySide ? 'It landed on your side!' : 'Not your side...'}</p>
-    {:else if v.step === 'toss'}
-      <p class="dim">{nameOf(v.flipper)} is about to flip the coin. Watch the TV.</p>
-    {:else}
-      <p class="dim">The coin is in the air. Watch the TV.</p>
+    <span class="eyebrow">{v.step === 'toss' ? `${player(v.flipper).name} throws the coin` : 'The coin is in the air'}</span>
+    <h1>Watch the TV!</h1>
+    <Coin3D {heads} {tails} size="8.5rem" idle />
+    {#if v.step === 'toss'}
+      <p class="dim" in:fade>Your face is on one side, {other.name}'s on the other.</p>
+      {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Thrown by itself in" />{/if}
     {/if}
   {/if}
 </div>
@@ -168,24 +155,6 @@
   .pick.lit :global(.avatar) {
     box-shadow: 0 0 0 0.25rem var(--coin);
   }
-  .sides {
-    display: flex;
-    gap: 1rem;
-  }
-  .side {
-    display: grid;
-    justify-items: center;
-    gap: 0.6rem;
-    padding: 0.8rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface-2);
-    color: var(--text);
-    font-size: 1.1rem;
-  }
-  .side:active {
-    transform: scale(0.96);
-  }
   .pad {
     height: 18rem;
     display: grid;
@@ -206,5 +175,14 @@
   }
   .flick.thrown {
     transition: transform 0.45s cubic-bezier(0.5, 0, 0.9, 0.6);
+  }
+  .spinning {
+    display: grid;
+    animation: tumble 0.3s linear infinite;
+  }
+  @keyframes tumble {
+    to {
+      transform: rotateX(360deg);
+    }
   }
 </style>
