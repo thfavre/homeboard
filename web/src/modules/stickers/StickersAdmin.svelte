@@ -2,7 +2,7 @@
   import { Synced } from '$lib/synced.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import { Trash2, Upload, X } from '@lucide/svelte';
-  import type { StickersState } from '$shared/stickers.ts';
+  import { MAX_GUEST_STICKERS, type StickersState } from '$shared/stickers.ts';
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -38,6 +38,18 @@
         <span class="truncate">{a.text ? `"${a.text}"` : a.sticker?.name}</span>
         <span class="faint">by {a.guest.name}</span>
         <span class="spacer"></span>
+        {#if a.sticker?.guestMade && a.guest.id}
+          <button
+            class="btn ghost small"
+            aria-label="Delete this sticker"
+            title="Take it off the TV and delete it from the guest's stickers"
+            onclick={async () =>
+              (await ask({ title: `Delete ${a.guest.name}'s sticker?`, message: 'It leaves the TV and their sticker collection.', confirm: 'Delete', danger: true })) &&
+              attempt(() => rpc('stickers', 'deleteGuestSticker', { guest: a.guest.id, sticker: a.sticker!.id }))}
+          >
+            <Trash2 size={16} />
+          </button>
+        {/if}
         <button class="btn ghost small" aria-label="Remove" onclick={() => attempt(() => rpc('stickers', 'remove', { id: a.id }))}><X size={16} /></button>
       </div>
     {:else}
@@ -83,6 +95,13 @@
         <p class="faint small">Guests can write a short message instead of picking a sticker.</p>
       </div>
       <Toggle checked={mod.allowText} label="Text stickers" onchange={(v) => set({ allowText: v })} />
+    </div>
+    <div class="line">
+      <div>
+        <strong>Guests make their own stickers</strong>
+        <p class="faint small">From a photo, a drawing or a picture they import (like a WhatsApp sticker). Each guest keeps up to {MAX_GUEST_STICKERS}.</p>
+      </div>
+      <Toggle checked={mod.allowCustom} label="Guests make their own stickers" onchange={(v) => set({ allowCustom: v })} />
     </div>
   </Section>
 
