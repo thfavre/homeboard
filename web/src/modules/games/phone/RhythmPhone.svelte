@@ -56,11 +56,13 @@
   <div class="hud">
     <span><span class="eyebrow">Score</span><strong class="mono">{mine?.score ?? 0}</strong></span>
     <span class="mult mono" class:max={mult >= 4}>x{mult}</span>
-    <span class="right"><span class="eyebrow">Left</span><strong class="mono">{Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}</strong></span>
+    <span class="right"><span class="eyebrow">Left</span><strong class="mono">{v.loading ? '-:--' : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}</strong></span>
   </div>
 
   <div class="status">
-    {#if countIn > 0}
+    {#if v.loading}
+      <span class="dim">Loading the song on the TV...</span>
+    {:else if countIn > 0}
       <span class="dim">Eyes on the light</span>
       {#key countIn}<strong class="mono count">{countIn}</strong>{/key}
     {:else if pop}

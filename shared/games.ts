@@ -122,8 +122,8 @@ export interface DuelInvite {
   expiresAt: number;
   /** Rhythm Rain level, 1 to 10 */
   difficulty?: number;
-  /** Rhythm Rain played on the host's song (costs the music price) */
-  music?: boolean;
+  /** Rhythm Rain played on one of the host's songs (costs the music price) */
+  song?: { key: string; title: string; artist: string };
 }
 
 export type MatchPhase = 'lobby' | 'intro' | 'play' | 'result';
@@ -194,8 +194,8 @@ export interface GamesState {
   lightDevices?: { id: string; name: string; online: boolean }[];
   /** WLED lights can show the game colors */
   lights: boolean;
-  /** The song for Rhythm Rain with music, once the host picked one */
-  rhythmSong: RhythmSongInfo | null;
+  /** The host's songs for Rhythm Rain with music */
+  rhythmSongs: RhythmSongInfo[];
   /** Guests online with their balance, to pick an opponent who can match the bet */
   online: (GamePlayer & { balance: number })[];
   settings: GamesSettings;
@@ -230,8 +230,8 @@ export interface GamesSettings {
   rhythmSec: number;
   /** Rhythm Rain note speed for every level, in percent (100 = as designed) */
   rhythmSpeed: number;
-  /** BeatSaver map whose song and notes Rhythm Rain plays with music ('' = none) */
-  rhythmSong: string;
+  /** BeatSaver maps (keys) guests can play Rhythm Rain on, with their song and notes */
+  rhythmSongs: string[];
   /** The music starts this many ms early, to make up for the TV's sound delay (-500 to 500) */
   rhythmAudioOffset: number;
 }
@@ -465,6 +465,8 @@ export interface RhythmView {
   leds: number | null;
   /** Played on a song: the TV plays `url` from `offsetMs` into it at server time `at`, for `durationMs` */
   music: { url: string; title: string; artist: string; at: number; offsetMs: number; durationMs: number } | null;
+  /** With music: waiting for the TV to have the song ready (no notes yet) */
+  loading: boolean;
 }
 
 export interface RhythmSongInfo {
@@ -472,7 +474,7 @@ export interface RhythmSongInfo {
   status: 'loading' | 'ready' | 'error';
   title?: string;
   artist?: string;
-  /** The audio, for the TV to load ahead */
+  /** The audio file */
   url?: string;
   error?: string;
 }

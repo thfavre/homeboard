@@ -7,6 +7,8 @@ const decoded = new Map<string, Promise<AudioBuffer>>();
 export function preloadMusic(url: string): Promise<AudioBuffer> {
   let p = decoded.get(url);
   if (!p) {
+    // One decoded song at a time (a few minutes of audio take tens of MB)
+    decoded.clear();
     p = fetch(url)
       .then((r) => {
         if (!r.ok) throw new Error(`Song not found (${r.status})`);
@@ -17,6 +19,15 @@ export function preloadMusic(url: string): Promise<AudioBuffer> {
     decoded.set(url, p);
   }
   return p;
+}
+
+/**
+ * Turn the sound on now rather than when the song starts: the first sound after a while can come out
+ * late (a TV over HDMI wakes its audio). A running context keeps the output open, even when silent.
+ */
+export async function warmAudio(): Promise<void> {
+  const ac = audioContext();
+  if (ac.state !== 'running') await ac.resume().catch(() => {});
 }
 
 export interface MusicCue {

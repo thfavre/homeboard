@@ -24,6 +24,8 @@ const GRACE_MS = 400;
 const OUTRO_MS = 1200;
 /** A hit lights up the zone for this long */
 const FLASH_MS = 260;
+/** Longest wait for the TV to have the song ready before starting anyway */
+const TV_WAIT_MS = 12_000;
 
 /**
  * Notes of a bar in eighths (1: a note), by level: the song gets busier as it goes.
@@ -125,40 +127,57 @@ export const rhythmRain: GameFactory = (m) => {
   const lanes = RHYTHM_COLORS.slice(0, level.lanes).map((c) => c.id);
   // The host's speed scales how fast the notes climb, at every level
   const travelMs = Math.round(level.travelMs / (Math.max(50, m.settings.rhythmSpeed || 100) / 100));
-  const song = m.options.music ? m.song : null;
+  const song = m.song;
   const chart = song ? chartFor(song, difficulty) : [];
   const bpm = song ? Math.round(song.bpm * 100) / 100 : level.bpm[0] + Math.floor(Math.random() * (level.bpm[1] - level.bpm[0] + 1));
   const beatMs = 60_000 / bpm;
-  const startAt = Date.now();
   const songMs = m.settings.rhythmSec * 1000;
-  let notes: RhythmNote[];
+  // The timeline is set by plan(): at once, or with music once the TV has the song ready to play
+  let startAt = Date.now();
+  let notes: RhythmNote[] = [];
   let music: RhythmView['music'] = null;
+  let endAt = Infinity;
   /** Server time of the song's beat 0 (the zone pulses on its beats) */
   let beatZero = startAt;
-  if (song && chart.length) {
-    // The map's "best part", or from the first note when it has none
-    let fromMs = song.previewMs > 0 ? song.previewMs : chart[0].ms;
-    if (chart.filter((n) => n.ms >= fromMs && n.ms <= fromMs + songMs).length < 10) fromMs = Math.max(0, chart[0].ms - 1000);
-    // The music starts once the count-in is over, the first notes already climbing
-    const musicAt = startAt + Math.max(RHYTHM.leadMs, travelMs + 1000);
-    beatZero = musicAt - fromMs;
-    notes = songNotes(chart, fromMs, fromMs + songMs, beatZero, lanes, MIN_GAP_MS[difficulty - 1]);
-    const lastAt = notes.length ? notes[notes.length - 1].at : musicAt + songMs;
-    music = {
-      url: song.url,
-      title: song.title,
-      artist: song.artist,
-      at: musicAt,
-      offsetMs: fromMs,
-      durationMs: lastAt + RHYTHM.okMs + GRACE_MS + OUTRO_MS - musicAt,
-    };
-  } else {
-    // The count-in: whole beats, long enough for the first note to climb the strip
-    const firstAt = startAt + Math.ceil(Math.max(RHYTHM.leadMs, travelMs + beatMs * 2) / beatMs) * beatMs;
-    notes = compose(firstAt, beatMs, songMs, lanes, level.busy);
-  }
-  if (!notes.length) notes = compose(startAt + RHYTHM.leadMs, beatMs, songMs, lanes, level.busy);
-  const endAt = notes[notes.length - 1].at + RHYTHM.okMs + GRACE_MS + OUTRO_MS;
+  let loading = !!(song && chart.length);
+
+  const plan = () => {
+    startAt = Date.now();
+    beatZero = startAt;
+    if (song && chart.length) {
+      // The map's "best part", or from the first note when it has none
+      let fromMs = song.previewMs > 0 ? song.previewMs : chart[0].ms;
+      if (chart.filter((n) => n.ms >= fromMs && n.ms <= fromMs + songMs).length < 10) fromMs = Math.max(0, chart[0].ms - 1000);
+      // The music starts once the count-in is over, the first notes already climbing
+      const musicAt = startAt + Math.max(RHYTHM.leadMs, travelMs + 1000);
+      beatZero = musicAt - fromMs;
+      notes = songNotes(chart, fromMs, fromMs + songMs, beatZero, lanes, MIN_GAP_MS[difficulty - 1]);
+      const lastAt = notes.length ? notes[notes.length - 1].at : musicAt + songMs;
+      music = {
+        url: song.url,
+        title: song.title,
+        artist: song.artist,
+        at: musicAt,
+        offsetMs: fromMs,
+        durationMs: lastAt + RHYTHM.okMs + GRACE_MS + OUTRO_MS - musicAt,
+      };
+    } else {
+      // The count-in: whole beats, long enough for the first note to climb the strip
+      const firstAt = startAt + Math.ceil(Math.max(RHYTHM.leadMs, travelMs + beatMs * 2) / beatMs) * beatMs;
+      notes = compose(firstAt, beatMs, songMs, lanes, level.busy);
+    }
+    if (!notes.length) notes = compose(startAt + RHYTHM.leadMs, beatMs, songMs, lanes, level.busy);
+    endAt = notes[notes.length - 1].at + RHYTHM.okMs + GRACE_MS + OUTRO_MS;
+  };
+
+  /** With music: the TV said the song is decoded and its sound is on (or it took too long) */
+  const go = () => {
+    if (!loading || over) return;
+    loading = false;
+    plan();
+    if (music) m.sound('rhythmMusic', { ...music, earlyMs: m.settings.rhythmAudioOffset });
+    m.publish();
+  };
 
   const scores = new Map<string, RhythmScore>(
     m.players.map((p) => [p.id, { score: 0, combo: 0, bestCombo: 0, perfect: 0, good: 0, ok: 0, missed: 0, wrong: 0, last: null }]),
@@ -269,8 +288,16 @@ export const rhythmRain: GameFactory = (m) => {
   return {
     start() {
       stopTicks = m.every(1000 / FPS, tick);
-      if (music) m.sound('rhythmMusic', { ...music, earlyMs: m.settings.rhythmAudioOffset });
+      if (loading) {
+        // The TV loads the song (usually already done) and answers; without an answer, go anyway
+        m.sound('rhythmPrepare', { url: song!.url });
+        m.later(TV_WAIT_MS, go);
+      } else plan();
       m.publish();
+    },
+
+    tvInput(args) {
+      if (args?.ready === song?.url) go();
     },
 
     input(id, args) {
@@ -279,7 +306,7 @@ export const rhythmRain: GameFactory = (m) => {
       const now = Date.now();
       // The phone sends when it was tapped (server clock), a little before the message got here
       const at = clamp(num(args?.at, now), now - GRACE_MS, now + 50);
-      if (over || at < notes[0].at - travelMs) return { grade: null };
+      if (over || loading || at < notes[0].at - travelMs) return { grade: null };
       const s = scores.get(id)!;
       const player = m.players.findIndex((p) => p.id === id);
       const lane = lanes.indexOf(color);
@@ -312,6 +339,7 @@ export const rhythmRain: GameFactory = (m) => {
         notes,
         bpm,
         music,
+        loading,
         difficulty,
         lanes,
         travelMs,

@@ -27,8 +27,8 @@ export interface MatchApi {
   /** Host settings when the game started */
   readonly settings: GamesSettings;
   /** Chosen with the challenge (Rhythm Rain level) */
-  readonly options: { difficulty?: number; music?: boolean };
-  /** The host's Rhythm Rain song, when it is loaded (url: where the TV gets the audio) */
+  readonly options: { difficulty?: number; song?: string };
+  /** The Rhythm Rain song picked with the challenge, loaded (url: where the TV gets the audio) */
   readonly song: (Song & { url: string }) | null;
   /** Show a color on the lights (and on the TV). null: dark. */
   light(color: GameColor | null): void;
@@ -53,6 +53,8 @@ export interface GameRuntime {
   start(): void;
   /** A player acts. Throw HbError to refuse. The return value goes back to that phone. */
   input(playerId: string, args: any): unknown;
+  /** The TV answers something (Rhythm Rain: the song is ready to play) */
+  tvInput?(args: any): void;
   /** Public game state; the TV may see more than the phones */
   view(role: Role): unknown;
 }

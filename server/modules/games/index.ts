@@ -79,7 +79,7 @@ interface Match {
   lightColor: GameColor | null;
   usesLights: boolean;
   ready: Set<string>;
-  options: { difficulty?: number; music?: boolean };
+  options: { difficulty?: number; song?: string };
 }
 
 const player = (g: Guest): GamePlayer => ({ id: g.id, name: g.name, color: g.color });
@@ -92,7 +92,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmSec: 45, rhythmSpeed: 100, rhythmSong: '747', rhythmAudioOffset: 0 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmSec: 45, rhythmSpeed: 100, rhythmSongs: ['747'], rhythmAudioOffset: 0 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -111,28 +111,27 @@ export default defineModule<GamesSettings>({
     // ------------------------------------------------------------ the Rhythm Rain song
 
     const songDir = ctx.mediaDir('rhythm');
-    let song: Song | null = null;
-    let songInfo: RhythmSongInfo | null = null;
-    /** Get the host's song from BeatSaver (or the copy kept from last time) */
-    const loadConfiguredSong = async () => {
-      const key = ctx.settings.get().rhythmSong;
-      song = null;
-      songInfo = key ? { key, status: 'loading' } : null;
+    /** The host's songs by key: downloaded once when added, then read from the copy */
+    const songs = new Map<string, { info: RhythmSongInfo; song: Song | null }>();
+    const loadOne = async (key: string) => {
+      songs.set(key, { info: { key, status: 'loading' }, song: null });
       ctx.publish();
-      if (!key) return;
       try {
         const s = await loadSong(key, songDir);
-        if (ctx.settings.get().rhythmSong !== key) return;
-        song = s;
-        songInfo = { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`) };
+        if (!songs.has(key)) return;
+        songs.set(key, { info: { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`) }, song: s });
       } catch (err) {
-        if (ctx.settings.get().rhythmSong !== key) return;
-        ctx.log.warn('Rhythm Rain song', err instanceof Error ? err.message : err);
-        songInfo = { key, status: 'error', error: err instanceof Error ? err.message : 'Could not load it' };
+        if (!songs.has(key)) return;
+        ctx.log.warn('Rhythm Rain song', key, err instanceof Error ? err.message : err);
+        songs.set(key, { info: { key, status: 'error', error: err instanceof Error ? err.message : 'Could not load it' }, song: null });
       }
       ctx.publish();
     };
-    void loadConfiguredSong();
+    for (const key of ctx.settings.get().rhythmSongs) void loadOne(key);
+    const readySong = (key: unknown) => {
+      const e = songs.get(String(key ?? ''));
+      return e?.song && e.info.url ? { ...e.song, url: e.info.url } : null;
+    };
     ctx.earn({ key: 'games.win', label: 'Games: win a room game', default: 2000, describe: (a) => `${a} for winning a game started for the room` });
     ctx.earn({ key: 'games.bluff', label: 'Bluff: both share', default: 2000, describe: (a) => `${a} each when both players share in Bluff` });
 
@@ -331,7 +330,7 @@ export default defineModule<GamesSettings>({
         pot: potOf(m),
         settings: ctx.settings.get(),
         options: m.options,
-        song: song && songInfo?.url ? { ...song, url: songInfo.url } : null,
+        song: m.options.song ? readySong(m.options.song) : null,
         light: (color) => {
           m.lightColor = color;
           if (m.usesLights) lights()?.color(color ? (GAME_COLORS.find((c) => c.id === color)?.led ?? null) : null);
@@ -428,8 +427,9 @@ export default defineModule<GamesSettings>({
       const stake = cleanStake(args?.stake);
       if (stake > opponent.balance) throw new HbError(`${opponent.name} cannot match that bet`);
       const name = gameInfo(game)!.name;
-      const music = game === 'rhythm' && !!args?.music;
-      if (music && !song) throw new HbError('The song is not ready, play without music');
+      const song = game === 'rhythm' && args?.song ? readySong(args.song) : null;
+      if (game === 'rhythm' && args?.song && !song) throw new HbError('This song is not available, pick another one');
+      const music = !!song;
 
       const fee = ctx.economy.charge(guest, music ? 'games.rhythmMusic' : 'games.duel', 1, `Duel: ${name}${music ? ' with music' : ''}`);
       let bet: Charge;
@@ -446,7 +446,8 @@ export default defineModule<GamesSettings>({
         to: player(opponent),
         stake,
         expiresAt: Date.now() + DUEL_INVITE_MS,
-        ...(game === 'rhythm' ? { difficulty: Math.min(10, Math.max(1, Math.round(num(args?.difficulty, RHYTHM_DEFAULT_LEVEL)))), music } : {}),
+        ...(game === 'rhythm' ? { difficulty: Math.min(10, Math.max(1, Math.round(num(args?.difficulty, RHYTHM_DEFAULT_LEVEL)))) } : {}),
+        ...(song ? { song: { key: song.key, title: song.title, artist: song.artist } } : {}),
         charges: [fee, bet],
         timer: setTimeout(() => {
           if (!invites.has(inv.id)) return;
@@ -469,10 +470,10 @@ export default defineModule<GamesSettings>({
       }
       tvFree();
       checkLight(inv.game);
-      if (inv.music && !song) throw new HbError('The song is not ready, ask for a duel without music');
+      if (inv.song && !readySong(inv.song.key)) throw new HbError('This song is not available any more');
       const bet = ctx.economy.pay(guest, inv.stake, `Duel bet: ${gameInfo(inv.game)!.name}`);
       try {
-        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet], { difficulty: inv.difficulty, music: inv.music });
+        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet], { difficulty: inv.difficulty, song: inv.song?.key });
         dropInvite(inv, null);
         intro(m);
       } catch (err) {
@@ -593,6 +594,33 @@ export default defineModule<GamesSettings>({
 
     // ------------------------------------------------------------ host
 
+    /** Add a song (a BeatSaver key or link): downloaded now, kept for every later party */
+    ctx.onAdmin('addSong', async (args) => {
+      const key = songKey(String(args?.key ?? ''));
+      if (!key) throw new HbError('Paste a BeatSaver map key or link');
+      const list = ctx.settings.get().rhythmSongs;
+      if (!list.includes(key)) ctx.settings.update({ rhythmSongs: [...list, key] });
+      await loadOne(key);
+      const e = songs.get(key);
+      if (e?.info.status === 'error') throw new HbError(e.info.error ?? 'Could not load it');
+      return e?.info;
+    });
+    ctx.onAdmin('retrySong', (args) => {
+      const key = String(args?.key ?? '');
+      if (ctx.settings.get().rhythmSongs.includes(key)) void loadOne(key);
+    });
+    ctx.onAdmin('removeSong', (args) => {
+      const key = String(args?.key ?? '');
+      ctx.settings.update({ rhythmSongs: ctx.settings.get().rhythmSongs.filter((k) => k !== key) });
+      songs.delete(key);
+      ctx.publish();
+    });
+
+    ctx.onTv('play', (args) => {
+      match?.runtime?.tvInput?.(args);
+      return true;
+    });
+
     ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake, args?.prize));
     ctx.onAdmin('begin', () => {
       if (match?.phase === 'lobby') beginRoom(match);
@@ -624,14 +652,11 @@ export default defineModule<GamesSettings>({
             ? args.rhythmLight
             : s.rhythmLight,
         rhythmReverse: typeof args?.rhythmReverse === 'boolean' ? args.rhythmReverse : s.rhythmReverse,
-        rhythmSong: typeof args?.rhythmSong === 'string' ? songKey(args.rhythmSong) : s.rhythmSong,
         rhythmAudioOffset:
           args?.rhythmAudioOffset !== undefined ? Math.min(500, Math.max(-500, Math.round(num(args.rhythmAudioOffset, 0)))) : s.rhythmAudioOffset,
         rhythmSpeed: args?.rhythmSpeed !== undefined ? Math.min(200, Math.max(50, Math.round(num(args.rhythmSpeed, 100)))) : s.rhythmSpeed,
         rhythmSec: args?.rhythmSec !== undefined ? Math.min(120, Math.max(20, Math.round(num(args.rhythmSec, 45)))) : s.rhythmSec,
       });
-      // A new song, or try again after an error
-      if (ctx.settings.get().rhythmSong !== s.rhythmSong || args?.reloadSong) void loadConfiguredSong();
       ctx.publish();
     });
 
@@ -667,7 +692,7 @@ export default defineModule<GamesSettings>({
         perk,
         ...(role === 'admin' ? { lightDevices: (lights()?.list() ?? []).map(({ id, name, online }) => ({ id, name, online })) } : {}),
         lights: lightsOn(),
-        rhythmSong: songInfo,
+        rhythmSongs: ctx.settings.get().rhythmSongs.map((key) => songs.get(key)?.info ?? { key, status: 'loading' as const }),
         online: role === 'tv' ? [] : [...ctx.session.guests.values()].filter((g) => g.sockets > 0).map((g) => ({ ...player(g), balance: g.balance })),
         settings: ctx.settings.get(),
       };

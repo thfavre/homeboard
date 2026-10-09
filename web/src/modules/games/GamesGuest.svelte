@@ -20,9 +20,11 @@
   let error = $state('');
 
   const s = $derived(gamesState());
-  /** Rhythm Rain on the host's song (its own price) */
+  /** Rhythm Rain on one of the host's songs (its own price) */
   let music = $state(false);
-  const song = $derived(s?.rhythmSong?.status === 'ready' ? s.rhythmSong : null);
+  let songPick = $state('');
+  const songs = $derived((s?.rhythmSongs ?? []).filter((x) => x.status === 'ready'));
+  const song = $derived(songs.find((x) => x.key === songPick) ?? songs[0] ?? null);
   const withMusic = $derived(picked?.id === 'rhythm' && mode === 'duel' && music && !!song);
   const economy = $derived(!!hb.core?.economyEnabled);
   const list = $derived(GAMES.filter((g) => g.modes.includes(mode) && s?.settings.enabled.includes(g.id)));
@@ -58,7 +60,7 @@
     busy = true;
     const ok =
       mode === 'duel'
-        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake, ...(picked!.id === 'rhythm' ? { difficulty, music: withMusic } : {}) }))
+        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake, ...(picked!.id === 'rhythm' ? { difficulty, ...(withMusic ? { song: song!.key } : {}) } : {}) }))
         : await attempt(() => rpc('games', 'startRoom', { game: picked!.id, stake }));
     busy = false;
     if (ok) picked = null;
@@ -110,7 +112,7 @@
           <span class="dim small">{level.help}</span>
         </div>
       </div>
-      {#if song}
+      {#if songs.length}
         <div class="field">
           <span class="label">Sound</span>
           <div class="sound">
@@ -121,9 +123,19 @@
             </button>
             <button class="choice" class:active={music} onclick={() => (music = true)}>
               <Music size={20} />
-              <span class="what"><strong>With music</strong><span class="faint small truncate">{song.artist ? `${song.artist} - ` : ''}{song.title}</span></span>
+              <span class="what"><strong>With music</strong><span class="faint small truncate">{songs.length === 1 ? `${songs[0].artist ? `${songs[0].artist} - ` : ''}${songs[0].title}` : `${songs.length} songs to pick from`}</span></span>
               {#if economy}<Money amount={price('games.rhythmMusic')} free />{/if}
             </button>
+            {#if music && songs.length > 1}
+              <div class="songs">
+                {#each songs as x (x.key)}
+                  <button class="song-pick" class:active={song?.key === x.key} onclick={() => (songPick = x.key)}>
+                    <strong class="truncate">{x.title}</strong>
+                    {#if x.artist}<span class="faint small truncate">{x.artist}</span>{/if}
+                  </button>
+                {/each}
+              </div>
+            {/if}
           </div>
         </div>
       {/if}
@@ -346,6 +358,28 @@
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 16%, transparent);
     color: var(--text);
+  }
+  .songs {
+    display: grid;
+    gap: 0.35rem;
+    max-height: 13rem;
+    overflow-y: auto;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--accent);
+  }
+  .song-pick {
+    display: grid;
+    padding: 0.5rem 0.8rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    text-align: left;
+    color: var(--text-dim);
+  }
+  .song-pick.active {
+    border-color: var(--accent);
+    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
   .choice .what {
     flex: 1;

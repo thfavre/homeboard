@@ -129,7 +129,7 @@
       {#if received.difficulty}
         <p class="dim note">
           Level {received.difficulty} of 10: {rhythmLevel(received.difficulty).help}
-          {#if received.music && s?.rhythmSong?.title}Played on {s.rhythmSong.artist ? `${s.rhythmSong.artist} - ` : ''}{s.rhythmSong.title}.{/if}
+          {#if received.song}Played on {received.song.artist ? `${received.song.artist} - ` : ''}{received.song.title}.{/if}
         </p>
       {/if}
       {#if economy && received.stake > 0}<PotPanel inLabel="You put in" stake={received.stake} outLabel="Winner takes" pot={received.stake * 2} />{/if}

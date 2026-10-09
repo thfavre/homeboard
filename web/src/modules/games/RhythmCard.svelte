@@ -7,7 +7,7 @@
   import Money from '$lib/ui/Money.svelte';
   import { Now, gamesState } from './store.svelte.ts';
   import { rhythmSound } from './ui/rhythmSound.ts';
-  import { playMusic, preloadMusic, stopMusic, type MusicCue } from './ui/rhythmMusic.ts';
+  import { playMusic, stopMusic, type MusicCue } from './ui/rhythmMusic.ts';
 
   /**
    * Rhythm Rain is played on the light strip: the TV keeps its screen and only shows this card above
@@ -28,11 +28,7 @@
     ),
   );
 
-  // Decode the song while the players read the rules, play it on cue, stop it when the game goes away
-  const songUrl = $derived(gamesState()?.rhythmSong?.url);
-  $effect(() => {
-    if (songUrl) void preloadMusic(songUrl).catch(() => {});
-  });
+  // Play the song on cue (RhythmPreload got it ready), stop it when the game goes away
   $effect(() => {
     const off = onEvent<MusicCue>('games', 'rhythmMusic', (cue) => void playMusic(cue).catch(() => {}));
     return () => {
@@ -50,6 +46,7 @@
     if (!m) return '';
     if (m.phase === 'intro') return 'Reading the rules';
     if (m.phase === 'result') return m.result?.headline ?? 'Over';
+    if (v?.loading) return 'Loading the song';
     if (countIn > 0) return `Starts in ${countIn}`;
     return v?.music ? `${v.music.artist ? `${v.music.artist} - ` : ''}${v.music.title}` : 'Watch the light';
   });
@@ -90,12 +87,12 @@
     {/each}
 
     <div class="time">
-      {#if v && m.phase === 'play'}
+      {#if v && m.phase === 'play' && !v.loading}
         <span class="mono clock">{countIn > 0 ? clock(Math.ceil((v.endAt - firstAt) / 1000)) : clock(left)}</span>
         <span class="eyebrow">left</span>
       {/if}
     </div>
-    {#if v && m.phase === 'play'}<span class="bar" style:width="{progress * 100}%"></span>{/if}
+    {#if v && m.phase === 'play' && !v.loading}<span class="bar" style:width="{progress * 100}%"></span>{/if}
   </div>
 {/if}
 
