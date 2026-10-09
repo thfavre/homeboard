@@ -30,7 +30,17 @@
   async function resize(e: Event & { currentTarget: HTMLSelectElement }) {
     const select = e.currentTarget;
     const [width, height] = select.value.split('x').map(Number);
-    if (await ask({ title: 'Change the canvas size?', message: 'This erases the canvas.', confirm: 'Change size', danger: true })) {
+    // Growing adds space around the drawing; shrinking cuts its border off
+    const shrinks = !!mod && (width < mod.width || height < mod.height);
+    if (
+      !shrinks ||
+      (await ask({
+        title: 'Make the canvas smaller?',
+        message: 'The drawing stays centered, but everything painted near the border is erased.',
+        confirm: 'Make smaller',
+        danger: true,
+      }))
+    ) {
       attempt(() => rpc('canvas', 'setSize', { width, height }));
     } else if (mod) select.value = `${mod.width}x${mod.height}`;
   }

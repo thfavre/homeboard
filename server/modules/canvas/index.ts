@@ -58,14 +58,25 @@ export default defineModule<CanvasSettings>({
       painted.clear();
     }, ACTIVITY_MS);
 
-    const reset = (w: number, h: number) => {
+    /** New blank canvas, or with `keep` the old drawing centered on it (cropped when smaller) */
+    const reset = (w: number, h: number, keep = false) => {
       // Updates still waiting are for the old canvas: clients reload the snapshot instead
       if (flushTimer) clearTimeout(flushTimer);
       flushTimer = null;
       pending = [];
+      const next = new Uint8Array(w * h);
+      if (keep) {
+        const dx = Math.floor((w - width) / 2);
+        const dy = Math.floor((h - height) / 2);
+        for (let y = Math.max(0, -dy); y < Math.min(height, h - dy); y++) {
+          const from = Math.max(0, -dx);
+          const to = Math.min(width, w - dx);
+          next.set(pixels.subarray(y * width + from, y * width + to), (y + dy) * w + from + dx);
+        }
+      }
       width = w;
       height = h;
-      pixels = new Uint8Array(w * h);
+      pixels = next;
       version = Date.now();
       save();
       ctx.publish();
@@ -121,7 +132,7 @@ export default defineModule<CanvasSettings>({
       const size = CANVAS_SIZES.find((s) => s.width === num(args.width) && s.height === num(args.height));
       if (!size) throw new HbError('Unsupported size');
       ctx.settings.update({ width: size.width, height: size.height });
-      reset(size.width, size.height);
+      reset(size.width, size.height, true);
     });
 
     ctx.onAdmin('setOptions', (args) => {
