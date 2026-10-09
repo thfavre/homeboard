@@ -238,9 +238,13 @@
     border-radius: 0.35rem;
     backface-visibility: hidden;
   }
+  /* Same family as the cards on the phones: the deck's purple back, green Share, red Steal */
   .back {
-    background: repeating-linear-gradient(45deg, var(--surface-2) 0 0.25rem, var(--surface-3) 0.25rem 0.5rem);
-    border: 1.5px solid var(--border-strong);
+    background:
+      repeating-linear-gradient(45deg, rgba(255, 59, 141, 0.16) 0 1px, transparent 1px 0.22rem),
+      repeating-linear-gradient(-45deg, rgba(139, 61, 255, 0.2) 0 1px, transparent 1px 0.22rem),
+      linear-gradient(160deg, #3a1660, #170a26);
+    border: 1.5px solid rgba(255, 59, 141, 0.45);
     color: var(--text-faint);
     transition:
       border-color 0.3s ease,
@@ -255,11 +259,11 @@
   }
   .front {
     transform: rotateY(180deg);
-    background: var(--success);
+    background: linear-gradient(160deg, #3be0a0, #0f8f63);
     color: #fff;
   }
   .front.steal {
-    background: var(--danger);
+    background: linear-gradient(160deg, #ff6a86, #c3123f);
   }
   .dots {
     display: flex;

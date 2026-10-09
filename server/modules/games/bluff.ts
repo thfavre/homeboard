@@ -2,7 +2,6 @@ import { bluffDeal, bluffGain, type BluffChoice, type BluffView } from '../../..
 import { HbError } from '../../core/util.ts';
 import type { GameFactory } from './engine.ts';
 
-const CHOOSE_MS = 30_000;
 /** Both chose: a short pause before the cards turn over */
 const REVEAL_MS = 1500;
 
@@ -49,8 +48,10 @@ export const bluff: GameFactory = (m) => {
 
   return {
     start() {
-      m.deadline(CHOOSE_MS);
-      m.later(CHOOSE_MS, end);
+      // The host's time to choose (settings saved before it existed have none)
+      const ms = (m.settings.bluffChooseSec || 30) * 1000;
+      m.deadline(ms);
+      m.later(ms, end);
     },
 
     input(id, args) {
