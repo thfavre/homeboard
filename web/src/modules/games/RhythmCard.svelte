@@ -42,7 +42,7 @@
     <div class="title">
       <span class="icon"><Guitar size="1.1rem" /></span>
       <span class="what">
-        <span class="eyebrow">Rhythm Rain{#if economy && m.pot > 0}<span>{' · pot '}</span><Money amount={m.pot} />{/if}</span>
+        <span class="eyebrow">Rhythm Rain{#if v}<span>{` · level ${v.difficulty}`}</span>{/if}{#if economy && m.pot > 0}<span>{' · pot '}</span><Money amount={m.pot} />{/if}</span>
         <strong class="truncate">{status}</strong>
       </span>
     </div>

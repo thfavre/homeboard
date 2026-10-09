@@ -81,7 +81,7 @@ export const GAMES: GameInfo[] = [
     id: 'rhythm',
     name: 'Rhythm Rain',
     tagline: 'Hit the notes when they reach the top of the light',
-    rules: 'Colored notes climb the light strip from the bottom. Tap the same color on your phone when a note crosses the zone near the top: green is perfect, orange is good, red is just in time. Hits in a row raise your multiplier, a wrong tap or a missed note resets it. Highest score wins.',
+    rules: 'Colored notes climb the light strip from the bottom. Tap the same color on your phone when a note crosses the zone near the top: green is perfect, orange is good, red is just in time. Hits in a row raise your multiplier, a missed note resets it, and a tap with no note of that color in the zone costs points: mashing every key does not pay. Highest score wins.',
     modes: ['duel'],
     lights: true,
     lightOnly: true,
@@ -120,6 +120,8 @@ export interface DuelInvite {
   to: GamePlayer;
   stake: number;
   expiresAt: number;
+  /** Rhythm Rain level, 1 to 10 */
+  difficulty?: number;
 }
 
 export type MatchPhase = 'lobby' | 'intro' | 'play' | 'result';
@@ -222,6 +224,8 @@ export interface GamesSettings {
   rhythmReverse: boolean;
   /** Length of a Rhythm Rain song in seconds */
   rhythmSec: number;
+  /** Rhythm Rain note speed for every level, in percent (100 = as designed) */
+  rhythmSpeed: number;
 }
 
 // ------------------------------------------------------------ per game views
@@ -342,16 +346,44 @@ export interface CoinView {
 
 // ------------------------------------------------------------ Rhythm Rain
 
-/** The four frets, left to right, like the guitar game */
-export const RHYTHM_LANES: GameColor[] = ['green', 'red', 'yellow', 'blue'];
+/** The keys, left to right (a level uses the first few). `led` is what the light strip shows. */
+export const RHYTHM_COLORS = [
+  { id: 'green', name: 'Green', hex: '#2fd27a', led: '#00ff00' },
+  { id: 'red', name: 'Red', hex: '#ff3b5c', led: '#ff0000' },
+  { id: 'yellow', name: 'Yellow', hex: '#ffd23d', led: '#ffb000' },
+  { id: 'blue', name: 'Blue', hex: '#3d8bff', led: '#0000ff' },
+  { id: 'orange', name: 'Orange', hex: '#ff7a2f', led: '#ff3c00' },
+  { id: 'purple', name: 'Purple', hex: '#a35bff', led: '#8c00ff' },
+  { id: 'cyan', name: 'Cyan', hex: '#2fe0e0', led: '#00ffd0' },
+  { id: 'pink', name: 'Pink', hex: '#ff5fc8', led: '#ff0080' },
+] as const;
+export type RhythmColor = (typeof RHYTHM_COLORS)[number]['id'];
 
 /**
- * Timing of Rhythm Rain. A note climbs from the bottom of the strip to the middle of the hit zone in
- * `travelMs`, then goes on to the top. The zone is drawn with the windows below: green within
- * `perfectMs` of the middle, orange within `goodMs`, red within `okMs`.
+ * The 10 levels picked with the challenge: how many colors, how long a note takes to climb to the
+ * zone (shorter = faster), the tempo, and `busy`: the song starts already dense.
+ */
+export const RHYTHM_LEVELS = [
+  { lanes: 1, travelMs: 2000, bpm: [90, 100], busy: 0, help: '1 color, slow. Just feel the beat.' },
+  { lanes: 2, travelMs: 2000, bpm: [95, 105], busy: 0, help: '2 colors, slow.' },
+  { lanes: 2, travelMs: 1600, bpm: [108, 118], busy: 0, help: '2 colors, faster.' },
+  { lanes: 3, travelMs: 1900, bpm: [100, 110], busy: 0, help: '3 colors, steady.' },
+  { lanes: 3, travelMs: 1550, bpm: [110, 120], busy: 0, help: '3 colors, faster.' },
+  { lanes: 4, travelMs: 1800, bpm: [105, 115], busy: 0, help: '4 colors, steady. The classic.' },
+  { lanes: 4, travelMs: 1500, bpm: [112, 122], busy: 0, help: '4 colors, faster.' },
+  { lanes: 4, travelMs: 1300, bpm: [118, 126], busy: 1, help: '4 colors, fast, and busy from the start.' },
+  { lanes: 4, travelMs: 1100, bpm: [124, 132], busy: 1, help: '4 colors, very fast. For real guitar heroes.' },
+  { lanes: 8, travelMs: 1200, bpm: [118, 126], busy: 1, help: '8 colors on two rows of keys, fast. Good luck.' },
+] as const;
+export const RHYTHM_DEFAULT_LEVEL = 5;
+export const rhythmLevel = (n: number) => RHYTHM_LEVELS[Math.min(10, Math.max(1, Math.round(n || RHYTHM_DEFAULT_LEVEL))) - 1];
+
+/**
+ * Timing of Rhythm Rain. A note climbs from the bottom of the strip to the middle of the hit zone
+ * (the level's travel time), then goes on to the top. The zone is drawn with the windows below:
+ * green within `perfectMs` of the middle, orange within `goodMs`, red within `okMs`.
  */
 export const RHYTHM = {
-  travelMs: 1800,
   perfectMs: 70,
   goodMs: 140,
   okMs: 210,
@@ -363,13 +395,15 @@ export const RHYTHM = {
 
 export type RhythmGrade = 'perfect' | 'good' | 'ok' | 'miss';
 export const RHYTHM_POINTS: Record<RhythmGrade, number> = { perfect: 100, good: 60, ok: 30, miss: 0 };
+/** A tap with no note of that color in the zone: mashing every key loses more than it wins */
+export const RHYTHM_WRONG_PENALTY = 50;
 /** x1, then one more every 8 hits in a row, up to x4 */
 export const rhythmMultiplier = (combo: number) => Math.min(4, 1 + Math.floor(combo / 8));
 
 export interface RhythmNote {
   /** Server time it crosses the middle of the zone */
   at: number;
-  color: GameColor;
+  color: RhythmColor;
 }
 
 export const rhythmGradeOf = (gapMs: number): RhythmGrade => {
@@ -378,7 +412,7 @@ export const rhythmGradeOf = (gapMs: number): RhythmGrade => {
 };
 
 /** The note a tap of `color` at server time `at` hits (index), or -1: the closest one of that color in the zone not hit yet */
-export function rhythmTarget(notes: RhythmNote[], at: number, color: GameColor, hit: (i: number) => boolean): number {
+export function rhythmTarget(notes: RhythmNote[], at: number, color: RhythmColor, hit: (i: number) => boolean): number {
   let found = -1;
   let gap = Infinity;
   for (let i = 0; i < notes.length; i++) {
@@ -411,6 +445,10 @@ export interface RhythmView {
   /** Every note of the song, sorted (the lights show them anyway) */
   notes: RhythmNote[];
   bpm: number;
+  /** Level 1 to 10, its keys (left to right) and the time a note takes to climb to the zone */
+  difficulty: number;
+  lanes: RhythmColor[];
+  travelMs: number;
   /** Server time of the first beat of the count-in, and the end of the song */
   startAt: number;
   endAt: number;

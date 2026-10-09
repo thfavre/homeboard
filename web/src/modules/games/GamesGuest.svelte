@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronRight, Swords, Users } from '@lucide/svelte';
-  import { GAMES, type GameInfo, type GameMode } from '$shared/games.ts';
+  import { GAMES, RHYTHM_COLORS, RHYTHM_DEFAULT_LEVEL, rhythmLevel, type GameInfo, type GameMode } from '$shared/games.ts';
   import { formatAmount, parseAmount } from '$shared/money.ts';
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
@@ -13,6 +13,9 @@
   let picked = $state<GameInfo | null>(null);
   let opponent = $state<string | null>(null);
   let stakeText = $state('');
+  /** Rhythm Rain level, sent with the challenge */
+  let difficulty = $state(RHYTHM_DEFAULT_LEVEL);
+  const level = $derived(rhythmLevel(difficulty));
   let busy = $state(false);
   let error = $state('');
 
@@ -51,7 +54,7 @@
     busy = true;
     const ok =
       mode === 'duel'
-        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake }))
+        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake, ...(picked!.id === 'rhythm' ? { difficulty } : {}) }))
         : await attempt(() => rpc('games', 'startRoom', { game: picked!.id, stake }));
     busy = false;
     if (ok) picked = null;
@@ -91,6 +94,19 @@
 {#if picked}
   <Sheet title={mode === 'duel' ? 'New duel' : 'Game for everyone'} onclose={() => (picked = null)}>
     <GameCard game={picked} />
+
+    {#if picked.id === 'rhythm'}
+      <div class="field">
+        <span class="label">Difficulty <strong class="mono level">{difficulty}</strong><span class="faint">/ 10</span></span>
+        <input class="slider" type="range" min="1" max="10" step="1" bind:value={difficulty} style:--p="{((difficulty - 1) / 9) * 100}%" />
+        <div class="helper">
+          <span class="keys">
+            {#each RHYTHM_COLORS.slice(0, level.lanes) as c (c.id)}<span class="key" style:--c={c.hex}></span>{/each}
+          </span>
+          <span class="dim small">{level.help}</span>
+        </div>
+      </div>
+    {/if}
 
     {#if mode === 'duel'}
       <div class="field">
@@ -284,6 +300,37 @@
     font-weight: 700;
     padding-top: 0.35rem;
     border-top: 1px solid var(--border);
+  }
+  .level {
+    margin-left: 0.4rem;
+    font-size: 1.1rem;
+    color: var(--text);
+  }
+  .slider {
+    width: 100%;
+    accent-color: var(--accent);
+    height: 1.6rem;
+  }
+  .helper {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-height: 2.6rem;
+    padding: 0.5rem 0.8rem;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+  }
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(4, 0.7rem);
+    gap: 0.2rem;
+    flex: none;
+  }
+  .key {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 0.2rem;
+    background: var(--c);
   }
   .small {
     font-size: 0.8rem;

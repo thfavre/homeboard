@@ -171,6 +171,21 @@
       </div>
     {/if}
     <div class="line">
+      <span>
+        Rhythm Rain: note speed <strong class="mono">{s.settings.rhythmSpeed}%</strong>
+        <span class="faint small">Scales how fast the notes climb at every level, 100% = as designed</span>
+      </span>
+      <input
+        class="speed"
+        type="range"
+        min="50"
+        max="200"
+        step="10"
+        value={s.settings.rhythmSpeed}
+        onchange={(e) => setSettings({ rhythmSpeed: Number(e.currentTarget.value) })}
+      />
+    </div>
+    <div class="line">
       <span>Rhythm Rain: song length <span class="faint small">Seconds, 20 to 120</span></span>
       <span class="stepper">
         <button class="btn small" disabled={s.settings.rhythmSec <= 20} onclick={() => setSettings({ rhythmSec: songStep(s.settings.rhythmSec, -1) })}><Minus size={16} /></button>
@@ -189,6 +204,10 @@
 {/if}
 
 <style>
+  .speed {
+    width: 10rem;
+    accent-color: var(--accent);
+  }
   .light {
     width: auto;
     min-width: 10rem;

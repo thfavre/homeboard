@@ -1,8 +1,8 @@
 import type { RhythmGrade } from '$shared/games.ts';
 import { audioContext } from '../../soundboard/player.ts';
 
-/** One note of a pentatonic scale per fret (C5 D5 E5 G5): any run of hits sounds like a tune */
-const LANE_HZ = [523.25, 587.33, 659.25, 783.99];
+/** One note of a pentatonic scale per key (C5 D5 E5 G5 A5 C6 D6 E6): any run of hits sounds like a tune */
+const LANE_HZ = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.51];
 
 /**
  * Rhythm Rain feedback, made on the fly (no file to load, nothing to allow: the tap itself unlocks

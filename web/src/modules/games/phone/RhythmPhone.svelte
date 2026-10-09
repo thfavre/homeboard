@@ -1,11 +1,11 @@
 <script lang="ts">
   import {
-    GAME_COLORS,
-    RHYTHM_LANES,
+    RHYTHM_COLORS,
+    RHYTHM_WRONG_PENALTY,
     rhythmGradeOf,
     rhythmMultiplier,
     rhythmTarget,
-    type GameColor,
+    type RhythmColor,
     type MatchState,
     type RhythmGrade,
     type RhythmView,
@@ -15,7 +15,8 @@
   import { rhythmSound } from '../ui/rhythmSound.ts';
 
   /**
-   * Just the four frets: the notes are on the light, eyes stay on it.
+   * Just the keys, one per color of the level (two rows of four at level 10): the notes are on the
+   * light, eyes stay on it. A tap with no note of its color in the zone costs points.
    * Each tap is judged right away on the phone (same rule as the server) so its sound comes with no
    * delay; the server keeps the score.
    */
@@ -27,7 +28,8 @@
   const firstAt = $derived(v.notes[0]?.at ?? v.startAt);
   const countIn = $derived(Math.ceil((firstAt - now.value) / 1000));
   const left = $derived(Math.max(0, Math.ceil((v.endAt - Math.max(now.value, firstAt)) / 1000)));
-  const lanes = RHYTHM_LANES.map((id) => GAME_COLORS.find((c) => c.id === id)!);
+  const lanes = $derived(v.lanes.map((id) => RHYTHM_COLORS.find((c) => c.id === id)!));
+  const columns = $derived(Math.min(4, lanes.length));
   const LABEL: Record<RhythmGrade, string> = { perfect: 'Perfect', good: 'Good', ok: 'Just', miss: 'Miss' };
 
   // Notes this phone hit, so a second tap on the same note is a miss here too
@@ -35,7 +37,7 @@
   let pressed = $state<Record<string, boolean>>({});
   let pop = $state<{ grade: RhythmGrade; key: number } | null>(null);
 
-  function tap(color: GameColor, lane: number) {
+  function tap(color: RhythmColor, lane: number) {
     const at = serverNow();
     const i = rhythmTarget(v.notes, at, color, (n) => hitLocal.has(n));
     const grade = i < 0 ? 'miss' : rhythmGradeOf(at - v.notes[i].at);
@@ -62,13 +64,13 @@
       <span class="dim">Eyes on the light</span>
       {#key countIn}<strong class="mono count">{countIn}</strong>{/key}
     {:else if pop}
-      {#key pop.key}<strong class="pop {pop.grade}">{LABEL[pop.grade]}</strong>{/key}
+      {#key pop.key}<strong class="pop {pop.grade}">{LABEL[pop.grade]}{#if pop.grade === 'miss'}<span class="minus mono"> -{RHYTHM_WRONG_PENALTY}</span>{/if}</strong>{/key}
     {:else}
       <span class="dim">Tap the color in the zone</span>
     {/if}
   </div>
 
-  <div class="frets">
+  <div class="frets" style:--cols={columns} style:--rows={Math.ceil(lanes.length / columns)}>
     {#each lanes as c, i (c.id)}
       <button
         class="fret"
@@ -168,10 +170,16 @@
     }
   }
   /* Four tall keys side by side: easy to find with the thumbs without looking */
+  .minus {
+    font-size: 1.1rem;
+    font-style: normal;
+    color: var(--danger);
+  }
   .frets {
     min-height: 0;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(var(--cols), 1fr);
+    grid-template-rows: repeat(var(--rows), 1fr);
     gap: 0.5rem;
     touch-action: none;
   }

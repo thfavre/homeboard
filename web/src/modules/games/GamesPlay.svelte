@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Check, Crown, Play, Swords, X } from '@lucide/svelte';
   import { fade, fly, scale } from 'svelte/transition';
-  import { DUEL_INVITE_MS, gameInfo, type GamePlayer } from '$shared/games.ts';
+  import { DUEL_INVITE_MS, gameInfo, rhythmLevel, type GamePlayer } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
@@ -126,6 +126,7 @@
       <span class="eyebrow center"><Swords size={14} /> You are challenged</span>
       <Versus left={received.from} right={meAsPlayer} leftLabel="Challenger" rightLabel="You" />
       <GameCard game={info} />
+      {#if received.difficulty}<p class="dim note">Level {received.difficulty} of 10: {rhythmLevel(received.difficulty).help}</p>{/if}
       {#if economy && received.stake > 0}<PotPanel inLabel="You put in" stake={received.stake} outLabel="Winner takes" pot={received.stake * 2} />{/if}
       <div class="answer">
         <button class="btn decline" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={20} /> Decline</button>

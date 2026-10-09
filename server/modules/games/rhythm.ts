@@ -1,12 +1,13 @@
 import {
-  GAME_COLORS,
   RHYTHM,
-  RHYTHM_LANES,
+  RHYTHM_COLORS,
   RHYTHM_POINTS,
+  RHYTHM_WRONG_PENALTY,
+  rhythmLevel,
   rhythmGradeOf,
   rhythmMultiplier,
   rhythmTarget,
-  type GameColor,
+  type RhythmColor,
   type RhythmGrade,
   type RhythmNote,
   type RhythmScore,
@@ -52,23 +53,28 @@ const PATTERNS = [
 
 const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
 
-/** A song: notes on a steady beat, the lane wandering left and right like a guitar line */
-function compose(firstAt: number, beatMs: number, songMs: number): RhythmNote[] {
+/**
+ * A song: notes on a steady beat, the lane wandering left and right like a guitar line.
+ * `busy` starts it denser; with one or two colors it never gets to the densest patterns.
+ */
+function compose(firstAt: number, beatMs: number, songMs: number, lanes: RhythmColor[], busy: number): RhythmNote[] {
   const notes: RhythmNote[] = [];
   const bars = Math.max(2, Math.floor(songMs / (beatMs * 4)));
-  let lane = Math.floor(Math.random() * RHYTHM_LANES.length);
+  const top = lanes.length - 1;
+  const densest = lanes.length <= 2 ? 2 : 3;
+  let lane = Math.floor(Math.random() * lanes.length);
   for (let bar = 0; bar < bars; bar++) {
     const last = bar === bars - 1;
-    const level = Math.min(3, Math.floor((bar / bars) * 4.4));
+    const level = Math.min(densest, busy + Math.floor((bar / bars) * 4.4));
     const pattern = last ? [1, 0, 0, 0, 0, 0, 0, 0] : pick(PATTERNS[level]);
     pattern.forEach((on, i) => {
       if (!on) return;
-      // Calm songs repeat lanes more, busy ones jump around
-      lane += pick(level < 1 ? [-1, 0, 0, 1] : [-2, -1, -1, 0, 1, 1, 2]);
+      // Calm songs repeat lanes more, busy ones jump around (further with many colors)
+      lane += pick(level < 1 ? [-1, 0, 0, 1] : lanes.length > 4 ? [-3, -2, -1, -1, 0, 1, 1, 2, 3] : [-2, -1, -1, 0, 1, 1, 2]);
       if (lane < 0) lane = -lane;
-      if (lane > 3) lane = 6 - lane;
-      lane = clamp(lane, 0, 3);
-      notes.push({ at: Math.round(firstAt + (bar * 8 + i) * (beatMs / 2)), color: RHYTHM_LANES[lane] });
+      if (lane > top) lane = 2 * top - lane;
+      lane = clamp(lane, 0, top);
+      notes.push({ at: Math.round(firstAt + (bar * 8 + i) * (beatMs / 2)), color: lanes[lane] });
     });
   }
   return notes;
@@ -78,17 +84,22 @@ const rgbOf = (hex: string): [number, number, number] => {
   const n = parseInt(hex.replace('#', ''), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
-const LED = Object.fromEntries(GAME_COLORS.map((c) => [c.id, rgbOf(c.led)])) as Record<GameColor, [number, number, number]>;
+const LED = Object.fromEntries(RHYTHM_COLORS.map((c) => [c.id, rgbOf(c.led)])) as Record<RhythmColor, [number, number, number]>;
 const ZONE = { perfect: [0, 255, 40], good: [255, 110, 0], ok: [255, 0, 0] } as const;
 
 /** Rhythm Rain: notes climb a light strip; tap their color as they cross the zone at the top */
 export const rhythmRain: GameFactory = (m) => {
-  const bpm = 100 + Math.floor(Math.random() * 25);
+  const difficulty = Math.min(10, Math.max(1, Math.round(m.options.difficulty ?? 5)));
+  const level = rhythmLevel(difficulty);
+  const lanes = RHYTHM_COLORS.slice(0, level.lanes).map((c) => c.id);
+  // The host's speed scales how fast the notes climb, at every level
+  const travelMs = Math.round(level.travelMs / (Math.max(50, m.settings.rhythmSpeed || 100) / 100));
+  const bpm = level.bpm[0] + Math.floor(Math.random() * (level.bpm[1] - level.bpm[0] + 1));
   const beatMs = 60_000 / bpm;
   const startAt = Date.now();
   // The count-in: whole beats, long enough for the first note to climb the strip
-  const firstAt = startAt + Math.ceil(Math.max(RHYTHM.leadMs, RHYTHM.travelMs + beatMs * 2) / beatMs) * beatMs;
-  const notes = compose(firstAt, beatMs, m.settings.rhythmSec * 1000);
+  const firstAt = startAt + Math.ceil(Math.max(RHYTHM.leadMs, travelMs + beatMs * 2) / beatMs) * beatMs;
+  const notes = compose(firstAt, beatMs, m.settings.rhythmSec * 1000, lanes, level.busy);
   const endAt = notes[notes.length - 1].at + RHYTHM.okMs + GRACE_MS + OUTRO_MS;
 
   const scores = new Map<string, RhythmScore>(
@@ -116,7 +127,7 @@ export const rhythmRain: GameFactory = (m) => {
       for (let c = 0; c < 3; c++) px[i * 3 + c] += rgb[c] * k;
     };
     const zone = Math.round(RHYTHM.zoneAt * (leds - 1));
-    const speed = zone / RHYTHM.travelMs;
+    const speed = zone / travelMs;
     const sinceBeat = (((now - startAt) % beatMs) + beatMs) % beatMs;
     const pulse = now >= startAt && now < endAt ? Math.exp(-sinceBeat / 140) : 0;
     for (let i = 0; i < leds; i++) {
@@ -204,19 +215,20 @@ export const rhythmRain: GameFactory = (m) => {
     },
 
     input(id, args) {
-      const color = args?.color as GameColor;
-      if (!RHYTHM_LANES.includes(color)) throw new HbError('Pick a color');
+      const color = args?.color as RhythmColor;
+      if (!lanes.includes(color)) throw new HbError('Pick a color');
       const now = Date.now();
       // The phone sends when it was tapped (server clock), a little before the message got here
       const at = clamp(num(args?.at, now), now - GRACE_MS, now + 50);
-      if (over || at < firstAt - RHYTHM.travelMs) return { grade: null };
+      if (over || at < firstAt - travelMs) return { grade: null };
       const s = scores.get(id)!;
       const player = m.players.findIndex((p) => p.id === id);
-      const lane = RHYTHM_LANES.indexOf(color);
+      const lane = lanes.indexOf(color);
       const i = rhythmTarget(notes, at, color, (n) => hits.get(id)!.has(n));
       if (i < 0) {
         s.wrong += 1;
         s.combo = 0;
+        s.score = Math.max(0, s.score - RHYTHM_WRONG_PENALTY);
         judge(s, 'miss');
         m.sound('rhythm', { player, lane, grade: 'miss' });
         m.publish();
@@ -240,6 +252,9 @@ export const rhythmRain: GameFactory = (m) => {
       return {
         notes,
         bpm,
+        difficulty,
+        lanes,
+        travelMs,
         startAt,
         endAt,
         scores: Object.fromEntries(scores),

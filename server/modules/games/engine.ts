@@ -25,6 +25,8 @@ export interface MatchApi {
   readonly pot: number;
   /** Host settings when the game started */
   readonly settings: GamesSettings;
+  /** Chosen with the challenge (Rhythm Rain level) */
+  readonly options: { difficulty?: number };
   /** Show a color on the lights (and on the TV). null: dark. */
   light(color: GameColor | null): void;
   readonly lightColor: GameColor | null;

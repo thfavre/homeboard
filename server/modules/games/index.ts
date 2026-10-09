@@ -2,6 +2,7 @@ import {
   GAMES,
   DUEL_INVITE_MS,
   GAME_COLORS,
+  RHYTHM_DEFAULT_LEVEL,
   gameInfo,
   type DuelInvite,
   type GameColor,
@@ -76,6 +77,7 @@ interface Match {
   lightColor: GameColor | null;
   usesLights: boolean;
   ready: Set<string>;
+  options: { difficulty?: number };
 }
 
 const player = (g: Guest): GamePlayer => ({ id: g.id, name: g.name, color: g.color });
@@ -88,7 +90,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmSec: 45 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmSec: 45, rhythmSpeed: 100 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -237,7 +239,15 @@ export default defineModule<GamesSettings>({
       return m.prize ?? ctx.economy.earnAmount('games.win');
     };
 
-    const createMatch = (game: GameId, mode: GameMode, starter: GamePlayer | null, players: GamePlayer[], stake: number, charges: Charge[]) => {
+    const createMatch = (
+      game: GameId,
+      mode: GameMode,
+      starter: GamePlayer | null,
+      players: GamePlayer[],
+      stake: number,
+      charges: Charge[],
+      options: Match['options'] = {},
+    ) => {
       tvFree();
       // A new game ends the prize; a light game takes the lights straight from it
       const handOver = perk?.kind === 'lights' && !!gameInfo(game)?.lights;
@@ -263,6 +273,7 @@ export default defineModule<GamesSettings>({
         // Lights handed over by the prize: released when this game is over, even if it never starts
         usesLights: handOver,
         ready: new Set(),
+        options,
       };
       return match;
     };
@@ -290,6 +301,7 @@ export default defineModule<GamesSettings>({
         stake: m.stake,
         pot: potOf(m),
         settings: ctx.settings.get(),
+        options: m.options,
         light: (color) => {
           m.lightColor = color;
           if (m.usesLights) lights()?.color(color ? (GAME_COLORS.find((c) => c.id === color)?.led ?? null) : null);
@@ -402,6 +414,7 @@ export default defineModule<GamesSettings>({
         to: player(opponent),
         stake,
         expiresAt: Date.now() + DUEL_INVITE_MS,
+        ...(game === 'rhythm' ? { difficulty: Math.min(10, Math.max(1, Math.round(num(args?.difficulty, RHYTHM_DEFAULT_LEVEL)))) } : {}),
         charges: [fee, bet],
         timer: setTimeout(() => {
           if (!invites.has(inv.id)) return;
@@ -426,7 +439,7 @@ export default defineModule<GamesSettings>({
       checkLight(inv.game);
       const bet = ctx.economy.pay(guest, inv.stake, `Duel bet: ${gameInfo(inv.game)!.name}`);
       try {
-        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet]);
+        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet], { difficulty: inv.difficulty });
         dropInvite(inv, null);
         intro(m);
       } catch (err) {
@@ -578,6 +591,7 @@ export default defineModule<GamesSettings>({
             ? args.rhythmLight
             : s.rhythmLight,
         rhythmReverse: typeof args?.rhythmReverse === 'boolean' ? args.rhythmReverse : s.rhythmReverse,
+        rhythmSpeed: args?.rhythmSpeed !== undefined ? Math.min(200, Math.max(50, Math.round(num(args.rhythmSpeed, 100)))) : s.rhythmSpeed,
         rhythmSec: args?.rhythmSec !== undefined ? Math.min(120, Math.max(20, Math.round(num(args.rhythmSec, 45)))) : s.rhythmSec,
       });
       ctx.publish();
