@@ -264,6 +264,8 @@ export interface GamesSettings {
   bluffMultiplier: number;
   /** Minutes between two Bluff games (0: no wait) */
   bluffCooldownMin: number;
+  /** Seconds the Bluff players have to choose (no choice counts as sharing) */
+  bluffChooseSec: number;
   /** Colors in the first sequence of Light Simon */
   simonStart: number;
   /** WLED light the Rhythm Rain notes climb ('' = the TV only) */

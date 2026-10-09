@@ -46,6 +46,8 @@
   const MULT_STEPS = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
   /** Minutes between two Bluff games */
   const COOLDOWN_STEPS = [0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
+  /** Seconds the Bluff players have to choose */
+  const CHOOSE_STEPS = [10, 15, 20, 30, 45, 60, 90, 120, 180];
   const now = new Now(10_000);
   const bluffWait = $derived(s?.bluffReadyAt && s.bluffReadyAt > now.value ? Math.ceil((s.bluffReadyAt - now.value) / 60_000) : 0);
   /** Bonus each player gets when both share in Bluff (also listed in Prices and rewards) */
@@ -74,7 +76,7 @@
       case 'circle':
         return `${plural(st.circleCount, 'circle')} each, ${perkText(st.circlePerkSec)}`;
       case 'bluff':
-        return `${hb.core?.economyEnabled ? `${formatAmount(bluffBonus?.amount ?? 0)} + ${st.bluffMultiplier}x the bet each if both share, ` : ''}${st.bluffCooldownMin ? `every ${st.bluffCooldownMin} min` : 'no wait'}`;
+        return `${hb.core?.economyEnabled ? `${formatAmount(bluffBonus?.amount ?? 0)} + ${st.bluffMultiplier}x the bet each if both share, ` : ''}${st.bluffChooseSec || 30}s to choose, ${st.bluffCooldownMin ? `every ${st.bluffCooldownMin} min` : 'no wait'}`;
       case 'rhythm':
         return st.rhythmLight
           ? `on ${lightName(st.rhythmLight)}, ${plural(s?.rhythmSongs.length ?? 0, 'song')}, ${st.rhythmFullSong ? 'whole songs' : `${clock(st.rhythmMinSec)} to ${clock(st.rhythmMaxSec)}`}, ${perkText(st.rhythmPerkSec)}`
@@ -193,6 +195,15 @@
         </span>
       </div>
     {/if}
+    {@const sec = s!.settings.bluffChooseSec || 30}
+    <div class="line">
+      <span class="label">Time to choose <span class="faint small">Seconds. No choice in time counts as sharing</span></span>
+      <span class="stepper">
+        <button class="btn small" aria-label="Less" disabled={sec <= CHOOSE_STEPS[0]} onclick={() => setSettings({ bluffChooseSec: stepIn(CHOOSE_STEPS, sec, -1) })}><Minus size={16} /></button>
+        <strong class="mono">{sec}</strong>
+        <button class="btn small" aria-label="More" disabled={sec >= CHOOSE_STEPS[CHOOSE_STEPS.length - 1]} onclick={() => setSettings({ bluffChooseSec: stepIn(CHOOSE_STEPS, sec, 1) })}><Plus size={16} /></button>
+      </span>
+    </div>
     {@const cd = s!.settings.bluffCooldownMin}
     <div class="line">
       <span class="label">Wait between two games <span class="faint small">Minutes, for the whole party. 0 = no wait</span></span>

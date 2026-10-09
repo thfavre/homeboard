@@ -4,6 +4,7 @@
   import { hb } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import GameCard from '../ui/GameCard.svelte';
+  import { gamesState } from '../store.svelte.ts';
   import BluffOdds from '../ui/BluffOdds.svelte';
 
   /** Bluff's rules on the phone, with what each outcome pays in this duel */
@@ -12,6 +13,7 @@
   const other = $derived(m.players.find((p) => p.id !== me)?.name ?? 'They');
   const deal = $derived(m.bluff ?? bluffDeal(m.stake, 0, 0));
   const economy = $derived(!!hb.core?.economyEnabled);
+  const chooseSec = $derived(gamesState()?.settings.bluffChooseSec || 30);
 </script>
 
 <div class="rules">
@@ -29,7 +31,7 @@
   <ol class="tips">
     <li style:animation-delay="300ms"><MessagesSquare size={18} /><span>Talk it over with {other}. Promise what you like: nobody has to keep it.</span></li>
     <li style:animation-delay="380ms"><EyeOff size={18} /><span>Choose in secret on your phone. You can change your mind until you have both chosen.</span></li>
-    <li style:animation-delay="460ms"><Timer size={18} /><span>30 seconds. No choice counts as sharing. The TV turns both cards over.</span></li>
+    <li style:animation-delay="460ms"><Timer size={18} /><span>{chooseSec} seconds to choose. No choice counts as sharing. The TV turns both cards over.</span></li>
   </ol>
 </div>
 

@@ -132,7 +132,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -979,6 +979,7 @@ export default defineModule<GamesSettings>({
         rhythmPerkSec: args?.rhythmPerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.rhythmPerkSec, 45)))) : s.rhythmPerkSec,
         bluffMultiplier: args?.bluffMultiplier !== undefined ? Math.round(clamp(num(args.bluffMultiplier, 0.5), 0, 3) * 100) / 100 : s.bluffMultiplier,
         bluffCooldownMin: args?.bluffCooldownMin !== undefined ? Math.round(clamp(num(args.bluffCooldownMin, 30), 0, 240)) : s.bluffCooldownMin,
+        bluffChooseSec: args?.bluffChooseSec !== undefined ? Math.round(clamp(num(args.bluffChooseSec, 30), 10, 180)) : s.bluffChooseSec,
         scratchLight:
           typeof args?.scratchLight === 'string' && (args.scratchLight === '' || lights()?.list().some((d) => d.id === args.scratchLight))
             ? args.scratchLight
