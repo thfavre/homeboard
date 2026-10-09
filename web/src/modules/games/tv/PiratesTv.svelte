@@ -8,9 +8,10 @@
   import PirateShip from '../ui/PirateShip.svelte';
 
   /**
-   * Pirate Race on the TV: one lane of sea per ship, the ships rowing with the drum toward the treasure
-   * island on the right. The oars move on the beat; a ship surges after each stroke of its crew, sparkles
-   * when the crew is in time, and leaves a white wake during a boost.
+   * Pirate Race on the TV: a sea map seen from above. The crews wait on the harbor beach on the left, and
+   * their small ships row along a route to the treasure island on the right, the oars moving on the beat.
+   * A ship surges after each stroke of its crew (its wake grows with its speed), its route behind it fills
+   * with its color, and it glows during a boost. Art: Kenney's Pirate Pack (CC0) in web/public/pirates.
    */
   let { m }: { m: MatchState } = $props();
   const v = $derived(m.view as PirateView | null);
@@ -18,12 +19,28 @@
   const shipOf = (c: PirateCrew) => PIRATE_SHIPS.find((s) => s.id === c.ship)!;
   const playerOf = (id: string) => m.players.find((p) => p.id === id);
 
-  // The clock, every frame: the oars follow the beat
+  /** Where each ship is drawn (eases toward its real progress) and how fast it goes (0 to 1) */
+  let shown = $state<Record<string, number>>({});
+  let speed = $state<Record<string, number>>({});
+
+  // The clock, every frame: the oars follow the beat and the ships glide to their place
   let now = $state(serverNow());
   $effect(() => {
     let raf = 0;
-    const loop = () => {
+    let last = performance.now();
+    const loop = (t: number) => {
       now = serverNow();
+      const dt = Math.min(100, t - last);
+      last = t;
+      if (v) {
+        for (const c of v.crews) {
+          const cur = shown[c.ship] ?? c.progress;
+          const gap = c.progress - cur;
+          shown[c.ship] = Math.abs(gap) < 1e-4 ? c.progress : cur + gap * (1 - Math.exp(-dt / 380));
+          const target = c.finishedAt ? 0 : Math.min(1, 0.12 + Math.abs(gap) * v.strokes * 0.9);
+          speed[c.ship] = (speed[c.ship] ?? 0) + (target - (speed[c.ship] ?? 0)) * (1 - Math.exp(-dt / 160));
+        }
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -60,12 +77,81 @@
     return i < 0 ? 'Ready...' : String(PIRATE.countIn - i);
   });
 
+  // ---------------------------------------------------------------- The map
+
+  let sw = $state(0);
+  let sh = $state(0);
+  type Pt = { x: number; y: number };
+  /**
+   * The map in pixels: the harbor beach (crew cards) on the left, the island on the right, and one route
+   * per ship from its pier to the island's beach, sampled by distance so a ship at 40% has rowed 40% of it.
+   */
+  const map = $derived.by(() => {
+    const n = v?.crews.length ?? 2;
+    const harbor = Math.min(sw * 0.2, 300);
+    const isle = Math.min(sh * 0.94, sw * 0.36);
+    const ix = sw - isle * 0.5 - sw * 0.01;
+    const iy = sh / 2;
+    const len = Math.max(46, Math.min(84, (sh / n) * 0.48));
+    const routes = Array.from({ length: n }, (_, i) => {
+      const a = { x: harbor + len * 0.9, y: (sh * (i + 0.5)) / n };
+      const b = { x: ix - isle * 0.43 - len * 0.5, y: iy - isle * 0.3 + (isle * 0.6 * (i + 0.5)) / n };
+      const dx = b.x - a.x;
+      const c1 = { x: a.x + dx * 0.42, y: a.y };
+      const c2 = { x: b.x - dx * 0.42, y: b.y };
+      const pts: Pt[] = [];
+      const dist: number[] = [];
+      for (let k = 0; k <= 64; k++) {
+        const t = k / 64;
+        const u = 1 - t;
+        const p = {
+          x: u * u * u * a.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * b.x,
+          y: u * u * u * a.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * b.y,
+        };
+        dist.push(k ? dist[k - 1] + Math.hypot(p.x - pts[k - 1].x, p.y - pts[k - 1].y) : 0);
+        pts.push(p);
+      }
+      const d = `M${a.x} ${a.y} C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`;
+      return { a, b, pts, dist, d };
+    });
+    return { n, harbor, isle, ix, iy, len, wid: (len * 66) / 113, routes };
+  });
+  /** A ship's place on its route at a progress (0 to 1), and its heading in degrees (0: to the right) */
+  function along(i: number, p: number): Pt & { deg: number } {
+    const r = map.routes[i];
+    if (!r) return { x: 0, y: 0, deg: 0 };
+    const want = Math.min(1, Math.max(0, p)) * r.dist[r.dist.length - 1];
+    let k = 1;
+    while (k < r.dist.length - 1 && r.dist[k] < want) k++;
+    const s = r.dist[k] - r.dist[k - 1] || 1;
+    const f = Math.min(1, Math.max(0, (want - r.dist[k - 1]) / s));
+    const p0 = r.pts[k - 1];
+    const p1 = r.pts[k];
+    return { x: p0.x + (p1.x - p0.x) * f, y: p0.y + (p1.y - p0.y) * f, deg: (Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180) / Math.PI };
+  }
+
   const strokeText = (c: PirateCrew) => (c.stroke.synced ? 'In sync!' : c.stroke.power >= 0.6 ? 'Good stroke' : c.stroke.power > 0 ? 'Out of time' : 'Splash!');
   const placeText = (n: number | null) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
+
+  /** Rocks and reefs around the routes (fractions of the sea) */
+  const ROCKS = [
+    { src: 'rock2', x: 0.4, y: 0.03, s: 7 },
+    { src: 'rock1', x: 0.46, y: 0.05, s: 4.5 },
+    { src: 'rock5', x: 0.57, y: 0.97, s: 7.5 },
+    { src: 'rock4', x: 0.3, y: 0.975, s: 5 },
+  ];
+  /** Trees on the island (fractions of the island) */
+  const PALMS = [
+    { src: 'palm2', x: 0.3, y: 0.24, s: 0.26, r: 10 },
+    { src: 'palm1', x: 0.72, y: 0.22, s: 0.22, r: -30 },
+    { src: 'palm3', x: 0.74, y: 0.7, s: 0.2, r: 20 },
+    { src: 'palm2', x: 0.28, y: 0.72, s: 0.2, r: 40 },
+    { src: 'palm1', x: 0.86, y: 0.46, s: 0.18, r: 70 },
+  ];
 </script>
 
 {#if v}
-  <div class="race" class:many={v.crews.length > 3}>
+  <div class="race">
     <div class="bar">
       <div class="drum" style:--kick={drumKick}>
         <span class="skin"><Drum size="2.2rem" /></span>
@@ -84,65 +170,19 @@
       <span class="pill">Row on the beat · {PIRATE.boostStreak} in sync = boost</span>
     </div>
 
-    <div class="sea">
-      <div class="lanes">
-        {#each v.crews as c (c.ship)}
-          {@const ship = shipOf(c)}
-          {@const boosted = now < c.boostUntil}
-          {@const won = m.result?.winners.includes(c.members[0])}
-          <div class="lane" class:boosted class:won style:--team={ship.hex} style:--p={c.progress}>
-            <div class="water w1"></div>
-            <div class="water w2"></div>
-            <div class="tag">
-              <span class="flag"></span>
-              <span class="who">
-                <strong>{ship.name} ship</strong>
-                <span class="crew">
-                  {#each c.members as id (id)}
-                    {@const p = playerOf(id)}
-                    {#if p}<Avatar name={p.name} color={p.color} id={p.id} size="1.9rem" />{/if}
-                  {/each}
-                </span>
-              </span>
-              <span class="pips" aria-label={`${c.streak} in sync`}>
-                {#each Array.from({ length: PIRATE.boostStreak }) as _, i}<span class:on={i < c.streak}></span>{/each}
-              </span>
-            </div>
-            <div class="boat">
-              {#if boosted}<div class="speed" transition:fade></div>{/if}
-              <PirateShip id={c.ship} color={ship.hex} {phase} power={c.stroke.seq ? c.stroke.power : 0.45} messy={!!c.stroke.seq && !c.stroke.synced} {boosted} />
-              {#if c.stroke.seq && m.phase === 'play'}
-                {#key c.stroke.seq}
-                  <span class="pop" class:sync={c.stroke.synced} class:bad={c.stroke.power === 0}>{strokeText(c)}</span>
-                {/key}
-              {/if}
-              {#if boosted}<span class="boost" in:scale={{ start: 0.4 }}><Zap size="1.2rem" /> BOOST</span>{/if}
-              {#if c.place && m.phase === 'result'}<span class="place" class:first={c.place === 1}>{placeText(c.place)}</span>{/if}
-            </div>
-            <!-- The water in front of the ships: the blades go under it -->
-            <div class="front"></div>
-            <span class="meter mono">{Math.round(c.progress * 100)}%</span>
-          </div>
-        {/each}
-      </div>
+    <div class="sea" bind:clientWidth={sw} bind:clientHeight={sh} style:--len="{map.len}px" style:--wid="{map.wid}px">
+      <div class="texture"></div>
+      <div class="waves"></div>
 
-      <!-- The treasure island: the ships row to its beach -->
-      <div class="island">
-        <svg viewBox="0 0 220 600" preserveAspectRatio="none" class="sand" aria-hidden="true">
-          <path d="M40 0 Q10 60 34 120 Q8 190 30 260 Q6 330 32 400 Q10 470 34 540 Q20 580 40 600 L220 600 L220 0 Z" fill="#e8c27a" />
-          <path d="M40 0 Q10 60 34 120 Q8 190 30 260 Q6 330 32 400 Q10 470 34 540 Q20 580 40 600" fill="none" stroke="#fff" stroke-opacity="0.7" stroke-width="5" class="surf" />
-          <path d="M80 0 Q60 150 84 300 Q62 450 80 600 L220 600 L220 0 Z" fill="#d6a95c" opacity="0.6" />
-        </svg>
-        <svg viewBox="0 0 200 200" class="palm" aria-hidden="true">
-          <path d="M104 196 Q96 140 112 70" stroke="#7a4d22" stroke-width="10" fill="none" stroke-linecap="round" />
-          <g fill="#2fa45a">
-            <path d="M112 70 Q70 40 30 64 Q72 52 112 74 Z" />
-            <path d="M112 70 Q100 24 60 14 Q96 34 110 74 Z" />
-            <path d="M112 70 Q140 22 186 30 Q146 38 114 74 Z" />
-            <path d="M112 70 Q160 60 190 96 Q152 70 114 76 Z" />
-            <path d="M112 70 Q90 80 70 120 Q92 86 114 76 Z" />
-          </g>
-          <circle cx="108" cy="78" r="6" fill="#6b3f1a" /><circle cx="118" cy="80" r="5.5" fill="#6b3f1a" />
+      <!-- The treasure island -->
+      <div class="isle" style:left="{map.ix}px" style:top="{map.iy}px" style:--s="{map.isle}px">
+        <span class="shallow"></span>
+        <img class="land" src="/pirates/island.png" alt="" draggable="false" />
+        {#each PALMS as t, i (i)}
+          <img class="palm" src="/pirates/{t.src}.png" alt="" draggable="false" style:left="{t.x * 100}%" style:top="{t.y * 100}%" style:width="{t.s * 100}%" style:rotate="{t.r}deg" />
+        {/each}
+        <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+          <path d="M8 8 L32 32 M32 8 L8 32" stroke="#c0392b" stroke-width="6" stroke-linecap="round" />
         </svg>
         <div class="chest">
           <span class="glow"></span>
@@ -157,6 +197,68 @@
           <span class="spark s1"></span><span class="spark s2"></span><span class="spark s3"></span>
         </div>
       </div>
+
+      {#each ROCKS as r, i (i)}
+        <img class="rock" src="/pirates/{r.src}.png" alt="" draggable="false" style:left="{r.x * 100}%" style:top="{r.y * 100}%" style:width="{r.s}rem" />
+      {/each}
+
+      <!-- The routes: dotted ahead, in the crew's color behind -->
+      <svg class="routes" width={sw} height={sh} aria-hidden="true">
+        {#each v.crews as c, i (c.ship)}
+          {@const r = map.routes[i]}
+          {#if r}
+            <path d={r.d} class="ahead" />
+            <path d={r.d} class="behind" pathLength="1" stroke={shipOf(c).hex} stroke-dasharray="{shown[c.ship] ?? c.progress} 2" />
+          {/if}
+        {/each}
+      </svg>
+
+      <!-- The harbor beach, with a pier for each ship -->
+      <div class="shore" style:width="{map.harbor + 24}px"></div>
+      {#each map.routes as r, i (i)}
+        <span class="pier" style:left="{map.harbor - 8}px" style:top="{r.a.y}px" style:width="{r.a.x - map.harbor - map.len * 0.3}px"></span>
+      {/each}
+
+      {#each v.crews as c, i (c.ship)}
+        {@const ship = shipOf(c)}
+        {@const r = map.routes[i]}
+        {#if r}
+          <div class="card" style:--team={ship.hex} style:top="{r.a.y}px" style:width="{map.harbor - 22}px" class:won={c.place === 1}>
+            <span class="name"><span class="flag"></span>{ship.name} ship</span>
+            <span class="crew">
+              {#each c.members as id (id)}
+                {@const p = playerOf(id)}
+                {#if p}<Avatar name={p.name} color={p.color} id={p.id} size="1.8rem" />{/if}
+              {/each}
+            </span>
+            <span class="foot">
+              <span class="pips" aria-label={`${c.streak} in sync`}>
+                {#each Array.from({ length: PIRATE.boostStreak }) as _, k}<span class:on={k < c.streak}></span>{/each}
+              </span>
+              <span class="mono pct">{Math.round(c.progress * 100)}%</span>
+            </span>
+          </div>
+        {/if}
+      {/each}
+
+      <!-- The ships -->
+      {#each v.crews as c, i (c.ship)}
+        {@const ship = shipOf(c)}
+        {@const boosted = now < c.boostUntil}
+        {@const at = along(i, shown[c.ship] ?? c.progress)}
+        <div class="boat" style:left="{at.x}px" style:top="{at.y}px" style:rotate="{at.deg - 90}deg">
+          <PirateShip ship={c.ship} color={ship.hex} {phase} power={c.stroke.seq ? c.stroke.power : 0.45} messy={!!c.stroke.seq && !c.stroke.synced} {boosted} speed={speed[c.ship] ?? 0} />
+        </div>
+        <div class="over" style:left="{at.x}px" style:top="{at.y}px" style:--team={ship.hex}>
+          {#if c.stroke.seq && m.phase === 'play'}
+            {#key c.stroke.seq}
+              <span class="pop" class:sync={c.stroke.synced} class:bad={c.stroke.power === 0}>{strokeText(c)}</span>
+            {/key}
+          {/if}
+          {#if boosted}<span class="boost" in:scale={{ start: 0.4 }}><Zap size="1.1rem" /> BOOST</span>{/if}
+          {#if c.place && m.phase === 'result'}<span class="place" class:first={c.place === 1}>{placeText(c.place)}</span>{/if}
+        </div>
+      {/each}
     </div>
 
     {#if v.step === 'crew' && m.phase === 'play'}
@@ -167,7 +269,7 @@
           {#each v.crews as c, k (c.ship)}
             {@const ship = shipOf(c)}
             <div class="crew-card" style:--team={ship.hex} in:scale={{ delay: 200 + k * 180, start: 0.7 }}>
-              <span class="mini"><PirateShip id={`card-${c.ship}`} color={ship.hex} phase={(now / 1600) % 1} /></span>
+              <span class="mini"><span><PirateShip ship={c.ship} color={ship.hex} phase={(now / 1600) % 1} speed={0.3} /></span></span>
               <strong>{ship.name} ship</strong>
               <span class="names">
                 {#each c.members as id (id)}
@@ -190,12 +292,12 @@
     {#if m.result}
       {@const r = m.result}
       {@const winners = v.crews.filter((c) => c.place === 1 && r.winners.length)}
-      <div class="overlay result" in:fade={{ delay: 400 }}>
-        <h1 class="headline" in:fly={{ y: -30, delay: 500 }}>{r.headline}</h1>
+      <div class="overlay result" in:fade={{ delay: 1400 }}>
+        <h1 class="headline" in:fly={{ y: -30, delay: 1500 }}>{r.headline}</h1>
         <div class="podium">
           {#each winners as c (c.ship)}
             {@const ship = shipOf(c)}
-            <div class="winner" style:--team={ship.hex} in:scale={{ delay: 800, start: 0.6 }}>
+            <div class="winner" style:--team={ship.hex} in:scale={{ delay: 1800, start: 0.6 }}>
               <span class="crown"><Crown size="2.6rem" /></span>
               <span class="names">
                 {#each c.members as id (id)}
@@ -291,112 +393,244 @@
     }
   }
 
+  /* ------------------------------------------------ The sea, from above */
   .sea {
     position: relative;
     min-height: 0;
-    display: grid;
-    grid-template-columns: 1fr 13rem;
-    border-radius: var(--radius);
     overflow: hidden;
-    background: linear-gradient(180deg, #0f5d9c, #08335f);
-    box-shadow: inset 0 0 6rem rgb(0 0 0 / 0.35);
+    border-radius: var(--radius);
+    background:
+      radial-gradient(ellipse 60% 70% at 52% 50%, #2e8fd2, transparent 75%),
+      linear-gradient(180deg, #2a86c8, #1d6db0 50%, #2a86c8);
+    box-shadow: inset 0 0 5rem rgb(0 20 50 / 0.45);
   }
-  .lanes {
-    min-height: 0;
-    display: grid;
-    grid-auto-rows: 1fr;
-  }
-  .lane {
-    position: relative;
-    container-type: size;
-    min-height: 0;
-    border-bottom: 2px dashed rgb(255 255 255 / 0.18);
-  }
-  .lane:last-child {
-    border-bottom: 0;
-  }
-  .water {
+  .texture,
+  .waves {
     position: absolute;
     inset: 0;
-    background-repeat: repeat-x;
     pointer-events: none;
   }
-  .w1 {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='40'%3E%3Cpath d='M0 20 Q20 8 40 20 T80 20 T120 20 T160 20' fill='none' stroke='white' stroke-opacity='0.16' stroke-width='3'/%3E%3C/svg%3E");
-    background-size: 160px 40px;
-    background-position: 0 30%;
-    animation: drift 7s linear infinite;
+  .texture {
+    background: url('/pirates/water.png') 0 0 / 180px 180px;
+    opacity: 0.18;
+    mix-blend-mode: screen;
+    animation: tide 40s linear infinite;
   }
-  .w2 {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='50'%3E%3Cpath d='M0 25 Q27 12 55 25 T110 25 T165 25 T220 25' fill='none' stroke='white' stroke-opacity='0.1' stroke-width='4'/%3E%3C/svg%3E");
-    background-size: 220px 50px;
-    background-position: 0 80%;
-    animation: drift 11s linear infinite reverse;
+  .waves {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='240'%3E%3Cg fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-opacity='0.35'%3E%3Cpath d='M20 40 q10 -8 20 0 t20 0'/%3E%3Cpath d='M190 30 q8 -6 16 0'/%3E%3Cpath d='M120 120 q10 -8 20 0 t20 0'/%3E%3Cpath d='M260 150 q8 -6 16 0 t16 0'/%3E%3Cpath d='M40 190 q8 -6 16 0'/%3E%3Cpath d='M200 215 q10 -8 20 0'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 320px 240px;
+    animation: tide 26s linear infinite reverse;
   }
-  @keyframes drift {
+  @keyframes tide {
     to {
-      background-position-x: -440px;
+      background-position: 360px 120px;
     }
   }
-  .front {
+
+  .isle {
+    position: absolute;
+    width: var(--s);
+    height: var(--s);
+    translate: -50% -50%;
+  }
+  .shallow {
+    position: absolute;
+    inset: -14%;
+    border-radius: 42%;
+    background: radial-gradient(closest-side, rgb(140 225 245 / 0.75) 62%, rgb(110 205 240 / 0.35) 80%, transparent);
+    animation: breathe 4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    50% {
+      transform: scale(1.03);
+      opacity: 0.85;
+    }
+  }
+  .land {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 4px #fff) drop-shadow(0 0 10px rgb(255 255 255 / 0.6));
+    animation: surf 3s ease-in-out infinite;
+  }
+  @keyframes surf {
+    50% {
+      filter: drop-shadow(0 0 7px #fff) drop-shadow(0 0 16px rgb(255 255 255 / 0.4));
+    }
+  }
+  .palm {
+    position: absolute;
+    translate: -50% -50%;
+    filter: drop-shadow(4px 8px 3px rgb(0 0 0 / 0.25));
+  }
+  .mark {
+    position: absolute;
+    left: 50%;
+    top: 47%;
+    width: 13%;
+    translate: -50% -50%;
+    opacity: 0.85;
+  }
+  .chest {
+    position: absolute;
+    left: 50%;
+    top: 47%;
+    translate: -50% -62%;
+    width: 22%;
+  }
+  .chest svg {
+    position: relative;
+    width: 100%;
+    filter: drop-shadow(0 6px 4px rgb(0 0 0 / 0.3));
+  }
+  .glow {
+    position: absolute;
+    inset: -45%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgb(255 214 74 / 0.8), transparent 62%);
+    animation: shimmer 1.6s ease-in-out infinite alternate;
+  }
+  @keyframes shimmer {
+    to {
+      opacity: 0.45;
+      transform: scale(0.9);
+    }
+  }
+  .spark {
+    position: absolute;
+    width: 0.8rem;
+    height: 0.8rem;
+    background: #fff;
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+    animation: twinkle 1.3s ease-in-out infinite;
+  }
+  .s1 {
+    left: 15%;
+    top: 5%;
+  }
+  .s2 {
+    left: 75%;
+    top: -5%;
+    animation-delay: 0.45s;
+  }
+  .s3 {
+    left: 52%;
+    top: 30%;
+    animation-delay: 0.9s;
+  }
+  @keyframes twinkle {
+    0%,
+    100% {
+      transform: scale(0);
+    }
+    50% {
+      transform: scale(1.3) rotate(45deg);
+    }
+  }
+  .rock {
+    position: absolute;
+    translate: -50% -50%;
+    filter: drop-shadow(0 0 3px rgb(255 255 255 / 0.8));
+  }
+
+  .routes {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .routes path {
+    fill: none;
+    stroke-linecap: round;
+  }
+  .ahead {
+    stroke: #fff;
+    stroke-opacity: 0.4;
+    stroke-width: 3;
+    stroke-dasharray: 2 12;
+  }
+  .behind {
+    stroke-width: 5;
+    stroke-opacity: 0.55;
+  }
+
+  /* The harbor: a beach on the left edge, with the crews' signs and their piers */
+  .shore {
     position: absolute;
     left: 0;
-    right: 0;
+    top: 0;
     bottom: 0;
-    height: 19cqh;
-    z-index: 3;
-    pointer-events: none;
-    background: linear-gradient(180deg, rgb(42 143 214 / 0.55), rgb(8 51 95 / 0.95));
-    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='200' preserveAspectRatio='none'%3E%3Cpath d='M0 8 Q20 0 40 8 T80 8 L80 200 L0 200 Z'/%3E%3C/svg%3E") 0 0 / 80px 100% repeat-x;
-    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='200' preserveAspectRatio='none'%3E%3Cpath d='M0 8 Q20 0 40 8 T80 8 L80 200 L0 200 Z'/%3E%3C/svg%3E") 0 0 / 80px 100% repeat-x;
-    animation: lap 2.4s linear infinite;
+    background:
+      radial-gradient(circle at 30% 20%, rgb(255 255 255 / 0.25) 0 2px, transparent 3px) 0 0 / 46px 52px,
+      linear-gradient(90deg, #e9cf98, #f6e3b6 70%, #f9ecc8);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='160' preserveAspectRatio='none'%3E%3Cpath d='M0 0 L28 0 Q40 40 28 80 Q16 120 28 160 L0 160 Z'/%3E%3C/svg%3E") right 0 top 0 / 40px 160px repeat-y,
+      linear-gradient(#000, #000) 0 0 / calc(100% - 39px) 100% no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='160' preserveAspectRatio='none'%3E%3Cpath d='M0 0 L28 0 Q40 40 28 80 Q16 120 28 160 L0 160 Z'/%3E%3C/svg%3E") right 0 top 0 / 40px 160px repeat-y,
+      linear-gradient(#000, #000) 0 0 / calc(100% - 39px) 100% no-repeat;
+    filter: drop-shadow(4px 0 0 rgb(255 255 255 / 0.7));
   }
-  @keyframes lap {
-    to {
-      -webkit-mask-position: -80px 0;
-      mask-position: -80px 0;
-    }
-  }
-  .tag {
+  .pier {
     position: absolute;
-    left: 0.8rem;
-    top: 0.5rem;
-    z-index: 4;
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.3rem 0.8rem 0.3rem 0.4rem;
-    border-radius: 999px;
-    background: rgb(0 0 0 / 0.35);
-    backdrop-filter: blur(6px);
+    height: calc(var(--wid) * 0.42);
+    translate: 0 -50%;
+    border-radius: 3px;
+    background: repeating-linear-gradient(90deg, #a26a35 0 9px, #7b4a20 9px 11px);
+    box-shadow:
+      0 0 0 2px #5a3415,
+      0 5px 6px rgb(0 0 0 / 0.3);
+  }
+  .card {
+    position: absolute;
+    left: 10px;
+    translate: 0 -50%;
+    z-index: 3;
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.55rem 0.75rem 0.6rem;
+    border-radius: 0.8rem;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--team) 26%, #13263a), #10202f);
+    border: 2px solid color-mix(in srgb, var(--team) 70%, transparent);
+    box-shadow: 0 6px 16px rgb(40 25 5 / 0.35);
     color: #fff;
   }
-  .flag {
-    width: 1.1rem;
-    height: 1.6rem;
-    border-radius: 0.2rem;
-    background: var(--team);
-    box-shadow: 0 0 0.8rem var(--team);
+  .card.won {
+    box-shadow:
+      0 0 0 3px var(--coin),
+      0 0 2rem var(--coin);
   }
-  .who {
-    display: grid;
-    gap: 0.15rem;
-  }
-  .who strong {
-    font-size: 1.05rem;
+  .name {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-weight: 800;
+    font-size: 1.1rem;
     line-height: 1;
+  }
+  .flag {
+    width: 0.8rem;
+    height: 1.1rem;
+    border-radius: 0.15rem;
+    background: var(--team);
+    box-shadow: 0 0 0.6rem var(--team);
   }
   .crew {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.2rem;
   }
-    .pips {
+  .foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .pips {
     display: flex;
     gap: 0.25rem;
   }
   .pips span {
-    width: 0.75rem;
-    height: 0.75rem;
+    width: 0.7rem;
+    height: 0.7rem;
     border-radius: 50%;
     border: 2px solid rgb(255 255 255 / 0.5);
     transition:
@@ -408,50 +642,37 @@
     border-color: var(--team);
     box-shadow: 0 0 0.6rem var(--team);
   }
+  .pct {
+    font-weight: 700;
+    font-size: 1rem;
+    color: rgb(255 255 255 / 0.8);
+  }
+
   .boat {
     position: absolute;
-    bottom: -8cqh;
-    height: 110cqh;
-    aspect-ratio: 280 / 180;
-    left: calc(var(--p) * (100cqw - 171cqh));
-    transition: left 0.7s cubic-bezier(0.2, 0.7, 0.3, 1);
-    z-index: 2;
+    z-index: 4;
+    width: var(--wid);
+    height: var(--len);
+    margin: calc(var(--len) / -2) 0 0 calc(var(--wid) / -2);
   }
-  .boosted .boat {
-    filter: drop-shadow(0 0 1.2rem var(--team));
-  }
-  .speed {
+  .over {
     position: absolute;
-    right: 80%;
-    top: 30%;
-    width: 60cqh;
-    height: 45%;
-    background: repeating-linear-gradient(180deg, transparent 0 14%, rgb(255 255 255 / 0.75) 14% 18%);
-    -webkit-mask: linear-gradient(90deg, transparent, #000);
-    mask: linear-gradient(90deg, transparent, #000);
-    animation: whoosh 0.35s linear infinite;
-  }
-  @keyframes whoosh {
-    from {
-      transform: translateX(20%);
-      opacity: 1;
-    }
-    to {
-      transform: translateX(-30%);
-      opacity: 0.4;
-    }
+    z-index: 6;
+    width: 0;
+    height: 0;
   }
   .pop {
     position: absolute;
-    left: 84%;
-    top: 30%;
+    left: 0;
+    bottom: calc(var(--len) * 0.45);
+    translate: -50% 0;
     white-space: nowrap;
     padding: 0.15rem 0.7rem;
     border-radius: 999px;
-    background: rgb(0 0 0 / 0.45);
+    background: rgb(0 20 40 / 0.6);
     color: #fff;
     font-weight: 700;
-    font-size: clamp(0.8rem, 11cqh, 1.3rem);
+    font-size: 1.05rem;
     animation: rise 1.1s ease-out forwards;
   }
   .pop.sync {
@@ -471,23 +692,24 @@
       opacity: 1;
     }
     100% {
-      transform: translateY(-14px);
+      transform: translateY(-16px);
       opacity: 0;
     }
   }
   .boost {
     position: absolute;
-    left: 2%;
-    top: 12%;
+    left: 0;
+    top: calc(var(--len) * 0.42);
+    translate: -50% 0;
     display: inline-flex;
     align-items: center;
     gap: 0.2rem;
-    padding: 0.15rem 0.6rem;
+    padding: 0.1rem 0.55rem;
     border-radius: 999px;
     background: linear-gradient(90deg, #ffe14d, #ff8a3a);
     color: #3a1a00;
     font-weight: 800;
-    font-size: clamp(0.8rem, 11cqh, 1.2rem);
+    font-size: 0.95rem;
     animation: pulse 0.4s ease-in-out infinite alternate;
   }
   @keyframes pulse {
@@ -497,108 +719,18 @@
   }
   .place {
     position: absolute;
-    left: 50%;
+    right: calc(var(--len) * 0.3);
     top: 0;
-    translate: -50% 0;
-    padding: 0.1rem 0.8rem;
+    translate: 0 -50%;
+    padding: 0.1rem 0.7rem;
     border-radius: 999px;
-    background: rgb(0 0 0 / 0.55);
+    background: rgb(0 0 0 / 0.6);
     color: #fff;
     font-weight: 800;
-    font-size: 1.3rem;
+    font-size: 1.2rem;
   }
   .place.first {
     background: linear-gradient(135deg, var(--coin), var(--coin-2));
-  }
-  .meter {
-    position: absolute;
-    right: 0.8rem;
-    bottom: 0.4rem;
-    z-index: 4;
-    color: rgb(255 255 255 / 0.75);
-    font-weight: 700;
-    font-size: 1.1rem;
-  }
-
-  .island {
-    position: relative;
-    min-height: 0;
-  }
-  .sand {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
-  .surf {
-    animation: surf 2.4s ease-in-out infinite;
-  }
-  @keyframes surf {
-    50% {
-      transform: translateX(-6px);
-      stroke-opacity: 0.35;
-    }
-  }
-  .palm {
-    position: absolute;
-    right: -1rem;
-    top: 2%;
-    width: 11rem;
-  }
-  .chest {
-    position: absolute;
-    left: 50%;
-    top: 55%;
-    translate: -45% -50%;
-    width: 8rem;
-  }
-  .chest svg {
-    position: relative;
-    width: 100%;
-  }
-  .glow {
-    position: absolute;
-    inset: -40%;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgb(255 214 74 / 0.75), transparent 62%);
-    animation: shimmer 1.6s ease-in-out infinite alternate;
-  }
-  @keyframes shimmer {
-    to {
-      opacity: 0.45;
-      transform: scale(0.9);
-    }
-  }
-  .spark {
-    position: absolute;
-    width: 0.7rem;
-    height: 0.7rem;
-    background: #fff;
-    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
-    animation: twinkle 1.3s ease-in-out infinite;
-  }
-  .s1 {
-    left: 20%;
-    top: 10%;
-  }
-  .s2 {
-    left: 70%;
-    top: 0;
-    animation-delay: 0.45s;
-  }
-  .s3 {
-    left: 52%;
-    top: 30%;
-    animation-delay: 0.9s;
-  }
-  @keyframes twinkle {
-    0%,
-    100% {
-      transform: scale(0);
-    }
-    50% {
-      transform: scale(1.3) rotate(45deg);
-    }
   }
 
   .overlay {
@@ -643,9 +775,23 @@
     font-size: 1.6rem;
     color: var(--team);
   }
+  /* A ship rowing to the right, on a patch of sea */
   .mini {
-    width: 9rem;
-    aspect-ratio: 280 / 180;
+    position: relative;
+    width: 10rem;
+    height: 5.6rem;
+    border-radius: 1rem;
+    background: radial-gradient(ellipse at center, #2e8fd2, #1d6db0);
+    overflow: hidden;
+  }
+  .mini > span {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 2.6rem;
+    height: 4.45rem;
+    translate: -50% -50%;
+    rotate: -90deg;
   }
   .names {
     display: flex;
