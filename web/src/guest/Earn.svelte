@@ -22,7 +22,7 @@
 <div class="earn">
   <div class="card balance">
     <span class="eyebrow">Your {currency?.name}</span>
-    <div class="amount"><Money amount={hb.me?.balance ?? 0} /></div>
+    <div class="amount"><Money amount={hb.me?.balance ?? 0} whole /></div>
     <p class="dim">Spend them on music, drawing, lights and more. Here is how to get more.</p>
   </div>
 

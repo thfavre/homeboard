@@ -70,7 +70,7 @@
       </div>
       {#if economy}
         <button class="wallet" onclick={earn}>
-          <span class="wallet-amount"><Money amount={hb.me.balance} /></span>
+          <span class="wallet-amount"><Money amount={hb.me.balance} whole /></span>
           <span class="wallet-label dim">{hb.core?.currency.name} to spend</span>
           <span class="wallet-cta">Earn more <ArrowUpRight size={16} /></span>
         </button>

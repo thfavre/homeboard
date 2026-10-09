@@ -2,14 +2,15 @@
   import { formatAmount } from '$shared/money.ts';
   import Coin from './Coin.svelte';
 
-  let { amount, sign = false, free = false }: { amount: number; sign?: boolean; free?: boolean } = $props();
+  /** whole: a balance, shown without cents */
+  let { amount, sign = false, free = false, whole = false }: { amount: number; sign?: boolean; free?: boolean; whole?: boolean } = $props();
 </script>
 
 <span class="money mono">
   {#if free && amount === 0}
     Free
   {:else}
-    <Coin />{sign && amount > 0 ? '+' : ''}{formatAmount(amount)}
+    <Coin />{sign && amount > 0 ? '+' : ''}{formatAmount(amount, whole)}
   {/if}
 </span>
 

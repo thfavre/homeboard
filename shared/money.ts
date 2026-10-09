@@ -2,10 +2,11 @@ import type { Currency } from './protocol.ts';
 
 /**
  * Format an amount in hundredths for display with Swiss grouping. Whole units stay whole, cents show only
- * when there are some, so small prices are not rounded away: 198990 => "1’990", 30 => "0.3", 125 => "1.25"
+ * when there are some, so small prices are not rounded away: 198990 => "1’990", 30 => "0.3", 125 => "1.25".
+ * `whole`: balances, in whole units only (rounded down, what can really be spent): 503950 => "5’039"
  */
-export function formatAmount(amount: number): string {
-  const abs = Math.round(Math.abs(amount));
+export function formatAmount(amount: number, whole = false): string {
+  const abs = whole ? Math.floor(Math.abs(amount) / 100) * 100 : Math.round(Math.abs(amount));
   const digits = String(Math.floor(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '’');
   const cents = abs % 100;
   const text = cents ? `${digits}.${String(cents).padStart(2, '0').replace(/0$/, '')}` : digits;

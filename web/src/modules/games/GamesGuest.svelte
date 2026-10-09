@@ -139,7 +139,7 @@
     }
     const target = others.find((p) => p.id === opponent);
     if (mode === 'duel' && economy && target && stake > target.balance) {
-      error = `${target.name} only has ${formatAmount(target.balance)}: lower your bet or pick someone else`;
+      error = `${target.name} only has ${formatAmount(target.balance, true)}: lower your bet or pick someone else`;
       return;
     }
     if (maxStake > 0 && stake > maxStake) {
@@ -325,7 +325,7 @@
               <span class="who">
                 <span class="truncate">{p.name}</span>
                 {#if economy}
-                  <span class="bal">{#if short}Can't match{:else}<Money amount={p.balance} />{/if}</span>
+                  <span class="bal">{#if short}Can't match{:else}<Money amount={p.balance} whole />{/if}</span>
                 {/if}
               </span>
             </button>
