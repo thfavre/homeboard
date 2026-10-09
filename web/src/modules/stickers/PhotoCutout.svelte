@@ -13,7 +13,7 @@
   const margin = $derived(Math.ceil(borderFor(Math.max(photo.width, photo.height))));
 
   type Shape = 'trace' | 'circle' | 'whole';
-  let shape = $state<Shape>('trace');
+  let shape = $state<Shape>('whole');
   let view = $state<HTMLCanvasElement>();
   // Points are in photo pixels. Kept out of Svelte (it can be hundreds), `version` triggers the redraw.
   let points: { x: number; y: number }[] = [];
@@ -188,9 +188,9 @@
 
 <div class="cutout">
   <div class="tabs">
+    <button class="btn small" class:primary={shape === 'whole'} onclick={() => pick('whole')}><Image size={16} /> Whole</button>
     <button class="btn small" class:primary={shape === 'trace'} onclick={() => pick('trace')}><Lasso size={16} /> Trace</button>
     <button class="btn small" class:primary={shape === 'circle'} onclick={() => pick('circle')}><Circle size={16} /> Circle</button>
-    <button class="btn small" class:primary={shape === 'whole'} onclick={() => pick('whole')}><Image size={16} /> Whole</button>
   </div>
   <div class="frame">
     <canvas
