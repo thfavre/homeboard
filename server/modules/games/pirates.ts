@@ -101,8 +101,47 @@ interface Crew extends PirateCrew {
 }
 
 /**
+ * The race light runs at full brightness (the ships shine at their brightest), so the sea is drawn dim on
+ * it. One unit is a sixtieth of the light: about 7 LEDs on a 3 m strip at 144 LEDs/m.
+ */
+const RACE_SEA = 0.32;
+const SHIP_LEN = 2;
+
+/** Paint over what is there (w: 0 to 1), so a ship keeps its own color on the sea */
+function cover(px: Float32Array, n: number, i: number, rgb: readonly number[], w: number): void {
+  if (i < 0 || i >= n || w <= 0) return;
+  const k = Math.min(1, w);
+  for (let c = 0; c < 3; c++) px[i * 3 + c] = px[i * 3 + c] * (1 - k) + rgb[c] * k;
+}
+function add(px: Float32Array, n: number, i: number, rgb: readonly number[], k: number): void {
+  if (i < 0 || i >= n || k <= 0) return;
+  for (let c = 0; c < 3; c++) px[i * 3 + c] += rgb[c] * k;
+}
+
+/** A ship: a solid block of its color at full brightness, the bow at `bow`, the stern fading a little */
+function drawShip(px: Float32Array, n: number, bow: number, rgb: readonly number[], u: number, k = 1): void {
+  const len = SHIP_LEN * u;
+  for (let d = 0; d < len; d++) {
+    const t = d / len;
+    cover(px, n, Math.round(bow - d), rgb, k * (t < 0.7 ? 1 : 1 - (t - 0.7) / 0.45));
+  }
+}
+
+/** The treasure: a gold glow, twinkling */
+function drawTreasure(px: Float32Array, n: number, at: number, now: number, u: number, k: number): void {
+  const w = 1.3 * u;
+  for (let i = Math.floor(at - w); i <= Math.ceil(at + w); i++) cover(px, n, i, GOLD, k * Math.min(1, 1.5 * Math.max(0, 1 - Math.abs(i + 0.5 - at) / w)));
+  if (Math.random() < 0.3) add(px, n, Math.round(at + (Math.random() - 0.5) * 2 * u), WHITE, 0.5 * k);
+}
+
+/** Buoys every tenth of the way to the treasure, the halfway one brighter: the score reads at a glance */
+function drawBuoys(px: Float32Array, n: number, from: number, to: number, k: number): void {
+  for (let b = 1; b < 10; b++) add(px, n, Math.round(from + ((to - from) * b) / 10), WHITE, (b === 5 ? 0.22 : 0.1) * k);
+}
+
+/**
  * The lights while the players read the rules: the race light shows the sea, the treasure glowing and the
- * crews' ships waiting side by side at the start, bobbing; every other light rolls the sea.
+ * crews' ships lined up at the start, breathing; every other light rolls the sea.
  */
 export function pirateWaitingLights(deal: PirateCrewDeal[], settings: GamesSettings, strips: { id: string; leds: number; send(rgb: Uint8Array): void }[]): void {
   const now = Date.now();
@@ -113,20 +152,14 @@ export function pirateWaitingLights(deal: PirateCrewDeal[], settings: GamesSetti
     const race = s.id === settings.pirateLight;
     const treasure = (clamp(settings.pirateTreasure, 10, 100) / 100) * (n - 1);
     for (let i = 0; i < n; i++) {
-      const rgb = sea(i, now, u, race && i > treasure + u ? 0.35 : 0.8);
+      const rgb = sea(i, now, u, race ? (i > treasure + u ? RACE_SEA * 0.45 : RACE_SEA) : 0.8);
       for (let c = 0; c < 3; c++) px[i * 3 + c] = rgb[c];
     }
     if (race) {
-      const dot = (pos: number, rgb: readonly number[], k: number, width: number) => {
-        for (let i = Math.floor(pos - width); i <= Math.ceil(pos + width); i++) {
-          if (i < 0 || i >= n) continue;
-          // Over the sea, not added to it: the ship keeps its own color
-          const w = Math.min(1, 1.6 * Math.max(0, 1 - Math.abs(i + 0.5 - pos) / width));
-          for (let c = 0; c < 3; c++) px[i * 3 + c] = px[i * 3 + c] * (1 - w) + rgb[c] * k * w;
-        }
-      };
-      dot(treasure, GOLD, 0.55 + 0.3 * Math.sin(now / 260), 1.4 * u);
-      deal.forEach((d, k) => dot(0.8 * u + k * 2.8 * u, SHIP_LED[d.ship], 0.8 + 0.2 * Math.sin(now / 400 + k * 1.3), 1.2 * u));
+      const start = (SHIP_LEN + 0.5) * u;
+      drawBuoys(px, n, start, treasure, 1);
+      drawTreasure(px, n, treasure, now, u, 0.75 + 0.25 * Math.sin(now / 260));
+      deal.forEach((d, k) => drawShip(px, n, start + k * (SHIP_LEN + 0.6) * u, SHIP_LED[d.ship], u, 0.8 + 0.2 * Math.sin(now / 400 + k * 1.3)));
     }
     s.send(pack(px, n, race && settings.pirateReverse));
   }
@@ -262,54 +295,68 @@ export const pirateRace: GameFactory = (m) => {
 
   // ------------------------------------------------------------ the lights
 
-  /** The race light: the sea, the treasure glowing gold, the ships sailing to it with their wake */
+  /**
+   * The race light, at full brightness: a dim sea, buoys every tenth of the way, the treasure glowing gold,
+   * and the ships as solid blocks of their color. Behind each ship, the water it leads the next one by is
+   * lit faintly in its color, so the lead reads at a glance. A stroke leaves a short wake, a synchronized one
+   * a quick white glint at the bow; a boost draws streaks of light running back from the ship, like wind.
+   */
   const renderRace = (now: number, n: number): Uint8Array => {
     const u = Math.max(1, n / 60);
     const px = new Float32Array(n * 3);
-    const add = (i: number, rgb: readonly number[], k: number) => {
-      if (i < 0 || i >= n || k <= 0) return;
-      for (let c = 0; c < 3; c++) px[i * 3 + c] += rgb[c] * k;
-    };
-    const dot = (pos: number, rgb: readonly number[], k: number, width: number) => {
-      for (let i = Math.floor(pos - width); i <= Math.ceil(pos + width); i++) add(i, rgb, k * Math.max(0, 1 - Math.abs(i + 0.5 - pos) / width));
-    };
-    const start = 0.5 * u;
+    const start = (SHIP_LEN + 0.5) * u;
     const treasure = treasureAt * (n - 1);
     const finale = step === 'finish' ? Math.min(1, (now - finishAt) / 900) : 0;
     const fade = step === 'finish' ? Math.max(0, Math.min(1, (finishAt + OUTRO_MS - now) / 600)) : 1;
 
-    for (let i = 0; i < n; i++) add(i, sea(i, now, u, (i > treasure + u ? 0.35 : 0.8) * (1 - finale * 0.6)), fade);
+    for (let i = 0; i < n; i++) add(px, n, i, sea(i, now, u, (i > treasure + u ? RACE_SEA * 0.45 : RACE_SEA) * (1 - finale * 0.6)), fade);
+    drawBuoys(px, n, start, treasure, fade * (1 - finale));
 
-    // The treasure: gold, twinkling; brighter as the leader gets close
+    // The treasure: brighter as the leader gets close
     const lead = Math.max(...crews.map((c) => c.progress));
-    const glow = 0.45 + 0.35 * Math.sin(now / 180) + 0.3 * lead;
-    dot(treasure, GOLD, glow * fade, 1.4 * u);
-    if (Math.random() < 0.25) add(Math.round(treasure + (Math.random() - 0.5) * 2 * u), WHITE, 0.5 * fade);
+    drawTreasure(px, n, treasure, now, u, Math.min(1, 0.55 + 0.25 * Math.sin(now / 180) + 0.3 * lead) * fade);
 
-    // The ships; ships on top of each other take turns, so each one can be seen
     const ships = crews.map((c) => ({ c, pos: start + c.progress * (treasure - start) })).sort((a, b) => a.pos - b.pos);
+
+    // The lead: from each ship back to the next one behind (or the start), faintly in its color
+    ships.forEach(({ c, pos }, k) => {
+      const behind = k > 0 ? ships[k - 1].pos : start - SHIP_LEN * u;
+      for (let i = Math.round(behind) + 1; i <= Math.round(pos - SHIP_LEN * u); i++) add(px, n, i, SHIP_LED[c.ship], 0.07 * fade);
+    });
+
+    // Ships on top of each other take turns, so each one can be seen
     const groups: (typeof ships)[] = [];
     for (const s of ships) {
       const g = groups[groups.length - 1];
-      if (g && s.pos - g[g.length - 1].pos < 2.2 * u) g.push(s);
+      if (g && s.pos - g[g.length - 1].pos < (SHIP_LEN + 0.3) * u) g.push(s);
       else groups.push([s]);
     }
     for (const g of groups) {
       const shown = g[Math.floor(now / 420) % g.length];
       for (const { c, pos } of g) {
         const rgb = SHIP_LED[c.ship];
-        const boosted = c.boosted;
-        // The wake behind the ship, longer after a strong stroke and during a boost
+        const stern = pos - SHIP_LEN * u;
         const since = now - c.stroke.at;
-        const surge = c.stroke.seq ? Math.max(0, 1 - since / 600) * c.stroke.power : 0;
-        const wake = (2 + 4 * surge + (boosted ? 5 : 0)) * u;
-        for (let d = 1; d < wake; d++) add(Math.round(pos - d), boosted ? WHITE : rgb, 0.3 * (1 - d / wake) * (boosted && Math.random() < 0.4 ? 1.6 : 1) * fade);
+        if (c.boosted) {
+          // The boost: streaks of light running back from the stern, the ship's color with a little white
+          const len = 5 * u;
+          const tint = rgb.map((v) => v * 0.7 + 255 * 0.3);
+          for (let d = 0; d < len; d++) {
+            const streak = (d + now / 22) % (1.4 * u) < 0.6 * u ? 1 : 0.25;
+            add(px, n, Math.round(stern - d), tint, 0.4 * streak * (1 - d / len) * fade);
+          }
+        } else {
+          // The wake: longer after a strong stroke
+          const surge = c.stroke.seq ? Math.max(0, 1 - since / 600) * c.stroke.power : 0;
+          const wake = (1 + 3 * surge) * u;
+          for (let d = 0; d < wake; d++) add(px, n, Math.round(stern - d), rgb, 0.3 * (1 - d / wake) * fade);
+        }
         if (c !== shown.c) continue;
         const win = winners.includes(c);
-        const k = (step === 'finish' && !win ? 0.5 : 1) * fade;
-        dot(pos, rgb, k, 1.3 * u);
-        // A synchronized stroke sparkles; a boost burns white hot
-        if (boosted || (c.stroke.synced && since < 250)) dot(pos, WHITE, 0.45 * k, 0.6 * u);
+        const k = (step === 'finish' && !win ? 0.45 : 1) * fade;
+        drawShip(px, n, pos, rgb, u, k);
+        // A synchronized stroke: a quick glint at the bow
+        if (c.stroke.synced && since < 180) for (let d = 0; d < 2; d++) cover(px, n, Math.round(pos - d), WHITE, 0.7 * (1 - since / 180) * k);
       }
     }
 
@@ -321,8 +368,8 @@ export const pirateRace: GameFactory = (m) => {
         const d = Math.abs(i - treasure);
         if (d > reach) continue;
         const front = Math.max(0, 1 - (reach - d) / (5 * u));
-        add(i, rgb, (0.3 + 0.6 * front) * fade);
-        if (Math.random() < 0.04) add(i, WHITE, 0.6 * fade);
+        add(px, n, i, rgb, (0.3 + 0.6 * front) * fade);
+        if (Math.random() < 0.04) add(px, n, i, WHITE, 0.6 * fade);
       }
     }
     return pack(px, n, reverse);

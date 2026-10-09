@@ -93,6 +93,8 @@ interface Match {
   timers: Set<NodeJS.Timeout>;
   lightColor: GameColor | null;
   usesLights: boolean;
+  /** A light the game set to full brightness (the Pirate Race light): put back before the lights are released */
+  fullLight?: string;
   ready: Set<string>;
   options: MatchOptions;
   /** The Spotify music was paused for this game: resumed when it ends */
@@ -280,13 +282,22 @@ export default defineModule<GamesSettings>({
         .catch((err) => ctx.log.warn('Could not resume the music', err instanceof Error ? err.message : err));
     };
 
+    /** Forget the full brightness of a game's light, so releasing the lights puts it back as it was */
+    const dimLight = (m: Match) => {
+      if (m.fullLight) void lights()?.unboost(m.fullLight);
+      m.fullLight = undefined;
+    };
+
     const close = () => {
       const m = match;
       if (!m) return;
       for (const t of m.timers) clearTimeout(t);
       match = null;
       resumeMusic(m);
-      if (m.usesLights) void lights()?.release();
+      if (m.usesLights) {
+        dimLight(m);
+        void lights()?.release();
+      }
       ctx.takeover.stop();
       ctx.publish();
     };
@@ -405,6 +416,12 @@ export default defineModule<GamesSettings>({
       }
       // Pirate Race: the lights already show the sea and the ships waiting at the start
       if (m.game === 'pirates' && m.usesLights && m.options.crews) {
+        // The race light at full brightness: the ships shine at their brightest, the sea is drawn dim
+        const race = ctx.settings.get().pirateLight;
+        if (race && lights()?.list().some((d) => d.id === race && d.online)) {
+          m.fullLight = race;
+          void lights()?.boost(race);
+        }
         const t = setInterval(() => {
           if (match !== m || m.phase !== 'intro' || !m.options.crews) {
             clearInterval(t);
@@ -513,6 +530,7 @@ export default defineModule<GamesSettings>({
       const prize = startPerk(m, outcome);
       if (m.usesLights) {
         m.usesLights = false;
+        dimLight(m);
         // A lights prize keeps them: released when it ends
         if (prize && perk?.kind === 'fireworks') {
           // The fireworks at full brightness, once the lights are back to how they were
