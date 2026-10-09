@@ -1,3 +1,6 @@
+import { unlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import express from 'express';
 import {
   GAMES,
   DUEL_INVITE_MS,
@@ -121,7 +124,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {} },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -817,6 +820,73 @@ export default defineModule<GamesSettings>({
       ctx.emit('tv-audio', 'pirateTest', { kind, url: ctx.settings.get().pirateSounds[kind as PirateSoundId]?.url ?? null });
     });
 
+    // The race songs: uploaded from the admin, their tempo and first beat measured there
+    const SONG_TYPES: Record<string, string> = { 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/ogg': 'ogg', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a' };
+    /** Beat times sent with an upload: rising, inside the song, at most 2000 */
+    const beatList = (raw: unknown): number[] => {
+      const list = String(raw ?? '')
+        .split(',')
+        .map((x) => Math.round(Number(x) * 1000) / 1000)
+        .filter((x) => Number.isFinite(x) && x >= 0 && x < 3600)
+        .slice(0, 2000);
+      return list.filter((x, i) => i === 0 || x > list[i - 1]);
+    };
+    const songOf = (id: unknown) => {
+      const song = ctx.settings.get().pirateSongs.find((x) => x.id === id);
+      if (!song) throw new HbError('Unknown song');
+      return song;
+    };
+    ctx.http.post('/pirateSong', express.raw({ type: Object.keys(SONG_TYPES), limit: '25mb' }), (req, res) => {
+      if (!ctx.isAdminRequest(req)) {
+        res.status(403).json({ error: 'Host only' });
+        return;
+      }
+      const ext = SONG_TYPES[req.get('content-type') ?? ''];
+      if (!ext || !Buffer.isBuffer(req.body) || !req.body.length) {
+        res.status(400).json({ error: 'Send an MP3, OGG, WAV or M4A file' });
+        return;
+      }
+      const id = uid(6);
+      const file = `song-${id}.${ext}`;
+      writeFileSync(join(pirateDir, file), req.body);
+      const title = String(req.query.name ?? '').slice(0, 80) || 'Race song';
+      const beats = beatList(req.query.beats);
+      if (beats.length < 8) {
+        res.status(400).json({ error: 'No beat found in this song' });
+        return;
+      }
+      const bpm = Math.round(clamp(num(req.query.bpm, 100), 30, 250) * 10) / 10;
+      const song = { id, file, url: ctx.mediaUrl(`pirates/${file}`), title, beats, bpm, steady: req.query.steady === '1' };
+      ctx.settings.update({ pirateSongs: [...ctx.settings.get().pirateSongs, song] });
+      ctx.publish();
+      res.json({ id });
+    });
+    /** Moves all the beats of a song a little earlier or later */
+    ctx.onAdmin('shiftPirateSong', (args) => {
+      const song = songOf(args?.id);
+      const by = clamp(num(args?.ms, 0), -500, 500) / 1000;
+      const beats = song.beats.map((b) => Math.round((b + by) * 1000) / 1000).filter((b) => b >= 0);
+      ctx.settings.update({ pirateSongs: ctx.settings.get().pirateSongs.map((x) => (x.id === song.id ? { ...x, beats } : x)) });
+      ctx.publish();
+    });
+    ctx.onAdmin('removePirateSong', (args) => {
+      const song = songOf(args?.id);
+      try {
+        unlinkSync(join(pirateDir, song.file));
+      } catch {
+        // already gone
+      }
+      ctx.settings.update({ pirateSongs: ctx.settings.get().pirateSongs.filter((x) => x.id !== song.id) });
+      ctx.publish();
+    });
+    /** The TV plays a song from its first beat with the drum on top, to check they match */
+    ctx.onAdmin('testPirateSong', (args) => {
+      const song = songOf(args?.id);
+      const s = ctx.settings.get();
+      ctx.emit('tv-audio', 'pirateSongTest', { id: song.id, drum: s.pirateSounds.drum?.url ?? null });
+    });
+    ctx.onAdmin('stopPirateSongTest', () => ctx.emit('tv-audio', 'pirateSongTest', null));
+
     ctx.onTv('play', (args) => {
       match?.runtime?.tvInput?.(args);
       return true;
@@ -866,6 +936,7 @@ export default defineModule<GamesSettings>({
         pirateReverse: typeof args?.pirateReverse === 'boolean' ? args.pirateReverse : s.pirateReverse,
         pirateTreasure: args?.pirateTreasure !== undefined ? Math.min(100, Math.max(10, Math.round(num(args.pirateTreasure, 100)))) : s.pirateTreasure,
         pirateLength: PIRATE_LENGTHS.some((l) => l.id === args?.pirateLength) ? args.pirateLength : s.pirateLength,
+        pirateSongVolume: args?.pirateSongVolume !== undefined ? Math.round(clamp(num(args.pirateSongVolume, 70), 0, 100)) : s.pirateSongVolume,
         pirateAudioOffset:
           args?.pirateAudioOffset !== undefined ? Math.min(1000, Math.max(-1000, Math.round(num(args.pirateAudioOffset, 0)))) : s.pirateAudioOffset,
       });

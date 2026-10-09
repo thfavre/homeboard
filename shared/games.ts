@@ -275,6 +275,10 @@ export interface GamesSettings {
   pirateAudioOffset: number;
   /** MyInstants sounds the host picked instead of the built-in ones */
   pirateSounds: Partial<Record<PirateSoundId, PirateSoundPick>>;
+  /** Songs the crews row to (sailors singing), one picked at random each race: the drum keeps to its tempo and the song follows the drum */
+  pirateSongs: PirateSong[];
+  /** Its volume on the TV, 0 to 100 */
+  pirateSongVolume: number;
 }
 
 // ------------------------------------------------------------ per game views
@@ -613,6 +617,28 @@ export const PIRATE_SOUNDS = [
   { id: 'finish', name: 'Finish', help: 'A ship reaches the treasure, on the TV', search: 'victory fanfare' },
 ] as const;
 export type PirateSoundId = (typeof PIRATE_SOUNDS)[number]['id'];
+/**
+ * A race song, uploaded by the host. Its beats are measured when it is uploaded (and can be shifted all
+ * together): the drum plays on them, a little slower or faster at times, and the song follows the drum.
+ */
+export interface PirateSong {
+  id: string;
+  file: string;
+  url: string;
+  title: string;
+  /** Times of its beats in the file, seconds */
+  beats: number[];
+  /** Its main tempo, beats a minute (to show) */
+  bpm: number;
+  /** Made to a click: its beats are a steady grid */
+  steady: boolean;
+}
+/** The drum drifts this far around the song's own pace (the song's speed moves with it) */
+export const PIRATE_SONG_DRIFT = { slower: 0.9, faster: 1.1 };
+
+/** The beats of a song that loop: whole 8 beat phrases (beat n plays like beat n mod the length) */
+export const songLoop = (beats: number[]) => (beats.length > 9 ? Math.floor((beats.length - 1) / 8) * 8 : Math.max(1, beats.length - 1));
+
 /** A picked sound: its local URL and its name (null: the built-in one) */
 export type PirateSoundPick = { file: string; url: string; title: string } | null;
 
@@ -690,6 +716,8 @@ export interface PirateView {
   audioOffset: number;
   /** Sounds the host picked (missing: built-in) */
   sounds: Partial<Record<PirateSoundId, string>>;
+  /** The race song (one of the settings' songs), its first beat on the drum's first beat (null: drum only) */
+  song: string | null;
   /** Per player: strokes on the beat (good or better) and judged beats */
   stats: Record<string, { onBeat: number; perfect: number; beats: number }>;
 }

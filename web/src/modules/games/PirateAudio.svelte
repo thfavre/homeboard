@@ -4,11 +4,13 @@
   import { audioContext } from '../soundboard/player.ts';
   import { gamesState } from './store.svelte.ts';
   import { loadPirateSound, pirateSound } from './ui/pirateSound.ts';
+  import { SongOnBeats } from './ui/pirateSong.ts';
 
   /**
    * The sound of Pirate Race on the TV, with nothing on screen: the drum on every beat (scheduled on the
    * audio clock from the server's beat times, a little early for the speaker delay), the crew's roar when
-   * the race starts, the boosts and the finish. Also plays a sound the host tries from the admin.
+   * the race starts, the boosts and the finish, and the race song in step with the drum. Also plays a
+   * sound or a song the host tries from the admin.
    */
   const s = $derived(gamesState());
   const v = $derived(s?.match?.game === 'pirates' && s.match.phase === 'play' ? (s.match.view as PirateView | null) : null);
@@ -17,6 +19,22 @@
   // The picked files are decoded as soon as they are known, so the first beat is not late
   $effect(() => {
     for (const pick of Object.values(s?.settings.pirateSounds ?? {})) if (pick?.url) void loadPirateSound(pick.url);
+    // The songs too, once a race is on its way (each is a few MB once decoded)
+    if (s?.match?.game === 'pirates') for (const song of s.settings.pirateSongs ?? []) void loadPirateSound(song.url);
+  });
+
+  /** The race song, while the drum plays */
+  let song: SongOnBeats | null = null;
+  $effect(() => {
+    const on = !!v && v.step !== 'finish' && !!v.song;
+    if (!on && song) {
+      song.stop();
+      song = null;
+    }
+  });
+  $effect(() => () => {
+    song?.stop(0.3);
+    song = null;
   });
 
   /** Beats already scheduled (index), and whether the roar is */
@@ -40,6 +58,15 @@
     const now = serverNow();
     const early = v.audioOffset;
     const at = (serverTime: number) => ac.currentTime + (serverTime - early - now) / 1000;
+    const pick = v.song ? s?.settings.pirateSongs?.find((x) => x.id === v.song) : null;
+    if (pick && v.step !== 'finish') {
+      if (song && song.url !== pick.url) {
+        song.stop(0.3);
+        song = null;
+      }
+      song ??= new SongOnBeats(pick.url, pick.beats, s?.settings.pirateSongVolume ?? 70);
+      void song.beats(v.beats.map((b) => ({ i: b.i, time: at(b.at) })));
+    }
     for (const b of v.beats) {
       if (b.i <= lastBeat) continue;
       const ahead = b.at - early - now;
@@ -66,7 +93,49 @@
       onEvent('games', 'pirateBoost', () => pirateSound('boost', { url: url('boost'), volume: 0.75 })),
       onEvent('games', 'pirateFinish', () => pirateSound('finish', { url: url('finish'), volume: 0.85 })),
       onEvent<{ kind: PirateSoundId; url: string | null }>('games', 'pirateTest', (d) => pirateSound(d.kind, { url: d.url, volume: 0.85 })),
+      onEvent<SongTest | null>('games', 'pirateSongTest', (d) => void testSong(d)),
     ];
-    return () => offs.forEach((off) => off());
+    return () => {
+      offs.forEach((off) => off());
+      stopTest();
+    };
   });
+
+  // ------------------------------------------------------------ trying a song from the admin
+
+  type SongTest = { id: string; drum: string | null };
+  let test: { song: SongOnBeats; timer: ReturnType<typeof setTimeout>; tick: ReturnType<typeof setInterval> } | null = null;
+  function stopTest() {
+    if (!test) return;
+    clearTimeout(test.timer);
+    clearInterval(test.tick);
+    test.song.stop(0.4);
+    test = null;
+  }
+  /** 20 s of the song from its first beat, at its own tempo, with the drum on every beat */
+  async function testSong(d: SongTest | null) {
+    stopTest();
+    if (!d) return;
+    const pick = s?.settings.pirateSongs?.find((x) => x.id === d.id);
+    if (!pick) return;
+    const buffer = await loadPirateSound(pick.url);
+    if (!buffer) return;
+    const ac = audioContext();
+    if (ac.state !== 'running') await ac.resume().catch(() => {});
+    const player = new SongOnBeats(pick.url, pick.beats, s?.settings.pirateSongVolume ?? 70);
+    const beats = player.ownBeats(ac.currentTime + 0.3, 64).filter((b) => b.time < ac.currentTime + 20.5);
+    const count = beats.length - 1;
+    void player.beats(beats);
+    // The drum a second ahead at a time, so stopping the test stops it too
+    let next = 0;
+    const drums = () => {
+      while (next < count && beats[next].time < ac.currentTime + 1.2) {
+        pirateSound('drum', { url: d.drum, when: beats[next].time, volume: 0.85, accent: next % 4 === 0 });
+        next++;
+      }
+    };
+    drums();
+    const tick = setInterval(drums, 250);
+    test = { song: player, timer: setTimeout(stopTest, 20_000), tick };
+  }
 </script>

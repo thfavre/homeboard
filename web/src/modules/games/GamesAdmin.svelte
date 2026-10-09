@@ -11,6 +11,7 @@
   import { GAME_ICONS, gamesState } from './store.svelte.ts';
   import RhythmSongsAdmin from './RhythmSongsAdmin.svelte';
   import PirateSoundsAdmin from './PirateSoundsAdmin.svelte';
+  import PirateSongsAdmin from './PirateSongsAdmin.svelte';
 
   const s = $derived(gamesState());
   const m = $derived(s?.match ?? null);
@@ -47,7 +48,7 @@
   const bluffBonus = $derived(hb.core?.admin?.earnRules.find((r) => r.key === 'games.bluff'));
 
   // A slider shows its value while it moves, and saves when it is let go
-  type SliderKey = 'rhythmAudioOffset' | 'pirateAudioOffset';
+  type SliderKey = 'rhythmAudioOffset' | 'pirateAudioOffset' | 'pirateSongVolume';
   let drag = $state<Partial<Record<SliderKey, number>>>({});
   async function saveSlider(key: SliderKey, v: number) {
     await setSettings({ [key]: v });
@@ -220,8 +221,13 @@
         {/each}
       </div>
     </div>
-    <p class="faint small">Crews are made from the number of players (2 to 12): 1 vs 1, 1 vs 1 vs 1, 2 vs 2, 5 ships of one, 3 vs 3, 3 vs 4, 4 vs 4, 3 vs 3 vs 3, 5 vs 5, 5 vs 6, 4 vs 4 vs 4. A ship goes as fast as the average stroke of its crew, so uneven crews stay fair.</p>
+    <p class="faint small">Crews are made from the number of players: 1 vs 1, 1 vs 1 vs 1, 2 vs 2, 5 ships of one, 3 vs 3, 3 vs 4, 4 vs 4, 3 vs 3 vs 3, 5 vs 5, 5 vs 6, 4 vs 4 vs 4, then 3, 4 and 5 crews as even as can be, with no limit. A ship goes as fast as the average stroke of its crew, so uneven crews stay fair.</p>
     {@render slider('Drum timing', 'The drum plays this much early on the TV, to make up for its speaker delay (Bluetooth, sound bar)', 'pirateAudioOffset', -1000, 1000, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
+    <h4 class="group">Songs</h4>
+    <PirateSongsAdmin songs={s!.settings.pirateSongs ?? []} />
+    {#if s!.settings.pirateSongs?.length}
+      {@render slider('Song volume', 'On the TV, under the drum', 'pirateSongVolume', 0, 100, (v) => `${v}%`)}
+    {/if}
     <h4 class="group">Sounds</h4>
     <PirateSoundsAdmin picks={s!.settings.pirateSounds ?? {}} />
   {/if}
