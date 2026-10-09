@@ -186,6 +186,8 @@ export interface MatchState {
   result: MatchResult | null;
   /** Rules screen: players who pressed Ready (it starts once everyone is) */
   ready: string[];
+  /** Pirate Race: the crews, dealt when the rules show so everyone already knows their ship */
+  crews?: PirateCrewDeal[];
 }
 
 /**
@@ -636,6 +638,12 @@ export const pirateGradeOf = (gapMs: number): PirateGrade => {
 };
 /** Crew members who must row on the beat for a synchronized stroke */
 export const pirateSyncNeed = (crew: number) => Math.max(1, Math.ceil(crew * PIRATE.syncShare - 1e-9));
+
+/** A ship and who rows it */
+export interface PirateCrewDeal {
+  ship: PirateShipId;
+  members: string[];
+}
 
 export interface PirateCrew {
   ship: PirateShipId;

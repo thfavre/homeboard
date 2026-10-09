@@ -8,6 +8,7 @@ import {
   pirateSyncNeed,
   type PirateBeat,
   type PirateCrew,
+  type PirateCrewDeal,
   type PirateGrade,
   type PirateSoundId,
   type PirateView,
@@ -79,6 +80,20 @@ function sea(i: number, now: number, u: number, k = 1): [number, number, number]
   return [(4 + 60 * foam) * k, (18 + 55 * w + 70 * foam) * k, (60 + 140 * w + 70 * foam) * k];
 }
 
+/** Players shuffled into crews, one ship each */
+export function dealPirateCrews(ids: string[]): PirateCrewDeal[] {
+  const order = shuffle([...ids]);
+  let next = 0;
+  return pirateFormation(ids.length).map((size, c) => ({ ship: PIRATE_SHIPS[c].id, members: order.slice(next, (next += size)) }));
+}
+
+/** The crews still fit these players: everyone in exactly one crew, in the formation for their number */
+function sameCrews(deal: PirateCrewDeal[], ids: string[]): boolean {
+  const all = deal.flatMap((d) => d.members);
+  const sizes = pirateFormation(ids.length);
+  return all.length === ids.length && new Set(all).size === all.length && ids.every((id) => all.includes(id)) && deal.length === sizes.length && deal.every((d, i) => d.members.length === sizes[i]);
+}
+
 interface Crew extends PirateCrew {
   /** Distance rowed, in perfect strokes */
   distance: number;
@@ -91,12 +106,13 @@ interface Crew extends PirateCrew {
  */
 export const pirateRace: GameFactory = (m) => {
   const goal = pirateLength(m.settings.pirateLength).strokes;
-  const formation = pirateFormation(m.players.length);
-  const order = shuffle(m.players.map((p) => p.id));
-  let next = 0;
-  const crews: Crew[] = formation.map((size, c) => ({
-    ship: PIRATE_SHIPS[c].id,
-    members: order.slice(next, (next += size)),
+  // The crews dealt on the rules screen, unless the players changed since
+  const dealt = m.options.crews;
+  const ids = m.players.map((p) => p.id);
+  const deal = dealt && sameCrews(dealt, ids) ? dealt : dealPirateCrews(ids);
+  const crews: Crew[] = deal.map((d) => ({
+    ship: d.ship,
+    members: [...d.members],
     progress: 0,
     distance: 0,
     streak: 0,

@@ -11,6 +11,7 @@
   import Versus from './ui/Versus.svelte';
   import PotPanel from './ui/PotPanel.svelte';
   import Fuse from './ui/Fuse.svelte';
+  import PirateCrewCard from './phone/PirateCrewCard.svelte';
   import PerkPanel from './perk/PerkPanel.svelte';
 
   /** Everything a phone shows for games: challenges, the room lobby, the game itself, the result */
@@ -69,7 +70,9 @@
     {:else if m.phase === 'intro'}
       {@const allReady = m.ready.length >= m.players.length}
       {@const imReady = m.ready.includes(me)}
+      {@const myCrew = m.crews?.find((c) => c.members.includes(me))}
       <div class="col" in:fade>
+        {#if myCrew}<div in:fly={{ y: -20 }}><PirateCrewCard crew={myCrew} players={m.players} {me} /></div>{/if}
         {#if m.mode === 'duel'}
           <Versus
             left={m.players[0]}

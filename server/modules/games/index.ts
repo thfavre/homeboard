@@ -41,7 +41,7 @@ import { coinFlip } from './coin.ts';
 import { chartFor, chartNps, chartSteadiness, rhythmRain } from './rhythm.ts';
 import { Turntable } from './turntable.ts';
 import { Fireworks } from './fireworks.ts';
-import { pirateRace } from './pirates.ts';
+import { dealPirateCrews, pirateRace } from './pirates.ts';
 import { cleanMp3, downloadMp3 } from '../soundboard/myinstants.ts';
 import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
 
@@ -396,6 +396,8 @@ export default defineModule<GamesSettings>({
 
     const intro = (m: Match) => {
       m.phase = 'intro';
+      // The crews are dealt now, so the phones show each player's ship with the rules
+      if (m.game === 'pirates' && m.players.length >= 2) m.options.crews = dealPirateCrews(m.players.map((p) => p.id));
       if (gameInfo(m.game)?.lights && lights()) {
         m.usesLights = true;
         lights()!.claim();
@@ -875,6 +877,7 @@ export default defineModule<GamesSettings>({
         view: m.runtime?.view(role) ?? null,
         result: m.result,
         ready: [...m.ready],
+        ...(m.options.crews ? { crews: m.options.crews } : {}),
       };
       return {
         invites: [...invites.values()].map(({ charges: _c, timer: _t, ...inv }) => inv),
