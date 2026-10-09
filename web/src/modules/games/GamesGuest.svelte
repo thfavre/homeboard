@@ -49,8 +49,11 @@
   const song = $derived(fits.find((x) => x.key === songPick) ?? fits[0] ?? null);
   const npsOf = (x: RhythmSongInfo) => x.charts?.find((c) => c.id === chart)?.nps;
   /** Played alone: no opponent, no bet */
-  const isSolo = $derived(mode === 'solo');
-  const withMusic = $derived(picked?.id === 'rhythm' && mode !== 'room' && music && !!song);
+  /** Played alone (games that can be, from the 1 vs 1 sheet): no opponent, no bet */
+  let solo = $state(false);
+  const canSolo = $derived(mode === 'duel' && !!picked?.modes.includes('solo'));
+  const isSolo = $derived(canSolo && solo);
+  const withMusic = $derived(picked?.id === 'rhythm' && mode === 'duel' && music && !!song);
   const economy = $derived(!!hb.core?.economyEnabled);
   const list = $derived(GAMES.filter((g) => g.modes.includes(mode) && s?.settings.enabled.includes(g.id)));
   // Richest first: the ones who can match a big bet
@@ -156,14 +159,11 @@
 <div class="games">
   <div class="tabs">
     <button class:active={mode === 'duel'} onclick={() => (mode = 'duel')}><Swords size={18} /> 1 vs 1</button>
-    <button class:active={mode === 'solo'} onclick={() => (mode = 'solo')}><User size={18} /> Solo</button>
     <button class:active={mode === 'room'} onclick={() => (mode = 'room')}><Users size={18} /> Everyone</button>
   </div>
   <p class="dim intro">
     {#if mode === 'duel'}
       Challenge someone on the TV. You both put the same amount in the pot, the winner takes it all.
-    {:else if mode === 'solo'}
-      Play on your own, just for the score. No bet, just the price of the game.
     {:else}
       Start a game on the TV that anyone can join. Everyone puts the same entry in the pot, the winner takes it.
     {/if}
@@ -305,11 +305,22 @@
 
     {#if mode === 'duel'}
       <div class="field">
-        <span class="label">Who do you challenge?</span>
+        <span class="label">{canSolo ? 'Who do you play against?' : 'Who do you challenge?'}</span>
+        {#if canSolo}
+          <button class="solo-card" class:active={solo} onclick={() => (solo = true)}>
+            <span class="solo-icon"><User size={20} /></span>
+            <span class="who">
+              <strong>Nobody, play solo</strong>
+              <span class="faint small">No opponent and no bet: just you and your score</span>
+            </span>
+            <span class="tick" aria-hidden="true"></span>
+          </button>
+          <span class="or faint small">or challenge someone</span>
+        {/if}
         <div class="people">
           {#each others as p (p.id)}
             {@const short = economy && stake > p.balance}
-            <button class="person" class:active={opponent === p.id} class:short disabled={short} onclick={() => (opponent = p.id)}>
+            <button class="person" class:active={!isSolo && opponent === p.id} class:short disabled={short} onclick={() => ((opponent = p.id), (solo = false))}>
               <Avatar name={p.name} color={p.color} id={p.id} size="2.2rem" />
               <span class="who">
                 <span class="truncate">{p.name}</span>
@@ -370,7 +381,7 @@
   }
   .tabs {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr 1fr;
     gap: 0.3rem;
     padding: 0.3rem;
     border-radius: var(--radius-sm);
@@ -453,6 +464,55 @@
     gap: 0.45rem;
     max-height: 15rem;
     overflow-y: auto;
+  }
+  /* Playing solo is not a person: a wide dashed card above the players */
+  .solo-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: var(--radius-sm);
+    border: 1.5px dashed var(--border-strong);
+    background: transparent;
+    color: var(--text-dim);
+    text-align: left;
+  }
+  .solo-card.active {
+    border-style: solid;
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--text);
+  }
+  .solo-icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 0.8rem;
+    background: var(--surface-2);
+    color: var(--text-dim);
+  }
+  .solo-card.active .solo-icon {
+    background: var(--gradient);
+    color: #fff;
+  }
+  .solo-card .who {
+    flex: 1;
+  }
+  .tick {
+    flex: none;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: 50%;
+    border: 2px solid var(--border-strong);
+  }
+  .solo-card.active .tick {
+    border-color: var(--accent);
+    background: radial-gradient(circle, var(--accent) 45%, transparent 50%);
+  }
+  .or {
+    text-align: center;
   }
   .person {
     display: flex;
