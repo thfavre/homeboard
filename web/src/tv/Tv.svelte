@@ -14,6 +14,7 @@
       .sort((a, b) => a.order - b.order);
 
   const main = $derived(widgets('main')[0]);
+  const above = $derived(widgets('above'));
   // Widgets sharing a spot take turns there: only the first visible one shows
   const side = $derived.by(() => {
     const taken = new Set<string>();
@@ -48,8 +49,9 @@
     </header>
 
     <main>
-      <section class="main">
-        {#if main}{#key main}<main.component />{/key}{/if}
+      <section class="main" class:stacked={above.length > 0}>
+        {#each above as w}<div class="above" transition:fade={{ duration: 300 }}><w.component /></div>{/each}
+        {#if main}<div class="main-widget">{#key main}<main.component />{/key}</div>{/if}
       </section>
       <aside>
         {#each side as w (w.spot ?? w)}
@@ -134,6 +136,15 @@
     gap: var(--tv-gap);
   }
   .main {
+    min-height: 0;
+    min-width: 0;
+    display: grid;
+  }
+  .main.stacked {
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--tv-gap);
+  }
+  .main-widget {
     min-height: 0;
     min-width: 0;
     display: grid;

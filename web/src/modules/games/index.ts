@@ -6,12 +6,15 @@ import GamesGuest from './GamesGuest.svelte';
 import GamesAdmin from './GamesAdmin.svelte';
 import InviteTv from './InviteTv.svelte';
 import ScratchCard from './perk/ScratchCard.svelte';
+import RhythmCard from './RhythmCard.svelte';
 import { gamesState, showGamesScreen } from './store.svelte.ts';
 
 export default {
   id: 'games',
   tv: [
     { slot: 'overlay', order: 40, component: InviteTv },
+    // Rhythm Rain is played on a light: just a card with the scores above the main widget
+    { slot: 'above', order: 10, component: RhythmCard, visible: () => gamesState()?.match?.game === 'rhythm' },
     // The Perfect Circle prize stands in for the music's "Up next" while it lasts
     { slot: 'side', order: 15, component: ScratchCard, spot: 'next', visible: () => gamesState()?.perk?.kind === 'scratch' },
   ],

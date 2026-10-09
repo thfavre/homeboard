@@ -12,6 +12,8 @@ export interface GameInfo {
   modes: GameMode[];
   /** Uses the WLED lights (also shown on the TV) */
   lights?: boolean;
+  /** Played on a light only: no full screen on the TV, just a small card above the main widget */
+  lightOnly?: boolean;
   /** How to play in 3 short steps, for the phones */
   steps: string[];
   /** Two colors of the game's gradient */
@@ -82,6 +84,7 @@ export const GAMES: GameInfo[] = [
     rules: 'Colored notes climb the light strip from the bottom. Tap the same color on your phone when a note crosses the zone near the top: green is perfect, orange is good, red is just in time. Hits in a row raise your multiplier, a wrong tap or a missed note resets it. Highest score wins.',
     modes: ['duel'],
     lights: true,
+    lightOnly: true,
     steps: ['Notes climb the light strip from the bottom', 'Tap their color when they cross the zone at the top', 'Green is perfect. Keep the streak going for x4'],
     colors: ['#3dff9b', '#8b3dff'],
   },
@@ -412,6 +415,6 @@ export interface RhythmView {
   startAt: number;
   endAt: number;
   scores: Record<string, RhythmScore>;
-  /** Pixels of the light the notes climb (null: no light, the TV shows them) */
+  /** Pixels of the light the notes climb (null: no light set or reachable) */
   leds: number | null;
 }

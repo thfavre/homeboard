@@ -1,6 +1,7 @@
 import type { Component } from 'svelte';
 
-export type TvSlot = 'main' | 'side' | 'footer' | 'overlay';
+/** above: small widgets over the main widget (it keeps the rest of the space) */
+export type TvSlot = 'main' | 'above' | 'side' | 'footer' | 'overlay';
 
 export interface TvWidget {
   slot: TvSlot;

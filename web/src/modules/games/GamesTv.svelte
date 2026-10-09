@@ -86,7 +86,7 @@
           </div>
         </div>
       </div>
-    {:else if m.phase === 'play' || (m.result && ui.tvResult)}
+    {:else if Game && (m.phase === 'play' || (m.result && ui.tvResult))}
       <!-- One block for both, so the game's screen stays mounted into its result instead of replaying its reveal -->
       <div class="stage"><Game {m} /></div>
     {:else if m.result}

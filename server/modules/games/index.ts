@@ -131,6 +131,15 @@ export default defineModule<GamesSettings>({
       }
     };
 
+    /** A light-only game needs its light (Rhythm Rain: the strip the host picked) */
+    const checkLight = (game: GameId) => {
+      if (!gameInfo(game)?.lightOnly) return;
+      const id = ctx.settings.get().rhythmLight;
+      if (!id || !lights()?.available() || !lights()?.list().some((d) => d.id === id && d.online)) {
+        throw new HbError(`${gameInfo(game)!.name} needs its light strip, and it is not reachable right now`);
+      }
+    };
+
     const tvFree = () => {
       if (match) throw new HbError('A game is already on the TV, wait for it to end');
       if (ctx.hub.takeover && ctx.hub.takeover !== ctx.id) throw new HbError('Something else is on the TV right now');
@@ -233,7 +242,8 @@ export default defineModule<GamesSettings>({
       // A new game ends the prize; a light game takes the lights straight from it
       const handOver = perk?.kind === 'lights' && !!gameInfo(game)?.lights;
       endPerk(handOver);
-      ctx.takeover.start();
+      // Light-only games leave the TV as it is (a small card shows the score)
+      if (!gameInfo(game)?.lightOnly) ctx.takeover.start();
       match = {
         id: uid(6),
         game,
@@ -369,6 +379,7 @@ export default defineModule<GamesSettings>({
       const opponent = ctx.session.guests.get(String(args?.to ?? ''));
       if (!opponent) throw new HbError('Pick someone to challenge');
       if (opponent.id === guest.id) throw new HbError('You cannot challenge yourself');
+      checkLight(game);
       if (opponent.sockets === 0) throw new HbError(`${opponent.name} is not online`);
       checkFree(guest.id, null);
       checkFree(opponent.id, opponent.name);
@@ -412,6 +423,7 @@ export default defineModule<GamesSettings>({
         return true;
       }
       tvFree();
+      checkLight(inv.game);
       const bet = ctx.economy.pay(guest, inv.stake, `Duel bet: ${gameInfo(inv.game)!.name}`);
       try {
         const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet]);

@@ -13,21 +13,20 @@ import ReflexTv from './tv/ReflexTv.svelte';
 import CircleTv from './tv/CircleTv.svelte';
 import BluffTv from './tv/BluffTv.svelte';
 import CoinTv from './tv/CoinTv.svelte';
-import RhythmTv from './tv/RhythmTv.svelte';
 
 type View = Component<{ m: MatchState }>;
 
 /**
- * Screens of each game. `tvResult`: the TV screen of the game also shows its result
+ * Screens of each game (no TV screen: played on a light, see RhythmCard). `tvResult`: the TV screen of the game also shows its result
  * (drawings, revealed cards...) instead of the generic result list. `fill`: the phone screen takes
  * the whole height while playing instead of being centered.
  */
-export const GAME_UI: Record<GameId, { phone: View; tv: View; tvResult?: boolean; fill?: boolean }> = {
+export const GAME_UI: Record<GameId, { phone: View; tv?: View; tvResult?: boolean; fill?: boolean }> = {
   timer: { phone: TimerPhone, tv: TimerTv, tvResult: true },
   simon: { phone: SimonPhone, tv: SimonTv },
   reflex: { phone: ReflexPhone, tv: ReflexTv, tvResult: true },
   circle: { phone: CirclePhone, tv: CircleTv, tvResult: true },
   bluff: { phone: BluffPhone, tv: BluffTv, tvResult: true },
   coin: { phone: CoinPhone, tv: CoinTv, tvResult: true },
-  rhythm: { phone: RhythmPhone, tv: RhythmTv, fill: true },
+  rhythm: { phone: RhythmPhone, fill: true },
 };

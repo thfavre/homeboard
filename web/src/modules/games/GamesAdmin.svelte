@@ -154,7 +154,7 @@
     <div class="line">
       <span>
         Rhythm Rain light
-        <span class="faint small">The WLED strip the notes climb, best hung upright. None: the notes only show on the TV</span>
+        <span class="faint small">The WLED strip the game is played on, best hung upright. The game can only be started when it is reachable</span>
       </span>
       <select class="input light" value={s.settings.rhythmLight} onchange={(e) => setSettings({ rhythmLight: e.currentTarget.value })}>
         <option value="">None</option>
@@ -181,7 +181,7 @@
     <div class="line">
       <span>
         Show the light colors on the TV too
-        <span class="faint small">{s.lights ? 'Light Simon, Color Reflex and Rhythm Rain use your WLED lights' : 'No light reachable: the TV always shows the colors'}</span>
+        <span class="faint small">{s.lights ? 'Light Simon and Color Reflex use your WLED lights' : 'No light reachable: the TV always shows the colors'}</span>
       </span>
       <Toggle checked={s.settings.tvColors} onchange={(v) => setSettings({ tvColors: v })} label="Colors on the TV" />
     </div>
