@@ -104,21 +104,54 @@ export function chartFor(song: Song, difficulty: RhythmDifficulty): { id: Rhythm
   return null;
 }
 
-/** Notes a second of a chart as played here (closer notes are left out), over the whole song */
+/** Two notes this much closer than the difficulty's gap still count as far enough (a 158 bpm beat is 379.7 ms) */
+const GAP_TOLERANCE = 0.9;
+
+/** How much a note's place in the bar matters: on a bar, on a beat, on a half beat, on a quarter, elsewhere */
+function strength(ms: number, beatMs: number): number {
+  const beats = ms / beatMs;
+  const on = (step: number) => Math.abs(beats / step - Math.round(beats / step)) * step < 0.03;
+  return on(4) ? 4 : on(1) ? 3 : on(0.5) ? 2 : on(0.25) ? 1 : 0;
+}
+
 /**
- * How steady a chart's rhythm is as played here (closer notes left out): the share of the gaps between
- * notes that have the most common length, in quarter beats (pauses over 4 beats are left out). 1: the
- * same gap all along, too regular to be fun; under about 0.55: a varied rhythm.
+ * The notes of a chart that are played here: Beat Saber is played with two arms, here with thumbs, so notes
+ * closer than `minGapMs` are thinned out. The strongest ones stay (on the beat first, then half beats...),
+ * then the others where they fit, so what is left still falls on the music's beats. Sorted by time.
+ */
+export function playable(chart: BsNote[], bpm: number, minGapMs: number): BsNote[] {
+  const beatMs = 60_000 / bpm;
+  const gap = minGapMs * GAP_TOLERANCE;
+  const order = chart.map((n, i) => ({ n, i, s: strength(n.ms, beatMs) })).sort((a, b) => b.s - a.s || a.n.ms - b.n.ms || a.i - b.i);
+  // Kept times, sorted: a note goes in when it is far enough from its neighbours there
+  const kept: BsNote[] = [];
+  for (const { n } of order) {
+    let lo = 0;
+    let hi = kept.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (kept[mid].ms < n.ms) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo > 0 && n.ms - kept[lo - 1].ms < gap) continue;
+    if (lo < kept.length && kept[lo].ms - n.ms < gap) continue;
+    kept.splice(lo, 0, n);
+  }
+  return kept;
+}
+
+/**
+ * How steady a chart's rhythm is as played here: the share of the gaps between notes that have the most
+ * common length, in quarter beats (pauses over 4 beats are left out). 1: the same gap all along, too
+ * regular to be fun; under about 0.55: a varied rhythm.
  */
 export function chartSteadiness(chart: BsNote[], bpm: number, minGapMs: number): number {
   const beatMs = 60_000 / bpm;
+  const notes = playable(chart, bpm, minGapMs);
   const counts = new Map<number, number>();
   let gaps = 0;
-  let last = -Infinity;
-  for (const n of chart) {
-    if (n.ms - last < minGapMs) continue;
-    const beats = (n.ms - last) / beatMs;
-    last = n.ms;
+  for (let i = 1; i < notes.length; i++) {
+    const beats = (notes[i].ms - notes[i - 1].ms) / beatMs;
     if (beats > 4) continue;
     const q = Math.round(beats * 4);
     counts.set(q, (counts.get(q) ?? 0) + 1);
@@ -127,15 +160,10 @@ export function chartSteadiness(chart: BsNote[], bpm: number, minGapMs: number):
   return gaps ? Math.round((Math.max(...counts.values()) / gaps) * 100) / 100 : 1;
 }
 
-export function chartNps(chart: BsNote[], minGapMs: number): number {
+/** Notes a second of a chart as played here, over the whole song */
+export function chartNps(chart: BsNote[], bpm: number, minGapMs: number): number {
   if (chart.length < 2) return 0;
-  let kept = 0;
-  let last = -Infinity;
-  for (const n of chart) {
-    if (n.ms - last < minGapMs) continue;
-    last = n.ms;
-    kept++;
-  }
+  const kept = playable(chart, bpm, minGapMs).length;
   return Math.round((kept / ((chart[chart.length - 1].ms - chart[0].ms) / 1000)) * 10) / 10;
 }
 
@@ -222,12 +250,9 @@ export function pickSection(
  * The song's notes between `fromMs` and `toMs`, timed for this game. The 4 columns of Beat Saber become
  * the keys: 2 keys follow the two sabers, 8 keys are the 4 columns of each saber.
  */
-function songNotes(chart: BsNote[], fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
+function songNotes(chart: BsNote[], bpm: number, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
   const notes: RhythmNote[] = [];
-  let last = -Infinity;
-  for (const n of chart) {
-    if (n.ms < fromMs || n.ms >= toMs || n.ms - last < minGapMs) continue;
-    last = n.ms;
+  for (const n of playable(chart.filter((x) => x.ms >= fromMs && x.ms < toMs), bpm, minGapMs)) {
     const k = lanes.length;
     const lane = k === 2 ? n.c : Math.min(k - 1, Math.floor((n.x * k) / 4));
     notes.push({ at: zeroAt + n.ms, color: lanes[lane] });
@@ -303,7 +328,7 @@ export const rhythmRain: GameFactory = (m) => {
       beatZero = startAt + Math.max(RHYTHM.leadMs, travelMs + 1000) - part.fromMs;
       const musicFrom = Math.max(0, part.fromMs - Math.max(RHYTHM.leadMs, travelMs + 1000) + MUSIC_CUE_MS);
       const musicAt = beatZero + musicFrom;
-      notes = songNotes(chart, part.fromMs, part.toMs, beatZero, lanes, level.minGapMs);
+      notes = songNotes(chart, song.bpm, part.fromMs, part.toMs, beatZero, lanes, level.minGapMs);
       const lastAt = notes.length ? notes[notes.length - 1].at : musicAt + minMs;
       // Played to the song's end, or a little past the last note, fading out
       musicEndAt = part.toEnd ? beatZero + part.toMs : lastAt + RHYTHM.okMs + GRACE_MS + OUTRO_MS;

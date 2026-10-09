@@ -27,6 +27,9 @@ export interface Song {
   cover?: string;
   preview?: string;
   durationSec?: number;
+  /** BeatSaver votes when it was last loaded: likes, and the share of positive votes (0 to 1) */
+  upvotes?: number;
+  rating?: number;
   charts: Partial<Record<BsDifficulty, BsNote[]>>;
 }
 
@@ -123,6 +126,8 @@ export async function loadSong(key: string, dir: string): Promise<Song> {
   }
 }
 
+const votes = (meta: any) => ({ upvotes: Number(meta.stats?.upvotes) || 0, rating: Number(meta.stats?.score) || 0 });
+
 async function download(key: string, dir: string, byKey: string): Promise<Song> {
   const res = await fetch(`${API}/maps/id/${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(15_000) });
   if (res.status === 404) throw new Error(`No BeatSaver map "${key}"`);
@@ -139,6 +144,7 @@ async function download(key: string, dir: string, byKey: string): Promise<Song> 
       cover: version.coverURL,
       preview: version.previewURL,
       durationSec: Number(meta.metadata?.duration) || undefined,
+      ...votes(meta),
     };
     writeFileSync(byKey, JSON.stringify(song));
     return song;
@@ -154,6 +160,7 @@ async function download(key: string, dir: string, byKey: string): Promise<Song> 
     cover: version.coverURL,
     preview: version.previewURL,
     durationSec: Number(meta.metadata?.duration) || undefined,
+    ...votes(meta),
   };
   writeFileSync(join(dir, song.audio), audio);
   writeFileSync(cached, JSON.stringify(song));

@@ -506,6 +506,9 @@ export interface RhythmSongInfo {
   /** BeatSaver's cover and 10 second MP3 preview (online) */
   cover?: string;
   preview?: string;
+  /** BeatSaver likes and share of positive votes (0 to 1) */
+  upvotes?: number;
+  rating?: number;
   /** Where the map's best part starts in the song (ms), to preview it from the audio file */
   previewMs?: number;
   /**

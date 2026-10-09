@@ -135,8 +135,8 @@ export default defineModule<GamesSettings>({
         const s = await loadSong(key, songDir);
         if (!songs.has(key)) return;
         songs.set(key, {
-          info: { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`), cover: s.cover, preview: s.preview, previewMs: s.previewMs, durationSec: s.durationSec,
-            charts: RHYTHM_DIFFICULTIES.filter((d) => s.charts[d.id]?.length).map((d) => ({ id: d.id, nps: chartNps(s.charts[d.id]!, d.minGapMs), steady: chartSteadiness(s.charts[d.id]!, s.bpm, d.minGapMs) })) },
+          info: { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`), cover: s.cover, preview: s.preview, previewMs: s.previewMs, durationSec: s.durationSec, upvotes: s.upvotes, rating: s.rating,
+            charts: RHYTHM_DIFFICULTIES.filter((d) => s.charts[d.id]?.length).map((d) => ({ id: d.id, nps: chartNps(s.charts[d.id]!, s.bpm, d.minGapMs), steady: chartSteadiness(s.charts[d.id]!, s.bpm, d.minGapMs) })) },
           song: s,
         });
       } catch (err) {

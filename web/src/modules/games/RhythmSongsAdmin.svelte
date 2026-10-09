@@ -93,6 +93,9 @@
           {#if x.status === 'ready'}
             <strong class="truncate">{x.title}</strong>
             <span class="faint small truncate">{x.artist}{x.durationSec ? ` · ${length(x.durationSec)}` : ''}</span>
+            {#if x.upvotes !== undefined}
+              <span class="faint small votes"><ThumbsUp size={12} /> {x.upvotes} · {Math.round((x.rating ?? 0) * 100)}%</span>
+            {/if}
             {#if x.charts?.length}
               <span class="meta" title="Difficulties guests can play this song at, with the notes per second">
                 {#each [rhythmFeel(x.charts)] as feel}
