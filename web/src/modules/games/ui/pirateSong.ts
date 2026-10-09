@@ -15,13 +15,15 @@ export const FADE_OUT_SEC = 3;
 export class SongOnBeats {
   private src: AudioBufferSourceNode | null = null;
   private out: GainNode | null = null;
+  /** The host's volume, after the fades: changed live from the admin slider */
+  private level: GainNode | null = null;
   private lastBeat = -1;
   private stopped = false;
 
   constructor(
     readonly url: string,
     private readonly song: number[],
-    private readonly volume: number,
+    private volume: number,
     readonly first: number,
   ) {
     void loadPirateSound(url);
@@ -41,7 +43,6 @@ export class SongOnBeats {
     const buffer = await loadPirateSound(this.url);
     if (!buffer || this.stopped) return;
     const ac = audioContext();
-    const target = Math.max(0, Math.min(1, this.volume / 100));
     for (let n = 0; n + 1 < list.length; n++) {
       const b = list[n];
       const next = list[n + 1];
@@ -56,20 +57,40 @@ export class SongOnBeats {
         const when = late ? b.time : fromStart;
         const out = ac.createGain();
         out.gain.setValueAtTime(0.0001, when);
-        out.gain.linearRampToValueAtTime(target, when + (late ? 0.8 : FADE_IN_SEC));
-        out.connect(ac.destination);
+        out.gain.linearRampToValueAtTime(1, when + (late ? 0.8 : FADE_IN_SEC));
+        const level = ac.createGain();
+        level.gain.value = this.gain();
+        out.connect(level);
+        level.connect(ac.destination);
+        this.level = level;
         const src = ac.createBufferSource();
         src.buffer = buffer;
         src.playbackRate.setValueAtTime(rate, when);
         src.connect(out);
         src.start(when, late ? this.song[k] : 0);
-        src.onended = () => out.disconnect();
+        src.onended = () => {
+          out.disconnect();
+          level.disconnect();
+        };
         this.src = src;
         this.out = out;
       }
       this.src.playbackRate.setValueAtTime(rate, b.time);
       this.lastBeat = b.i;
     }
+  }
+
+  private gain(): number {
+    return Math.max(0, Math.min(1, this.volume / 100));
+  }
+
+  /** The host moved the volume (0 to 100): heard at once, without a jump */
+  setVolume(volume: number): void {
+    this.volume = volume;
+    if (!this.level) return;
+    const now = audioContext().currentTime;
+    this.level.gain.cancelScheduledValues(now);
+    this.level.gain.setTargetAtTime(this.gain(), now, 0.05);
   }
 
   /** The song's own timing, all its beats, beat 0 at `t0`: to try it at its own pace */
@@ -83,6 +104,7 @@ export class SongOnBeats {
     const { src, out } = this;
     this.src = null;
     this.out = null;
+    this.level = null;
     if (!src || !out) return;
     const ac = audioContext();
     const now = ac.currentTime;

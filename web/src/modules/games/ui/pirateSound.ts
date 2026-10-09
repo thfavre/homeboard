@@ -149,6 +149,10 @@ const BUILT_IN: Record<PirateSoundId, Synth> = {
     burst(ac, out, t, 'lowpass', 900, 0.8, 0.002, accent ? 0.55 : 0.4, 0.08, 200);
     burst(ac, out, t, 'bandpass', 160, 1.5, 0.01, 0.35, 0.4);
   },
+  /** The drum on every 4th beat: the same drum, hit harder and a little higher */
+  drumAccent(ac, out, t) {
+    BUILT_IN.drum(ac, out, t, true);
+  },
   /** The oar going in: a wooden knock, then water splashing off the blade */
   oar(ac, out, t) {
     tone(ac, out, 'triangle', 210, t, 0.002, 0.3, 0.06, 120);

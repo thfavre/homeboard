@@ -35,6 +35,12 @@
     if (!v || v.step === 'finish') stopSongs();
   });
   $effect(() => () => stopSongs(0.3));
+  // The host's song volume, heard at once (in a race and while trying a song)
+  $effect(() => {
+    const volume = s?.settings.pirateSongVolume ?? 70;
+    for (const p of playing.values()) p.setVolume(volume);
+    test?.song.setVolume(volume);
+  });
 
   /** Beats already scheduled (index), and whether the roar is */
   let lastBeat = -1;
@@ -95,7 +101,10 @@
       if (ahead > 1200) break;
       lastBeat = b.i;
       if (ahead < -40) continue;
-      pirateSound('drum', { url: url('drum'), when: at(b.at), accent: b.i < PIRATE.countIn, volume: drum(b.i < PIRATE.countIn ? 0.95 : 0.85) });
+      // The accent on every 4th beat: counted from the song's beat 0 while one plays (its bars), else from the race's first beat
+      const song = (v.songs ?? []).findLast((p) => p.beat <= b.i);
+      const accent = b.i < PIRATE.countIn || (b.i - (song?.beat ?? PIRATE.countIn)) % 4 === 0;
+      pirateSound(accent ? 'drumAccent' : 'drum', { url: url(accent ? 'drumAccent' : 'drum'), when: at(b.at), accent, volume: drum(accent ? 0.95 : 0.85) });
     }
     if (!roared && v.raceAt - early - now < 1200) {
       roared = true;
@@ -114,7 +123,7 @@
     const offs = [
       onEvent('games', 'pirateBoost', () => pirateSound('boost', { url: url('boost'), volume: 0.75 })),
       onEvent('games', 'pirateFinish', () => pirateSound('finish', { url: url('finish'), volume: 0.85 })),
-      onEvent<{ kind: PirateSoundId; url: string | null }>('games', 'pirateTest', (d) => pirateSound(d.kind, { url: d.url, volume: d.kind === 'drum' ? drum(0.85) : 0.85 })),
+      onEvent<{ kind: PirateSoundId; url: string | null }>('games', 'pirateTest', (d) => pirateSound(d.kind, { url: d.url, volume: d.kind === 'drum' || d.kind === 'drumAccent' ? drum(0.85) : 0.85, accent: d.kind === 'drumAccent' })),
       onEvent<SongTest | null>('games', 'pirateSongTest', (d) => void testSong(d)),
     ];
     return () => {
@@ -125,8 +134,8 @@
 
   // ------------------------------------------------------------ trying a song from the admin
 
-  type SongTest = { id: string; drum: string | null };
-  let test: { song: SongOnBeats; timer: ReturnType<typeof setTimeout>; tick: ReturnType<typeof setInterval> } | null = null;
+  type SongTest = { id: string; drum: string | null; accent?: string | null };
+  let test = $state<{ song: SongOnBeats; timer: ReturnType<typeof setTimeout>; tick: ReturnType<typeof setInterval> } | null>(null);
   function stopTest() {
     if (!test) return;
     clearTimeout(test.timer);
@@ -152,7 +161,8 @@
     let next = 0;
     const drums = () => {
       while (next < count && beats[next].time < ac.currentTime + 1.2) {
-        pirateSound('drum', { url: d.drum, when: beats[next].time, volume: drum(0.85), accent: next % 4 === 0 });
+        const accent = next % 4 === 0;
+        pirateSound(accent ? 'drumAccent' : 'drum', { url: accent ? (d.accent ?? null) : d.drum, when: beats[next].time, volume: drum(accent ? 0.95 : 0.85), accent });
         next++;
       }
     };

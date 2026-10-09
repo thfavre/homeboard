@@ -888,7 +888,7 @@ export default defineModule<GamesSettings>({
     ctx.onAdmin('testPirateSong', (args) => {
       const song = songOf(args?.id);
       const s = ctx.settings.get();
-      ctx.emit('tv-audio', 'pirateSongTest', { id: song.id, drum: s.pirateSounds.drum?.url ?? null });
+      ctx.emit('tv-audio', 'pirateSongTest', { id: song.id, drum: s.pirateSounds.drum?.url ?? null, accent: s.pirateSounds.drumAccent?.url ?? null });
     });
     ctx.onAdmin('stopPirateSongTest', () => ctx.emit('tv-audio', 'pirateSongTest', null));
 

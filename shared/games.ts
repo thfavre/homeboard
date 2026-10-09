@@ -613,6 +613,7 @@ export const pirateLength = (id: unknown) => PIRATE_LENGTHS.find((l) => l.id ===
 /** The sounds of the race. Each one is made on the fly unless the host picked a MyInstants sound for it. */
 export const PIRATE_SOUNDS = [
   { id: 'drum', name: 'Drum', help: 'Every beat, on the TV', search: 'war drum' },
+  { id: 'drumAccent', name: 'Drum accent', help: 'Every 4th beat instead (and the count-in), on the TV', search: 'war drum' },
   { id: 'oar', name: 'Oar stroke', help: 'Each tap, on the rower’s phone', search: 'water splash' },
   { id: 'roar', name: 'Pirate roar', help: 'When the race starts, on the TV', search: 'pirate arr' },
   { id: 'boost', name: 'Speed boost', help: 'A crew gets a boost, on the TV', search: 'speed boost' },
