@@ -106,6 +106,26 @@ export const STAT_BOARDS: { stat: GuestStat; title: string; unit: string; one: s
   { stat: 'photos', title: 'Paparazzi', unit: 'photos', one: 'photo' },
 ];
 
+/** Every kind of board the TV leaderboard can show */
+export type BoardKind = 'balance' | 'spent' | 'earned' | GuestStat | 'rhythm';
+/** one: always the same board. rotate: the chosen boards take turns. off: no leaderboard. */
+export type BoardMode = 'one' | 'rotate' | 'off';
+
+export const BOARD_KINDS: { kind: BoardKind; title: string; hint: string; group: 'Money' | 'Party' | 'Games' }[] = [
+  { kind: 'balance', title: 'Richest', hint: 'Who has the most money right now', group: 'Money' },
+  { kind: 'spent', title: 'Big spenders', hint: 'Who spent the most this party', group: 'Money' },
+  { kind: 'earned', title: 'Top earners', hint: 'Who earned the most this party', group: 'Money' },
+  { kind: 'pixels', title: 'Pixel artists', hint: 'Most pixels painted on the canvas', group: 'Party' },
+  { kind: 'stickers', title: 'Sticker spammers', hint: 'Most stickers sent', group: 'Party' },
+  { kind: 'photos', title: 'Paparazzi', hint: 'Most photos shared', group: 'Party' },
+  { kind: 'songs', title: 'Party DJs', hint: 'Most songs queued', group: 'Party' },
+  { kind: 'sounds', title: 'Soundboard heroes', hint: 'Most sounds played', group: 'Party' },
+  { kind: 'games', title: 'Most games played', hint: 'Duels, room games and solo games', group: 'Games' },
+  { kind: 'wins', title: 'Game champions', hint: 'Most games won', group: 'Games' },
+  { kind: 'rhythm', title: 'Rhythm Rain songs', hint: 'Best scores on a song, one board per song, difficulty and number of colors', group: 'Games' },
+];
+export const isMoneyBoard = (k: BoardKind): k is 'balance' | 'spent' | 'earned' => k === 'balance' || k === 'spent' || k === 'earned';
+
 export interface BoardRow {
   id: string;
   name: string;
@@ -119,6 +139,8 @@ export interface BoardRow {
  */
 export interface Board {
   id: string;
+  /** Which setting it comes from */
+  of: BoardKind;
   title: string;
   kind: 'money' | 'count' | 'score';
   unit?: string;
@@ -149,9 +171,10 @@ export interface CoreState {
   earn: EarnRuleInfo[];
   /** Time between passive income payouts (0 = off) */
   passiveMs: number;
+  /** The money ranking guests see their place in ('off' when the TV shows no money board) */
   leaderboardMode: LeaderboardMode;
   leaderboard: PublicGuest[];
-  /** TV only: every board the leaderboard takes turns with (the money one first), and seconds per board */
+  /** TV only: the boards the leaderboard shows (taking turns when more than one), and seconds per board */
   boards?: Board[];
   boardSeconds?: number;
   privacy: PrivacySettings;
@@ -175,7 +198,11 @@ export interface CoreAdminState {
   sessionStartedAt: number;
   passiveMinutes: number;
   passiveAwayMinutes: number;
-  leaderboardRotate: boolean;
+  boardMode: BoardMode;
+  boardOne: BoardKind;
+  boardRotate: BoardKind[];
+  /** Kinds that have something to show right now */
+  boardsLive: BoardKind[];
   boardSeconds: number;
   songBoardPlayers: number;
   qrIncludesCode: boolean;

@@ -10,8 +10,8 @@
   import Money from '$lib/ui/Money.svelte';
 
   /**
-   * The leaderboard takes turns with the other boards the server sends (most pixels painted,
-   * stickers sent, games played, Rhythm Rain scores on a song...), with a crossfade between them.
+   * The boards the host picked (one, or several taking turns: richest, most pixels painted, stickers
+   * sent, games played, Rhythm Rain scores on a song...), with a crossfade between them.
    */
   const ICONS: Record<GuestStat, Component<any>> = {
     pixels: Palette,
@@ -22,7 +22,7 @@
     sounds: Volume2,
     photos: Camera,
   };
-  const iconOf = (b: Board) => (b.kind === 'money' ? Coins : b.kind === 'score' ? Guitar : (ICONS[b.id.slice(5) as GuestStat] ?? Trophy));
+  const iconOf = (b: Board) => (b.kind === 'money' ? Coins : b.kind === 'score' ? Guitar : (ICONS[b.of as GuestStat] ?? Trophy));
 
   const boards = $derived(hb.core?.boards ?? []);
   const seconds = $derived(Math.max(5, hb.core?.boardSeconds ?? 15));

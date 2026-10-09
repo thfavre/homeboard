@@ -8,7 +8,8 @@ import { Server, type Socket } from 'socket.io';
 import type {
   ActivityItem,
   Currency,
-  LeaderboardMode,
+  BoardKind,
+  BoardMode,
   PrivacySettings,
   Role,
   RpcRequest,
@@ -16,6 +17,7 @@ import type {
   ToastMessage,
   VisitorState,
 } from '../../shared/protocol.ts';
+import { BOARD_KINDS } from '../../shared/protocol.ts';
 import { Economy } from './economy.ts';
 import type { GuestHandler, Handler, ModuleContext, ModuleDef, Target } from './module.ts';
 import { DATA_DIR, MEDIA_DIR, WEB_DIST, ensureDir } from './paths.ts';
@@ -35,9 +37,10 @@ export interface CoreSettings {
   passiveMinutes: number;
   /** Passive income keeps going this many minutes while a guest is away (0 = only while online) */
   passiveAwayMinutes: number;
-  leaderboardMode: LeaderboardMode;
-  /** The TV leaderboard takes turns with the other boards (pixels, stickers, games, song scores...) */
-  leaderboardRotate: boolean;
+  /** The TV leaderboard: one board, or several taking turns (or none) */
+  boardMode: BoardMode;
+  boardOne: BoardKind;
+  boardRotate: BoardKind[];
   /** Seconds each board stays on the TV */
   boardSeconds: number;
   /** A Rhythm Rain song gets its own board once this many guests played it (same difficulty and colors) */
@@ -60,8 +63,9 @@ const CORE_DEFAULTS: CoreSettings = {
   earn: {},
   passiveMinutes: 5,
   passiveAwayMinutes: 60,
-  leaderboardMode: 'balance',
-  leaderboardRotate: true,
+  boardMode: 'rotate',
+  boardOne: 'balance',
+  boardRotate: BOARD_KINDS.map((b) => b.kind),
   boardSeconds: 15,
   songBoardPlayers: 6,
   privacy: { activity: 'names', photoNames: true, stickerNames: true, songNames: true, effectNames: true },

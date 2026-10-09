@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import QRCode from 'qrcode';
 import { AVATAR_EFFECTS, type AvatarParams } from '../../../shared/avatar.ts';
 import { ensureDir } from '../../core/paths.ts';
-import { STAT_BOARDS, type Board, type CoreState, type Currency, type JoinResult, type LeaderboardMode, type NameCheck, type PassivePaid, type PublicGuest, type WelcomeBack } from '../../../shared/protocol.ts';
+import { BOARD_KINDS, STAT_BOARDS, isMoneyBoard, type Board, type BoardKind, type BoardRow, type CoreState, type Currency, type JoinResult, type LeaderboardMode, type NameCheck, type PassivePaid, type WelcomeBack } from '../../../shared/protocol.ts';
 import { THEMES } from '../../../shared/themes.ts';
 import type { CoreSettings } from '../../core/hub.ts';
 import { defineModule } from '../../core/module.ts';
@@ -17,7 +17,6 @@ const MAX_JOIN_FAILURES = 8;
 const AWAY_CARD_MS = 60_000;
 
 const BOARD_ROWS = 10;
-const MONEY_TITLES = { balance: 'Richest', spent: 'Big spenders', earned: 'Top earners' } as const;
 
 const minutesText = (m: number) => (m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min`);
 
@@ -110,67 +109,76 @@ export default defineModule({
       return { url, code: session.code, qrSvg: qrCache.svg, codeRequired: core().requireCode };
     };
 
-    const sortKey: Record<Exclude<LeaderboardMode, 'off'>, (g: PublicGuest) => number> = {
-      balance: (g) => g.balance,
-      spent: (g) => g.spent,
-      earned: (g) => g.earned,
+    // Settings of an older version: one money board, and a switch to take turns with the others
+    {
+      const old = core() as CoreSettings & { leaderboardMode?: LeaderboardMode; leaderboardRotate?: boolean };
+      if (old.leaderboardMode !== undefined || old.leaderboardRotate !== undefined) {
+        const money = old.leaderboardMode && old.leaderboardMode !== 'off' ? old.leaderboardMode : 'balance';
+        hub.settings.update<CoreSettings>('core', {
+          boardMode: old.leaderboardMode === 'off' ? 'off' : old.leaderboardRotate === false ? 'one' : 'rotate',
+          boardOne: money,
+          leaderboardMode: undefined,
+          leaderboardRotate: undefined,
+        } as Partial<CoreSettings>);
+      }
+    }
+
+    const kindsOn = (): BoardKind[] => {
+      const c = core();
+      return c.boardMode === 'off' ? [] : c.boardMode === 'one' ? [c.boardOne] : c.boardRotate;
     };
 
     /**
-     * Every board the TV leaderboard can show: money first (when the economy is on), then, when the
-     * host lets it take turns, each stat at least 2 guests have, and each Rhythm Rain song enough
-     * guests played at the same difficulty and number of colors.
+     * The boards of these kinds that have something to show, in the order of BOARD_KINDS. Money
+     * boards need the economy on. A stat needs `minRows` guests on it (2 when boards take turns,
+     * so the TV does not show a "ranking" of one). A Rhythm Rain song needs enough guests who
+     * played it at the same difficulty and number of colors; each song is its own board.
      */
-    const boards = (): Board[] => {
+    const boardsOf = (kinds: BoardKind[], minRows: number): Board[] => {
       const c = core();
-      if (c.leaderboardMode === 'off') return [];
+      const want = new Set(kinds);
       const guests = [...session.guests.values()];
-      const top = (value: (g: Guest) => number) =>
+      const rowsBy = (value: (g: Guest) => number | undefined) =>
         guests
           .map((g) => ({ id: g.id, name: g.name, color: g.color, value: value(g) }))
-          .filter((r) => r.value > 0)
+          .filter((r): r is BoardRow => r.value !== undefined)
           .sort((a, b) => b.value - a.value)
           .slice(0, BOARD_ROWS);
       const list: Board[] = [];
-      if (c.economyEnabled) {
-        const mode = c.leaderboardMode;
-        const rows = guests
-          .map((g) => ({ id: g.id, name: g.name, color: g.color, value: g[mode] }))
-          .sort((a, b) => b.value - a.value)
-          .slice(0, BOARD_ROWS);
-        if (rows.length) list.push({ id: `money:${mode}`, title: MONEY_TITLES[mode], kind: 'money', rows });
-      }
-      if (!c.leaderboardRotate) return list;
-      for (const b of STAT_BOARDS) {
-        const rows = top((g) => g.stats?.[b.stat] ?? 0);
-        if (rows.length >= 2) list.push({ id: `stat:${b.stat}`, title: b.title, kind: 'count', unit: b.unit, one: b.one, rows });
-      }
-      const games = ctx.use<GamesApi>('games');
-      const songBoards = new Set(guests.flatMap((g) => Object.keys(g.bests ?? {})).filter((k) => k.startsWith('rhythm:')));
-      for (const id of songBoards) {
-        const players = guests.filter((g) => g.bests?.[id] !== undefined);
-        if (players.length < c.songBoardPlayers) continue;
-        const song = games?.songBoard(id);
-        if (!song) continue;
-        list.push({
-          id,
-          title: 'Rhythm Rain',
-          kind: 'score',
-          unit: 'pts',
-          rows: players
-            .map((g) => ({ id: g.id, name: g.name, color: g.color, value: g.bests![id] }))
-            .sort((a, b) => b.value - a.value)
-            .slice(0, BOARD_ROWS),
-          song: { ...song, players: players.length },
-        });
+      for (const { kind, title } of BOARD_KINDS) {
+        if (!want.has(kind)) continue;
+        if (isMoneyBoard(kind)) {
+          const rows = c.economyEnabled ? rowsBy((g) => g[kind]) : [];
+          if (rows.length) list.push({ id: `money:${kind}`, of: kind, title, kind: 'money', rows });
+        } else if (kind === 'rhythm') {
+          const games = ctx.use<GamesApi>('games');
+          const ids = new Set(guests.flatMap((g) => Object.keys(g.bests ?? {})).filter((k) => k.startsWith('rhythm:')));
+          for (const id of ids) {
+            const players = guests.filter((g) => g.bests?.[id] !== undefined).length;
+            const song = players >= c.songBoardPlayers ? games?.songBoard(id) : null;
+            if (song) list.push({ id, of: kind, title: 'Rhythm Rain', kind: 'score', unit: 'pts', rows: rowsBy((g) => g.bests?.[id]), song: { ...song, players } });
+          }
+        } else {
+          const stat = STAT_BOARDS.find((b) => b.stat === kind)!;
+          const rows = rowsBy((g) => (g.stats?.[kind] ? g.stats[kind] : undefined));
+          if (rows.length >= minRows) list.push({ id: `stat:${kind}`, of: kind, title, kind: 'count', unit: stat.unit, one: stat.one, rows });
+        }
       }
       return list;
+    };
+    const boards = () => boardsOf(kindsOn(), core().boardMode === 'one' ? 1 : 2);
+
+    /** The money ranking guests see their place in: the first money board on the TV */
+    const guestRanking = (): LeaderboardMode => {
+      if (!core().economyEnabled) return 'off';
+      return kindsOn().find(isMoneyBoard) ?? 'off';
     };
 
     ctx.state((role) => {
       const c = core();
       const toggleable = hub.moduleList().filter((m) => m.toggleable !== false);
       const guests = [...session.guests.values()].map((g) => session.publicGuest(g));
+      const ranking = guestRanking();
       const state: CoreState = {
         appName: c.appName,
         theme: c.theme,
@@ -180,8 +188,8 @@ export default defineModule({
         prices: economy.priceList((id) => hub.isEnabled(id)),
         earn: economy.earnList((id) => hub.isEnabled(id)),
         passiveMs: economy.earnAmount('core.passive') > 0 ? c.passiveMinutes * 60_000 : 0,
-        leaderboardMode: c.leaderboardMode,
-        leaderboard: c.leaderboardMode === 'off' ? [] : guests.sort((a, b) => sortKey[c.leaderboardMode as 'balance'](b) - sortKey[c.leaderboardMode as 'balance'](a)).slice(0, 10),
+        leaderboardMode: ranking,
+        leaderboard: ranking === 'off' ? [] : guests.sort((a, b) => b[ranking] - a[ranking]).slice(0, 10),
         guestsOnline: guests.filter((g) => g.online).length,
         takeover: hub.takeover,
         privacy: c.privacy,
@@ -203,7 +211,10 @@ export default defineModule({
           sessionStartedAt: session.startedAt,
           passiveMinutes: c.passiveMinutes,
           passiveAwayMinutes: c.passiveAwayMinutes,
-          leaderboardRotate: c.leaderboardRotate,
+          boardMode: c.boardMode,
+          boardOne: c.boardOne,
+          boardRotate: c.boardRotate,
+          boardsLive: [...new Set(boardsOf(BOARD_KINDS.map((b) => b.kind), c.boardMode === 'one' ? 1 : 2).map((b) => b.of))],
           boardSeconds: c.boardSeconds,
           songBoardPlayers: c.songBoardPlayers,
           qrIncludesCode: c.qrIncludesCode,
@@ -409,10 +420,10 @@ export default defineModule({
       if (args.economyEnabled !== undefined) patch.economyEnabled = !!args.economyEnabled;
       if (args.passiveMinutes !== undefined) patch.passiveMinutes = clamp(num(args.passiveMinutes, 5), 0, 120);
       if (args.passiveAwayMinutes !== undefined) patch.passiveAwayMinutes = Math.round(clamp(num(args.passiveAwayMinutes, 60), 0, 1440));
-      if (args.leaderboardMode !== undefined && ['balance', 'spent', 'earned', 'off'].includes(args.leaderboardMode)) {
-        patch.leaderboardMode = args.leaderboardMode;
-      }
-      if (args.leaderboardRotate !== undefined) patch.leaderboardRotate = !!args.leaderboardRotate;
+      const isKind = (k: unknown): k is BoardKind => BOARD_KINDS.some((b) => b.kind === k);
+      if (['one', 'rotate', 'off'].includes(args.boardMode)) patch.boardMode = args.boardMode;
+      if (isKind(args.boardOne)) patch.boardOne = args.boardOne;
+      if (Array.isArray(args.boardRotate)) patch.boardRotate = BOARD_KINDS.map((b) => b.kind).filter((k) => args.boardRotate.includes(k));
       if (args.boardSeconds !== undefined) patch.boardSeconds = Math.round(clamp(num(args.boardSeconds, 15), 5, 300));
       if (args.songBoardPlayers !== undefined) patch.songBoardPlayers = Math.round(clamp(num(args.songBoardPlayers, 6), 1, 50));
       if (args.privacy !== undefined) {

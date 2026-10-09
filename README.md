@@ -157,12 +157,12 @@ when no light is reachable if the host turns that off. Each game is one file in
 
 ### Leaderboard
 
-The TV leaderboard takes turns, with a crossfade, between the money board (richest, big spenders or
-top earners, set in Economy) and every other board with at least two guests on it: pixels painted,
-stickers sent, games played, games won, songs queued, sounds played and photos shared. A Rhythm Rain
-song played with music gets its own board (cover, title, best score of each guest) once enough guests
-played it at the same difficulty and number of colors (6 by default); in a duel both scores count.
-The host can turn the rotation off and choose how long each board stays, in Economy.
+In the admin's Leaderboard page, the host picks what the right column of the TV ranks: one board, or
+several that take turns with a crossfade (or none). The boards: richest, big spenders, top earners,
+pixels painted, stickers sent, photos shared, songs queued, sounds played, games played, games won,
+and Rhythm Rain songs. A song played with music gets its own board (cover, title, best score of each
+guest) once enough guests played it at the same difficulty and number of colors (6 by default); in a
+duel both scores count. When boards take turns, one shows once at least two guests are on it.
 
 ### Selfie avatars
 
