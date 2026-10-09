@@ -36,13 +36,17 @@ export async function searchMyInstants(query: unknown, page: unknown, maxSec = 0
   const hit = results.get(url);
   if (hit && Date.now() - hit.at < 10 * 60_000) return hit.page;
 
-  let body: { status?: string; has_next?: boolean | null; data?: { id?: string; title?: string; mp3?: string; duration?: number }[] };
+  let body: { status?: string; has_next?: boolean | null; error?: unknown; data?: { id?: string; title?: string; mp3?: string; duration?: number }[] };
+  let ok = false;
   try {
     const res = await fetch(url, { headers: { 'user-agent': UA, accept: 'application/json' }, signal: AbortSignal.timeout(12_000) });
     body = (await res.json()) as typeof body;
+    // A 404 is a search without result; a 5xx is the service being down (its host paused it, answering only an error)
+    ok = res.status < 500;
   } catch {
     throw new HbError('Sound search is not reachable right now');
   }
+  if (!ok) throw new HbError('Sound search is down right now (the MyInstants search service is not answering)');
   // The scraper answers "404" when a search has no result
   const items: MiSound[] = [];
   for (const d of body.data ?? []) {
