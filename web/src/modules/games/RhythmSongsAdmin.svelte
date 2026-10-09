@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Check, Music, Pause, Play, Plus, RotateCw, Search, ThumbsUp, X } from '@lucide/svelte';
-  import type { RhythmSongInfo } from '$shared/games.ts';
+  import { rhythmDifficulty, type RhythmSongInfo } from '$shared/games.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
 
   /**
@@ -84,7 +84,7 @@
 
 <div class="part">
   <h4 class="group">Songs</h4>
-  <p class="faint small">Guests pick one of these when they pay for a duel or a solo game with music. Tap a cover to hear it.</p>
+  <p class="faint small">Guests pick one of these when they pay for a duel or a solo game with music, at one of the difficulties listed under it (with its notes per second). Tap a cover to hear it.</p>
   <div class="list">
     {#each songs as x (x.key)}
       <div class="row">
@@ -93,6 +93,11 @@
           {#if x.status === 'ready'}
             <strong class="truncate">{x.title}</strong>
             <span class="faint small truncate">{x.artist}{x.durationSec ? ` · ${length(x.durationSec)}` : ''}</span>
+            {#if x.charts?.length}
+              <span class="meta" title="Difficulties guests can play this song at, with the notes per second">
+                {#each x.charts as c (c.id)}<span class="diff">{rhythmDifficulty(c.id).name} <span class="nps">{c.nps.toFixed(1)}/s</span></span>{/each}
+              </span>
+            {/if}
           {:else if x.status === 'loading'}
             <strong class="truncate">Map {x.key}</strong>
             <span class="faint small">Downloading...</span>
@@ -233,6 +238,10 @@
     font-size: 0.7rem;
     font-weight: 700;
     color: var(--text-dim);
+  }
+  .nps {
+    font-weight: 500;
+    color: var(--text-faint);
   }
   .added {
     display: grid;

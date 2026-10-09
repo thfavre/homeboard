@@ -214,6 +214,8 @@ const rgbOf = (hex: string): [number, number, number] => {
 const LED = Object.fromEntries(RHYTHM_COLORS.map((c) => [c.id, rgbOf(c.led)])) as Record<RhythmColor, [number, number, number]>;
 const ZONE = { perfect: [0, 255, 40], good: [255, 110, 0], ok: [255, 0, 0] } as const;
 const WHITE = [255, 255, 255] as const;
+/** The band of the zone a pixel is in, from its distance to the middle in ms (null: outside) */
+const gradeAt = (gapMs: number) => (gapMs <= RHYTHM.perfectMs ? 'perfect' : gapMs <= RHYTHM.goodMs ? 'good' : gapMs <= RHYTHM.okMs ? 'ok' : null);
 /** Finale color of a solo game, by the share of notes hit: gold, green, blue, red */
 const SOLO_FINALE: [number, readonly number[]][] = [
   [0.9, [255, 176, 0]],
@@ -307,7 +309,8 @@ export const rhythmRain: GameFactory = (m) => {
   let seq = 0;
   let over = false;
   /** Bursts at the zone: hits (white hot on a perfect), and wrong taps (a short red glow) */
-  const flashes: { at: number; rgb: readonly number[]; perfect?: boolean; wrong?: boolean }[] = [];
+  /** `gapMs`: how late the tap was (early < 0), so the burst is where the note was, in the band it was judged in */
+  const flashes: { at: number; rgb: readonly number[]; grade?: RhythmGrade; gapMs?: number; wrong?: boolean }[] = [];
   /** A player reached a new multiplier: a wave of their color runs down the strip */
   const waves: { at: number; rgb: readonly number[] }[] = [];
   /** Finale color: the winner's, white on a tie; solo, by how well it went */
@@ -350,7 +353,7 @@ export const rhythmRain: GameFactory = (m) => {
     const zoneK = playing ? 1 : Math.max(0, 1 - (now - finaleAt) / 400);
     for (let i = 0; i < leds; i++) {
       const gap = Math.abs(i - zone) / speed;
-      const kind = gap <= RHYTHM.perfectMs ? 'perfect' : gap <= RHYTHM.goodMs ? 'good' : gap <= RHYTHM.okMs ? 'ok' : null;
+      const kind = gradeAt(gap);
       if (kind) add(i, ZONE[kind], (0.09 + 0.16 * pulse) * zoneK);
     }
     // While the TV loads the song, the middle of the zone breathes: the game is on
@@ -388,13 +391,22 @@ export const rhythmRain: GameFactory = (m) => {
         for (let i = zone - 1; i <= zone + 1; i++) add(i, f.rgb, 0.5 * (1 - t));
         continue;
       }
-      // A ring of the note's color opening up and down from the zone; a perfect starts white hot
+      // The band the hit was judged in (green, orange or red, on the side of the note) lights up
+      const side = Math.sign(f.gapMs ?? 0);
+      for (let i = 0; i < leds; i++) {
+        const off = i - zone;
+        const kind = gradeAt(Math.abs(off) / speed);
+        if (kind !== f.grade || (f.grade !== 'perfect' && Math.sign(off) !== side)) continue;
+        add(i, ZONE[kind], 0.75 * (1 - t));
+      }
+      // A ring of the note's color opening up and down from where the note was hit; a perfect starts white hot
+      const at = zone + (f.gapMs ?? 0) * speed;
       const spread = 1 + t * 6;
-      for (let i = Math.floor(zone - spread - 2); i <= Math.ceil(zone + spread + 2); i++) {
-        const edge = Math.max(0, 1 - Math.abs(Math.abs(i - zone) - spread) / 1.6);
-        const core = Math.max(0, 1 - Math.abs(i - zone) / 2);
+      for (let i = Math.floor(at - spread - 2); i <= Math.ceil(at + spread + 2); i++) {
+        const edge = Math.max(0, 1 - Math.abs(Math.abs(i - at) - spread) / 1.6);
+        const core = Math.max(0, 1 - Math.abs(i - at) / 2);
         add(i, f.rgb, (1 - t) * (0.8 * edge + 0.5 * core));
-        if (f.perfect) add(i, WHITE, Math.max(0, 1 - t * 2.5) * core);
+        if (f.grade === 'perfect') add(i, WHITE, Math.max(0, 1 - t * 2.5) * core);
       }
     }
 
@@ -519,7 +531,7 @@ export const rhythmRain: GameFactory = (m) => {
       s.score += RHYTHM_POINTS[grade] * rhythmMultiplier(s.combo);
       s[grade as 'perfect' | 'good' | 'ok'] += 1;
       judge(s, grade);
-      flashes.push({ at: now, rgb: LED[color], perfect: grade === 'perfect' });
+      flashes.push({ at: now, rgb: LED[color], grade, gapMs: at - notes[i].at });
       if (rhythmMultiplier(s.combo) > before) waves.push({ at: now, rgb: rgbOf(m.players[player].color) });
       if (tvSounds) m.sound('rhythm', { player, lane, grade });
       m.publish();
