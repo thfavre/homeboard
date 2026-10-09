@@ -1,7 +1,7 @@
-// Mini games: 1 vs 1 duels with a stake, or room games that anyone can join.
+// Mini games: 1 vs 1 duels with a stake, room games that anyone can join, or solo games.
 
 export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm';
-export type GameMode = 'duel' | 'room';
+export type GameMode = 'duel' | 'room' | 'solo';
 
 export interface GameInfo {
   id: GameId;
@@ -14,6 +14,8 @@ export interface GameInfo {
   lights?: boolean;
   /** Played on a light only: no full screen on the TV, just a small card above the main widget */
   lightOnly?: boolean;
+  /** Has its own sound: the Spotify music is paused while it is played, and resumed after */
+  pausesMusic?: boolean;
   /** How to play in 3 short steps, for the phones */
   steps: string[];
   /** Two colors of the game's gradient */
@@ -81,10 +83,11 @@ export const GAMES: GameInfo[] = [
     id: 'rhythm',
     name: 'Rhythm Rain',
     tagline: 'Hit the notes when they reach the top of the light',
-    rules: 'Colored notes climb the light strip from the bottom. Tap the same color on your phone when a note crosses the zone near the top: green is perfect, orange is good, red is just in time. Hits in a row raise your multiplier, a missed note resets it, and a tap with no note of that color in the zone costs points: mashing every key does not pay. Highest score wins.',
-    modes: ['duel'],
+    rules: 'Colored notes climb the light strip from the bottom. Tap the same color on your phone when a note crosses the zone near the top: green is perfect, orange is good, red is just in time. Hits in a row raise your multiplier, a missed note resets it, and a tap with no note of that color in the zone costs points: mashing every key does not pay. In a duel, the highest score wins.',
+    modes: ['duel', 'solo'],
     lights: true,
     lightOnly: true,
+    pausesMusic: true,
     steps: ['Notes climb the light strip from the bottom', 'Tap their color when they cross the zone at the top', 'Green is perfect. Keep the streak going for x4'],
     colors: ['#3dff9b', '#8b3dff'],
   },
@@ -226,10 +229,14 @@ export interface GamesSettings {
   rhythmLight: string;
   /** The rhythm light's first LED is at the top (the notes go the other way) */
   rhythmReverse: boolean;
-  /** Length of a Rhythm Rain song in seconds */
-  rhythmSec: number;
-  /** Rhythm Rain note speed for every level, in percent (100 = as designed) */
-  rhythmSpeed: number;
+  /**
+   * Length of a Rhythm Rain game in seconds: with music, a part of the song between the two around
+   * the map's best part (the whole song when it is shorter). Without music: the shorter one.
+   */
+  rhythmMinSec: number;
+  rhythmMaxSec: number;
+  /** With music, play the whole song whatever its length */
+  rhythmFullSong: boolean;
   /** BeatSaver maps (keys) guests can play Rhythm Rain on, with their song and notes */
   rhythmSongs: string[];
   /** The music starts this many ms early, to make up for the TV's sound delay (-500 to 500) */
@@ -460,11 +467,15 @@ export interface RhythmView {
   /** Server time of the first beat of the count-in, and the end of the song */
   startAt: number;
   endAt: number;
+  /** Server time of one beat of the song (the beats fall every 60000 / bpm ms from it) */
+  beatAt: number;
+  /** Solo with music: the TV plays the tap sounds. Otherwise each phone plays its own. */
+  tvSounds: boolean;
   scores: Record<string, RhythmScore>;
   /** Pixels of the light the notes climb (null: no light set or reachable) */
   leds: number | null;
   /** Played on a song: the TV plays `url` from `offsetMs` into it at server time `at`, for `durationMs` */
-  music: { url: string; title: string; artist: string; at: number; offsetMs: number; durationMs: number } | null;
+  music: { url: string; title: string; artist: string; cover?: string; at: number; offsetMs: number; durationMs: number } | null;
   /** With music: waiting for the TV to have the song ready (no notes yet) */
   loading: boolean;
 }
@@ -479,6 +490,8 @@ export interface RhythmSongInfo {
   /** BeatSaver's cover and 10 second MP3 preview (online) */
   cover?: string;
   preview?: string;
+  /** Where the map's best part starts in the song (ms), to preview it from the audio file */
+  previewMs?: number;
   durationSec?: number;
   error?: string;
 }

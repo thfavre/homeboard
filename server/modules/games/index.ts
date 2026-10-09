@@ -23,6 +23,7 @@ import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
 import { HbError, clamp, num, uid } from '../../core/util.ts';
 import type { LightsApi } from '../wled/index.ts';
+import type { MusicApi } from '../spotify/index.ts';
 import type { GameFactory, GameRuntime, MatchApi, Outcome } from './engine.ts';
 import { blindTimer } from './timer.ts';
 import { lightSimon } from './simon.ts';
@@ -83,6 +84,8 @@ interface Match {
   usesLights: boolean;
   ready: Set<string>;
   options: { difficulty?: number; song?: string };
+  /** The Spotify music was paused for this game: resumed when it ends */
+  musicPaused: boolean;
 }
 
 const player = (g: Guest): GamePlayer => ({ id: g.id, name: g.name, color: g.color });
@@ -95,7 +98,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmSec: 45, rhythmSpeed: 100, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -109,9 +112,16 @@ export default defineModule<GamesSettings>({
 
     ctx.price({ key: 'games.duel', label: 'Challenge someone to a duel', default: 5000 });
     ctx.price({ key: 'games.room', label: 'Start a game for the room', default: 5000 });
-    ctx.price({ key: 'games.rhythmMusic', label: 'Challenge to Rhythm Rain with music', default: 10000 });
+    ctx.price({ key: 'games.rhythmMusic', label: 'Rhythm Rain with music (duel or solo)', default: 10000 });
+    ctx.price({ key: 'games.solo', label: 'Play a solo game', default: 3000 });
 
     // ------------------------------------------------------------ the Rhythm Rain song
+
+    // Settings of an older version: one song length, and a note speed (the notes follow the music now)
+    {
+      const old = ctx.settings.get() as GamesSettings & { rhythmSec?: number; rhythmSpeed?: number };
+      if (old.rhythmSec !== undefined || old.rhythmSpeed !== undefined) ctx.settings.update({ rhythmSec: undefined, rhythmSpeed: undefined } as Partial<GamesSettings>);
+    }
 
     const songDir = ctx.mediaDir('rhythm');
     /** The host's songs by key: downloaded once when added, then read from the copy */
@@ -123,7 +133,7 @@ export default defineModule<GamesSettings>({
         const s = await loadSong(key, songDir);
         if (!songs.has(key)) return;
         songs.set(key, {
-          info: { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`), cover: s.cover, preview: s.preview, durationSec: s.durationSec },
+          info: { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`), cover: s.cover, preview: s.preview, previewMs: s.previewMs, durationSec: s.durationSec },
           song: s,
         });
       } catch (err) {
@@ -219,11 +229,34 @@ export default defineModule<GamesSettings>({
       ctx.publish();
     };
 
+    /** A game with its own sound pauses the Spotify music while it is played */
+    const music = () => ctx.use<MusicApi>('music');
+    const pauseMusic = (m: Match) => {
+      if (!gameInfo(m.game)?.pausesMusic) return;
+      void music()
+        ?.pause()
+        .then((paused) => {
+          if (!paused) return;
+          // The game may be over already: then resume straight away
+          if (match === m && m.phase === 'play') m.musicPaused = true;
+          else void music()?.resume().catch(() => {});
+        })
+        .catch((err) => ctx.log.warn('Could not pause the music', err instanceof Error ? err.message : err));
+    };
+    const resumeMusic = (m: Match) => {
+      if (!m.musicPaused) return;
+      m.musicPaused = false;
+      void music()
+        ?.resume()
+        .catch((err) => ctx.log.warn('Could not resume the music', err instanceof Error ? err.message : err));
+    };
+
     const close = () => {
       const m = match;
       if (!m) return;
       for (const t of m.timers) clearTimeout(t);
       match = null;
+      resumeMusic(m);
       if (m.usesLights) void lights()?.release();
       ctx.takeover.stop();
       ctx.publish();
@@ -312,6 +345,7 @@ export default defineModule<GamesSettings>({
         usesLights: handOver,
         ready: new Set(),
         options,
+        musicPaused: false,
       };
       return match;
     };
@@ -370,6 +404,7 @@ export default defineModule<GamesSettings>({
         reward: (key) => (ctx.economy.enabled ? ctx.economy.earnAmount(key) : 0),
       };
       m.runtime = FACTORIES[m.game](api);
+      pauseMusic(m);
       m.runtime.start();
       ctx.publish();
     };
@@ -403,6 +438,7 @@ export default defineModule<GamesSettings>({
       const headline = outcome.headline ?? (names.length === 1 ? `${names[0]} wins` : names.length ? `Tie: ${names.join(' and ')}` : 'Nobody wins');
       m.result = { winners: outcome.winners, lines: outcome.lines, payouts, headline };
       m.phase = 'result';
+      resumeMusic(m);
       const prize = startPerk(m, outcome);
       if (m.usesLights) {
         m.usesLights = false;
@@ -498,6 +534,31 @@ export default defineModule<GamesSettings>({
       const inv = invites.get(String(args?.id ?? ''));
       if (!inv || inv.from.id !== guest.id) return false;
       dropInvite(inv, 'Challenge cancelled');
+      return true;
+    });
+
+    // ------------------------------------------------------------ solo
+
+    /** A game for one, on the TV or its light (no bet: just the fee) */
+    ctx.onGuest('solo', (args, guest) => {
+      const game = String(args?.game ?? '') as GameId;
+      if (!allowed(game, 'solo')) throw new HbError('This game cannot be played solo');
+      tvFree();
+      checkLight(game);
+      checkFree(guest.id, null);
+      const song = game === 'rhythm' && args?.song ? readySong(args.song) : null;
+      if (game === 'rhythm' && args?.song && !song) throw new HbError('This song is not available, pick another one');
+      const name = gameInfo(game)!.name;
+      const fee = ctx.economy.charge(guest, song ? 'games.rhythmMusic' : 'games.solo', 1, `Solo: ${name}${song ? ' with music' : ''}`);
+      try {
+        const difficulty = game === 'rhythm' ? Math.min(10, Math.max(1, Math.round(num(args?.difficulty, RHYTHM_DEFAULT_LEVEL)))) : undefined;
+        const m = createMatch(game, 'solo', player(guest), [player(guest)], 0, [fee], { difficulty, song: song?.key });
+        intro(m);
+      } catch (err) {
+        ctx.economy.refund(fee);
+        throw err;
+      }
+      ctx.activity(`{name} is playing ${name}${song ? ` on ${song.title}` : ''}`, { guest });
       return true;
     });
 
@@ -674,9 +735,15 @@ export default defineModule<GamesSettings>({
         rhythmReverse: typeof args?.rhythmReverse === 'boolean' ? args.rhythmReverse : s.rhythmReverse,
         rhythmAudioOffset:
           args?.rhythmAudioOffset !== undefined ? Math.min(500, Math.max(-500, Math.round(num(args.rhythmAudioOffset, 0)))) : s.rhythmAudioOffset,
-        rhythmSpeed: args?.rhythmSpeed !== undefined ? Math.min(200, Math.max(50, Math.round(num(args.rhythmSpeed, 100)))) : s.rhythmSpeed,
-        rhythmSec: args?.rhythmSec !== undefined ? Math.min(120, Math.max(20, Math.round(num(args.rhythmSec, 45)))) : s.rhythmSec,
+        rhythmMinSec: args?.rhythmMinSec !== undefined ? Math.min(600, Math.max(20, Math.round(num(args.rhythmMinSec, 60)))) : s.rhythmMinSec,
+        rhythmMaxSec: args?.rhythmMaxSec !== undefined ? Math.min(600, Math.max(20, Math.round(num(args.rhythmMaxSec, 120)))) : s.rhythmMaxSec,
+        rhythmFullSong: typeof args?.rhythmFullSong === 'boolean' ? args.rhythmFullSong : s.rhythmFullSong,
       });
+      // The shortest stays below the longest, whichever was moved
+      const n = ctx.settings.get();
+      if (n.rhythmMinSec > n.rhythmMaxSec) {
+        ctx.settings.update(args?.rhythmMinSec !== undefined ? { rhythmMaxSec: n.rhythmMinSec } : { rhythmMinSec: n.rhythmMaxSec });
+      }
       ctx.publish();
     });
 

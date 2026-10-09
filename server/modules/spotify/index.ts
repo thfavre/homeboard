@@ -59,6 +59,13 @@ function toTrack(item: any): Track {
   };
 }
 
+/** For other modules: pause the music for a while (a game with its own sound), then resume it */
+export interface MusicApi {
+  /** Pause it if it is playing. True when it was paused here (resume it later). */
+  pause(): Promise<boolean>;
+  resume(): Promise<void>;
+}
+
 /**
  * Spotify Web API integration (needs a Premium account): guests search and queue
  * songs, the TV shows what is playing and what comes next.
@@ -475,6 +482,17 @@ export default defineModule<SpotifySettings>({
       await api(method, path);
       setTimeout(poll, 400);
     };
+    ctx.provide<MusicApi>('music', {
+      pause: async () => {
+        if (!connected() || !ctx.enabled() || !now?.isPlaying) return false;
+        await control('PUT', '/me/player/pause');
+        if (now) now = { ...now, isPlaying: false };
+        return true;
+      },
+      resume: async () => {
+        if (connected() && ctx.enabled()) await control('PUT', '/me/player/play');
+      },
+    });
     ctx.onAdmin('play', () => control('PUT', '/me/player/play'));
     ctx.onAdmin('pause', () => control('PUT', '/me/player/pause'));
     ctx.onAdmin('next', async () => {

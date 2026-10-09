@@ -11,9 +11,9 @@
 
   /**
    * Rhythm Rain is played on the light strip: the TV keeps its screen and only shows this card above
-   * the main widget, with the time left and both scores. The TV that plays the sound plucks each hit,
-   * the first player on the left speaker, the second on the right (softer over a song). With music,
-   * that TV also plays the song, in time with the notes on the light.
+   * the main widget, with the time left and the scores. With music, the TV that plays the sound plays
+   * the song in time with the notes on the light; solo with music, it also plucks each tap (in a duel
+   * or without music, each phone plays its own taps).
    */
   const m = $derived(gamesState()?.match ?? null);
   const v = $derived(m?.phase === 'play' || m?.phase === 'result' ? (m.view as RhythmView | null) : null);
@@ -21,12 +21,8 @@
   const economy = $derived(!!hb.core?.economyEnabled);
   const LABEL: Record<RhythmGrade, string> = { perfect: 'Perfect', good: 'Good', ok: 'Just', miss: 'Miss' };
 
-  const withMusic = $derived(!!v?.music);
-  $effect(() =>
-    onEvent<{ player: number; lane: number; grade: RhythmGrade }>('games', 'rhythm', (d) =>
-      rhythmSound(d.grade, d.lane, d.player === 0 ? -0.7 : 0.7, withMusic ? 0.3 : 0.6),
-    ),
-  );
+  $effect(() => onEvent<{ player: number; lane: number; grade: RhythmGrade }>('games', 'rhythm', (d) => rhythmSound(d.grade, d.lane, 0, 0.4)));
+  const solo = $derived(m?.mode === 'solo');
 
   // Play the song on cue (RhythmPreload got it ready), stop it when the game goes away
   $effect(() => {
@@ -53,7 +49,7 @@
 </script>
 
 {#if m}
-  <div class="card rhythm" in:scale={{ start: 0.95 }}>
+  <div class="card rhythm" class:solo in:scale={{ start: 0.95 }}>
     <div class="title">
       <span class="icon"><Guitar size="1.1rem" /></span>
       <span class="what">
@@ -71,7 +67,7 @@
           {#if won}<span class="badge crown"><Crown size="0.7rem" /></span>{:else if m.phase === 'intro' && m.ready.includes(p.id)}<span class="badge ready"><Check size="0.7rem" strokeWidth={3} /></span>{/if}
         </span>
         <span class="who">
-          <span class="name truncate">{p.name}</span>
+          <span class="name truncate">{p.name}{#if solo && sc && m.phase === 'play'}<span class="faint">{` · ${sc.perfect + sc.good + sc.ok} hit`}</span>{/if}</span>
           <span class="line">
             <strong class="mono score">{sc?.score ?? 0}</strong>
             {#if sc && m.phase === 'play'}
@@ -83,7 +79,7 @@
           </span>
         </span>
       </div>
-      {#if i === 0}<span class="vs">VS</span>{/if}
+      {#if i === 0 && !solo}<span class="vs">VS</span>{/if}
     {/each}
 
     <div class="time">
@@ -107,6 +103,9 @@
     gap: 1rem;
     padding: 0.45rem 1rem;
     overflow: hidden;
+  }
+  .rhythm.solo {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
   }
   .title {
     display: flex;

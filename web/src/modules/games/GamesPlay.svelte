@@ -106,7 +106,7 @@
           {#if won}<Crown size={46} />{:else}<Avatar name={hb.me?.name ?? ''} color={hb.me?.color ?? '#888'} src={hb.me?.avatar} size="5.5rem" />{/if}
         </div>
         <span class="eyebrow">{r.headline}</span>
-        <h1>{won ? (r.winners.length > 1 ? 'Shared win' : 'You won!') : 'Not this time'}</h1>
+        <h1>{m.mode === 'solo' ? 'Well played!' : won ? (r.winners.length > 1 ? 'Shared win' : 'You won!') : 'Not this time'}</h1>
         {#if line}
           <div class="stat">
             <span class="mono">{line.label}</span>

@@ -84,7 +84,7 @@
 
 <div class="part">
   <h4 class="group">Songs</h4>
-  <p class="faint small">Guests pick one of these when they pay for a duel with music. Tap a cover to hear it.</p>
+  <p class="faint small">Guests pick one of these when they pay for a duel or a solo game with music. Tap a cover to hear it.</p>
   <div class="list">
     {#each songs as x (x.key)}
       <div class="row">

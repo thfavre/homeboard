@@ -34,7 +34,9 @@
   /** Seconds the winner plays with their prize (0: no prize) */
   const PERK_STEPS = [0, 15, 30, 45, 60, 90, 120, 180, 300];
   /** Rhythm Rain song lengths, in seconds */
-  const SONG_STEPS = [20, 30, 45, 60, 75, 90, 120];
+  const SONG_STEPS = [20, 30, 45, 60, 75, 90, 120, 150, 180, 210, 240, 300, 360, 480, 600];
+  const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  const MODE_NAMES = { duel: '1 vs 1', room: 'room', solo: 'solo' } as const;
 
   // The game whose options are open (one at a time keeps the list short on a phone)
   let open = $state<GameId | null>(null);
@@ -44,7 +46,7 @@
   const bluffBonus = $derived(hb.core?.admin?.earnRules.find((r) => r.key === 'games.bluff'));
 
   // A slider shows its value while it moves, and saves when it is let go
-  type SliderKey = 'rhythmSpeed' | 'rhythmAudioOffset';
+  type SliderKey = 'rhythmAudioOffset';
   let drag = $state<Partial<Record<SliderKey, number>>>({});
   async function saveSlider(key: SliderKey, v: number) {
     await setSettings({ [key]: v });
@@ -68,14 +70,16 @@
       case 'bluff':
         return `${formatAmount(bluffBonus?.amount ?? 0)} each if both share`;
       case 'rhythm':
-        return st.rhythmLight ? `on ${lightName(st.rhythmLight)}, ${plural(s?.rhythmSongs.length ?? 0, 'song')}` : 'needs a light';
+        return st.rhythmLight
+          ? `on ${lightName(st.rhythmLight)}, ${plural(s?.rhythmSongs.length ?? 0, 'song')}, ${st.rhythmFullSong ? 'whole songs' : `${clock(st.rhythmMinSec)} to ${clock(st.rhythmMaxSec)}`}`
+          : 'needs a light';
       default:
         return '';
     }
   }
   const modes = (id: GameId) => {
     const g = gameInfo(id)!;
-    return `${g.modes.includes('room') ? '1 vs 1 or room' : '1 vs 1'}${g.lights ? ', lights' : ''}`;
+    return `${g.modes.map((x) => MODE_NAMES[x]).join(' or ')}${g.lights ? ', lights' : ''}`;
   };
 </script>
 
@@ -86,6 +90,18 @@
       <button class="btn small" aria-label="Less" disabled={n <= min} onclick={() => set(-1)}><Minus size={16} /></button>
       <strong class="mono">{n}</strong>
       <button class="btn small" aria-label="More" disabled={n >= max} onclick={() => set(1)}><Plus size={16} /></button>
+    </span>
+  </div>
+{/snippet}
+
+{#snippet length(label: string, key: 'rhythmMinSec' | 'rhythmMaxSec')}
+  {@const n = s!.settings[key]}
+  <div class="line">
+    <span class="label">{label}</span>
+    <span class="stepper">
+      <button class="btn small" aria-label="Shorter" disabled={n <= SONG_STEPS[0]} onclick={() => setSettings({ [key]: stepIn(SONG_STEPS, n, -1) })}><Minus size={16} /></button>
+      <strong class="mono">{clock(n)}</strong>
+      <button class="btn small" aria-label="Longer" disabled={n >= SONG_STEPS[SONG_STEPS.length - 1]} onclick={() => setSettings({ [key]: stepIn(SONG_STEPS, n, 1) })}><Plus size={16} /></button>
     </span>
   </div>
 {/snippet}
@@ -167,8 +183,18 @@
       </div>
     {/if}
     <h4 class="group">Play</h4>
-    {@render stepper('Song length', 'Seconds, 20 to 120', s!.settings.rhythmSec, 20, 120, (dir) => setSettings({ rhythmSec: stepIn(SONG_STEPS, s!.settings.rhythmSec, dir) }))}
-    {@render slider('Note speed', 'How fast the notes climb at every level, 100% = as designed', 'rhythmSpeed', 50, 200, (v) => `${v}%`)}
+    <div class="line">
+      <span class="label">Whole songs <span class="faint small">Play every song from start to end, whatever its length</span></span>
+      <Toggle checked={s!.settings.rhythmFullSong} onchange={(v) => setSettings({ rhythmFullSong: v })} label="Whole songs" />
+    </div>
+    {#if !s!.settings.rhythmFullSong}
+      <p class="faint small">
+        Song length. With music, the game plays the part of the song around its best part (the one the map's author marked, else its busiest part) that fits best between
+        these two, cut where the music pauses. A shorter song is played whole. Without music, a game lasts the shortest.
+      </p>
+      {@render length('Shortest', 'rhythmMinSec')}
+      {@render length('Longest', 'rhythmMaxSec')}
+    {/if}
     {@render slider('Music timing', 'Notes reach the zone after the beat you hear: move it to +. Before the beat: to -', 'rhythmAudioOffset', -500, 500, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
     <RhythmSongsAdmin songs={s!.rhythmSongs} />
   {/if}
@@ -176,7 +202,7 @@
 
 {#if s}
   {#if m}
-    <Section title="On the TV now" hint={`${gameInfo(m.game)?.name} (${m.mode === 'duel' ? '1 vs 1' : 'room'}): ${PHASES[m.phase]}`}>
+    <Section title="On the TV now" hint={`${gameInfo(m.game)?.name} (${MODE_NAMES[m.mode]}): ${PHASES[m.phase]}`}>
       <div class="players">
         {#each m.players as p (p.id)}<span class="pill" style:border-color={p.color}>{p.name}</span>{:else}<span class="faint">No player yet</span>{/each}
       </div>

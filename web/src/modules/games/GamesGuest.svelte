@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ChevronRight, Music, Swords, Users, VolumeX } from '@lucide/svelte';
-  import { GAMES, RHYTHM_COLORS, RHYTHM_DEFAULT_LEVEL, rhythmLevel, type GameInfo, type GameMode } from '$shared/games.ts';
+  import { ChevronRight, Music, Pause, Play, Swords, User, Users, VolumeX } from '@lucide/svelte';
+  import { GAMES, RHYTHM_COLORS, RHYTHM_DEFAULT_LEVEL, rhythmLevel, type GameInfo, type GameMode, type RhythmSongInfo } from '$shared/games.ts';
   import { formatAmount, parseAmount } from '$shared/money.ts';
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
@@ -12,6 +12,8 @@
   let mode = $state<GameMode>('duel');
   let picked = $state<GameInfo | null>(null);
   let opponent = $state<string | null>(null);
+  /** Played alone (games that can be): no opponent, no bet */
+  let solo = $state(false);
   let stakeText = $state('');
   /** Rhythm Rain level, sent with the challenge */
   let difficulty = $state(RHYTHM_DEFAULT_LEVEL);
@@ -26,13 +28,15 @@
   const songs = $derived((s?.rhythmSongs ?? []).filter((x) => x.status === 'ready'));
   const song = $derived(songs.find((x) => x.key === songPick) ?? songs[0] ?? null);
   const withMusic = $derived(picked?.id === 'rhythm' && mode === 'duel' && music && !!song);
+  const canSolo = $derived(mode === 'duel' && !!picked?.modes.includes('solo'));
+  const isSolo = $derived(canSolo && solo);
   const economy = $derived(!!hb.core?.economyEnabled);
   const list = $derived(GAMES.filter((g) => g.modes.includes(mode) && s?.settings.enabled.includes(g.id)));
   // Richest first: the ones who can match a big bet
   const others = $derived((s?.online ?? []).filter((p) => p.id !== hb.me?.id).sort((a, b) => b.balance - a.balance));
   const opponentName = $derived(others.find((p) => p.id === opponent)?.name);
   const stake = $derived(economy ? Math.max(0, parseAmount(stakeText || '0')) : 0);
-  const fee = $derived(price(mode === 'duel' ? (withMusic ? 'games.rhythmMusic' : 'games.duel') : 'games.room'));
+  const fee = $derived(price(mode === 'duel' ? (withMusic ? 'games.rhythmMusic' : isSolo ? 'games.solo' : 'games.duel') : 'games.room'));
   const maxStake = $derived(s?.settings.maxStake ?? 0);
   const tvBusy = $derived(!!s?.match || (!!hb.core?.takeover && hb.core.takeover !== 'games'));
 
@@ -41,9 +45,65 @@
     error = '';
   }
 
+  // Hear 5 seconds of a song before picking it: BeatSaver's preview, or the best part from the party's copy
+  const PREVIEW_MS = 5000;
+  let audio: HTMLAudioElement | null = null;
+  let previewing = $state<string | null>(null);
+  let previewTimer: ReturnType<typeof setTimeout> | undefined;
+  function stopPreview() {
+    clearTimeout(previewTimer);
+    audio?.pause();
+    audio = null;
+    previewing = null;
+  }
+  function listen(x: RhythmSongInfo, local = false) {
+    const again = previewing === x.key && !local;
+    stopPreview();
+    if (again) return;
+    const src = local ? x.url : (x.preview ?? x.url);
+    if (!src) return;
+    const a = new Audio(src);
+    audio = a;
+    previewing = x.key;
+    a.volume = 0.85;
+    if (src === x.url && x.previewMs) a.addEventListener('loadedmetadata', () => (a.currentTime = x.previewMs! / 1000), { once: true });
+    // The 5 seconds count from when it is heard, then it fades out
+    a.addEventListener(
+      'playing',
+      () => {
+        previewTimer = setTimeout(() => {
+          const fade = setInterval(() => {
+            if (audio !== a || a.volume <= 0.1) {
+              clearInterval(fade);
+              if (audio === a) stopPreview();
+              return;
+            }
+            a.volume = Math.max(0, a.volume - 0.12);
+          }, 60);
+        }, PREVIEW_MS - 450);
+      },
+      { once: true },
+    );
+    a.onended = () => audio === a && stopPreview();
+    // BeatSaver out of reach: the party's own copy
+    a.onerror = () => audio === a && (src !== x.url && x.url ? listen(x, true) : stopPreview());
+    a.play().catch(() => audio === a && stopPreview());
+  }
+  $effect(() => () => stopPreview());
+  $effect(() => {
+    if (!picked || !music) stopPreview();
+  });
+
   async function send() {
     if (!picked) return;
     error = '';
+    if (isSolo) {
+      busy = true;
+      const ok = await attempt(() => rpc('games', 'solo', { game: picked!.id, difficulty, ...(withMusic ? { song: song!.key } : {}) }));
+      busy = false;
+      if (ok) picked = null;
+      return;
+    }
     if (mode === 'duel' && !opponent) {
       error = 'Pick someone to challenge';
       return;
@@ -98,7 +158,7 @@
 </div>
 
 {#if picked}
-  <Sheet title={mode === 'duel' ? 'New duel' : 'Game for everyone'} onclose={() => (picked = null)}>
+  <Sheet title={isSolo ? 'Solo game' : mode === 'duel' ? 'New duel' : 'Game for everyone'} onclose={() => (picked = null)}>
     <GameCard game={picked} />
 
     {#if picked.id === 'rhythm'}
@@ -119,25 +179,34 @@
             <button class="choice" class:active={!music} onclick={() => (music = false)}>
               <VolumeX size={20} />
               <span class="what"><strong>No music</strong><span class="faint small">Just the beat of the lights</span></span>
-              {#if economy}<Money amount={price('games.duel')} free />{/if}
+              {#if economy}<Money amount={price(isSolo ? 'games.solo' : 'games.duel')} free />{/if}
             </button>
             <button class="choice" class:active={music} onclick={() => (music = true)}>
               <Music size={20} />
               <span class="what"><strong>With music</strong><span class="faint small truncate">{songs.length === 1 ? `${songs[0].artist ? `${songs[0].artist} - ` : ''}${songs[0].title}` : `${songs.length} songs to pick from`}</span></span>
               {#if economy}<Money amount={price('games.rhythmMusic')} free />{/if}
             </button>
-            {#if music && songs.length > 1}
+            {#if music}
               <div class="songs">
                 {#each songs as x (x.key)}
-                  <button class="song-pick" class:active={song?.key === x.key} onclick={() => (songPick = x.key)}>
-                    <span class="art" style:background-image={x.cover ? `url("${x.cover}")` : undefined}></span>
-                    <span class="name">
+                  <div class="song-pick" class:active={song?.key === x.key}>
+                    <button
+                      class="art"
+                      class:on={previewing === x.key}
+                      style:background-image={x.cover ? `url("${x.cover}")` : undefined}
+                      aria-label={previewing === x.key ? 'Stop' : `Listen to ${x.title}`}
+                      onclick={() => listen(x)}
+                    >
+                      <span class="play">{#if previewing === x.key}<Pause size={16} />{:else}<Play size={16} />{/if}</span>
+                    </button>
+                    <button class="name" onclick={() => (songPick = x.key)}>
                       <strong class="truncate">{x.title}</strong>
                       {#if x.artist}<span class="faint small truncate">{x.artist}</span>{/if}
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                 {/each}
               </div>
+              <span class="faint small">Tap a cover to hear 5 seconds of it.</span>
             {/if}
           </div>
         </div>
@@ -146,11 +215,17 @@
 
     {#if mode === 'duel'}
       <div class="field">
-        <span class="label">Who do you challenge?</span>
+        <span class="label">{canSolo ? 'Who do you play against?' : 'Who do you challenge?'}</span>
         <div class="people">
+          {#if canSolo}
+            <button class="person" class:active={solo} onclick={() => (solo = true)}>
+              <span class="me"><User size={18} /></span>
+              <span class="who"><span class="truncate">Nobody</span><span class="bal">Play solo</span></span>
+            </button>
+          {/if}
           {#each others as p (p.id)}
             {@const short = economy && stake > p.balance}
-            <button class="person" class:active={opponent === p.id} class:short disabled={short} onclick={() => (opponent = p.id)}>
+            <button class="person" class:active={!isSolo && opponent === p.id} class:short disabled={short} onclick={() => ((opponent = p.id), (solo = false))}>
               <Avatar name={p.name} color={p.color} id={p.id} size="2.2rem" />
               <span class="who">
                 <span class="truncate">{p.name}</span>
@@ -160,13 +235,17 @@
               </span>
             </button>
           {:else}
-            <p class="faint small">Nobody else is online right now.</p>
+            {#if !canSolo}<p class="faint small">Nobody else is online right now.</p>{/if}
           {/each}
         </div>
       </div>
     {/if}
 
-    {#if economy}
+    {#if economy && isSolo}
+      <div class="sum">
+        <span class="pay">You pay now</span><span class="pay"><Money amount={fee} free /></span>
+      </div>
+    {:else if economy}
       <label class="field">
         <span class="label">{mode === 'duel' ? 'Your bet' : 'Entry for each player'}</span>
         <input class="input mono" inputmode="decimal" placeholder="0" bind:value={stakeText} />
@@ -191,11 +270,11 @@
       </p>
     {/if}
 
-    {#if tvBusy}<p class="faint small">A game is on the TV right now. {mode === 'duel' ? 'They can accept once it is over.' : 'Wait for it to end.'}</p>{/if}
+    {#if tvBusy}<p class="faint small">A game is on the TV right now. {mode === 'duel' && !isSolo ? 'They can accept once it is over.' : 'Wait for it to end.'}</p>{/if}
     {#if error}<p class="error">{error}</p>{/if}
 
-    <button class="btn primary block go" disabled={busy || (mode === 'room' && tvBusy)} onclick={send}>
-      {#if mode === 'duel'}<Swords size={18} /> Send the challenge{:else}<Users size={18} /> Start for everyone{/if}
+    <button class="btn primary block go" disabled={busy || ((mode === 'room' || isSolo) && tvBusy)} onclick={send}>
+      {#if isSolo}<Play size={18} /> Play now{:else if mode === 'duel'}<Swords size={18} /> Send the challenge{:else}<Users size={18} /> Start for everyone{/if}
     </button>
   </Sheet>
 {/if}
@@ -307,6 +386,16 @@
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, transparent);
   }
+  .me {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 50%;
+    background: var(--gradient);
+    color: #fff;
+  }
   .person.short {
     opacity: 0.45;
   }
@@ -330,6 +419,10 @@
     background: var(--surface-2);
     font-size: 0.9rem;
     color: var(--text-dim);
+  }
+  .pay {
+    color: var(--text);
+    font-weight: 700;
   }
   .total {
     color: var(--text);
@@ -371,21 +464,63 @@
     border-left: 2px solid var(--accent);
   }
   .song-pick .art {
+    position: relative;
     flex: none;
-    width: 2.3rem;
-    height: 2.3rem;
-    border-radius: 0.4rem;
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0.5rem;
     background: var(--surface-2) center / cover no-repeat;
+    color: #fff;
+  }
+  .song-pick .play {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 50%;
+    background: rgb(0 0 0 / 0.5);
+  }
+  /* A ring fills around the button while the 5 seconds play */
+  .song-pick .art.on .play::before {
+    content: '';
+    position: absolute;
+    inset: -0.2rem;
+    border-radius: 50%;
+    background: conic-gradient(var(--accent) var(--p, 0%), transparent 0);
+    -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%);
+    mask: radial-gradient(circle, transparent 58%, #000 60%);
+    animation: listen 5s linear forwards;
+  }
+  @property --p {
+    syntax: '<percentage>';
+    inherits: false;
+    initial-value: 0%;
+  }
+  @keyframes listen {
+    to {
+      --p: 100%;
+    }
   }
   .song-pick .name {
+    flex: 1;
     min-width: 0;
     display: grid;
+    padding: 0.2rem 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    text-align: left;
   }
   .song-pick {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    padding: 0.5rem 0.8rem;
+    padding: 0.4rem 0.8rem 0.4rem 0.4rem;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--surface);
