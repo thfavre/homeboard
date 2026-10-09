@@ -36,6 +36,12 @@ export interface CoreSettings {
   /** Passive income keeps going this many minutes while a guest is away (0 = only while online) */
   passiveAwayMinutes: number;
   leaderboardMode: LeaderboardMode;
+  /** The TV leaderboard takes turns with the other boards (pixels, stickers, games, song scores...) */
+  leaderboardRotate: boolean;
+  /** Seconds each board stays on the TV */
+  boardSeconds: number;
+  /** A Rhythm Rain song gets its own board once this many guests played it (same difficulty and colors) */
+  songBoardPlayers: number;
   privacy: PrivacySettings;
   qrIncludesCode: boolean;
   requireCode: boolean;
@@ -55,6 +61,9 @@ const CORE_DEFAULTS: CoreSettings = {
   passiveMinutes: 5,
   passiveAwayMinutes: 60,
   leaderboardMode: 'balance',
+  leaderboardRotate: true,
+  boardSeconds: 15,
+  songBoardPlayers: 6,
   privacy: { activity: 'names', photoNames: true, stickerNames: true, songNames: true, effectNames: true },
   qrIncludesCode: true,
   requireCode: true,

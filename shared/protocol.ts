@@ -92,6 +92,41 @@ export interface LedgerEntry {
 
 export type LeaderboardMode = 'balance' | 'spent' | 'earned' | 'off';
 
+/** What guests did during the session, counted for the TV leaderboards */
+export type GuestStat = 'pixels' | 'stickers' | 'photos' | 'songs' | 'sounds' | 'games' | 'wins';
+
+/** The boards the TV leaderboard takes turns with, besides the money one */
+export const STAT_BOARDS: { stat: GuestStat; title: string; unit: string; one: string }[] = [
+  { stat: 'pixels', title: 'Pixel artists', unit: 'pixels', one: 'pixel' },
+  { stat: 'stickers', title: 'Sticker spammers', unit: 'stickers', one: 'sticker' },
+  { stat: 'games', title: 'Most games played', unit: 'games', one: 'game' },
+  { stat: 'wins', title: 'Game champions', unit: 'wins', one: 'win' },
+  { stat: 'songs', title: 'Party DJs', unit: 'songs', one: 'song' },
+  { stat: 'sounds', title: 'Soundboard heroes', unit: 'sounds', one: 'sound' },
+  { stat: 'photos', title: 'Paparazzi', unit: 'photos', one: 'photo' },
+];
+
+export interface BoardRow {
+  id: string;
+  name: string;
+  color: string;
+  value: number;
+}
+
+/**
+ * One leaderboard the TV can show. money: amounts, count: a stat (`unit`), score: Rhythm Rain points
+ * on one song at one difficulty and number of colors (`song`).
+ */
+export interface Board {
+  id: string;
+  title: string;
+  kind: 'money' | 'count' | 'score';
+  unit?: string;
+  one?: string;
+  rows: BoardRow[];
+  song?: { title: string; artist: string; cover?: string; chart: string; colors: number; players: number };
+}
+
 /** What the TV (and guest phones) may show about who did what. The host always sees everything. */
 export interface PrivacySettings {
   /** Activity feed at the bottom of the TV */
@@ -116,6 +151,9 @@ export interface CoreState {
   passiveMs: number;
   leaderboardMode: LeaderboardMode;
   leaderboard: PublicGuest[];
+  /** TV only: every board the leaderboard takes turns with (the money one first), and seconds per board */
+  boards?: Board[];
+  boardSeconds?: number;
   privacy: PrivacySettings;
   /** Avatar URL of every guest who has one, by guest id */
   avatars: Record<string, string>;
@@ -137,6 +175,9 @@ export interface CoreAdminState {
   sessionStartedAt: number;
   passiveMinutes: number;
   passiveAwayMinutes: number;
+  leaderboardRotate: boolean;
+  boardSeconds: number;
+  songBoardPlayers: number;
   qrIncludesCode: boolean;
   requireCode: boolean;
   prices: PriceInfo[];

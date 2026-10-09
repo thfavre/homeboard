@@ -115,6 +115,7 @@ export default defineModule<PhotoSettings>({
         store.data.gallery.push(photo);
         store.save();
         enqueue(photo);
+        ctx.session.count(guest, 'photos');
         ctx.activity('{name} shared a photo', { guest });
         res.json({ id, position: queue.length });
       } catch (err) {

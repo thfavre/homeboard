@@ -3,17 +3,21 @@ import { join } from 'node:path';
 import QRCode from 'qrcode';
 import { AVATAR_EFFECTS, type AvatarParams } from '../../../shared/avatar.ts';
 import { ensureDir } from '../../core/paths.ts';
-import type { CoreState, Currency, JoinResult, LeaderboardMode, NameCheck, PassivePaid, PublicGuest, WelcomeBack } from '../../../shared/protocol.ts';
+import { STAT_BOARDS, type Board, type CoreState, type Currency, type JoinResult, type LeaderboardMode, type NameCheck, type PassivePaid, type PublicGuest, type WelcomeBack } from '../../../shared/protocol.ts';
 import { THEMES } from '../../../shared/themes.ts';
 import type { CoreSettings } from '../../core/hub.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
+import type { GamesApi } from '../games/index.ts';
 import { HbError, cleanName, clamp, num, uid } from '../../core/util.ts';
 
 const TICK_SECONDS = 5;
 const MAX_JOIN_FAILURES = 8;
 /** Away at least this long: the guest gets a welcome back card instead of the usual toast */
 const AWAY_CARD_MS = 60_000;
+
+const BOARD_ROWS = 10;
+const MONEY_TITLES = { balance: 'Richest', spent: 'Big spenders', earned: 'Top earners' } as const;
 
 const minutesText = (m: number) => (m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min`);
 
@@ -112,6 +116,57 @@ export default defineModule({
       earned: (g) => g.earned,
     };
 
+    /**
+     * Every board the TV leaderboard can show: money first (when the economy is on), then, when the
+     * host lets it take turns, each stat at least 2 guests have, and each Rhythm Rain song enough
+     * guests played at the same difficulty and number of colors.
+     */
+    const boards = (): Board[] => {
+      const c = core();
+      if (c.leaderboardMode === 'off') return [];
+      const guests = [...session.guests.values()];
+      const top = (value: (g: Guest) => number) =>
+        guests
+          .map((g) => ({ id: g.id, name: g.name, color: g.color, value: value(g) }))
+          .filter((r) => r.value > 0)
+          .sort((a, b) => b.value - a.value)
+          .slice(0, BOARD_ROWS);
+      const list: Board[] = [];
+      if (c.economyEnabled) {
+        const mode = c.leaderboardMode;
+        const rows = guests
+          .map((g) => ({ id: g.id, name: g.name, color: g.color, value: g[mode] }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, BOARD_ROWS);
+        if (rows.length) list.push({ id: `money:${mode}`, title: MONEY_TITLES[mode], kind: 'money', rows });
+      }
+      if (!c.leaderboardRotate) return list;
+      for (const b of STAT_BOARDS) {
+        const rows = top((g) => g.stats?.[b.stat] ?? 0);
+        if (rows.length >= 2) list.push({ id: `stat:${b.stat}`, title: b.title, kind: 'count', unit: b.unit, one: b.one, rows });
+      }
+      const games = ctx.use<GamesApi>('games');
+      const songBoards = new Set(guests.flatMap((g) => Object.keys(g.bests ?? {})).filter((k) => k.startsWith('rhythm:')));
+      for (const id of songBoards) {
+        const players = guests.filter((g) => g.bests?.[id] !== undefined);
+        if (players.length < c.songBoardPlayers) continue;
+        const song = games?.songBoard(id);
+        if (!song) continue;
+        list.push({
+          id,
+          title: 'Rhythm Rain',
+          kind: 'score',
+          unit: 'pts',
+          rows: players
+            .map((g) => ({ id: g.id, name: g.name, color: g.color, value: g.bests![id] }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, BOARD_ROWS),
+          song: { ...song, players: players.length },
+        });
+      }
+      return list;
+    };
+
     ctx.state((role) => {
       const c = core();
       const toggleable = hub.moduleList().filter((m) => m.toggleable !== false);
@@ -134,6 +189,10 @@ export default defineModule({
         activity: hub.activityFor(role),
       };
       if (role === 'tv' || role === 'admin') state.join = joinInfo();
+      if (role === 'tv') {
+        state.boards = boards();
+        state.boardSeconds = c.boardSeconds;
+      }
       if (role === 'admin') {
         state.admin = {
           guests: [...session.guests.values()].map((g) => session.adminGuest(g)).sort((a, b) => a.name.localeCompare(b.name)),
@@ -144,6 +203,9 @@ export default defineModule({
           sessionStartedAt: session.startedAt,
           passiveMinutes: c.passiveMinutes,
           passiveAwayMinutes: c.passiveAwayMinutes,
+          leaderboardRotate: c.leaderboardRotate,
+          boardSeconds: c.boardSeconds,
+          songBoardPlayers: c.songBoardPlayers,
           qrIncludesCode: c.qrIncludesCode,
           requireCode: c.requireCode,
           prices: economy.adminPriceList(),
@@ -350,6 +412,9 @@ export default defineModule({
       if (args.leaderboardMode !== undefined && ['balance', 'spent', 'earned', 'off'].includes(args.leaderboardMode)) {
         patch.leaderboardMode = args.leaderboardMode;
       }
+      if (args.leaderboardRotate !== undefined) patch.leaderboardRotate = !!args.leaderboardRotate;
+      if (args.boardSeconds !== undefined) patch.boardSeconds = Math.round(clamp(num(args.boardSeconds, 15), 5, 300));
+      if (args.songBoardPlayers !== undefined) patch.songBoardPlayers = Math.round(clamp(num(args.songBoardPlayers, 6), 1, 50));
       if (args.privacy !== undefined) {
         const p = { ...c.privacy };
         if (['names', 'anonymous', 'off'].includes(args.privacy.activity)) p.activity = args.privacy.activity;

@@ -112,6 +112,7 @@ export default defineModule<SoundboardSettings>({
       const cooldownSec = ctx.settings.get().cooldownSec;
       cooldownUntil = cooldownSec > 0 ? Date.now() + cooldownSec * 1000 : 0;
       play(sound, guest.name, maxSec);
+      ctx.session.count(guest, 'sounds');
       ctx.activity(`{name} played ${sound.name}`, { guest });
       ctx.publish();
     };

@@ -16,6 +16,8 @@ export interface Outcome {
    * Room rewards are not added then.
    */
   payouts?: Record<string, number>;
+  /** Points per player, kept as their best on the game's leaderboard (Rhythm Rain on a song) */
+  scores?: Record<string, number>;
 }
 
 /** Rhythm Rain: number of colors, difficulty (a chart name) and song key */

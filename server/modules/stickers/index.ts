@@ -76,6 +76,7 @@ export default defineModule<StickerSettings>({
         if (!sticker) throw new HbError('Unknown sticker');
       }
       ctx.economy.charge(guest, 'stickers.sticker', 1, text ? `Text sticker "${text}"` : `Sticker: ${sticker!.name}`);
+      ctx.session.count(guest, 'stickers');
       const item: ActiveSticker = {
         id: uid(6),
         sticker,

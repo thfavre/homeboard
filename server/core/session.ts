@@ -1,7 +1,7 @@
 import { scryptSync, timingSafeEqual } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
-import type { AdminGuest, LedgerEntry, Me, PublicGuest } from '../../shared/protocol.ts';
+import type { AdminGuest, GuestStat, LedgerEntry, Me, PublicGuest } from '../../shared/protocol.ts';
 import type { AvatarParams } from '../../shared/avatar.ts';
 import { JsonFile } from './jsonFile.ts';
 import { DATA_DIR } from './paths.ts';
@@ -23,6 +23,10 @@ export interface Guest {
   balance: number;
   earned: number;
   spent: number;
+  /** What they did this session, for the TV leaderboards */
+  stats?: Partial<Record<GuestStat, number>>;
+  /** Best scores by board (Rhythm Rain: one per song, difficulty and number of colors) */
+  bests?: Record<string, number>;
   joinedAt: number;
   lastSeen: number;
   /** Seconds online since the last passive payout */
@@ -217,6 +221,20 @@ export class Session extends EventEmitter {
     if (ledger.length > LEDGER_SIZE) ledger.splice(0, ledger.length - LEDGER_SIZE);
     this.changed(guest);
     return entry;
+  }
+
+  /** Count something the guest did (pixels painted, stickers sent...) */
+  count(guest: Guest, stat: GuestStat, n = 1): void {
+    if (n <= 0) return;
+    guest.stats = { ...guest.stats, [stat]: (guest.stats?.[stat] ?? 0) + n };
+    this.changed(guest);
+  }
+
+  /** Keep a score when it beats the guest's best on that board */
+  best(guest: Guest, board: string, score: number): void {
+    if (score <= (guest.bests?.[board] ?? -Infinity)) return;
+    guest.bests = { ...guest.bests, [board]: score };
+    this.changed(guest);
   }
 
   changed(guest: Guest): void {

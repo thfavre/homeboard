@@ -414,6 +414,7 @@ export default defineModule<SpotifySettings>({
       const requestedBy = { name: guest.name, color: guest.color };
       requests.set(uri, requestedBy);
       held.push({ ...track, requestedBy, qid: randomBytes(6).toString('base64url'), charge });
+      ctx.session.count(guest, 'songs');
       ctx.activity(`{name} queued ${track.title} by ${track.artists}`, { guest });
       // The current song may already be about to end
       await feed();

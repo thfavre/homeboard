@@ -571,17 +571,20 @@ export const rhythmRain: GameFactory = (m) => {
     if (strip) strip.send(new Uint8Array(strip.leds * 3));
     const score = (id: string) => scores.get(id)!.score;
     const detail = (s: RhythmScore) => `${s.perfect + s.good + s.ok} of ${notes.length} notes hit, ${s.perfect} perfect, best streak ${s.bestCombo}`;
+    // Every player's score goes to the song's leaderboard, the loser's too
+    const scored = Object.fromEntries(m.players.map((p) => [p.id, score(p.id)]));
     if (solo) {
       // Nobody to beat: the score is the result
       const p = m.players[0];
       const s = scores.get(p.id)!;
-      m.finish({ winners: [], headline: `${p.name}: ${s.score} pts`, lines: [{ id: p.id, label: `${s.score} pts`, detail: detail(s) }] });
+      m.finish({ winners: [], scores: scored, headline: `${p.name}: ${s.score} pts`, lines: [{ id: p.id, label: `${s.score} pts`, detail: detail(s) }] });
       return;
     }
     m.finish({
       // A duel's winner shoots fireworks on the light for a while
       perk: { kind: 'fireworks' },
       winners: best(m.players, score),
+      scores: scored,
       lines: [...m.players]
         .sort((a, b) => score(b.id) - score(a.id))
         .map((p) => ({ id: p.id, label: `${score(p.id)} pts`, detail: detail(scores.get(p.id)!) })),

@@ -95,6 +95,7 @@ export default defineModule<CanvasSettings>({
       }
       if (!changes.length) return { painted: 0 };
       ctx.economy.charge(guest, 'canvas.pixel', changes.length, `Painted ${changes.length} pixels`);
+      ctx.session.count(guest, 'pixels', changes.length);
       for (const [x, y, c] of changes) {
         pixels[y * width + x] = c;
         queue(x, y, c);

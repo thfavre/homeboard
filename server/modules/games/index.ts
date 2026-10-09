@@ -95,6 +95,16 @@ interface Match {
 
 const player = (g: Guest): GamePlayer => ({ id: g.id, name: g.name, color: g.color });
 
+/** Where a Rhythm Rain score goes: one board per song, difficulty and number of colors */
+const songBoard = (song: string, chart: string, colors: number) => `rhythm:${song}:${chart}:${colors}`;
+
+/** What the games share with other modules */
+export interface GamesApi {
+  busy(guestId: string): boolean;
+  /** The song of a Rhythm Rain board (see songBoard), null when it is not one of the host's songs any more */
+  songBoard(board: string): { title: string; artist: string; cover?: string; chart: string; colors: number } | null;
+}
+
 /**
  * Mini games on the TV: 1 vs 1 duels where both put money in the pot, or room games
  * that anyone can join. Each game lives in its own file and plugs in through engine.ts.
@@ -455,6 +465,16 @@ export default defineModule<GamesSettings>({
         for (const p of m.players) payouts[p.id] += m.stake;
       }
 
+      // For the TV leaderboards: games played and won, and the best score on each song
+      const board = m.game === 'rhythm' && m.options.song ? songBoard(m.options.song, m.options.chart ?? 'Normal', m.options.colors ?? 3) : null;
+      for (const p of m.players) {
+        const guest = ctx.session.guests.get(p.id);
+        if (!guest) continue;
+        ctx.session.count(guest, 'games');
+        if (outcome.winners.includes(p.id) && m.players.length > 1) ctx.session.count(guest, 'wins');
+        if (board && outcome.scores?.[p.id] !== undefined) ctx.session.best(guest, board, outcome.scores[p.id]);
+      }
+
       for (const [id, amount] of Object.entries(payouts)) {
         const guest = ctx.session.guests.get(id);
         if (!guest || amount <= 0) continue;
@@ -783,10 +803,16 @@ export default defineModule<GamesSettings>({
 
     // ------------------------------------------------------------ state
 
-    /** For other modules: is this guest playing, or in a challenge? (no pop-ups then) */
-    ctx.provide('games', {
+    /** For other modules: is this guest playing, or in a challenge? (no pop-ups then). And the song leaderboards. */
+    ctx.provide<GamesApi>('games', {
       busy: (guestId: string) =>
         !!match?.players.some((p) => p.id === guestId) || [...invites.values()].some((i) => i.from.id === guestId || i.to.id === guestId),
+      songBoard: (board) => {
+        const [, key, chart, colors] = board.split(':');
+        const info = songs.get(key)?.info;
+        if (!info?.title) return null;
+        return { title: info.title, artist: info.artist ?? '', cover: info.cover, chart: rhythmDifficulty(chart).name, colors: Number(colors) || 1 };
+      },
     });
 
     ctx.state((role): GamesState => {
