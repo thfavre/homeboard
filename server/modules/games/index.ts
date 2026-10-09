@@ -803,6 +803,16 @@ export default defineModule<GamesSettings>({
 
     // Pirate Race sounds: a MyInstants sound in place of a built-in one, kept for every later party
     const pirateDir = ctx.mediaDir('pirates');
+    /** A sound file uploaded from the host's computer is deleted once it is replaced (MyInstants files stay, as a cache) */
+    const dropUpload = (kind: PirateSoundId) => {
+      const file = ctx.settings.get().pirateSounds[kind]?.file;
+      if (!file?.startsWith('sound-')) return;
+      try {
+        unlinkSync(join(pirateDir, file));
+      } catch {
+        // already gone
+      }
+    };
     ctx.onAdmin('setPirateSound', async (args) => {
       const kind = String(args?.kind ?? '') as PirateSoundId;
       if (!PIRATE_SOUNDS.some((x) => x.id === kind)) throw new HbError('Unknown sound');
@@ -814,9 +824,37 @@ export default defineModule<GamesSettings>({
         const file = await downloadMp3(mp3, pirateDir);
         sounds[kind] = { file, url: ctx.mediaUrl(`pirates/${encodeURIComponent(file)}`), title: String(args?.title ?? mp3).slice(0, 60) };
       }
+      dropUpload(kind);
       ctx.settings.update({ pirateSounds: sounds });
       ctx.publish();
       return sounds[kind] ?? null;
+    });
+    /** A sound from the host's computer instead of a built-in one (the browser checked it can be played) */
+    const SOUND_EXTS = ['mp3', 'ogg', 'oga', 'opus', 'wav', 'flac', 'm4a', 'aac', 'webm'];
+    ctx.http.post('/pirateSound', express.raw({ type: () => true, limit: '10mb' }), (req, res) => {
+      if (!ctx.isAdminRequest(req)) {
+        res.status(403).json({ error: 'Host only' });
+        return;
+      }
+      const kind = String(req.query.kind ?? '') as PirateSoundId;
+      const name = String(req.query.name ?? '');
+      const ext = name.split('.').pop()?.toLowerCase() ?? '';
+      if (!PIRATE_SOUNDS.some((x) => x.id === kind)) {
+        res.status(400).json({ error: 'Unknown sound' });
+        return;
+      }
+      if (!SOUND_EXTS.includes(ext) || !Buffer.isBuffer(req.body) || !req.body.length) {
+        res.status(400).json({ error: 'Send an audio file (MP3, OGG, WAV, FLAC, M4A...)' });
+        return;
+      }
+      dropUpload(kind);
+      const file = `sound-${kind}-${uid(6)}.${ext}`;
+      writeFileSync(join(pirateDir, file), req.body);
+      const title = name.replace(/.[^.]+$/, '').slice(0, 60) || 'My sound';
+      const pick = { file, url: ctx.mediaUrl(`pirates/${file}`), title };
+      ctx.settings.update({ pirateSounds: { ...ctx.settings.get().pirateSounds, [kind]: pick } });
+      ctx.publish();
+      res.json(pick);
     });
     /** Let the TV play one of the race sounds, to try it */
     ctx.onAdmin('testPirateSound', (args) => {

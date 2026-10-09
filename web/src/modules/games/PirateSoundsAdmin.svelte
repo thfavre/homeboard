@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { LoaderCircle, Play, RotateCcw, Search, Tv, X } from '@lucide/svelte';
+  import { LoaderCircle, Play, RotateCcw, Search, Tv, Upload, X } from '@lucide/svelte';
   import { PIRATE_SOUNDS, type PirateSoundId, type PirateSoundPick } from '$shared/games.ts';
   import type { MiPage, MiSound } from '$shared/soundboard.ts';
-  import { attempt, rpc } from '$lib/client.svelte.ts';
+  import { attempt, rpc, upload } from '$lib/client.svelte.ts';
   import { pirateSound } from './ui/pirateSound.ts';
 
   /**
-   * The Pirate Race sounds: each one is built in (made on the fly), or a MyInstants sound picked here,
-   * downloaded once and kept for later parties. Try them here or on the TV.
+   * The Pirate Race sounds: each one is built in (made on the fly), a MyInstants sound picked here
+   * (downloaded once and kept for later parties), or a file from this computer. Try them here or on the TV.
    */
   let { picks }: { picks: Partial<Record<PirateSoundId, PirateSoundPick>> } = $props();
 
@@ -41,6 +41,7 @@
       return;
     }
     open = kind;
+    fileError = '';
     query = PIRATE_SOUNDS.find((x) => x.id === kind)!.search;
     items = [];
     void load(query);
@@ -66,6 +67,31 @@
     if (x) open = null;
   }
 
+  // A file from this computer: checked here first (the browser must be able to play it), then uploaded
+  let input: HTMLInputElement | undefined = $state();
+  let fileError = $state('');
+  async function useFile(kind: PirateSoundId, file: File) {
+    fileError = '';
+    saving = 'file';
+    try {
+      const ac = new AudioContext();
+      try {
+        await ac.decodeAudioData(await file.arrayBuffer());
+      } catch {
+        throw new Error('This file cannot be played');
+      } finally {
+        void ac.close();
+      }
+      await upload('games', 'pirateSound', file, { kind, name: file.name });
+      open = null;
+    } catch (err) {
+      fileError = err instanceof Error && err.message ? err.message : 'Upload failed';
+    } finally {
+      saving = '';
+      if (input) input.value = '';
+    }
+  }
+
   $effect(() => () => audio?.pause());
 </script>
 
@@ -87,6 +113,11 @@
       </div>
       {#if open === k.id}
         <div class="search">
+          <input bind:this={input} type="file" accept="audio/*,.flac,.opus" hidden onchange={(e) => e.currentTarget.files?.[0] && useFile(k.id, e.currentTarget.files[0])} />
+          <button class="btn small" disabled={!!saving} onclick={() => input?.click()}>
+            {#if saving === 'file'}<LoaderCircle size={15} class="spin" /> Uploading...{:else}<Upload size={15} /> Upload a file from this computer{/if}
+          </button>
+          {#if fileError}<p class="error small">{fileError}</p>{/if}
           <label class="box">
             <Search size={15} />
             <input bind:value={query} oninput={onInput} placeholder="Search MyInstants" />
@@ -101,7 +132,7 @@
                 <button class="btn small primary" disabled={!!saving} onclick={() => use(k.id, x)}>{saving === x.id ? '...' : 'Use'}</button>
               </div>
             {:else}
-              {#if !loading}<p class="faint small">No sound found.</p>{/if}
+              {#if !loading && !error}<p class="faint small">No sound found.</p>{/if}
             {/each}
           </div>
         </div>
@@ -139,6 +170,7 @@
   }
   .search {
     display: grid;
+    justify-items: stretch;
     gap: 0.5rem;
     padding: 0 0.6rem 0.6rem;
   }
