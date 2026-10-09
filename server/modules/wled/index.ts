@@ -184,12 +184,17 @@ export default defineModule<WledSettings>({
       if (added.length || effects.some((e, i) => e !== s.effects[i]) || ids.some((id) => !s.knownEffects.includes(id))) {
         ctx.settings.update({ effects: [...effects, ...added], knownEffects: ids });
       }
-      // New default scenes go first
+      // New default scenes go where they are in the defaults: after the default before them still in the list
       const knownScenes = new Set(s.knownScenes.length ? s.knownScenes : LEGACY_WLED_SCENES);
-      const newScenes = DEFAULT_WLED_SCENES.filter((e) => !knownScenes.has(e.id) && !s.scenes.some((x) => x.id === e.id));
+      const scenes = [...s.scenes];
+      DEFAULT_WLED_SCENES.forEach((e, i) => {
+        if (knownScenes.has(e.id) || scenes.some((x) => x.id === e.id)) return;
+        const before = DEFAULT_WLED_SCENES.slice(0, i).map((p) => scenes.findIndex((x) => x.id === p.id));
+        scenes.splice(Math.max(-1, ...before) + 1, 0, e);
+      });
       const sceneIds = DEFAULT_WLED_SCENES.map((e) => e.id);
-      if (newScenes.length || sceneIds.some((id) => !s.knownScenes.includes(id))) {
-        ctx.settings.update({ scenes: [...newScenes, ...s.scenes], knownScenes: sceneIds });
+      if (scenes.length !== s.scenes.length || sceneIds.some((id) => !s.knownScenes.includes(id))) {
+        ctx.settings.update({ scenes, knownScenes: sceneIds });
       }
     }
 
