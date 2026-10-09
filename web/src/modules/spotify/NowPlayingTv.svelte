@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { fade } from 'svelte/transition';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import type { SpotifyState } from '$shared/spotify.ts';
   import { hb, showNames } from '$lib/client.svelte.ts';
   import { clock } from '$lib/time.ts';
@@ -10,25 +11,39 @@
   const now = $derived(mod?.now ?? null);
   const tick = ticker();
   const pos = $derived(now ? progressOf(now, tick.now) : 0);
+  const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ms = (d: number) => (reduced ? 0 : d);
 </script>
 
 {#if mod?.connected}
   <div class="card np">
     {#if now}
-      {#key now.uri}
-        <div class="art" in:fade={{ duration: 500 }}>
-          {#if now.image}<img class="blur" src={now.image} alt="" />{/if}
-          <Cover src={now.image} size="7.5rem" radius="0.9rem" />
-        </div>
-      {/key}
+      <!-- The old cover and title stay under the new ones while they fade out -->
+      <div class="art">
+        {#key now.uri}
+          <div class="layer" in:scale={{ start: 0.9, opacity: 0, duration: ms(550), easing: cubicOut }} out:fade={{ duration: ms(450) }}>
+            {#if now.image}<img class="blur" src={now.image} alt="" />{/if}
+            <Cover src={now.image} size="7.5rem" radius="0.9rem" />
+          </div>
+        {/key}
+      </div>
       <div class="info">
         <span class="eyebrow">{now.isPlaying ? 'Now playing' : 'Paused'}</span>
-        <p class="title">{now.title}</p>
-        <p class="artist truncate">{now.artists}</p>
-        {#if now.requestedBy && showNames('songNames')}
-          <span class="by" style:--c={now.requestedBy.color}>Requested by {now.requestedBy.name}</span>
-        {/if}
-        <div class="bar"><span style:width="{(pos / Math.max(1, now.durationMs)) * 100}%"></span></div>
+        <div class="song">
+          {#key now.uri}
+            <div class="layer" in:fly={{ y: 10, duration: ms(450), delay: ms(120), easing: cubicOut }} out:fade={{ duration: ms(200) }}>
+              <p class="title">{now.title}</p>
+              <p class="artist truncate">{now.artists}</p>
+              {#if now.requestedBy && showNames('songNames')}
+                <span class="by" style:--c={now.requestedBy.color}>Requested by {now.requestedBy.name}</span>
+              {/if}
+            </div>
+          {/key}
+        </div>
+        <!-- A new bar for each song, so it starts empty instead of sliding back -->
+        {#key now.uri}
+          <div class="bar"><span style:width="{(pos / Math.max(1, now.durationMs)) * 100}%"></span></div>
+        {/key}
         <div class="times mono"><span>{clock(pos)}</span><span>{clock(now.durationMs)}</span></div>
       </div>
     {:else}
@@ -50,9 +65,25 @@
     padding: 1.1rem;
     overflow: hidden;
   }
-  .art {
+  .art,
+  .song {
     position: relative;
+    display: grid;
+  }
+  .art {
     flex: none;
+  }
+  .song {
+    min-width: 0;
+  }
+  /* Both songs share one cell while they change */
+  .layer {
+    grid-area: 1 / 1;
+    position: relative;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
   }
   .blur {
     position: absolute;
