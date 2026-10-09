@@ -36,7 +36,7 @@
 
   const s = $derived(gamesState());
   /** Rhythm Rain on one of the host's songs (its own price) */
-  let music = $state(false);
+  let music = $state(true);
   let songPick = $state('');
   const songs = $derived((s?.rhythmSongs ?? []).filter((x) => x.status === 'ready'));
   const has = (x: RhythmSongInfo, d: RhythmDifficulty) => !!x.charts?.some((c) => c.id === d);
@@ -115,6 +115,11 @@
   async function send() {
     if (!picked) return;
     error = '';
+    // Music on but no song in this difficulty: say so rather than playing without music
+    if (picked.id === 'rhythm' && music && songs.length && !song) {
+      error = `No song has a ${level.name} chart: pick another difficulty or No music`;
+      return;
+    }
     if (isSolo) {
       busy = true;
       const ok = await attempt(() => rpc('games', 'solo', { game: picked!.id, colors, chart, ...(withMusic ? { song: song!.key } : {}) }));
@@ -246,16 +251,18 @@
         <div class="field">
           <span class="label">Sound</span>
           <div class="sound">
-            <button class="choice" class:active={!music} onclick={() => (music = false)}>
-              <VolumeX size={20} />
-              <span class="what"><strong>No music</strong><span class="faint small">Just the beat of the lights</span></span>
-              {#if economy}<Money amount={price(isSolo ? 'games.solo' : 'games.duel')} free />{/if}
-            </button>
-            <button class="choice" class:active={music} onclick={() => (music = true)}>
-              <Music size={20} />
-              <span class="what"><strong>With music</strong><span class="faint small truncate">{songs.length === 1 ? `${songs[0].artist ? `${songs[0].artist} - ` : ''}${songs[0].title}` : `${songs.length} songs to pick from`}</span></span>
-              {#if economy}<Money amount={price('games.rhythmMusic')} free />{/if}
-            </button>
+            <div class="pair">
+              <button class="choice" class:active={music} onclick={() => (music = true)}>
+                <span class="top"><Music size={18} /><strong>With music</strong></span>
+                <span class="faint small truncate">{songs.length === 1 ? songs[0].title : `${songs.length} songs`}</span>
+                {#if economy}<Money amount={price('games.rhythmMusic')} free />{/if}
+              </button>
+              <button class="choice" class:active={!music} onclick={() => (music = false)}>
+                <span class="top"><VolumeX size={18} /><strong>No music</strong></span>
+                <span class="faint small truncate">Just the lights</span>
+                {#if economy}<Money amount={price(isSolo ? 'games.solo' : 'games.duel')} free />{/if}
+              </button>
+            </div>
             {#if music}
               <div class="songs">
                 {#each fits as x (x.key)}
@@ -498,16 +505,30 @@
     display: grid;
     gap: 0.5rem;
   }
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
   .choice {
-    display: flex;
-    align-items: center;
-    gap: 0.8rem;
+    min-width: 0;
+    display: grid;
+    justify-items: start;
+    gap: 0.2rem;
     padding: 0.7rem 0.9rem;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-strong);
     background: var(--surface-2);
     color: var(--text-dim);
     text-align: left;
+  }
+  .choice .top {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .choice > .truncate {
+    max-width: 100%;
   }
   .choice.active {
     border-color: var(--accent);
@@ -654,11 +675,6 @@
     border-color: var(--accent);
     color: var(--text);
     background: color-mix(in srgb, var(--accent) 12%, transparent);
-  }
-  .choice .what {
-    flex: 1;
-    min-width: 0;
-    display: grid;
   }
   .keys {
     display: flex;
