@@ -286,7 +286,10 @@ export default defineModule<WledSettings>({
         if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
         const seg = targets(d, saved.get(d.id)!.before).map((s, j) => {
           const l = lookAt(effect, k + j);
-          return { id: s.id, on: true, fx: l.fx, pal: l.pal, sx: l.sx, ix: l.ix, ...(l.colors.length ? { col: l.colors.map(hexToRgb) } : {}) };
+          // Colors the look leaves out are black, not what the light had (its own background would show through);
+          // with none at all, the first one stays the light's (an empty slot leaves it as it is)
+          const col = [0, 1, 2].map((i) => (l.colors[i] ? hexToRgb(l.colors[i]) : i === 0 && !l.colors.length ? [] : [0, 0, 0]));
+          return { id: s.id, on: true, fx: l.fx, pal: l.pal, sx: l.sx, ix: l.ix, col };
         });
         // v: WLED answers with its new state
         saved.sent(d.id, await wled(d.host, '/json/state', { on: true, transition, ...(bri > 0 ? { bri } : {}), seg, v: true }));
