@@ -81,6 +81,18 @@ export class PixelBoard {
     this.schedule();
   }
 
+  /** Whether something is painted outside a w x h canvas centered on this one (what a resize would cut off) */
+  paintedOutside(w: number, h: number): boolean {
+    const dx = Math.floor((this.width - w) / 2);
+    const dy = Math.floor((this.height - h) / 2);
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        if (this.pixels[y * this.width + x] && (x < dx || y < dy || x >= dx + w || y >= dy + h)) return true;
+      }
+    }
+    return false;
+  }
+
   destroy(): void {
     this.off();
     cancelAnimationFrame(this.frame);

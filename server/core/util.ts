@@ -12,6 +12,9 @@ export class HbError extends Error {
   }
 }
 
+/** Exit code asking server/run.ts (bun run party) to build and start the server again */
+export const RESTART_CODE = 75;
+
 export const uid = (bytes = 12) => randomBytes(bytes).toString('base64url');
 
 export const sessionCode = () => String(randomInt(0, 10000)).padStart(4, '0');

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
+  import { Lightbulb, RotateCw, X } from '@lucide/svelte';
   import { hb, rpc } from '$lib/client.svelte.ts';
   import { applyTheme } from '../themes/index.ts';
   import { activeModules, moduleById } from '../modules/index.ts';
@@ -7,8 +8,11 @@
 
   $effect(() => applyTheme(hb.core?.theme));
 
-  // A hidden shortcut: the name tapped 5 times within 5 s restarts every light; a short note says how it went
+  // A hidden menu: the name tapped 5 times within 5 s opens it; it closes itself after 10 s untouched.
+  // A short note next to the name says how an action went
   let taps: number[] = [];
+  let menu = $state(false);
+  let menuTimer: ReturnType<typeof setTimeout> | undefined;
   let note = $state<{ text: string; error: boolean } | null>(null);
   let noteTimer: ReturnType<typeof setTimeout> | undefined;
   function say(text: string, error = false) {
@@ -16,11 +20,24 @@
     note = { text, error };
     noteTimer = setTimeout(() => (note = null), 5000);
   }
-  async function tapBrand() {
+  function keepMenu() {
+    clearTimeout(menuTimer);
+    menuTimer = setTimeout(() => (menu = false), 10_000);
+  }
+  function closeMenu() {
+    clearTimeout(menuTimer);
+    menu = false;
+  }
+  function tapBrand() {
     const now = Date.now();
     taps = [...taps.filter((t) => now - t < 5000), now];
     if (taps.length < 5) return;
     taps = [];
+    menu = true;
+    keepMenu();
+  }
+  async function restartLights() {
+    closeMenu();
     try {
       const r = await rpc<{ rebooted: number; failed: string[] }>('wled', 'reboot');
       say(r.failed.length ? `${r.failed.join(', ')} did not answer` : `Restarting ${r.rebooted} lights`, r.failed.length > 0);
@@ -28,6 +45,16 @@
       say((err as Error).message, true);
     }
   }
+  async function restartApp() {
+    closeMenu();
+    try {
+      await rpc('core', 'restart');
+      say('Restarting Homeboard');
+    } catch (err) {
+      say((err as Error).message, true);
+    }
+  }
+  $effect(() => () => clearTimeout(menuTimer));
   $effect(() => () => clearTimeout(noteTimer));
 
   const widgets = (slot: TvSlot): TvWidget[] =>
@@ -65,7 +92,16 @@
 {:else}
   <div class="tv">
     <header>
-      <button type="button" class="brand" onclick={tapBrand}>{hb.core.appName}</button>
+      <div class="brand-wrap">
+        <button type="button" class="brand" onclick={tapBrand}>{hb.core.appName}</button>
+        {#if menu}
+          <div class="menu card" role="menu" tabindex="-1" onpointerdown={keepMenu} transition:fade={{ duration: 150 }}>
+            <button type="button" class="btn small" onclick={restartLights}><Lightbulb size={16} /> Restart all lights</button>
+            <button type="button" class="btn small" onclick={restartApp}><RotateCw size={16} /> Restart Homeboard</button>
+            <button type="button" class="close" aria-label="Close" onclick={closeMenu}><X size={16} /></button>
+          </div>
+        {/if}
+      </div>
       {#if note}<span class="pill" class:danger={note.error} class:success={!note.error} transition:fade={{ duration: 200 }}>{note.text}</span>{/if}
       <span class="spacer"></span>
       {#if !hb.connected}<span class="pill danger">Reconnecting</span>{/if}
@@ -157,6 +193,37 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+  .brand-wrap {
+    position: relative;
+  }
+  /* Right of the name, above everything else */
+  .menu {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 0.8rem);
+    transform: translateY(-50%);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.4rem 0.4rem 0.5rem;
+    white-space: nowrap;
+  }
+  .close {
+    display: grid;
+    place-items: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-faint);
+  }
+  .close:hover {
+    color: var(--text);
+    background: var(--surface-2);
   }
   .time {
     font-size: 1.35rem;

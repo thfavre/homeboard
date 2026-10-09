@@ -23,6 +23,8 @@
   onDestroy(() => board.destroy());
 
   async function clear() {
+    // Nothing painted: nothing to lose
+    if (!board.pixels.some((c) => c > 0)) return attempt(() => rpc('canvas', 'clear'), 'Canvas cleared');
     if (await ask({ title: 'Erase the whole canvas?', message: 'Everything guests painted is lost.', confirm: 'Erase', danger: true }))
       attempt(() => rpc('canvas', 'clear'), 'Canvas cleared');
   }
@@ -30,10 +32,10 @@
   async function resize(e: Event & { currentTarget: HTMLSelectElement }) {
     const select = e.currentTarget;
     const [width, height] = select.value.split('x').map(Number);
-    // Growing adds space around the drawing; shrinking cuts its border off
-    const shrinks = !!mod && (width < mod.width || height < mod.height);
+    // Growing adds space around the drawing; shrinking cuts its border off, so ask only if something is painted there
+    await board.sync(mod?.version ?? -1);
     if (
-      !shrinks ||
+      !board.paintedOutside(width, height) ||
       (await ask({
         title: 'Make the canvas smaller?',
         message: 'The drawing stays centered, but everything painted near the border is erased.',

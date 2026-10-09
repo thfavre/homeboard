@@ -439,6 +439,14 @@ export default defineModule({
       updateCore(patch);
     });
 
+    /** The hidden menu on the TV (its name tapped 5 times): stop and start the whole project again */
+    ctx.onTv('restart', () => {
+      if (!process.env.HB_SUPERVISED) throw new HbError('Only works when started with "bun run party"');
+      // Answer first, then go down
+      setTimeout(() => hub.bus.emit('restart'), 300);
+      return { ok: true };
+    });
+
     ctx.onAdmin('setFeature', (args) => hub.setEnabled(String(args.id), !!args.enabled));
 
     ctx.onAdmin('setPrice', (args) => {

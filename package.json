@@ -7,7 +7,7 @@
     "build": "vite build",
     "start": "tsx server/index.ts",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "party": "vite build && tsx server/index.ts --kiosk"
+    "party": "tsx server/run.ts --kiosk"
   },
   "keywords": [],
   "author": "",

@@ -1,6 +1,6 @@
 import { Hub } from './core/hub.ts';
 import { openTvKiosk } from './core/kiosk.ts';
-import { log } from './core/util.ts';
+import { RESTART_CODE, log } from './core/util.ts';
 import { modules } from './modules/index.ts';
 
 const PORT = Number(process.env.PORT ?? 4300);
@@ -24,12 +24,14 @@ if (process.argv.includes('--kiosk')) {
 }
 
 let stopping = false;
-const shutdown = async () => {
+const shutdown = async (code = 0) => {
   if (stopping) return;
   stopping = true;
-  log.info('hub', 'Shutting down...');
+  log.info('hub', code === RESTART_CODE ? 'Restarting...' : 'Shutting down...');
   await hub.stop();
-  process.exit(0);
+  process.exit(code);
 };
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => shutdown());
+process.on('SIGTERM', () => shutdown());
+// The hidden menu on the TV: server/run.ts builds and starts everything again
+hub.bus.on('restart', () => shutdown(RESTART_CODE));
