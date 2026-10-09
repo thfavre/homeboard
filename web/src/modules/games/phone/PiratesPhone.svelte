@@ -107,14 +107,8 @@
     grid-template-rows: auto 1fr auto;
     gap: 1rem;
     min-height: 100%;
-    padding: 1rem 1rem 1.6rem;
-    border-radius: var(--radius);
-    background:
-      radial-gradient(ellipse 90% 55% at 50% 100%, color-mix(in srgb, var(--team) 40%, transparent), transparent 75%),
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='90'%3E%3Cg fill='none' stroke='white' stroke-opacity='0.08' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M10 20 q8 -6 16 0 t16 0'/%3E%3Cpath d='M70 60 q8 -6 16 0 t16 0'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 120px 90px,
-      linear-gradient(180deg, #0d3a66, #071d36);
-    color: #fff;
-    overflow: hidden;
+    padding: 0.5rem 0 1.6rem;
+    color: var(--text);
     touch-action: manipulation;
     user-select: none;
     -webkit-user-select: none;
@@ -135,7 +129,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    color: rgb(255 255 255 / 0.7);
+    color: var(--text-dim);
     font-size: 0.95rem;
   }
   .big {

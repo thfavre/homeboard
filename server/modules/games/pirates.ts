@@ -110,6 +110,8 @@ export const pirateRace: GameFactory = (m) => {
   const dealt = m.options.crews;
   const ids = m.players.map((p) => p.id);
   const deal = dealt && sameCrews(dealt, ids) ? dealt : dealPirateCrews(ids);
+  // The phones read the crews from the match (and color the screen with the ship)
+  m.options.crews = deal;
   const crews: Crew[] = deal.map((d) => ({
     ship: d.ship,
     members: [...d.members],

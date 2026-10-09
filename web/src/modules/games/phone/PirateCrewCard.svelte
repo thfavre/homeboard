@@ -33,7 +33,8 @@
     padding: 0.9rem;
     border-radius: var(--radius);
     border: 2px solid var(--team);
-    background: linear-gradient(135deg, color-mix(in srgb, var(--team) 28%, #0b1b2e), #0b1b2e 75%);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--team) 30%, rgb(0 0 0 / 0.3)), rgb(0 0 0 / 0.3) 80%);
+    backdrop-filter: blur(6px);
     box-shadow: 0 0 2.5rem -0.8rem var(--team);
     color: #fff;
   }

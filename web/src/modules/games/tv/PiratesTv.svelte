@@ -12,7 +12,7 @@
    * their small ships row along a route to the treasure island on the right, the oars moving on the beat.
    * A ship surges after each stroke of its crew (its wake grows with its speed), its route behind it fills
    * with its color, a synchronized stroke sends out a golden ring, a stroke off the beat a splash, and
-   * a boosted ship burns with a halo. No text on the sea: everything is shown on the ships. Art: Kenney's Pirate Pack (CC0) in web/public/pirates.
+   * a boosted ship has the wind behind it. No text on the sea: everything is shown on the ships. Art: Kenney's Pirate Pack (CC0) in web/public/pirates.
    */
   let { m }: { m: MatchState } = $props();
   const v = $derived(m.view as PirateView | null);
@@ -241,7 +241,6 @@
         {@const boosted = c.boosted}
         {@const at = along(i, shown[c.ship] ?? c.progress)}
         <div class="boat" style:left="{at.x}px" style:top="{at.y}px" style:rotate="{at.deg - 90}deg" style:--team={ship.hex}>
-          {#if boosted}<span class="aura" transition:fade></span>{/if}
           <PirateShip ship={c.ship} color={ship.hex} phase={rowing(c)} power={c.stroke.power} messy={!!c.stroke.seq && !c.stroke.synced} {boosted} speed={speed[c.ship] ?? 0} />
         </div>
         <div class="over" style:left="{at.x}px" style:top="{at.y}px" style:--team={ship.hex}>
@@ -700,29 +699,6 @@
     to {
       transform: scale(1.25) rotate(25deg);
       opacity: 0;
-    }
-  }
-  /* A boost: the ship burns in a halo of its color */
-  .aura {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    z-index: -1;
-    width: calc(var(--len) * 1.5);
-    aspect-ratio: 1;
-    translate: -50% -50%;
-    border-radius: 50%;
-    background: radial-gradient(closest-side, #fff8 0%, color-mix(in srgb, var(--team) 80%, #ffb347) 40%, transparent 100%);
-    animation: aura 0.35s ease-in-out infinite alternate;
-  }
-  @keyframes aura {
-    from {
-      transform: scale(0.9);
-      opacity: 0.75;
-    }
-    to {
-      transform: scale(1.12);
-      opacity: 1;
     }
   }
   .place {

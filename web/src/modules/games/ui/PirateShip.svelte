@@ -56,6 +56,15 @@
     const a = (o.angle * Math.PI) / 180;
     return { x: (side < 0 ? 12 : 54) + side * Math.cos(a) * (OAR - 3), y: o.y + Math.sin(a) * (OAR - 3) };
   };
+  /** The wind lines of a boost: across the stern, each with its own sway and start */
+  const GUSTS = [
+    { x: -4, c: 4, d: 0.3 },
+    { x: 12, c: -5, d: 0 },
+    { x: 27, c: 5, d: 0.42 },
+    { x: 41, c: -5, d: 0.15 },
+    { x: 55, c: 5, d: 0.55 },
+    { x: 70, c: -4, d: 0.24 },
+  ];
   const wake = $derived(Math.min(1, Math.max(0, speed)) * (boosted ? 1.4 : 1));
 </script>
 
@@ -97,6 +106,14 @@
     {/each}
   </svg>
 
+  {#if boosted}
+    <!-- A boost: gusts of wind blowing from behind, into the sails -->
+    <svg class="wind" viewBox="0 0 66 113" aria-hidden="true">
+      {#each GUSTS as g, i (i)}
+        <path d="M{g.x} 0 q{g.c} -14 0 -28 q{-g.c} -14 0 -28 q{g.c} -12 0 -24" style:animation-delay="{g.d}s" />
+      {/each}
+    </svg>
+  {/if}
   <img class="hull" src="/pirates/ship-{sprite}.png" alt="" draggable="false" />
   {#if dyed}<span class="dye"></span>{/if}
 </div>
@@ -163,8 +180,38 @@
     filter: drop-shadow(0 3px 2px rgb(0 0 0 / 0.35));
     user-select: none;
   }
-  .boosted .hull {
-    filter: drop-shadow(0 0 6px var(--team)) drop-shadow(0 0 2px #fff);
+  .wind {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+  }
+  .wind path {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 3.4;
+    stroke-linecap: round;
+    stroke-dasharray: 40 100;
+    opacity: 0;
+    filter: drop-shadow(0 0 2px rgb(255 255 255 / 0.8));
+    animation: gust 0.7s linear infinite;
+  }
+  @keyframes gust {
+    0% {
+      transform: translateY(-60px);
+      stroke-dashoffset: 40;
+      opacity: 0;
+    }
+    25% {
+      opacity: 0.95;
+    }
+    100% {
+      transform: translateY(30px);
+      stroke-dashoffset: -40;
+      opacity: 0;
+    }
   }
   /* The plain sail, dyed in the ship's color (its place in the sprite: 0,24 66x47) */
   .dye {
