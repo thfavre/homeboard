@@ -14,8 +14,9 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] playing gifs
 - [ ] spin the wheel
 - [ ] Sync Selfie: Take a selfie on the same signal as everyone else, then see the mosaic of all the faces on the TV.
-- [ ] Custom stickers
+- [ ] Custom stickers (like the same as the one on that the user creted for whatsapp, or he can create one from a photo, or from a drawing)
 - [ ] Add something that cost a lot, like 1000, and advertise it as a big thing, but it will just like stop the lights, and do a fart sound, or something like that. (like a joke for the rich people)
+- [ ] ! Make the leaderboard more divers. Like sometimes it changes to the leaderboardt of the most pixels draw in the canas, or more stickers sent, most games done,... (with a smooth transtition, and not just a hard change) (and also when a song has been played on guitar hero by more than 5 players (in 1vs1 save both player score of course), allow it to show on the leaderboard with the score (show the cover and song name))
 
 -- games ---
 - [x] 1vs1 someone on the TV (like a game show (and put some coins?))
@@ -32,14 +33,28 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] Beat Maker: Compose a rhythm on a grid without hearing a single sound, then let the room vote when it plays on the TV.
 - [ ] Horse Race: Bet on a horse and watch the race unfold on the TV, hoping yours crosses the line first.
 
+- [ ] on the a selecatble Wled device  Tir à la corde, spammer(possible de le faire en 1vs1, 2vs2,.. ou même nombre impair)
+- [ ] on the a selecatble Wled deviceZone cible : un point lumineux monte et descend, et il faut presser pile quand il traverse la zone verte. La zone rétrécit et la vitesse augmente à chaque réussite.
+- [x] on the a selecatble Wled device (with direction) Pluie rythmique : des lumières montent depuis le bas, et il faut presser quand elles touchent le haut, comme Guitar Hero. Le haut-parleur joue un son à chaque note réussie.
+- [x] make the Led guitar hero playable in solo, gusest should be able to preview 5s of the song, make the WLED effect a bit nicer? Also it should pause the spotify music when the game is played, and resume it after the game is finished. Only play the sound of the button on the TV speaker when he plays solo with music, otherwise only do the effect on the player phone (so at 2 player with or without music it should only play the sound on the guest deivce that is playing, to his own action). Also make sure the games in sync music / led effect.
+
+
 # Bugs / improvements
-- [ ] The TV page sometimes cahnge the layout and the right part become too big (for ex when I add a lot of music to the queue...) ![alt text](image.png) (delete the image once it is fixed)
-- [ ] pixelcanvas: should be able to use gesture to navigate the canvas, not just drag the finger to draw. (like pinch to zoom, two fingers to move)
-- [ ] When a user adds a song but spotify is not played anywhere, he sees a +10 on his money and the error. (He gets -10 for putting a song and instend of +10 for the error). Make sure this bug doesnt also appens somewhere else.
-- [ ] Let the admin choose the delay for the passive earning.
+- [x] The TV page sometimes cahnge the layout and the right part become too big (for ex when I add a lot of music to the queue...)
+- [ ] pixelcanvas: should be able to use gesture to navigate the canvas, not just drag the finger to draw. (like pinch to zoom, two fingers to move), and imrpove the UI, Like the bottom part should never move, even when moving, and better way to display all those colors. And when I paint a few pixels, it show price 0, write the correct prize reduction on the phone guest
+- [x] When a user adds a song but spotify is not played anywhere, he sees a +10 on his money and the error. (He gets -10 for putting a song and instend of +10 for the error). Make sure this bug doesnt also appens somewhere else.
+- [x] Let the admin choose the delay for the passive earning.
 - Add more fun emoji for the selfie avatars (like a crown, a hat, a mustache, a monocle, etc.)
-- [ ] add some lights effects (dark, a better fiework that uses the firework effect, some effects that are not just copied on all devices the same)
-- [ ] show a +x to the music queue when there is more than the screen can display in te queue.
+- [ ] add some lights effects (dark, a better fiework that uses the firework effect, some effects that are not just copied on all devices the same). and also some scene that will be stay until a new scene is selected, only chill thigs
+- [x] show a +x to the music queue when there is more than the screen can display in te queue.
+- [ ] buy domain name
+- [ ] redo a more fair economy
+- [x] WLED on ChillGuy should only change the eye segment effect/color
+- [ ] ! for the coin flip, just put the face of the participans so easier to undertand who won. And still ranomly choose who trow the coin. Also I dont think we need the whole screen to do that, like we could do everything on the 2 participant phone, just the trow the coin on the big TV, and show a small animation of the money going to the winner. (so it would be more like a duel, and not a game for the whole room), also make the coin with the head on it look a bit nicer, like 3D, and make the coin flip animation a bit more realistic, like it should be a bit more random, and not just go up and down, but also rotate a bit.
+- [x] change the passive incom, makes that he doesnt need to be always online, if not online, it will increase what he would gain when he comes back online. up to X hours (admin can change it, 1h by deauflt) and user get a nice message when he comes back online, like "you were offline for 2h, you earned +20 coins while you were away"
+- [ ] idea, think if its good, amin desactivable of course: make prices degressives when the feature is not used.. until its 1 or even free
+- improve the game settings admin side
+
 
 ## Quick start
 
