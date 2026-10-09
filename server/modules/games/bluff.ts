@@ -50,7 +50,8 @@ export const bluff: GameFactory = (m) => {
     },
 
     input(id, args) {
-      if (over) throw new HbError('Too late');
+      // Locked once both have chosen, during the short pause before the reveal too
+      if (over || choices.size >= m.players.length) throw new HbError('Too late');
       const choice = args?.choice;
       if (choice !== 'share' && choice !== 'steal') throw new HbError('Share or steal?');
       // Changing your mind is allowed until both have chosen

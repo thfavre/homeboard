@@ -59,6 +59,10 @@ export default defineModule<CanvasSettings>({
     }, ACTIVITY_MS);
 
     const reset = (w: number, h: number) => {
+      // Updates still waiting are for the old canvas: clients reload the snapshot instead
+      if (flushTimer) clearTimeout(flushTimer);
+      flushTimer = null;
+      pending = [];
       width = w;
       height = h;
       pixels = new Uint8Array(w * h);
@@ -85,14 +89,15 @@ export default defineModule<CanvasSettings>({
     ctx.onGuest('paint', (args, guest) => {
       const list = Array.isArray(args.pixels) ? args.pixels : [];
       if (list.length > MAX_PIXELS_PER_CALL) throw new HbError('Too many pixels at once');
-      const changes: [number, number, number][] = [];
+      // One entry per pixel (the last color wins): a pixel sent twice is painted and paid once
+      const wanted = new Map<number, [number, number, number]>();
       for (const p of list) {
         const [x, y, c] = [num(p?.[0], -1), num(p?.[1], -1), num(p?.[2], -1)];
         if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= width || y >= height) continue;
         if (!Number.isInteger(c) || c < 0 || c >= CANVAS_PALETTE.length) continue;
-        if (pixels[y * width + x] === c) continue;
-        changes.push([x, y, c]);
+        wanted.set(y * width + x, [x, y, c]);
       }
+      const changes = [...wanted.entries()].filter(([i, [, , c]]) => pixels[i] !== c).map(([, px]) => px);
       if (!changes.length) return { painted: 0 };
       ctx.economy.charge(guest, 'canvas.pixel', changes.length, `Painted ${changes.length} pixels`);
       ctx.session.count(guest, 'pixels', changes.length);

@@ -19,6 +19,7 @@ import type { Charge } from '../../core/economy.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
+import type { GamesApi } from '../games/index.ts';
 import { HbError, clamp, cleanName, num, uid } from '../../core/util.ts';
 
 interface Question {
@@ -356,10 +357,17 @@ export default defineModule<QuizSettings>({
       ctx.publish();
     };
 
+    /** Coin Flip and Rhythm Rain leave the TV free, but a quiz would cover the throw or play over the music */
+    const checkNoGame = () => {
+      const game = ctx.use<GamesApi>('games')?.playing();
+      if (game) throw new HbError(`${game} is being played, wait for it to end`);
+    };
+
     /** Start a quiz: load the questions, then open the lobby */
     const launch = (src: QuizSource, by: Guest | null, charge: Charge | null) => {
       if (!ctx.enabled()) throw new HbError('The quiz is turned off');
       if (phase !== 'idle') throw new HbError('A quiz is already running');
+      checkNoGame();
       ctx.takeover.start();
       runId = uid(6);
       phase = 'loading';
@@ -567,6 +575,7 @@ export default defineModule<QuizSettings>({
     ctx.onGuest('start', (args, guest) => {
       if (ctx.hub.takeover) throw new HbError('Something else is on the TV right now');
       if (phase !== 'idle') throw new HbError('A quiz is already running');
+      checkNoGame();
       const src = parseSource(args);
       if (src.kind === 'custom' && !library.data.quizzes.some((q) => q.id === src.quizId)) throw new HbError('Pick a quiz');
       const charge = ctx.economy.charge(guest, 'quiz.start', 1, 'Started a quiz');

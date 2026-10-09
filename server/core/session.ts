@@ -51,6 +51,9 @@ const GUEST_COLORS = [
 
 const LEDGER_SIZE = 500;
 const PIN_PATTERN = /^\d{4}$/;
+/** Wrong PINs allowed before a name is locked for a while (a 4-digit PIN is quick to guess otherwise) */
+const PIN_TRIES = 10;
+const PIN_LOCK_MS = 60_000;
 
 function checkPin(pin: string, stored: NonNullable<Guest['pin']>): boolean {
   const [a, b] =
@@ -74,13 +77,15 @@ function freshSession(): SessionData {
  * The current party session: guests, balances and the ledger.
  * Reset by the admin with "New session"; persisted so a server restart keeps it.
  *
- * Events: 'guest-changed' (guest), 'guests-changed' (), 'reset' (),
+ * Events: 'guest-changed' (guest), 'guests-changed' (), 'guest-removed' (guest), 'reset' (),
  * 'guest-online' (guest, awayMs): a guest with no open page opened one
  */
 export class Session extends EventEmitter {
   private file = new JsonFile<SessionData>(join(DATA_DIR, 'session.json'), freshSession());
   guests = new Map<string, Guest>();
   private bootAt = Date.now();
+  /** Wrong PINs by guest id, not persisted */
+  private pinFails = new Map<string, { count: number; until: number }>();
 
   constructor() {
     super();
@@ -99,6 +104,7 @@ export class Session extends EventEmitter {
   reset(): void {
     this.file.data = freshSession();
     this.guests.clear();
+    this.pinFails.clear();
     this.save();
     this.emit('reset');
     this.emit('guests-changed');
@@ -157,7 +163,19 @@ export class Session extends EventEmitter {
   }
 
   private login(guest: Guest, pin: string): Guest {
-    if (!guest.pin || !checkPin(pin, guest.pin)) {
+    const fails = this.pinFails.get(guest.id);
+    if (fails && fails.until > Date.now()) {
+      throw new HbError(`Too many wrong PINs for ${guest.name}. Wait a minute and try again.`);
+    }
+    if (guest.pin && checkPin(pin, guest.pin)) {
+      this.pinFails.delete(guest.id);
+    } else {
+      if (guest.pin) {
+        const count = (fails?.count ?? 0) + 1;
+        // Each lock after the first lasts longer
+        const locks = Math.floor(count / PIN_TRIES);
+        this.pinFails.set(guest.id, { count, until: count % PIN_TRIES === 0 ? Date.now() + PIN_LOCK_MS * locks : 0 });
+      }
       throw new HbError(
         guest.pin
           ? `${guest.name} is already here. If it is you, check your PIN. Otherwise pick another name.`
@@ -170,6 +188,7 @@ export class Session extends EventEmitter {
 
   setPin(guest: Guest, rawPin: unknown): void {
     guest.pin = validPin(rawPin);
+    this.pinFails.delete(guest.id);
     this.changed(guest);
   }
 
@@ -185,7 +204,9 @@ export class Session extends EventEmitter {
 
   remove(guest: Guest): void {
     this.guests.delete(guest.id);
+    this.pinFails.delete(guest.id);
     this.save();
+    this.emit('guest-removed', guest);
     this.emit('guests-changed');
   }
 
@@ -203,10 +224,12 @@ export class Session extends EventEmitter {
   /**
    * Low-level balance change. Use Economy for anything user-facing.
    * countStats false: the balance moves but earned/spent (the leaderboard) do not.
+   * 'refund': money given back, so it was never really spent (and is not earned either).
    */
-  applyAmount(guest: Guest, amount: number, reason: string, countStats = true): LedgerEntry {
+  applyAmount(guest: Guest, amount: number, reason: string, countStats: boolean | 'refund' = true): LedgerEntry {
     guest.balance += amount;
-    if (countStats && amount > 0) guest.earned += amount;
+    if (countStats === 'refund') guest.spent = Math.max(0, guest.spent - amount);
+    else if (countStats && amount > 0) guest.earned += amount;
     else if (countStats) guest.spent += -amount;
     const entry: LedgerEntry = {
       id: ++this.file.data.ledgerSeq,
@@ -227,6 +250,14 @@ export class Session extends EventEmitter {
   count(guest: Guest, stat: GuestStat, n = 1): void {
     if (n <= 0) return;
     guest.stats = { ...guest.stats, [stat]: (guest.stats?.[stat] ?? 0) + n };
+    this.changed(guest);
+  }
+
+  /** Undo a count: the thing was removed by the host (a song taken out of the queue, a photo deleted) */
+  uncount(guest: Guest, stat: GuestStat, n = 1): void {
+    const had = guest.stats?.[stat] ?? 0;
+    if (n <= 0 || !had || !this.guests.has(guest.id)) return;
+    guest.stats = { ...guest.stats, [stat]: Math.max(0, had - n) };
     this.changed(guest);
   }
 

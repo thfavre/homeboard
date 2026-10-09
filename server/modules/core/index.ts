@@ -503,6 +503,7 @@ export default defineModule({
     ctx.onAdmin('kick', (args) => {
       const guest: Guest = session.byId(args.guestId);
       hub.kickGuest(guest, 'You were removed by the host');
+      deleteAvatar(guest);
       session.remove(guest);
     });
 

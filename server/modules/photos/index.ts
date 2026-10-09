@@ -101,7 +101,12 @@ export default defineModule<PhotoSettings>({
         const charge = ctx.economy.charge(guest, 'photos.photo', 1, 'Photo on the TV');
         const id = uid(8);
         const file = `${id}.${ext}`;
-        writeFileSync(join(media, file), req.body);
+        try {
+          writeFileSync(join(media, file), req.body);
+        } catch (err) {
+          ctx.economy.refund(charge);
+          throw err;
+        }
         const photo: StoredPhoto = {
           id,
           file,
@@ -138,10 +143,12 @@ export default defineModule<PhotoSettings>({
     ctx.onAdmin('remove', (args) => {
       const p = store.data.gallery.find((x) => x.id === args.id);
       if (!p) return;
+      const guest = ctx.session.guests.get(p.guestId);
+      // Only a photo of this party counts on the leaderboard
+      if (guest && p.at >= ctx.session.startedAt) ctx.session.uncount(guest, 'photos');
       if (args.refund && p.paid > 0) {
-        const guest = ctx.session.guests.get(p.guestId);
         if (guest) {
-          ctx.economy.credit(guest, p.paid, 'Refund: photo removed');
+          ctx.economy.giveBack(guest, p.paid, 'Refund: photo removed');
           ctx.toast(guest, { text: 'Your photo was removed and refunded', amount: p.paid });
         }
       }

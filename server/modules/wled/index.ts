@@ -436,7 +436,7 @@ export default defineModule<WledSettings>({
         // Nothing reachable: give the money back and move on
         const guest = job.guestId ? ctx.session.guests.get(job.guestId) : undefined;
         if (guest && job.paid) {
-          ctx.economy.credit(guest, job.paid, 'Refund: lights unreachable');
+          ctx.economy.giveBack(guest, job.paid, 'Refund: lights unreachable');
           ctx.toast(guest, { text: 'The lights did not answer, you got your money back', amount: job.paid, kind: 'error' });
         }
         return runNext();
@@ -464,7 +464,7 @@ export default defineModule<WledSettings>({
       if (refund) {
         for (const j of dropped) {
           const guest = j.guestId ? ctx.session.guests.get(j.guestId) : undefined;
-          if (guest && j.paid) ctx.economy.credit(guest, j.paid, 'Refund: light effect cancelled');
+          if (guest && j.paid) ctx.economy.giveBack(guest, j.paid, 'Refund: light effect cancelled');
         }
       }
       if (current) await finish();
