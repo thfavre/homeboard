@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Activity, Coins, EyeOff, KeyRound, Medal, Menu, Palette, Search, Users, X } from '@lucide/svelte';
   import type { Component } from 'svelte';
-  import { hb, rpc, attempt, toast } from '$lib/client.svelte.ts';
+  import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Toasts from '$lib/ui/Toasts.svelte';
   import DialogHost from '$lib/ui/DialogHost.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -17,18 +17,6 @@
   import Privacy from '../modules/core/admin/Privacy.svelte';
   import Leaderboard from '../modules/core/admin/Leaderboard.svelte';
   import type { AdminGroup } from '../modules/types.ts';
-
-  /** A hidden shortcut: the app name clicked 5 times within 5 s restarts every light */
-  let taps: number[] = [];
-  async function tapBrand() {
-    const now = Date.now();
-    taps = [...taps.filter((t) => now - t < 5000), now];
-    if (taps.length < 5) return;
-    taps = [];
-    const r = await attempt(() => rpc<{ rebooted: number; failed: string[] }>('wled', 'reboot', {}));
-    if (r?.failed.length) toast({ text: `${r.failed.join(', ')} did not answer`, kind: 'error' });
-    else if (r) toast({ text: `${r.rebooted} lights are restarting`, kind: 'success' });
-  }
 
   interface Section {
     id: string;
@@ -117,7 +105,7 @@
   <div class="admin" class:menu-open={menuOpen}>
     <nav>
       <div class="nav-head">
-        <button type="button" class="brand" onclick={tapBrand}>{hb.core.appName}</button>
+        <span class="brand">{hb.core.appName}</span>
         <span class="pill">Host</span>
       </div>
       <label class="search">
@@ -210,11 +198,6 @@
     padding: 0 0.6rem 1rem;
   }
   .brand {
-    padding: 0;
-    border: 0;
-    cursor: default;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
     font-family: var(--font-display);
     font-weight: 700;
     font-size: 1.15rem;

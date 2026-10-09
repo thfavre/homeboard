@@ -687,9 +687,9 @@ export default defineModule<WledSettings>({
     });
 
     /** Restart one light (`id`) or all of them: back on its boot preset, and on the scene again once it answers */
-    ctx.onAdmin('reboot', async (args) => {
-      const list = args.id ? devices().filter((d) => d.id === args.id) : devices().filter((d) => health.get(d.id)?.online);
-      if (!list.length) throw new HbError(args.id ? 'Unknown light' : 'No lights are reachable right now');
+    const reboot = async (id?: unknown) => {
+      const list = id ? devices().filter((d) => d.id === id) : devices().filter((d) => health.get(d.id)?.online);
+      if (!list.length) throw new HbError(id ? 'Unknown light' : 'No lights are reachable right now');
       const done = await Promise.all(
         list.map(async (d) => {
           try {
@@ -708,7 +708,10 @@ export default defineModule<WledSettings>({
       const failed = list.filter((_, i) => !done[i]).map((d) => d.name);
       if (failed.length === list.length) throw new HbError(`${failed.join(', ')} did not answer`);
       return { rebooted: list.length - failed.length, failed };
-    });
+    };
+    ctx.onAdmin('reboot', (args) => reboot(args.id));
+    /** The hidden shortcut on the TV (its name tapped 5 times): every light. The TV page only opens on the Homeboard PC */
+    ctx.onTv('reboot', () => reboot());
 
     ctx.onAdmin('removeDevice', (args) => {
       ctx.settings.update({ devices: devices().filter((d) => d.id !== args.id) });

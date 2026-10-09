@@ -1,11 +1,34 @@
 <script lang="ts">
   import { fade } from 'svelte/transition';
-  import { hb } from '$lib/client.svelte.ts';
+  import { hb, rpc } from '$lib/client.svelte.ts';
   import { applyTheme } from '../themes/index.ts';
   import { activeModules, moduleById } from '../modules/index.ts';
   import type { TvSlot, TvWidget } from '../modules/types.ts';
 
   $effect(() => applyTheme(hb.core?.theme));
+
+  // A hidden shortcut: the name tapped 5 times within 5 s restarts every light; a short note says how it went
+  let taps: number[] = [];
+  let note = $state<{ text: string; error: boolean } | null>(null);
+  let noteTimer: ReturnType<typeof setTimeout> | undefined;
+  function say(text: string, error = false) {
+    clearTimeout(noteTimer);
+    note = { text, error };
+    noteTimer = setTimeout(() => (note = null), 5000);
+  }
+  async function tapBrand() {
+    const now = Date.now();
+    taps = [...taps.filter((t) => now - t < 5000), now];
+    if (taps.length < 5) return;
+    taps = [];
+    try {
+      const r = await rpc<{ rebooted: number; failed: string[] }>('wled', 'reboot');
+      say(r.failed.length ? `${r.failed.join(', ')} did not answer` : `Restarting ${r.rebooted} lights`, r.failed.length > 0);
+    } catch (err) {
+      say((err as Error).message, true);
+    }
+  }
+  $effect(() => () => clearTimeout(noteTimer));
 
   const widgets = (slot: TvSlot): TvWidget[] =>
     activeModules()
@@ -42,7 +65,8 @@
 {:else}
   <div class="tv">
     <header>
-      <span class="brand">{hb.core.appName}</span>
+      <button type="button" class="brand" onclick={tapBrand}>{hb.core.appName}</button>
+      {#if note}<span class="pill" class:danger={note.error} class:success={!note.error} transition:fade={{ duration: 200 }}>{note.text}</span>{/if}
       <span class="spacer"></span>
       {#if !hb.connected}<span class="pill danger">Reconnecting</span>{/if}
       <span class="time mono">{time}</span>
@@ -120,6 +144,11 @@
     gap: 1rem;
   }
   .brand {
+    padding: 0;
+    border: 0;
+    cursor: default;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
     font-family: var(--font-display);
     font-weight: 700;
     font-size: 1.35rem;
