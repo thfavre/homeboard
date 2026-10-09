@@ -95,7 +95,7 @@
                 <Avatar name={g.name} color={g.color} id={g.id} size={avatarSize(b, i)} />
                 <span class="name truncate">{g.name}</span>
                 {#if b.kind === 'money'}
-                  <Money amount={g.value} />
+                  <Money amount={g.value} whole />
                 {:else}
                   <span class="value mono">{count(g.value)}<span class="unit">{b.kind === 'score' ? 'pts' : g.value === 1 ? b.one : b.unit}</span></span>
                 {/if}

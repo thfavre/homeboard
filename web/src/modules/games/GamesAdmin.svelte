@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronDown, Minus, Play, Plus, Square, X } from '@lucide/svelte';
-  import { GAMES, gameInfo, type GameId, type GamesSettings } from '$shared/games.ts';
+  import { GAMES, PIRATE_LENGTHS, gameInfo, pirateLength, type GameId, type GamesSettings } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -10,6 +10,7 @@
   import { formatAmount } from '$shared/money.ts';
   import { GAME_ICONS, gamesState } from './store.svelte.ts';
   import RhythmSongsAdmin from './RhythmSongsAdmin.svelte';
+  import PirateSoundsAdmin from './PirateSoundsAdmin.svelte';
 
   const s = $derived(gamesState());
   const m = $derived(s?.match ?? null);
@@ -46,7 +47,7 @@
   const bluffBonus = $derived(hb.core?.admin?.earnRules.find((r) => r.key === 'games.bluff'));
 
   // A slider shows its value while it moves, and saves when it is let go
-  type SliderKey = 'rhythmAudioOffset';
+  type SliderKey = 'rhythmAudioOffset' | 'pirateAudioOffset';
   let drag = $state<Partial<Record<SliderKey, number>>>({});
   async function saveSlider(key: SliderKey, v: number) {
     await setSettings({ [key]: v });
@@ -73,6 +74,8 @@
         return st.rhythmLight
           ? `on ${lightName(st.rhythmLight)}, ${plural(s?.rhythmSongs.length ?? 0, 'song')}, ${st.rhythmFullSong ? 'whole songs' : `${clock(st.rhythmMinSec)} to ${clock(st.rhythmMaxSec)}`}, ${perkText(st.rhythmPerkSec)}`
           : 'needs a light';
+      case 'pirates':
+        return `${pirateLength(st.pirateLength).name.toLowerCase()} race, ${st.pirateLight ? `on ${lightName(st.pirateLight)}, treasure at ${st.pirateTreasure}%` : 'TV only'}`;
       default:
         return '';
     }
@@ -116,7 +119,7 @@
   {@render stepper(label, 'Seconds, 0 = no prize', n, 0, 300, (dir) => setSettings({ [key]: stepIn(PERK_STEPS, n, dir) }))}
 {/snippet}
 
-{#snippet lightSelect(label: string, hint: string, key: 'scratchLight' | 'rhythmLight')}
+{#snippet lightSelect(label: string, hint: string, key: 'scratchLight' | 'rhythmLight' | 'pirateLight')}
   <div class="line">
     <span class="label">{label} <span class="faint small">{hint}</span></span>
     <select class="input light" value={s!.settings[key]} onchange={(e) => setSettings({ [key]: e.currentTarget.value })}>
@@ -198,6 +201,29 @@
     {@render perk('Duel winner shoots fireworks on the light', 'rhythmPerkSec')}
     {@render slider('Music timing', 'Notes reach the zone after the beat you hear: move it to +. Before the beat: to -. Speakers in Bluetooth or a sound bar can need a lot', 'rhythmAudioOffset', -2000, 2000, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
     <RhythmSongsAdmin songs={s!.rhythmSongs} />
+  {:else if id === 'pirates'}
+    <h4 class="group">Light</h4>
+    {@render lightSelect('Race light', 'The WLED light the ships sail on, toward the gold treasure. Every other light plays a blue sea wave during the race', 'pirateLight')}
+    {#if s!.settings.pirateLight}
+      <div class="line">
+        <span class="label">First LED at the treasure end <span class="faint small">Turn it on if the ships sail the wrong way</span></span>
+        <Toggle checked={s!.settings.pirateReverse} onchange={(v) => setSettings({ pirateReverse: v })} label="First LED at the treasure end" />
+      </div>
+      {@render stepper('Treasure position', '% of the light the ships sail before reaching it', s!.settings.pirateTreasure, 10, 100, (dir) => setSettings({ pirateTreasure: s!.settings.pirateTreasure + dir * 10 }))}
+    {/if}
+    <h4 class="group">Race</h4>
+    <div class="line wrap">
+      <span class="label">Distance to the treasure <span class="faint small">{pirateLength(s!.settings.pirateLength).help}. Harder to row there means a longer game</span></span>
+      <div class="choices">
+        {#each PIRATE_LENGTHS as l (l.id)}
+          <button class="chip" class:active={s!.settings.pirateLength === l.id} onclick={() => setSettings({ pirateLength: l.id })}>{l.name}</button>
+        {/each}
+      </div>
+    </div>
+    <p class="faint small">Crews are made from the number of players (2 to 12): 1 vs 1, 1 vs 1 vs 1, 2 vs 2, 5 ships of one, 3 vs 3, 3 vs 4, 4 vs 4, 3 vs 3 vs 3, 5 vs 5, 5 vs 6, 4 vs 4 vs 4. A ship goes as fast as the average stroke of its crew, so uneven crews stay fair.</p>
+    {@render slider('Drum timing', 'The drum plays this much early on the TV, to make up for its speaker delay (Bluetooth, sound bar)', 'pirateAudioOffset', -1000, 1000, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
+    <h4 class="group">Sounds</h4>
+    <PirateSoundsAdmin picks={s!.settings.pirateSounds ?? {}} />
   {/if}
 {/snippet}
 

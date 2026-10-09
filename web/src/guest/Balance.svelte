@@ -15,9 +15,6 @@
   const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const shown = new Tween(untrack(() => amount), { duration: reduced ? 0 : 750, easing: cubicOut });
 
-  // Count in whole coins when both ends are whole, so the number does not flicker through cents
-  let unit = $state(100);
-  const display = $derived(Math.round(shown.current / unit) * unit);
 
   let deltas = $state<{ id: number; value: number; passive?: boolean }[]>([]);
   let seq = 0;
@@ -33,7 +30,6 @@
     const now = amount;
     if (now === last) return;
     const diff = now - last;
-    unit = [100, 10, 1].find((u) => now % u === 0 && last % u === 0) ?? 1;
     last = now;
     shown.target = now;
     const d = { id: ++seq, value: diff };
@@ -97,7 +93,7 @@
         {/if}
         <span class="coin" bind:this={coin}><Coin /></span>
       </span>
-      {formatAmount(display)}
+      {formatAmount(shown.current, true)}
     </span>
   </button>
   {#each deltas as d (d.id)}

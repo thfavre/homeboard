@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Check, Crown } from '@lucide/svelte';
   import { fade, scale } from 'svelte/transition';
-  import { gameInfo } from '$shared/games.ts';
+  import { formationName, gameInfo } from '$shared/games.ts';
   import { hb } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
@@ -35,6 +35,7 @@
           <div class="join-box">
             <p class="join">
               Tap <strong>Join</strong> on your phone{#if economy && m.stake > 0}<span>{' (entry '}</span><Money amount={m.stake} /><span>)</span>{/if}.
+              {#if m.game === 'pirates' && m.players.length >= 2}<span class="prize crews">Crews: {formationName(m.players.length)}</span>{/if}
               {#if economy && m.prize > 0}<span class="prize">Prize <Money amount={m.prize} />{m.stake > 0 ? ' + the pot' : ''}</span>{/if}
             </p>
             <div class="players">
@@ -189,6 +190,10 @@
     background: color-mix(in srgb, var(--coin) 16%, transparent);
     color: var(--coin);
     font-weight: 700;
+  }
+  .crews {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
   }
   .players {
     display: flex;

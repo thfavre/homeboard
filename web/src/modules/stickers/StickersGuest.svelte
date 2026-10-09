@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { Send } from '@lucide/svelte';
-  import type { StickerDef, StickersState } from '$shared/stickers.ts';
-  import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
+  import { Plus, Send, X } from '@lucide/svelte';
+  import { MAX_GUEST_STICKERS, type GuestSticker, type StickerDef, type StickersState } from '$shared/stickers.ts';
+  import { hb, rpc, attempt, onEvent, price } from '$lib/client.svelte.ts';
+  import { ask } from '$lib/dialog.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
+  import StickerMaker from './StickerMaker.svelte';
   import StickerView from './StickerView.svelte';
 
   const mod = $derived(hb.modules.stickers as StickersState | undefined);
@@ -11,7 +13,25 @@
   let text = $state('');
   let busy = $state(false);
 
-  async function send(args: { id?: string; text?: string; face?: boolean }, label: string) {
+  // The guest's own stickers ("My stickers")
+  let mine = $state<GuestSticker[]>([]);
+  let making = $state(false);
+  let editing = $state(false);
+  $effect(() => {
+    rpc<GuestSticker[]>('stickers', 'mine').then((l) => (mine = l)).catch(() => {});
+    return onEvent<GuestSticker[]>('stickers', 'mine', (l) => (mine = l));
+  });
+  $effect(() => {
+    if (!mine.length) editing = false;
+  });
+
+  async function removeMine(s: GuestSticker) {
+    if (!(await ask({ title: `Delete ${s.name}?`, confirm: 'Delete', danger: true }))) return;
+    const list = await attempt(() => rpc<GuestSticker[]>('stickers', 'removeMine', { id: s.id }));
+    if (list) mine = list;
+  }
+
+  async function send(args: { id?: string; text?: string; face?: boolean; mine?: string }, label: string) {
     busy = true;
     const ok = await attempt(() => rpc('stickers', 'place', args), `${label} is on the TV`);
     busy = false;
@@ -30,6 +50,40 @@
     <p class="faint status truncate">
       {mod.maxActive > 0 ? `${mod.active.length} of ${mod.maxActive} on screen` : `${mod.active.length} on screen`}{full ? ', wait for one to leave' : ''}
     </p>
+
+    {#if mod.allowCustom}
+      <div class="head">
+        <h4>My stickers</h4>
+        {#if mine.length}<span class="faint count">{mine.length}/{MAX_GUEST_STICKERS}</span>{/if}
+        <span class="spacer"></span>
+        {#if mine.length}<button class="btn ghost small" onclick={() => (editing = !editing)}>{editing ? 'Done' : 'Edit'}</button>{/if}
+      </div>
+      <div class="grid">
+        {#if mine.length < MAX_GUEST_STICKERS}
+          <button class="item card make" disabled={editing} onclick={() => (making = true)}>
+            <div class="art plus"><Plus size={30} /></div>
+            <span class="name">Make one</span>
+          </button>
+        {:else}
+          <!-- Full: say why there is no new sticker, and how to make room -->
+          <button class="item card make full" onclick={() => (editing = true)}>
+            <span class="name">{MAX_GUEST_STICKERS} max. Delete one to make another.</span>
+          </button>
+        {/if}
+        {#each mine as s (s.id)}
+          <div class="mine">
+            <button class="item card" disabled={editing || busy || full} onclick={() => send({ mine: s.id }, s.name)}>
+              <div class="art"><StickerView sticker={{ id: s.id, name: s.name, kind: 'image', src: s.src }} /></div>
+              <span class="name truncate">{s.name}</span>
+            </button>
+            {#if editing}
+              <button class="remove" aria-label={`Delete ${s.name}`} onclick={() => removeMine(s)}><X size={14} /></button>
+            {/if}
+          </div>
+        {/each}
+      </div>
+      <div class="head"><h4>Party stickers</h4></div>
+    {/if}
 
     <div class="grid">
       {#if hb.me?.avatar}
@@ -65,6 +119,10 @@
       </form>
     {/if}
   </div>
+
+  {#if making}
+    <StickerMaker onsaved={(l) => (mine = l)} onclose={() => (making = false)} />
+  {/if}
 {/if}
 
 <style>
@@ -108,5 +166,57 @@
   }
   .write {
     padding: 1rem;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: -0.3rem;
+  }
+  .head h4 {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+  .spacer {
+    flex: 1;
+  }
+  .mine {
+    position: relative;
+    display: grid;
+    min-width: 0;
+  }
+  .mine .name {
+    max-width: 100%;
+  }
+  .make {
+    border-style: dashed;
+  }
+  .full {
+    align-content: center;
+    text-align: center;
+  }
+  .count {
+    font-size: 0.8rem;
+  }
+  .plus {
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--gradient);
+    color: #fff;
+    transform: scale(0.75);
+  }
+  .remove {
+    position: absolute;
+    top: -0.4rem;
+    right: -0.4rem;
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: var(--danger);
+    color: #fff;
+    border: 2px solid var(--bg);
   }
 </style>

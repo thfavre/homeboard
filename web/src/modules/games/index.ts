@@ -10,6 +10,7 @@ import ScratchCard from './perk/ScratchCard.svelte';
 import RhythmCard from './RhythmCard.svelte';
 import RhythmPreload from './RhythmPreload.svelte';
 import CoinCard from './CoinCard.svelte';
+import PirateAudio from './PirateAudio.svelte';
 import CoinTossTv from './tv/CoinTossTv.svelte';
 import type { CoinView } from '$shared/games.ts';
 import { gamesState, showGamesScreen } from './store.svelte.ts';
@@ -33,6 +34,8 @@ export default {
     },
     // Keeps the sound awake on the TV and gets a duel's song ready, so the music starts on time
     { slot: 'overlay', order: 90, component: RhythmPreload, visible: () => (gamesState()?.rhythmSongs.length ?? 0) > 0 },
+    // The drum and the sounds of Pirate Race (and the host trying them)
+    { slot: 'overlay', order: 91, component: PirateAudio },
     // The Perfect Circle prize stands in for the music's "Up next" while it lasts
     { slot: 'side', order: 15, component: ScratchCard, spot: 'next', visible: () => gamesState()?.perk?.kind === 'scratch' },
   ],
@@ -40,5 +43,5 @@ export default {
   guestTakeover: GamesPlay,
   showGuestTakeover: showGamesScreen,
   guest: { title: 'Games', tagline: 'Duel someone for money, or start a game for everyone', icon: Gamepad2, order: 65, component: GamesGuest, priceKey: 'games.duel' },
-  admin: { title: 'Games', icon: Gamepad2, order: 10, group: 'play', keywords: 'duel bet stake rhythm rain guitar songs beatsaver coin flip timer simon reflex circle bluff room', component: GamesAdmin, prices: GamesPrices },
+  admin: { title: 'Games', icon: Gamepad2, order: 10, group: 'play', keywords: 'duel bet stake rhythm rain guitar songs beatsaver coin flip timer simon reflex circle bluff room pirate race ship row drum team', component: GamesAdmin, prices: GamesPrices },
 } satisfies ClientModule;

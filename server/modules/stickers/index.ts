@@ -1,8 +1,17 @@
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import express from 'express';
-import { BUILTIN_STICKERS, type ActiveSticker, type StickerDef, type StickersState } from '../../../shared/stickers.ts';
+import {
+  BUILTIN_STICKERS,
+  MAX_GUEST_STICKERS,
+  type ActiveSticker,
+  type GuestSticker,
+  type StickerDef,
+  type StickersState,
+} from '../../../shared/stickers.ts';
+import { JsonFile } from '../../core/jsonFile.ts';
 import { defineModule } from '../../core/module.ts';
+import type { Guest } from '../../core/session.ts';
 import { HbError, clamp, cleanName, num, uid } from '../../core/util.ts';
 
 interface CustomSticker {
@@ -16,7 +25,14 @@ interface StickerSettings {
   /** 0 = no limit */
   maxActive: number;
   allowText: boolean;
+  allowCustom: boolean;
   custom: CustomSticker[];
+}
+
+interface StoredGuestSticker {
+  id: string;
+  name: string;
+  file: string;
 }
 
 const IMAGE_TYPES: Record<string, string> = {
@@ -27,17 +43,56 @@ const IMAGE_TYPES: Record<string, string> = {
   'image/svg+xml': 'svg',
 };
 
+/** What guests may upload for their own stickers (no SVG: it could carry scripts) */
+const GUEST_TYPES: Record<string, string> = {
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/jpeg': 'jpg',
+};
+
+/** Checks the first bytes, so a guest cannot pass something else off as an image */
+function looksLike(ext: string, b: Buffer): boolean {
+  if (ext === 'png') return b.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  if (ext === 'jpg') return b[0] === 0xff && b[1] === 0xd8;
+  if (ext === 'gif') return b.subarray(0, 4).toString('latin1') === 'GIF8';
+  if (ext === 'webp') return b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP';
+  return false;
+}
+
 /** Stickers that bounce around the TV for a few minutes, DVD-logo style */
 export default defineModule<StickerSettings>({
   id: 'stickers',
   name: 'Stickers',
   description: 'Guests send stickers or short texts that bounce around the TV',
-  settings: { durationSec: 120, maxActive: 10, allowText: true, custom: [] },
+  settings: { durationSec: 120, maxActive: 10, allowText: true, allowCustom: true, custom: [] },
 
   setup(ctx) {
     let active: ActiveSticker[] = [];
     const timers = new Map<string, NodeJS.Timeout>();
     const media = ctx.mediaDir();
+    const guestMedia = ctx.mediaDir('guests');
+
+    // Each guest's own stickers ("My stickers"), by guest id. Cleared with the session, like the guests.
+    const personal = new JsonFile<{ guests: Record<string, StoredGuestSticker[]> }>(join(ctx.dataDir, 'personal.json'), { guests: {} });
+    const mineStored = (guest: Guest) => personal.data.guests[guest.id] ?? [];
+    const mine = (guest: Guest): GuestSticker[] =>
+      mineStored(guest).map((m) => ({ id: m.id, name: m.name, src: ctx.mediaUrl(`guests/${m.file}`) }));
+    const setMine = (guest: Guest, list: StoredGuestSticker[]) => {
+      personal.data.guests[guest.id] = list;
+      personal.save();
+      // Other phones logged in as the same guest
+      const pub = mine(guest);
+      ctx.emit({ guest: guest.id }, 'mine', pub);
+      return pub;
+    };
+    const unlinkGuestFile = (file: string) => {
+      try {
+        unlinkSync(join(guestMedia, file));
+      } catch {
+        // already gone
+      }
+    };
 
     const catalog = (): StickerDef[] => [
       ...BUILTIN_STICKERS.map((s) => ({ id: s.id, name: s.name, kind: 'builtin' as const })),
@@ -55,7 +110,7 @@ export default defineModule<StickerSettings>({
 
     ctx.state((): StickersState => {
       const s = ctx.settings.get();
-      return { catalog: catalog(), active, durationSec: s.durationSec, maxActive: s.maxActive, allowText: s.allowText };
+      return { catalog: catalog(), active, durationSec: s.durationSec, maxActive: s.maxActive, allowText: s.allowText, allowCustom: s.allowCustom };
     });
 
     ctx.onGuest('place', (args, guest) => {
@@ -71,6 +126,12 @@ export default defineModule<StickerSettings>({
         // The guest's own selfie, when they made one
         if (!guest.avatar) throw new HbError('Take a selfie first (in your profile)');
         sticker = { id: 'face', name: 'Face', kind: 'face', src: guest.avatar.url };
+      } else if (args.mine !== undefined) {
+        // One of the guest's own stickers
+        if (!s.allowCustom) throw new HbError('Your own stickers are turned off');
+        const own = mine(guest).find((m) => m.id === args.mine);
+        if (!own) throw new HbError('This sticker is gone');
+        sticker = { id: own.id, name: own.name, kind: 'image', src: own.src, guestMade: true };
       } else {
         sticker = catalog().find((c) => c.id === args.id) ?? null;
         if (!sticker) throw new HbError('Unknown sticker');
@@ -87,7 +148,13 @@ export default defineModule<StickerSettings>({
       active = [...active, item];
       timers.set(item.id, setTimeout(() => remove(item.id), s.durationSec * 1000));
       ctx.activity(
-        text ? `{name} wrote "${text}" on the TV` : sticker!.kind === 'face' ? '{name} sent their face bouncing' : `{name} dropped a ${sticker!.name.toLowerCase()} sticker`,
+        text
+          ? `{name} wrote "${text}" on the TV`
+          : sticker!.kind === 'face'
+            ? '{name} sent their face bouncing'
+            : args.mine !== undefined
+              ? '{name} sent a sticker they made'
+              : `{name} dropped a ${sticker!.name.toLowerCase()} sticker`,
         { guest },
       );
       ctx.publish();
@@ -95,6 +162,21 @@ export default defineModule<StickerSettings>({
     });
 
     ctx.onAdmin('remove', (args) => remove(String(args.id)));
+    // A guest-made sticker that should not be on the TV: off the screen and out of their collection
+    ctx.onAdmin('deleteGuestSticker', (args) => {
+      const sticker = String(args.sticker);
+      for (const a of active.filter((x) => x.sticker?.id === sticker)) remove(a.id);
+      const guest = ctx.session.guests.get(String(args.guest));
+      const list = personal.data.guests[String(args.guest)] ?? [];
+      const gone = list.find((m) => m.id === sticker);
+      if (!gone) return;
+      unlinkGuestFile(gone.file);
+      if (guest) setMine(guest, list.filter((m) => m.id !== sticker));
+      else {
+        personal.data.guests[String(args.guest)] = list.filter((m) => m.id !== sticker);
+        personal.save();
+      }
+    });
     ctx.onAdmin('clear', () => {
       for (const id of [...timers.keys()]) remove(id);
     });
@@ -105,6 +187,7 @@ export default defineModule<StickerSettings>({
         durationSec: args.durationSec !== undefined ? clamp(num(args.durationSec, 120), 10, 3600) : s.durationSec,
         maxActive: args.maxActive !== undefined ? clamp(Math.round(num(args.maxActive, 10)), 0, 100) : s.maxActive,
         allowText: args.allowText !== undefined ? !!args.allowText : s.allowText,
+        allowCustom: args.allowCustom !== undefined ? !!args.allowCustom : s.allowCustom,
       });
       ctx.publish();
     });
@@ -141,11 +224,48 @@ export default defineModule<StickerSettings>({
       res.json({ id });
     });
 
+    ctx.onGuest('mine', (_args, guest) => mine(guest));
+    ctx.onGuest('removeMine', (args, guest) => {
+      const list = mineStored(guest);
+      const gone = list.find((m) => m.id === args.id);
+      if (!gone) return mine(guest);
+      unlinkGuestFile(gone.file);
+      return setMine(guest, list.filter((m) => m.id !== gone.id));
+    });
+
+    // A guest saves a sticker they made (the phone already cut it out and added the white border)
+    ctx.http.post('/mine', express.raw({ type: Object.keys(GUEST_TYPES), limit: '3mb' }), (req, res) => {
+      const guest = ctx.guestFromRequest(req);
+      try {
+        if (!guest) throw new HbError('Please join the session first');
+        if (!ctx.enabled() || !ctx.settings.get().allowCustom) throw new HbError('Your own stickers are turned off');
+        const ext = GUEST_TYPES[req.get('content-type') ?? ''];
+        if (!ext || !Buffer.isBuffer(req.body) || !looksLike(ext, req.body)) throw new HbError('Send a PNG, WebP, GIF or JPG image');
+        const list = mineStored(guest);
+        if (list.length >= MAX_GUEST_STICKERS) throw new HbError(`You can keep ${MAX_GUEST_STICKERS} stickers. Delete one first.`);
+        const id = `g${uid(7)}`;
+        const file = `${id}.${ext}`;
+        writeFileSync(join(guestMedia, file), req.body);
+        const name = cleanName(req.query.name, 24) || 'My sticker';
+        const pub = setMine(guest, [...list, { id, name, file }]);
+        res.json({ id, mine: pub });
+      } catch (err) {
+        if (err instanceof HbError) res.status(400).json({ error: err.message });
+        else {
+          ctx.log.error(err);
+          res.status(500).json({ error: 'Upload failed' });
+        }
+      }
+    });
+
     ctx.onToggle((on) => {
       if (!on) for (const id of [...timers.keys()]) remove(id);
     });
     ctx.onSessionReset(() => {
       for (const id of [...timers.keys()]) remove(id);
+      for (const list of Object.values(personal.data.guests)) for (const m of list) unlinkGuestFile(m.file);
+      personal.data.guests = {};
+      personal.save();
     });
   },
 });

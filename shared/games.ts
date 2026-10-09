@@ -1,6 +1,6 @@
 // Mini games: 1 vs 1 duels with a stake, room games that anyone can join, or solo games.
 
-export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm';
+export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm' | 'pirates';
 export type GameMode = 'duel' | 'room' | 'solo';
 
 export interface GameInfo {
@@ -22,6 +22,8 @@ export interface GameInfo {
   steps: string[];
   /** Two colors of the game's gradient */
   colors: [string, string];
+  /** Most players a room game takes (no limit when unset) */
+  maxPlayers?: number;
 }
 
 export const GAMES: GameInfo[] = [
@@ -93,6 +95,17 @@ export const GAMES: GameInfo[] = [
     pausesMusic: true,
     steps: ['Notes climb the light strip from the bottom', 'Tap their color when they cross the zone at the top', 'Green is perfect. Keep the streak going for x4'],
     colors: ['#3dff9b', '#8b3dff'],
+  },
+  {
+    id: 'pirates',
+    name: 'Pirate Race',
+    tagline: 'Row in time with the drum, first ship to the treasure wins',
+    rules: 'The players are split into pirate crews, one ship each: your phone shows your ship color. A drum beats the rhythm on the TV, sometimes speeding up or slowing down little by little. Tap ROW exactly on each beat: the closer to the beat, the stronger the stroke. A ship moves with the average stroke of its crew, so a small crew is as fast as a big one. When the whole crew (or nearly) rows on the beat, the stroke is synchronized and goes further; 5 synchronized strokes in a row start a speed boost, which lasts as long as the crew stays in sync. Tapping off the beat splashes and wastes the stroke. The first ship to reach the treasure wins, and its crew shares the pot.',
+    modes: ['room', 'duel'],
+    lights: true,
+    pausesMusic: true,
+    steps: ['Find your crew: your phone shows your ship color', 'Tap ROW on every beat of the drum, all together', '5 synchronized strokes in a row: speed boost, as long as you stay in sync!'],
+    colors: ['#2fb4ff', '#c98a2b'],
   },
 ];
 
@@ -172,6 +185,8 @@ export interface MatchState {
   result: MatchResult | null;
   /** Rules screen: players who pressed Ready (it starts once everyone is) */
   ready: string[];
+  /** Pirate Race: the crews, dealt when the rules show so everyone already knows their ship */
+  crews?: PirateCrewDeal[];
 }
 
 /**
@@ -248,6 +263,18 @@ export interface GamesSettings {
   rhythmSongs: string[];
   /** The music starts this many ms early, to make up for the sound delay of the TV or its speakers (-2000 to 2000) */
   rhythmAudioOffset: number;
+  /** WLED light the Pirate Race ships sail on ('' = the TV only); every other light plays a sea wave */
+  pirateLight: string;
+  /** The pirate light's first LED is at the treasure end */
+  pirateReverse: boolean;
+  /** Where the treasure is on the race light, in % of its length from the start (the ships sail to it) */
+  pirateTreasure: number;
+  /** Race length */
+  pirateLength: PirateLength;
+  /** The drum is played this many ms early, to make up for the sound delay of the TV (-1000 to 1000) */
+  pirateAudioOffset: number;
+  /** MyInstants sounds the host picked instead of the built-in ones */
+  pirateSounds: Partial<Record<PirateSoundId, PirateSoundPick>>;
 }
 
 // ------------------------------------------------------------ per game views
@@ -525,4 +552,144 @@ export interface RhythmSongInfo {
   charts?: { id: RhythmDifficulty; nps: number; steady: number }[];
   durationSec?: number;
   error?: string;
+}
+
+// ------------------------------------------------------------ Pirate Race
+
+/** The ships, in the order crews are filled. `led` is what the race light shows. */
+export const PIRATE_SHIPS = [
+  { id: 'red', name: 'Red', hex: '#ff3b5c', led: '#ff0010' },
+  { id: 'yellow', name: 'Yellow', hex: '#ffc83d', led: '#ffa000' },
+  { id: 'green', name: 'Green', hex: '#2fd27a', led: '#00ff30' },
+  { id: 'purple', name: 'Purple', hex: '#b35bff', led: '#a000ff' },
+  { id: 'white', name: 'White', hex: '#f2f2f2', led: '#ffffff' },
+] as const;
+export type PirateShipId = (typeof PIRATE_SHIPS)[number]['id'];
+
+/**
+ * Crews by number of players: 1 vs 1, 1 vs 1 vs 1, 2 vs 2, five ships of one, 3 vs 3, 3 vs 4, 4 vs 4,
+ * 3 vs 3 vs 3, 5 vs 5, 5 vs 6, 4 vs 4 vs 4. A ship goes as fast as the average stroke of its crew, so
+ * uneven crews (3 vs 4) stay fair.
+ */
+export const PIRATE_FORMATIONS: Record<number, number[]> = {
+  2: [1, 1],
+  3: [1, 1, 1],
+  4: [2, 2],
+  5: [1, 1, 1, 1, 1],
+  6: [3, 3],
+  7: [3, 4],
+  8: [4, 4],
+  9: [3, 3, 3],
+  10: [5, 5],
+  11: [5, 6],
+  12: [4, 4, 4],
+};
+/** More than 12 players: 3 crews up to 15, 4 up to 24, then all 5 ships, as even as can be (7 vs 7 vs 6) */
+export const pirateFormation = (players: number): number[] => {
+  const n = Math.max(2, Math.floor(players));
+  if (PIRATE_FORMATIONS[n]) return PIRATE_FORMATIONS[n];
+  const crews = n <= 15 ? 3 : n <= 24 ? 4 : PIRATE_SHIPS.length;
+  return Array.from({ length: crews }, (_, k) => Math.floor(n / crews) + (k >= crews - (n % crews) ? 1 : 0));
+};
+/** "3 vs 4" */
+export const formationName = (players: number) => pirateFormation(players).join(' vs ');
+
+/** How long a race is: the distance to the treasure, in perfect strokes */
+export const PIRATE_LENGTHS = [
+  { id: 'short', name: 'Short', strokes: 45, help: 'About half a minute for a crew in time' },
+  { id: 'normal', name: 'Normal', strokes: 70, help: 'About a minute' },
+  { id: 'long', name: 'Long', strokes: 110, help: 'About a minute and a half' },
+  { id: 'epic', name: 'Epic', strokes: 160, help: 'Two minutes or more: for strong arms' },
+] as const;
+export type PirateLength = (typeof PIRATE_LENGTHS)[number]['id'];
+export const pirateLength = (id: unknown) => PIRATE_LENGTHS.find((l) => l.id === id) ?? PIRATE_LENGTHS[1];
+
+/** The sounds of the race. Each one is made on the fly unless the host picked a MyInstants sound for it. */
+export const PIRATE_SOUNDS = [
+  { id: 'drum', name: 'Drum', help: 'Every beat, on the TV', search: 'war drum' },
+  { id: 'oar', name: 'Oar stroke', help: 'Each tap, on the rower’s phone', search: 'water splash' },
+  { id: 'roar', name: 'Pirate roar', help: 'When the race starts, on the TV', search: 'pirate arr' },
+  { id: 'boost', name: 'Speed boost', help: 'A crew gets a boost, on the TV', search: 'speed boost' },
+  { id: 'finish', name: 'Finish', help: 'A ship reaches the treasure, on the TV', search: 'victory fanfare' },
+] as const;
+export type PirateSoundId = (typeof PIRATE_SOUNDS)[number]['id'];
+/** A picked sound: its local URL and its name (null: the built-in one) */
+export type PirateSoundPick = { file: string; url: string; title: string } | null;
+
+/** Timing of a stroke around the beat, and how much it is worth */
+export const PIRATE = {
+  perfectMs: 70,
+  goodMs: 140,
+  okMs: 220,
+  /** Synchronized strokes in a row for a boost; it lasts until a stroke is out of sync */
+  boostStreak: 5,
+  /** A synchronized stroke goes this much further */
+  syncBonus: 1.2,
+  /** And a boosted one */
+  boostSpeed: 1.6,
+  /** Share of a crew rowing on the beat (good or better) for a synchronized stroke */
+  syncShare: 0.75,
+  /** Beats of the drum before the rowing counts */
+  countIn: 4,
+};
+export type PirateGrade = 'perfect' | 'good' | 'ok' | 'splash';
+export const PIRATE_POWER: Record<PirateGrade, number> = { perfect: 1, good: 0.75, ok: 0.4, splash: 0 };
+export const pirateGradeOf = (gapMs: number): PirateGrade => {
+  const g = Math.abs(gapMs);
+  return g <= PIRATE.perfectMs ? 'perfect' : g <= PIRATE.goodMs ? 'good' : g <= PIRATE.okMs ? 'ok' : 'splash';
+};
+/** Crew members who must row on the beat for a synchronized stroke */
+export const pirateSyncNeed = (crew: number) => Math.max(1, Math.ceil(crew * PIRATE.syncShare - 1e-9));
+
+/** A ship and who rows it */
+export interface PirateCrewDeal {
+  ship: PirateShipId;
+  members: string[];
+}
+
+export interface PirateCrew {
+  ship: PirateShipId;
+  members: string[];
+  /** 0 to 1: at the treasure */
+  progress: number;
+  /** Synchronized strokes in a row (back to 0 on a stroke out of sync) */
+  streak: number;
+  /** Boosted: the crew made boostStreak synchronized strokes in a row and has stayed in sync since */
+  boosted: boolean;
+  /** Strokes judged so far, and the last one: its power (0 to 1), whether it was synchronized, and how many of the crew tapped */
+  stroke: { seq: number; power: number; synced: boolean; at: number; rowers: number };
+  /** Server time it reached the treasure */
+  finishedAt: number | null;
+  /** Place at the end (1: winner) */
+  place: number | null;
+}
+
+export interface PirateBeat {
+  /** Index of the beat (the count-in comes first) */
+  i: number;
+  at: number;
+}
+
+export interface PirateView {
+  /** crew: teams are shown. race: the drum plays (count-in first). finish: a ship got there, the light plays the finale */
+  step: 'crew' | 'race' | 'finish';
+  crews: PirateCrew[];
+  /** Server time of the first beat of the count-in, and of the first stroke that counts */
+  drumAt: number;
+  raceAt: number;
+  /** The beats around now (a second back, several ahead), for the drum on the TV and the guide on the phones */
+  beats: PirateBeat[];
+  /** Tempo now, and where it goes over the next beats */
+  bpm: number;
+  trend: 'faster' | 'slower' | 'steady';
+  /** Distance in perfect strokes */
+  strokes: number;
+  /** Where the treasure is on the race light, 0 to 1 (null: no race light) */
+  treasureAt: number | null;
+  /** The drum is played this many ms early on the TV (speaker delay) */
+  audioOffset: number;
+  /** Sounds the host picked (missing: built-in) */
+  sounds: Partial<Record<PirateSoundId, string>>;
+  /** Per player: strokes on the beat (good or better) and judged beats */
+  stats: Record<string, { onBeat: number; perfect: number; beats: number }>;
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Check, Crown, Play, Swords, X } from '@lucide/svelte';
   import { fade, fly, scale } from 'svelte/transition';
-  import { DUEL_INVITE_MS, gameInfo, rhythmDifficulty, type GamePlayer } from '$shared/games.ts';
+  import { DUEL_INVITE_MS, PIRATE_SHIPS, formationName, gameInfo, rhythmDifficulty, type GamePlayer } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
@@ -11,6 +11,7 @@
   import Versus from './ui/Versus.svelte';
   import PotPanel from './ui/PotPanel.svelte';
   import Fuse from './ui/Fuse.svelte';
+  import PirateCrewCard from './phone/PirateCrewCard.svelte';
   import PerkPanel from './perk/PerkPanel.svelte';
 
   /** Everything a phone shows for games: challenges, the room lobby, the game itself, the result */
@@ -24,6 +25,32 @@
   const economy = $derived(!!hb.core?.economyEnabled);
   const myPerk = $derived(s?.perk?.guest.id === me ? s.perk : null);
   const now = new Now(250);
+
+  /** Pirate Race: the color of my ship, from the rules to the end of the race */
+  const shipColor = $derived.by(() => {
+    if (!m || m.game !== 'pirates' || (m.phase !== 'intro' && m.phase !== 'play')) return null;
+    const crew = m.crews?.find((c) => c.members.includes(me));
+    return PIRATE_SHIPS.find((s) => s.id === crew?.ship)?.hex ?? null;
+  });
+  // The whole page takes that color: the theme's background, tinted, with a glow and a few waves
+  $effect(() => {
+    const hex = shipColor;
+    if (!hex) return;
+    const root = document.documentElement;
+    const css = getComputedStyle(root);
+    const base = css.getPropertyValue('--bg').trim() || '#08090f';
+    const light = css.getPropertyValue('--scheme').trim() === 'light';
+    const waves = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='100'%3E%3Cg fill='none' stroke='${light ? 'black' : 'white'}' stroke-opacity='0.06' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M12 24 q9 -7 18 0 t18 0'/%3E%3Cpath d='M80 70 q9 -7 18 0 t18 0'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 140px 100px`;
+    root.style.setProperty('--bg', `color-mix(in srgb, ${hex} ${light ? 14 : 20}%, ${base})`);
+    root.style.setProperty(
+      '--bg-image',
+      `radial-gradient(120% 55% at 50% -5%, color-mix(in srgb, ${hex} ${light ? 30 : 42}%, transparent), transparent 70%), radial-gradient(110% 45% at 50% 108%, color-mix(in srgb, ${hex} ${light ? 22 : 34}%, transparent), transparent 70%), ${waves}`,
+    );
+    return () => {
+      root.style.removeProperty('--bg');
+      root.style.removeProperty('--bg-image');
+    };
+  });
   let busy = $state(false);
 
   async function act(method: string, args?: unknown) {
@@ -55,6 +82,7 @@
         <GameCard game={info} eyebrow="You are in" />
         {#if economy && (m.stake > 0 || m.prize > 0)}<PotPanel inLabel="Your entry" stake={m.stake} outLabel="Winner takes" pot={m.pot + m.prize} />{/if}
         {@render faces(m.players)}
+        {#if m.game === 'pirates' && m.players.length >= 2}<p class="dim note">Crews right now: {formationName(m.players.length)}{info.maxPlayers ? ` · up to ${info.maxPlayers} players` : ''}</p>{/if}
         {#if m.endsAt}
           <Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label={m.players.length < 2 ? 'Needs 2 players, cancelled in' : 'Starts in'} />
         {/if}
@@ -68,7 +96,9 @@
     {:else if m.phase === 'intro'}
       {@const allReady = m.ready.length >= m.players.length}
       {@const imReady = m.ready.includes(me)}
+      {@const myCrew = m.crews?.find((c) => c.members.includes(me))}
       <div class="col" in:fade>
+        {#if myCrew}<div in:fly={{ y: -20 }}><PirateCrewCard crew={myCrew} players={m.players} {me} /></div>{/if}
         {#if m.mode === 'duel'}
           <Versus
             left={m.players[0]}
@@ -161,6 +191,7 @@
       <GameCard game={info} eyebrow={m.starter ? `${m.starter.name} started a game` : 'Game on the TV'} />
       {#if economy && (m.stake > 0 || m.prize > 0)}<PotPanel inLabel="Entry" stake={m.stake} outLabel="Winner takes" pot={m.pot + m.prize} />{/if}
       {@render faces(m.players)}
+      {#if m.game === 'pirates' && m.players.length >= 2}<p class="dim note">Crews right now: {formationName(m.players.length)}{info.maxPlayers ? ` · up to ${info.maxPlayers} players` : ''}</p>{/if}
       {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Join closes in" />{/if}
       <button class="btn primary block big" disabled={busy} onclick={() => act('join')}><Play size={20} /> Join</button>
       <button class="btn ghost block" onclick={() => (local.skipped = m.id)}>Not this time</button>

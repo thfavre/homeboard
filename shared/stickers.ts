@@ -21,6 +21,8 @@ export interface StickerDef {
   kind: 'builtin' | 'image' | 'face';
   /** Image URL for uploaded stickers */
   src?: string;
+  /** Made by the guest who sent it (the host can delete it from their collection) */
+  guestMade?: boolean;
 }
 
 export interface ActiveSticker {
@@ -39,4 +41,16 @@ export interface StickersState {
   /** 0 = no limit */
   maxActive: number;
   allowText: boolean;
+  /** Guests can make their own stickers (from an image, a photo or a drawing) */
+  allowCustom: boolean;
 }
+
+/** A sticker a guest made, kept in their own collection ("My stickers") */
+export interface GuestSticker {
+  id: string;
+  name: string;
+  src: string;
+}
+
+/** How many stickers a guest can keep */
+export const MAX_GUEST_STICKERS = 24;

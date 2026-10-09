@@ -1,6 +1,6 @@
 import type { Role } from '../../../shared/protocol.ts';
 import type { Song } from './beatsaver.ts';
-import type { CircleDrawing, GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine, RhythmDifficulty } from '../../../shared/games.ts';
+import type { CircleDrawing, GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine, PirateCrewDeal, RhythmDifficulty } from '../../../shared/games.ts';
 
 /** How a game ended. The match pays out from it. */
 export interface Outcome {
@@ -22,6 +22,8 @@ export interface Outcome {
 
 /** Rhythm Rain: number of colors, difficulty (a chart name) and song key */
 export interface MatchOptions {
+  /** Pirate Race: crews dealt on the rules screen */
+  crews?: PirateCrewDeal[];
   colors?: number;
   chart?: RhythmDifficulty;
   song?: string;
@@ -50,6 +52,8 @@ export interface MatchApi {
   every(ms: number, fn: () => void): () => void;
   /** A WLED light to draw live pixels on (null: unknown or offline) */
   strip(deviceId: string): { leds: number; send(rgb: Uint8Array): void } | null;
+  /** Every WLED light online, to draw live pixels on */
+  strips(): { id: string; leds: number; send(rgb: Uint8Array): void }[];
   /** One-off event to the TV that plays the sound */
   sound(name: string, data: unknown): void;
   publish(): void;

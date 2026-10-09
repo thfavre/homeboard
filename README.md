@@ -14,7 +14,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] playing gifs
 - [ ] spin the wheel
 - [ ] Sync Selfie: Take a selfie on the same signal as everyone else, then see the mosaic of all the faces on the TV.
-- [ ] Custom stickers (like the same as the one on that the user creted for whatsapp, or he can create one from a photo, or from a drawing)
+- [x] Custom stickers (like the same as the one on that the user creted for whatsapp, or he can create one from a photo, or from a drawing)
 - [ ] Add something that cost a lot, like 1000, and advertise it as a big thing, but it will just like stop the lights, and do a fart sound, or something like that. (like a joke for the rich people)
 - [x] ! Make the leaderboard more divers. Like sometimes it changes to the leaderboardt of the most pixels draw in the canas, or more stickers sent, most games done,... (with a smooth transtition, and not just a hard change) (and also when a song has been played on guitar hero by more than 5 players (in 1vs1 save both player score of course, with the same difficulty / numbers of colors), allow it to show on the leaderboard with the score (show the cover and song name))
 
@@ -32,6 +32,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [x] Perfect Circle: Draw the most perfect circle you can in one stroke, and the app scores your precision.
 - [ ] Beat Maker: Compose a rhythm on a grid without hearing a single sound, then let the room vote when it plays on the TV.
 - [ ] Horse Race: Bet on a horse and watch the race unfold on the TV, hoping yours crosses the line first.
+- [x] Pirate Race: crews of pirates (1 vs 1 up to 4 vs 4 vs 4) row in time with a drum that speeds up and slows down; the ships sail on the TV and on a WLED light (the other lights play a sea wave), first to the treasure wins.
 
 - [ ] on the a selecatble Wled device  Tir à la corde, spammer(possible de le faire en 1vs1, 2vs2,.. ou même nombre impair)
 - [ ] on the a selecatble Wled deviceZone cible : un point lumineux monte et descend, et il faut presser pile quand il traverse la zone verte. La zone rétrécit et la vitesse augmente à chaque réussite.
@@ -41,7 +42,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 
 # Bugs / improvements
 - [x] The TV page sometimes cahnge the layout and the right part become too big (for ex when I add a lot of music to the queue...)
-- [ ] pixelcanvas: should be able to use gesture to navigate the canvas, not just drag the finger to draw. (like pinch to zoom, two fingers to move), and imrpove the UI, Like the bottom part should never move, even when moving, and better way to display all those colors. And when I paint a few pixels, it show price 0, write the correct prize reduction on the phone guest
+- [x] pixelcanvas: should be able to use gesture to navigate the canvas, not just drag the finger to draw. (like pinch to zoom, two fingers to move), and imrpove the UI, Like the bottom part should never move, even when moving, and better way to display all those colors. And when I paint a few pixels, it show price 0, write the correct prize reduction on the phone guest
 - [x] When a user adds a song but spotify is not played anywhere, he sees a +10 on his money and the error. (He gets -10 for putting a song and instend of +10 for the error). Make sure this bug doesnt also appens somewhere else.
 - [x] Let the admin choose the delay for the passive earning.
 - Add more fun emoji for the selfie avatars (like a crown, a hat, a mustache, a monocle, etc.)
@@ -89,8 +90,8 @@ Environment variables: `PORT` (default 4300), `HB_TUNNEL=0` (no public tunnel),
 | Module | Guests | Host |
 | --- | --- | --- |
 | **Music** (Spotify) | Search and queue songs, skip | Connect account, playback controls, explicit filter |
-| **Pixel canvas** | Paint pixel by pixel (r/place style) | Clear, resize |
-| **Stickers** | Built-in vector stickers, text, or their own face, bouncing for X minutes | Duration, limit, upload your own |
+| **Pixel canvas** | Paint pixel by pixel (r/place style), pinch to zoom and two fingers to move | Clear, resize |
+| **Stickers** | Built-in vector stickers, text, their own face, or stickers they make (cut out of a photo, drawn with a finger, or imported like a WhatsApp sticker, animated ones stay animated), bouncing for X minutes | Duration, limit, upload your own, turn guest-made stickers on or off, delete one from a guest's collection |
 | **Photos** | Photo with caption shown big on the TV | Remove (with refund), replay, duration |
 | **Lights** (WLED) | Pick an effect, on all lights or one | Devices, effect editor, test, stop |
 | **Soundboard** | Play a sound on the TV speakers, or search MyInstants | Volume, cooldown, upload sounds, add sounds from MyInstants, let guests search MyInstants and keep their own "My sounds" (with a length limit) |
