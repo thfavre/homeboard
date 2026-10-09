@@ -16,7 +16,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] Sync Selfie: Take a selfie on the same signal as everyone else, then see the mosaic of all the faces on the TV.
 - [ ] Custom stickers (like the same as the one on that the user creted for whatsapp, or he can create one from a photo, or from a drawing)
 - [ ] Add something that cost a lot, like 1000, and advertise it as a big thing, but it will just like stop the lights, and do a fart sound, or something like that. (like a joke for the rich people)
-- [ ] ! Make the leaderboard more divers. Like sometimes it changes to the leaderboardt of the most pixels draw in the canas, or more stickers sent, most games done,... (with a smooth transtition, and not just a hard change) (and also when a song has been played on guitar hero by more than 5 players (in 1vs1 save both player score of course), allow it to show on the leaderboard with the score (show the cover and song name))
+- [ ] ! Make the leaderboard more divers. Like sometimes it changes to the leaderboardt of the most pixels draw in the canas, or more stickers sent, most games done,... (with a smooth transtition, and not just a hard change) (and also when a song has been played on guitar hero by more than 5 players (in 1vs1 save both player score of course, with the same difficulty / numbers of colors), allow it to show on the leaderboard with the score (show the cover and song name))
 
 -- games ---
 - [x] 1vs1 someone on the TV (like a game show (and put some coins?))
