@@ -47,6 +47,22 @@
     }
   });
 
+  /**
+   * The link between the server clock and the audio clock (server seconds minus audio seconds). Read
+   * fresh, it moves by a few ms to tens of ms from one reading to the next (the audio clock goes forward
+   * in steps, a block of samples at a time), and every drum beat would land a little off the song, which
+   * plays on without a break. So one steady link is kept: the audio clock is only ever late when read,
+   * so the smallest reading is the truest; it creeps up slowly to follow the two clocks drifting apart,
+   * and jumps when they really move (the clock measured again, the audio woken up).
+   */
+  let link: number | null = null;
+  function clockLink(ac: AudioContext): number {
+    const reading = serverNow() / 1000 - ac.currentTime;
+    if (link === null || reading < link || reading - link > 0.1) link = reading;
+    else link += Math.min(reading - link, 0.0002);
+    return link;
+  }
+
   /** Schedule what falls in the next 1.2 s */
   function schedule() {
     if (!v) return;
@@ -54,7 +70,8 @@
     if (ac.state !== 'running') void ac.resume().catch(() => {});
     const now = serverNow();
     const early = v.audioOffset;
-    const at = (serverTime: number) => ac.currentTime + (serverTime - early - now) / 1000;
+    const base = clockLink(ac);
+    const at = (serverTime: number) => (serverTime - early) / 1000 - base;
     if (v.step !== 'finish') {
       const known = v.beats.map((b) => ({ i: b.i, time: at(b.at) }));
       const last = v.beats[v.beats.length - 1]?.i ?? -1;
