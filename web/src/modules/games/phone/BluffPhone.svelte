@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, EyeOff, HandCoins, Handshake, Tv } from '@lucide/svelte';
+  import { Check, Eye, EyeOff, HandCoins, Handshake, Lock, Tv } from '@lucide/svelte';
   import { fly, scale } from 'svelte/transition';
   import { bluffDeal, bluffGain, type BluffChoice, type BluffView, type MatchState } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
@@ -7,10 +7,12 @@
   import Money from '$lib/ui/Money.svelte';
   import { local } from '../store.svelte.ts';
   import Fuse from '../ui/Fuse.svelte';
+  import MoneyFlow from '../ui/MoneyFlow.svelte';
 
   /**
    * Bluff on the phone: two big cards, Share and Steal, each with what it pays whatever the other one
-   * picks. Then, with the result, both cards turn over face to face.
+   * picks. Once picked, the choice is hidden behind a face-down card (hold it to peek), so a glance
+   * at the screen gives nothing away. Then, with the result, both cards turn over face to face.
    */
   let { m }: { m: MatchState } = $props();
   const v = $derived(m.view as BluffView | null);
@@ -24,14 +26,24 @@
   const theyChose = $derived(chosen.includes(other.id));
   let choice = $state<BluffChoice | null>(null);
   let sending = $state(false);
+  /** The choice is behind the face-down card; `peek` while a finger holds it */
+  let sealed = $state(false);
+  let peek = $state(false);
 
   async function pick(c: BluffChoice) {
-    if (bothChose || sending || choice === c) return;
+    if (bothChose || sending) return;
     const before = choice;
     choice = c;
+    // Hidden at once: the colors of the picked card would give it away
+    sealed = true;
+    peek = false;
     navigator.vibrate?.(15);
+    if (before === c) return;
     sending = true;
-    if (!(await attempt(() => rpc('games', 'play', { choice: c })))) choice = before;
+    if (!(await attempt(() => rpc('games', 'play', { choice: c })))) {
+      choice = before;
+      sealed = !!before;
+    }
     sending = false;
   }
 
@@ -65,25 +77,49 @@
             {#if bothChose}Both chosen{:else if theyChose}{other.name} has chosen{:else}{other.name} is thinking<span class="dots"><i></i><i></i><i></i></span>{/if}
           </strong>
         {/key}
-        <span class="faint small">{bothChose ? 'Turning the cards over...' : choice ? 'You can still change your mind' : 'Your move'}</span>
+        <span class="faint small">{bothChose ? 'Turning the cards over...' : choice ? 'Your choice is in' : 'Your move'}</span>
       </span>
     </div>
 
     {#if m.endsAt && !bothChose}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Choose within" />{/if}
 
-    <div class="choices" class:made={!!choice} class:locked={bothChose}>
-      {#each ['share', 'steal'] as const as c, i (c)}
-        <button class="choice {c}" class:active={choice === c} disabled={bothChose} onclick={() => pick(c)} in:fly={{ y: 24, delay: 80 + i * 90 }}>
-          {#if choice === c}<span class="picked" in:scale={{ start: 0.4, duration: 250 }}><Check size={14} strokeWidth={3} /></span>{/if}
-          <span class="icon">{#if c === 'share'}<Handshake size={34} />{:else}<HandCoins size={34} />{/if}</span>
-          <strong class="name">{c === 'share' ? 'Share' : 'Steal'}</strong>
-          <span class="pays">
-            <span class="row"><span>If {other.name} shares</span><b class="mono">{@render amount(bluffGain(deal, c, 'share'))}</b></span>
-            <span class="row"><span>If {other.name} steals</span><b class="mono">{@render amount(bluffGain(deal, c, 'steal'))}</b></span>
-          </span>
+    {#if choice && sealed}
+      <div class="sealed" in:scale={{ start: 0.85, duration: 300 }}>
+        <button
+          class="facedown"
+          class:peek
+          aria-label="Hold to see your choice"
+          onpointerdown={() => (peek = true)}
+          onpointerup={() => (peek = false)}
+          onpointerleave={() => (peek = false)}
+          onpointercancel={() => (peek = false)}
+          oncontextmenu={(e) => e.preventDefault()}
+        >
+          {#if peek}
+            <span class="peeked">{#if choice === 'share'}<Handshake size={22} />{:else}<HandCoins size={22} />{/if} {choice === 'share' ? 'Share' : 'Steal'}</span>
+          {:else}
+            <span class="lock"><Lock size={26} /></span>
+            <strong>Locked in</strong>
+            <span class="faint small"><Eye size={13} /> Hold to peek</span>
+          {/if}
         </button>
-      {/each}
-    </div>
+        {#if !bothChose}<button class="btn ghost block" onclick={() => (sealed = false)}>Change my mind</button>{/if}
+      </div>
+    {:else}
+      <div class="choices" class:made={!!choice} class:locked={bothChose}>
+        {#each ['share', 'steal'] as const as c, i (c)}
+          <button class="choice {c}" class:active={choice === c} disabled={bothChose} onclick={() => pick(c)} in:fly={{ y: 24, delay: 80 + i * 90 }}>
+            {#if choice === c}<span class="picked" in:scale={{ start: 0.4, duration: 250 }}><Check size={14} strokeWidth={3} /></span>{/if}
+            <span class="icon">{#if c === 'share'}<Handshake size={34} />{:else}<HandCoins size={34} />{/if}</span>
+            <strong class="name">{c === 'share' ? 'Share' : 'Steal'}</strong>
+            <span class="pays">
+              <span class="row"><span>If {other.name} shares</span><b class="mono">{@render amount(bluffGain(deal, c, 'share'))}</b></span>
+              <span class="row"><span>If {other.name} steals</span><b class="mono">{@render amount(bluffGain(deal, c, 'steal'))}</b></span>
+            </span>
+          </button>
+        {/each}
+      </div>
+    {/if}
 
     <p class="hint faint">
       {#if bothChose}<Tv size={14} /> Watch the TV{:else}<EyeOff size={14} /> Keep your screen hidden{/if}
@@ -108,7 +144,7 @@
     <div class="outcome">
       <h1>{verdict.title}</h1>
       {#if economy}
-        <p class="gain mono" class:zero={gain <= 0}>{#if gain > 0}<Money amount={gain} sign />{:else}Nothing for you{/if}</p>
+        {#if gain > 0 || deal.stake > 0}<MoneyFlow amount={gain > 0 ? gain : -deal.stake} delay={1900} />{:else}<p class="gain zero">Nothing for you</p>{/if}
         {#if verdict.tone === 'both' && deal.bonus > 0}<p class="faint small">Your bet back plus a <Money amount={deal.bonus} /> bonus</p>{/if}
         {#if verdict.tone === 'none' && deal.stake > 0}<p class="faint small">Both bets are lost</p>{/if}
       {/if}
@@ -283,6 +319,55 @@
     border-radius: 50%;
     background: #fff;
     color: var(--c);
+  }
+  /* The choice made, face down */
+  .sealed {
+    display: grid;
+    justify-items: center;
+    gap: 0.6rem;
+  }
+  .facedown {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 0.45rem;
+    width: 11rem;
+    height: 14rem;
+    border-radius: var(--radius);
+    border: 2px solid #ff3b8d;
+    background: repeating-linear-gradient(45deg, var(--surface-2) 0 0.7rem, var(--surface-3) 0.7rem 1.4rem), var(--surface);
+    box-shadow: 0 20px 44px -22px #ff3b8d;
+    color: var(--text);
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: none;
+    transition: transform 0.2s ease;
+  }
+  .facedown.peek {
+    transform: scale(0.97);
+  }
+  .facedown .small {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .lock {
+    display: grid;
+    place-items: center;
+    width: 3.6rem;
+    height: 3.6rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, #ff3b8d 18%, transparent);
+    color: #ff3b8d;
+  }
+  /* Peeking: small and plain, no big color a neighbour would notice */
+  .peeked {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 700;
+    color: var(--text-dim);
   }
   .hint {
     display: flex;
