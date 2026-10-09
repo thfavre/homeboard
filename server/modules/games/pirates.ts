@@ -333,7 +333,7 @@ export const pirateRace: GameFactory = (m) => {
       else groups.push([s]);
     }
     for (const g of groups) {
-      const shown = g[Math.floor(now / 420) % g.length];
+      const shown = g[Math.floor(now / 200) % g.length];
       for (const { c, pos } of g) {
         const rgb = SHIP_LED[c.ship];
         const stern = pos - SHIP_LEN * u;
