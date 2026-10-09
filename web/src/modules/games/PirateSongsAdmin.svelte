@@ -6,7 +6,8 @@
   import { detectBeats } from './ui/beatDetect.ts';
 
   /**
-   * The race songs: sailors singing, one picked at random each race. On upload, this page finds the song's
+   * The race songs: sailors singing. In a race they play one after the other in a random order, each from
+   * its start, 2 to 10 s apart. On upload, this page finds the song's
    * beats (a steady grid, or following the singers when they hurry or slow down); they can be shifted all
    * together. Hear a song here with a tick on each beat, or on the TV with the drum on top.
    */
@@ -31,6 +32,7 @@
         beats: map.beats.join(','),
         bpm: String(map.bpm),
         steady: map.steady ? '1' : '0',
+        duration: String(Math.round(buffer.duration * 100) / 100),
       });
     } catch (err) {
       error = err instanceof Error && err.message ? err.message : 'This file could not be read';

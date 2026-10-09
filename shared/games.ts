@@ -628,16 +628,16 @@ export interface PirateSong {
   title: string;
   /** Times of its beats in the file, seconds */
   beats: number[];
+  /** Length of the file, seconds */
+  duration?: number;
   /** Its main tempo, beats a minute (to show) */
   bpm: number;
   /** Made to a click: its beats are a steady grid */
   steady: boolean;
 }
-/** The drum drifts this far around the song's own pace (the song's speed moves with it) */
+/** The drum drifts this far around a song's own pace (the song's speed moves with it) */
 export const PIRATE_SONG_DRIFT = { slower: 0.9, faster: 1.1 };
 
-/** The beats of a song that loop: whole 8 beat phrases (beat n plays like beat n mod the length) */
-export const songLoop = (beats: number[]) => (beats.length > 9 ? Math.floor((beats.length - 1) / 8) * 8 : Math.max(1, beats.length - 1));
 
 /** A picked sound: its local URL and its name (null: the built-in one) */
 export type PirateSoundPick = { file: string; url: string; title: string } | null;
@@ -716,8 +716,8 @@ export interface PirateView {
   audioOffset: number;
   /** Sounds the host picked (missing: built-in) */
   sounds: Partial<Record<PirateSoundId, string>>;
-  /** The race song (one of the settings' songs), its first beat on the drum's first beat (null: drum only) */
-  song: string | null;
+  /** The songs of the race (from the settings' songs), each from its very start, its beat 0 on drum beat `beat` */
+  songs: { id: string; beat: number }[];
   /** Per player: strokes on the beat (good or better) and judged beats */
   stats: Record<string, { onBeat: number; perfect: number; beats: number }>;
 }

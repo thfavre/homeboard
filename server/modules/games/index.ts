@@ -856,7 +856,8 @@ export default defineModule<GamesSettings>({
         return;
       }
       const bpm = Math.round(clamp(num(req.query.bpm, 100), 30, 250) * 10) / 10;
-      const song = { id, file, url: ctx.mediaUrl(`pirates/${file}`), title, beats, bpm, steady: req.query.steady === '1' };
+      const duration = Math.round(clamp(num(req.query.duration, beats[beats.length - 1] + 2), beats[beats.length - 1], 3600) * 100) / 100;
+      const song = { id, file, url: ctx.mediaUrl(`pirates/${file}`), title, beats, bpm, steady: req.query.steady === '1', duration };
       ctx.settings.update({ pirateSongs: [...ctx.settings.get().pirateSongs, song] });
       ctx.publish();
       res.json({ id });

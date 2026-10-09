@@ -4,13 +4,13 @@ import {
   PIRATE_SHIPS,
   PIRATE_SONG_DRIFT,
   pirateFormation,
-  songLoop,
   pirateGradeOf,
   pirateLength,
   pirateSyncNeed,
   type PirateBeat,
   type PirateCrew,
   type PirateCrewDeal,
+  type PirateSong,
   type GamesSettings,
   type PirateGrade,
   type PirateSoundId,
@@ -76,40 +76,79 @@ function drumBeats(firstAt: number, totalMs: number, steadyBeats: number): numbe
   return out;
 }
 
+/** A song played in the race: its beat 0 falls on drum beat `beat` */
+export interface SongPlay {
+  id: string;
+  beat: number;
+}
+
 /**
- * The drum on a song: beat by beat as the song goes (it loops on whole phrases), at a pace that drifts a
- * little slower or faster now and then, a few % a beat, holding in between. The song follows the drum.
+ * The drum with songs: it plays alone at first, and 2 to 10 s after the race starts a song begins from
+ * its very start; the drum then plays on the song's beats, at a pace that drifts a little slower or faster
+ * now and then (the song follows the drum). When the song is over the drum goes on alone, gliding to the
+ * next song's tempo, and 2 to 10 s later another song (a different one when there are several) begins.
  */
-function songBeats(firstAt: number, totalMs: number, steadyBeats: number, song: number[]): number[] {
-  const loop = songLoop(song);
-  const gap = (k: number) => {
-    const i = k % loop;
-    return (song[i + 1] - song[i]) * 1000;
-  };
+function songPlan(firstAt: number, totalMs: number, countIn: number, songs: PirateSong[]): { beats: number[]; plays: SongPlay[] } {
   const out: number[] = [];
+  const plays: SongPlay[] = [];
+  const median = (s: PirateSong) => {
+    const gaps = s.beats.slice(1).map((b, i) => b - s.beats[i]).sort((a, b) => a - b);
+    return gaps[Math.floor(gaps.length / 2)] * 1000;
+  };
+  const pickAfter = (last: PirateSong | null) => {
+    const pool = songs.length > 1 ? songs.filter((s) => s !== last) : songs;
+    return pool[Math.floor(Math.random() * pool.length)];
+  };
+  const pause = () => 2000 + Math.random() * 8000;
+  // The pace drifts during songs and holds between them
+  const { slower, faster } = PIRATE_SONG_DRIFT;
   let pace = 1;
   let step = 0;
   let ramp = 0;
-  let hold = steadyBeats;
-  let t = firstAt;
-  for (let k = 0; t < firstAt + totalMs; k++) {
-    out.push(Math.round(t));
+  let hold = 8;
+  const drift = () => {
     if (ramp > 0) {
       pace += step;
       ramp -= 1;
     } else if (hold > 0) {
       hold -= 1;
     } else {
-      const { slower, faster } = PIRATE_SONG_DRIFT;
       const up = pace < slower + 0.04 ? true : pace > faster - 0.04 ? false : Math.random() < 0.55;
       const target = clamp(pace + (up ? 1 : -1) * (0.04 + Math.random() * 0.08), slower, faster);
       ramp = 8 + Math.floor(Math.random() * 7);
       step = (target - pace) / ramp;
       hold = 6 + Math.floor(Math.random() * 10);
     }
-    t += gap(k) / pace;
+  };
+
+  let t = firstAt;
+  let song = pickAfter(null);
+  let gap = median(song);
+  /** When the next song may start (its file, not its first beat): set once the race has started */
+  let after: number | null = null;
+  while (t < firstAt + totalMs) {
+    // The drum alone, gliding to the coming song's tempo
+    const target = median(song) / pace;
+    out.push(Math.round(t));
+    if (out.length === countIn + 1) after = t + pause();
+    gap += (target - gap) * 0.15;
+    t += gap;
+    // The song can begin when its file would start after the pause
+    if (after === null || t - (song.beats[0] * 1000) / pace < after) continue;
+    plays.push({ id: song.id, beat: out.length });
+    const beats = song.beats;
+    for (let k = 0; k + 1 < beats.length && t < firstAt + totalMs; k++) {
+      out.push(Math.round(t));
+      drift();
+      t += ((beats[k + 1] - beats[k]) * 1000) / pace;
+    }
+    // Its last beat, then the rest of the file, then a pause before the next one
+    const last = beats[beats.length - 1];
+    gap = ((beats[beats.length - 1] - beats[beats.length - 2]) * 1000) / pace;
+    after = t + ((Math.max(last, song.duration ?? last + 2) - last) * 1000) / pace + pause();
+    song = pickAfter(song);
   }
-  return out;
+  return { beats: out, plays };
 }
 
 /** The sea, for one pixel: deep blue rolling waves with a bit of foam on the crests */
@@ -240,8 +279,8 @@ export const pirateRace: GameFactory = (m) => {
   const drumAt = startAt + CREW_MS;
   // With a song, the drum keeps to its tempo, a little slower or faster (the song follows it)
   const songs = (m.settings.pirateSongs ?? []).filter((s) => s.beats.length > 4);
-  const song = songs.length ? songs[Math.floor(Math.random() * songs.length)] : null;
-  const beats = song ? songBeats(drumAt, MAX_RACE_MS + 20_000, PIRATE.countIn + 8, song.beats) : drumBeats(drumAt, MAX_RACE_MS + 20_000, PIRATE.countIn + 8);
+  const plan = songs.length ? songPlan(drumAt, MAX_RACE_MS + 20_000, PIRATE.countIn, songs) : { beats: drumBeats(drumAt, MAX_RACE_MS + 20_000, PIRATE.countIn + 8), plays: [] };
+  const beats = plan.beats;
   const first = PIRATE.countIn;
   const raceAt = beats[first];
   let step: PirateView['step'] = 'crew';
@@ -519,7 +558,7 @@ export const pirateRace: GameFactory = (m) => {
         treasureAt: raceLight && m.strip(raceLight) ? treasureAt : null,
         audioOffset: m.settings.pirateAudioOffset,
         sounds,
-        song: song?.id ?? null,
+        songs: plan.plays,
         stats: Object.fromEntries(stats),
       };
     },
