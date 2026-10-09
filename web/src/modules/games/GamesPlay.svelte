@@ -10,6 +10,7 @@
   import GameCard from './ui/GameCard.svelte';
   import Versus from './ui/Versus.svelte';
   import PotPanel from './ui/PotPanel.svelte';
+  import MoneyFlow from './ui/MoneyFlow.svelte';
   import Fuse from './ui/Fuse.svelte';
   import PirateCrewCard from './phone/PirateCrewCard.svelte';
   import BluffRules from './phone/BluffRules.svelte';
@@ -147,7 +148,7 @@
             {#if line.detail}<span class="dim">{line.detail}</span>{/if}
           </div>
         {/if}
-        {#if economy && r.payouts[me] > 0}<p class="gain" in:fly={{ y: 12, delay: 300 }}><Money amount={r.payouts[me]} sign /></p>{/if}
+        {#if economy && (r.payouts[me] > 0 || (m.mode !== 'solo' && m.stake > 0))}<MoneyFlow amount={r.payouts[me] > 0 ? r.payouts[me] : -m.stake} delay={400} />{/if}
         <button class="btn block close" onclick={() => (local.closed = m.id)}>Close</button>
       </div>
     {/if}
@@ -343,10 +344,6 @@
   .stat .mono {
     font-size: 1.8rem;
     font-weight: 700;
-  }
-  .gain {
-    font-size: 1.8rem;
-    color: var(--success);
   }
   .close {
     margin-top: 0.8rem;

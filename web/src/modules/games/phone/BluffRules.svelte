@@ -23,7 +23,7 @@
     </div>
     <BluffOdds {deal} {other} {economy} />
     {#if economy && deal.bonus > 0}
-      <p class="faint small center">Both share: your bet back, plus a <Money amount={deal.bonus} /> bonus each.</p>
+      <p class="faint small center">Both share: your bet back plus a <Money amount={deal.bonus} /> bonus each. One steals: takes it all, both bonuses included.</p>
     {/if}
   </div>
   <ol class="tips">
