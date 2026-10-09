@@ -104,7 +104,6 @@ export const GAMES: GameInfo[] = [
     modes: ['room', 'duel'],
     lights: true,
     pausesMusic: true,
-    maxPlayers: 12,
     steps: ['Find your crew: your phone shows your ship color', 'Tap ROW on every beat of the drum, all together', '5 synchronized strokes in a row: speed boost, as long as you stay in sync!'],
     colors: ['#2fb4ff', '#c98a2b'],
   },
@@ -585,8 +584,13 @@ export const PIRATE_FORMATIONS: Record<number, number[]> = {
   11: [5, 6],
   12: [4, 4, 4],
 };
-export const PIRATE_MAX_PLAYERS = 12;
-export const pirateFormation = (players: number) => PIRATE_FORMATIONS[Math.min(PIRATE_MAX_PLAYERS, Math.max(2, players))];
+/** More than 12 players: 3 crews up to 15, 4 up to 24, then all 5 ships, as even as can be (7 vs 7 vs 6) */
+export const pirateFormation = (players: number): number[] => {
+  const n = Math.max(2, Math.floor(players));
+  if (PIRATE_FORMATIONS[n]) return PIRATE_FORMATIONS[n];
+  const crews = n <= 15 ? 3 : n <= 24 ? 4 : PIRATE_SHIPS.length;
+  return Array.from({ length: crews }, (_, k) => Math.floor(n / crews) + (k >= crews - (n % crews) ? 1 : 0));
+};
 /** "3 vs 4" */
 export const formationName = (players: number) => pirateFormation(players).join(' vs ');
 

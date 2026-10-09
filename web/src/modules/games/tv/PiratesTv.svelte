@@ -133,6 +133,9 @@
     return { x: p0.x + (p1.x - p0.x) * f, y: p0.y + (p1.y - p0.y) * f, deg: (Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180) / Math.PI };
   }
 
+  /** Big crews: faces shown on a crew's sign, and the most players listed by name on the overlays */
+  const CARD_FACES = 8;
+  const NAMED = 6;
   const placeText = (n: number | null) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
 
   /** Rocks and reefs around the routes (fractions of the sea) */
@@ -220,10 +223,11 @@
           <div class="card" style:--team={ship.hex} style:top="{r.a.y}px" style:width="{map.harbor - 22}px" class:won={c.place === 1}>
             <span class="name"><span class="flag"></span>{ship.name} ship</span>
             <span class="crew">
-              {#each c.members as id (id)}
+              {#each c.members.slice(0, CARD_FACES) as id (id)}
                 {@const p = playerOf(id)}
                 {#if p}<Avatar name={p.name} color={p.color} id={p.id} size="1.8rem" />{/if}
               {/each}
+              {#if c.members.length > CARD_FACES}<span class="more">+{c.members.length - CARD_FACES}</span>{/if}
             </span>
             <span class="foot">
               <span class="pips" aria-label={`${c.streak} in sync`}>
@@ -269,10 +273,10 @@
             <div class="crew-card" style:--team={ship.hex} in:scale={{ delay: 200 + k * 180, start: 0.7 }}>
               <span class="mini"><span><PirateShip ship={c.ship} color={ship.hex} speed={0} /></span></span>
               <strong>{ship.name} ship</strong>
-              <span class="names">
+              <span class="names" class:faces={c.members.length > NAMED}>
                 {#each c.members as id (id)}
                   {@const p = playerOf(id)}
-                  {#if p}<span class="mate"><Avatar name={p.name} color={p.color} id={p.id} size="2.4rem" />{p.name}</span>{/if}
+                  {#if p}<span class="mate"><Avatar name={p.name} color={p.color} id={p.id} size={c.members.length > NAMED ? '2rem' : '2.4rem'} />{#if c.members.length <= NAMED}{p.name}{/if}</span>{/if}
                 {/each}
               </span>
             </div>
@@ -302,7 +306,7 @@
                   {@const p = playerOf(id)}
                   {#if p}
                     <span class="mate big">
-                      <Avatar name={p.name} color={p.color} id={p.id} size="4rem" />
+                      <Avatar name={p.name} color={p.color} id={p.id} size={c.members.length > NAMED ? '2.8rem' : '4rem'} />
                       <strong>{p.name}</strong>
                       <span class="dim small">{v.stats[id]?.onBeat ?? 0} on the beat</span>
                       {#if economy && r.payouts[id] > 0}<span class="gain"><Money amount={r.payouts[id]} sign /></span>{/if}
@@ -778,6 +782,17 @@
     height: 4.45rem;
     translate: -50% -50%;
     rotate: -90deg;
+  }
+  .more {
+    align-self: center;
+    margin-left: 0.2rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: rgb(255 255 255 / 0.75);
+  }
+  .names.faces {
+    gap: 0.3rem;
+    max-width: 18rem;
   }
   .names {
     display: flex;

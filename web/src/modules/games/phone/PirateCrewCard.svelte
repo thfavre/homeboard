@@ -6,7 +6,13 @@
   /** This player's ship and crew, in the ship's color: on the rules screen and while rowing */
   let { crew, players, me, phase = null, compact = false }: { crew: PirateCrewDeal; players: GamePlayer[]; me: string; phase?: number | null; compact?: boolean } = $props();
   const ship = $derived(PIRATE_SHIPS.find((s) => s.id === crew.ship) ?? PIRATE_SHIPS[0]);
-  const mates = $derived(crew.members.map((id) => players.find((p) => p.id === id)).filter((p) => !!p));
+  /** Me first, then my crewmates */
+  const mates = $derived(
+    [...crew.members]
+      .sort((a, b) => (a === me ? -1 : b === me ? 1 : 0))
+      .map((id) => players.find((p) => p.id === id))
+      .filter((p) => !!p),
+  );
 </script>
 
 <div class="crew" class:compact style:--team={ship.hex}>
@@ -17,9 +23,10 @@
     <span class="eyebrow">You row for the</span>
     <strong>{ship.name} ship</strong>
     <span class="mates">
-      {#each mates as p (p.id)}
+      {#each mates.slice(0, 8) as p (p.id)}
         <span class="mate" class:me={p.id === me}><Avatar name={p.name} color={p.color} id={p.id} size="1.6rem" />{p.id === me ? 'You' : p.name}</span>
       {/each}
+      {#if mates.length > 8}<span class="mate">+{mates.length - 8}</span>{/if}
     </span>
   </span>
 </div>
