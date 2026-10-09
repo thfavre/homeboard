@@ -84,6 +84,8 @@
 <style>
   .rhythm {
     position: relative;
+    width: 50%;
+    margin: 0 auto;
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto minmax(0, 1fr) auto;
     align-items: center;
