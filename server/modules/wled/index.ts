@@ -686,6 +686,30 @@ export default defineModule<WledSettings>({
       return (state.seg ?? []).map((s: any) => ({ id: s.id, name: typeof s.n === 'string' && s.n ? s.n : `Segment ${s.id}`, leds: s.len ?? s.stop - s.start }));
     });
 
+    /** Restart one light (`id`) or all of them: back on its boot preset, and on the scene again once it answers */
+    ctx.onAdmin('reboot', async (args) => {
+      const list = args.id ? devices().filter((d) => d.id === args.id) : devices().filter((d) => health.get(d.id)?.online);
+      if (!list.length) throw new HbError(args.id ? 'Unknown light' : 'No lights are reachable right now');
+      const done = await Promise.all(
+        list.map(async (d) => {
+          try {
+            await wled(d.host, '/json/state', { rb: true });
+            inScene.delete(d.id);
+            health.set(d.id, { online: false });
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      );
+      ctx.publish();
+      // Seen again as soon as they are back (a restart takes a few seconds)
+      for (const ms of [8000, 15000]) setTimeout(() => void poll(), ms);
+      const failed = list.filter((_, i) => !done[i]).map((d) => d.name);
+      if (failed.length === list.length) throw new HbError(`${failed.join(', ')} did not answer`);
+      return { rebooted: list.length - failed.length, failed };
+    });
+
     ctx.onAdmin('removeDevice', (args) => {
       ctx.settings.update({ devices: devices().filter((d) => d.id !== args.id) });
       ctx.publish();

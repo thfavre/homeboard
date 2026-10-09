@@ -1,9 +1,9 @@
 <script lang="ts">
   import { Synced } from '$lib/synced.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
-  import { Pencil, Play, Plus, RotateCcw, SkipForward, Square, Trash2 } from '@lucide/svelte';
+  import { Pencil, Play, Plus, Power, RotateCcw, SkipForward, Square, Trash2 } from '@lucide/svelte';
   import { WLED_LIVE, type WledDevice, type WledEffect, type WledLook, type WledState } from '$shared/wled.ts';
-  import { hb, rpc, attempt } from '$lib/client.svelte.ts';
+  import { hb, rpc, attempt, toast } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Sheet from '$lib/ui/Sheet.svelte';
   import Countdown from './Countdown.svelte';
@@ -84,6 +84,19 @@
     if (ok) devForm = null;
   }
 
+  /** Restart one light, or every reachable one (no id) */
+  async function reboot(d?: WledDevice) {
+    const sure = await ask({
+      title: d ? `Restart ${d.name}?` : 'Restart every light?',
+      message: 'It goes dark for a few seconds, then comes back on its own start-up preset (or the scene, when one is on).',
+      confirm: 'Restart',
+    });
+    if (!sure) return;
+    const r = await attempt(() => rpc<{ rebooted: number; failed: string[] }>('wled', 'reboot', d ? { id: d.id } : {}));
+    if (r?.failed.length) toast({ text: `${r.failed.join(', ')} did not answer`, kind: 'error' });
+    else if (r) toast({ text: d ? `${d.name} is restarting` : `${r.rebooted} lights are restarting`, kind: 'success' });
+  }
+
   const set = (args: Record<string, unknown>) => attempt(() => rpc('wled', 'setOptions', args));
   const deviceName = (id: string) => mod?.devices.find((d) => d.id === id)?.name ?? id;
 </script>
@@ -121,6 +134,7 @@
 
   <Section title="Lights">
     {#snippet actions()}
+      <button class="btn small" disabled={!mod.devices.some((d) => d.online)} onclick={() => reboot()}><Power size={16} /> Reboot all</button>
       <button class="btn small" onclick={() => editDevice()}><Plus size={16} /> Add</button>
     {/snippet}
     {#each mod.devices as d (d.id)}
@@ -134,6 +148,7 @@
           {/if}
           {#if d.group}<p class="small accent">{d.group} LEDs lit together</p>{/if}
         </div>
+        <button class="btn ghost small" aria-label={`Restart ${d.name}`} title="Restart" disabled={!d.online} onclick={() => reboot(d)}><Power size={15} /></button>
         <button class="btn ghost small" aria-label="Edit" onclick={() => editDevice(d)}><Pencil size={15} /></button>
         <button class="btn ghost small" aria-label="Remove" onclick={async () => (await ask({ title: `Remove ${d.name}?`, confirm: 'Remove', danger: true })) && attempt(() => rpc('wled', 'removeDevice', { id: d.id }))}>
           <Trash2 size={15} />
