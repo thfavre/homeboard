@@ -130,8 +130,11 @@
               <div class="songs">
                 {#each songs as x (x.key)}
                   <button class="song-pick" class:active={song?.key === x.key} onclick={() => (songPick = x.key)}>
-                    <strong class="truncate">{x.title}</strong>
-                    {#if x.artist}<span class="faint small truncate">{x.artist}</span>{/if}
+                    <span class="art" style:background-image={x.cover ? `url("${x.cover}")` : undefined}></span>
+                    <span class="name">
+                      <strong class="truncate">{x.title}</strong>
+                      {#if x.artist}<span class="faint small truncate">{x.artist}</span>{/if}
+                    </span>
                   </button>
                 {/each}
               </div>
@@ -367,8 +370,21 @@
     padding-left: 0.6rem;
     border-left: 2px solid var(--accent);
   }
-  .song-pick {
+  .song-pick .art {
+    flex: none;
+    width: 2.3rem;
+    height: 2.3rem;
+    border-radius: 0.4rem;
+    background: var(--surface-2) center / cover no-repeat;
+  }
+  .song-pick .name {
+    min-width: 0;
     display: grid;
+  }
+  .song-pick {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
     padding: 0.5rem 0.8rem;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);

@@ -23,6 +23,10 @@ export interface Song {
   previewMs: number;
   /** Audio file name in the media folder */
   audio: string;
+  /** BeatSaver's cover picture and 10 second MP3 preview (online) */
+  cover?: string;
+  preview?: string;
+  durationSec?: number;
   charts: Partial<Record<BsDifficulty, BsNote[]>>;
 }
 
@@ -33,6 +37,13 @@ const json = (b: Buffer | undefined) => (b ? JSON.parse(b.toString('utf8').repla
 export function songKey(raw: string): string {
   const m = /([0-9a-f]{1,8})\/?$/i.exec(raw.trim());
   return m ? m[1].toLowerCase() : '';
+}
+
+/** True when the chart changes tempo along the way (not handled: its notes would drift from the song) */
+function changesTempo(map: any, bpm: number): boolean {
+  const changes = [...(map?._BPMChanges ?? []), ...(map?._events ?? []).filter((e: any) => e._type === 100)];
+  if (changes.some((c: any) => Math.abs(Number(c._BPM ?? c._floatValue) - bpm) > 0.01)) return true;
+  return (map?.bpmEvents ?? []).some((e: any) => Math.abs(Number(e.m) - bpm) > 0.01);
 }
 
 /** Notes of a difficulty file, any map version (2, 3 or 4). Bombs are left out. */
@@ -71,12 +82,20 @@ function parseMap(files: Map<string, Buffer>): { info: Omit<Song, 'key' | 'hash'
         file: d._beatmapFilename,
       }));
   const charts: Song['charts'] = {};
+  let tempoChanges = false;
   for (const l of levels) {
     if (!BS_DIFFICULTIES.includes(l.difficulty as BsDifficulty)) continue;
-    const notes = notesOf(json(files.get(find(l.file) ?? '')), bpm, offsetMs);
+    const map = json(files.get(find(l.file) ?? ''));
+    if (changesTempo(map, bpm)) {
+      tempoChanges = true;
+      continue;
+    }
+    const notes = notesOf(map, bpm, offsetMs);
     if (notes.length >= 20) charts[l.difficulty as BsDifficulty] = notes;
   }
-  if (!Object.keys(charts).length) throw new Error('This map has no playable chart');
+  if (!Object.keys(charts).length) {
+    throw new Error(tempoChanges ? 'This map changes tempo along the song: pick another one' : 'This map has no playable chart');
+  }
   return {
     info: {
       title: String((v4 ? info.song?.title : info._songName) ?? 'Song'),
@@ -114,16 +133,75 @@ async function download(key: string, dir: string, byKey: string): Promise<Song> 
   const hash = String(version.hash).toLowerCase();
   const cached = join(dir, `${hash}.json`);
   if (existsSync(cached)) {
-    const song: Song = { ...JSON.parse(readFileSync(cached, 'utf8')), key };
+    const song: Song = {
+      ...JSON.parse(readFileSync(cached, 'utf8')),
+      key,
+      cover: version.coverURL,
+      preview: version.previewURL,
+      durationSec: Number(meta.metadata?.duration) || undefined,
+    };
     writeFileSync(byKey, JSON.stringify(song));
     return song;
   }
   const zip = await fetch(version.downloadURL, { signal: AbortSignal.timeout(60_000) });
   if (!zip.ok) throw new Error(`Download failed (${zip.status})`);
   const { info, audio } = parseMap(unzip(Buffer.from(await zip.arrayBuffer())));
-  const song: Song = { ...info, key, hash, audio: `${hash}.ogg` };
+  const song: Song = {
+    ...info,
+    key,
+    hash,
+    audio: `${hash}.ogg`,
+    cover: version.coverURL,
+    preview: version.previewURL,
+    durationSec: Number(meta.metadata?.duration) || undefined,
+  };
   writeFileSync(join(dir, song.audio), audio);
   writeFileSync(cached, JSON.stringify(song));
   writeFileSync(byKey, JSON.stringify(song));
   return song;
+}
+
+export interface SongSearchHit {
+  key: string;
+  title: string;
+  artist: string;
+  mapper: string;
+  bpm: number;
+  durationSec: number;
+  upvotes: number;
+  /** 0 to 1 */
+  rating: number;
+  difficulties: string[];
+  cover: string;
+  preview: string;
+}
+
+/** Search BeatSaver's maps that can be played (Standard charts), best rated first when there is no text */
+export async function searchSongs(q: string, page: number): Promise<{ hits: SongSearchHit[]; more: boolean }> {
+  const params = new URLSearchParams({ q, sortOrder: q ? 'Relevance' : 'Rating' });
+  const res = await fetch(`${API}/search/text/${page}?${params}`, { signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) throw new Error(`BeatSaver answered ${res.status}`);
+  const data = await res.json();
+  const docs: any[] = data.docs ?? [];
+  const hits = docs
+    .map((m): SongSearchHit | null => {
+      const v = m.versions?.[0];
+      const diffs = (v?.diffs ?? []).filter((d: any) => d.characteristic === 'Standard').map((d: any) => String(d.difficulty));
+      if (!v || !diffs.length) return null;
+      return {
+        key: String(m.id),
+        title: String(m.metadata?.songName ?? m.name ?? ''),
+        artist: String(m.metadata?.songAuthorName ?? ''),
+        mapper: String(m.metadata?.levelAuthorName ?? m.uploader?.name ?? ''),
+        bpm: Math.round(Number(m.metadata?.bpm) || 0),
+        durationSec: Number(m.metadata?.duration) || 0,
+        upvotes: Number(m.stats?.upvotes) || 0,
+        rating: Number(m.stats?.score) || 0,
+        difficulties: BS_DIFFICULTIES.filter((d) => diffs.includes(d)),
+        cover: String(v.coverURL ?? ''),
+        preview: String(v.previewURL ?? ''),
+      };
+    })
+    .filter((h): h is SongSearchHit => !!h);
+  return { hits, more: docs.length >= 20 };
 }

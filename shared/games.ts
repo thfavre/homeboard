@@ -476,5 +476,9 @@ export interface RhythmSongInfo {
   artist?: string;
   /** The audio file */
   url?: string;
+  /** BeatSaver's cover and 10 second MP3 preview (online) */
+  cover?: string;
+  preview?: string;
+  durationSec?: number;
   error?: string;
 }

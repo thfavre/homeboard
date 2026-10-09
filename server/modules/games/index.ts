@@ -32,7 +32,10 @@ import { bluff } from './bluff.ts';
 import { coinFlip } from './coin.ts';
 import { rhythmRain } from './rhythm.ts';
 import { Turntable } from './turntable.ts';
-import { loadSong, songKey, type Song } from './beatsaver.ts';
+import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
+
+/** Songs a new party starts with: well known, well rated maps with charts from Easy or Normal to Expert */
+const STARTER_SONGS = ['747', '217', '8553', '849a', '141', '1492', '6d63', 'bd3', '13760', '1672a', '3fc90', '8278', '38c26'];
 
 const FACTORIES: Record<GameId, GameFactory> = {
   timer: blindTimer,
@@ -92,7 +95,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmSec: 45, rhythmSpeed: 100, rhythmSongs: ['747'], rhythmAudioOffset: 0 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmSec: 45, rhythmSpeed: 100, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -119,7 +122,10 @@ export default defineModule<GamesSettings>({
       try {
         const s = await loadSong(key, songDir);
         if (!songs.has(key)) return;
-        songs.set(key, { info: { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`) }, song: s });
+        songs.set(key, {
+          info: { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`), cover: s.cover, preview: s.preview, durationSec: s.durationSec },
+          song: s,
+        });
       } catch (err) {
         if (!songs.has(key)) return;
         ctx.log.warn('Rhythm Rain song', key, err instanceof Error ? err.message : err);
@@ -127,7 +133,11 @@ export default defineModule<GamesSettings>({
       }
       ctx.publish();
     };
-    for (const key of ctx.settings.get().rhythmSongs) void loadOne(key);
+    // One after the other: the first start downloads the starter songs (about 10 MB each)
+    void (async () => {
+      for (const key of ctx.settings.get().rhythmSongs) songs.set(key, { info: { key, status: 'loading' }, song: null });
+      for (const key of ctx.settings.get().rhythmSongs) if (songs.has(key)) await loadOne(key);
+    })();
     const readySong = (key: unknown) => {
       const e = songs.get(String(key ?? ''));
       return e?.song && e.info.url ? { ...e.song, url: e.info.url } : null;
@@ -604,6 +614,16 @@ export default defineModule<GamesSettings>({
       const e = songs.get(key);
       if (e?.info.status === 'error') throw new HbError(e.info.error ?? 'Could not load it');
       return e?.info;
+    });
+    ctx.onAdmin('searchSongs', async (args) => {
+      try {
+        const page = Math.max(0, Math.min(50, Math.round(num(args?.page, 0))));
+        const r = await searchSongs(String(args?.q ?? '').trim().slice(0, 100), page);
+        const added = new Set(ctx.settings.get().rhythmSongs);
+        return { ...r, hits: r.hits.map((h) => ({ ...h, added: added.has(h.key) })) };
+      } catch (err) {
+        throw new HbError(`BeatSaver cannot be reached: ${err instanceof Error ? err.message : 'no answer'}`);
+      }
     });
     ctx.onAdmin('retrySong', (args) => {
       const key = String(args?.key ?? '');

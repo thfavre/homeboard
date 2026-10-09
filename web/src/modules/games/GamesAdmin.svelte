@@ -8,6 +8,7 @@
   import Money from '$lib/ui/Money.svelte';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { GAME_ICONS, gamesState } from './store.svelte.ts';
+  import RhythmSongsAdmin from './RhythmSongsAdmin.svelte';
 
   const s = $derived(gamesState());
   const m = $derived(s?.match ?? null);
@@ -38,8 +39,6 @@
   const songStep = (now: number, dir: 1 | -1) =>
     dir > 0 ? (SONG_STEPS.find((x) => x > now) ?? now) : ([...SONG_STEPS].reverse().find((x) => x < now) ?? now);
   const PHASES = { lobby: 'Waiting for players', intro: 'Showing the rules', play: 'Playing', result: 'Showing the result' } as const;
-  let newSong = $state('');
-  let adding = $state(false);
   const setSettings = (patch: object) => attempt(() => rpc('games', 'setSettings', patch));
 
   function toggleGame(id: GameId, on: boolean) {
@@ -219,58 +218,10 @@
     </div>
   </Section>
 
-  <Section title="Rhythm Rain songs" hint="Guests pick one when they pay for a duel with music. Each song is downloaded from beatsaver.com once, when you add it.">
-    {#each s.rhythmSongs as x (x.key)}
-      <div class="line">
-        <span>
-          {#if x.status === 'ready'}
-            {x.title}
-            <span class="faint small">{x.artist ? `${x.artist} · ` : ''}map {x.key}</span>
-          {:else if x.status === 'loading'}
-            Map {x.key}
-            <span class="faint small">Downloading...</span>
-          {:else}
-            Map {x.key}
-            <span class="small bad">{x.error}</span>
-          {/if}
-        </span>
-        <span class="song">
-          {#if x.status === 'error'}<button class="btn small" onclick={() => attempt(() => rpc('games', 'retrySong', { key: x.key }))}>Retry</button>{/if}
-          <button class="btn small ghost" aria-label="Remove" onclick={() => attempt(() => rpc('games', 'removeSong', { key: x.key }))}><X size={16} /></button>
-        </span>
-      </div>
-    {:else}
-      <p class="faint small">No song yet: duels are played without music.</p>
-    {/each}
-    <form
-      class="line"
-      novalidate
-      onsubmit={async (e) => {
-        e.preventDefault();
-        if (!newSong.trim() || adding) return;
-        adding = true;
-        if (await attempt(() => rpc('games', 'addSong', { key: newSong }))) newSong = '';
-        adding = false;
-      }}
-    >
-      <input class="input" placeholder="BeatSaver map key or link, e.g. 747" bind:value={newSong} />
-      <button class="btn primary" disabled={adding || !newSong.trim()}><Plus size={16} /> {adding ? 'Downloading...' : 'Add'}</button>
-    </form>
-    <p class="faint small">Find songs on beatsaver.com: the key is in the map's link (beatsaver.com/maps/<span class="mono">747</span>). Maps with Easy to Expert charts suit every level.</p>
-  </Section>
+  <RhythmSongsAdmin songs={s.rhythmSongs} />
 {/if}
 
 <style>
-  .song {
-    display: flex;
-    gap: 0.4rem;
-  }
-  form.line .input {
-    flex: 1;
-  }
-  .bad {
-    color: var(--danger);
-  }
   .speed {
     width: 10rem;
     accent-color: var(--accent);
@@ -314,7 +265,7 @@
   }
   /* Label with a hint under it */
   .game > span,
-  .line > span:not(.game, .stepper, .song) {
+  .line > span:not(.game, .stepper) {
     display: grid;
   }
   .small {
