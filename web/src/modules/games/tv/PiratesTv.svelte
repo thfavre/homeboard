@@ -450,6 +450,8 @@
   .chest svg {
     position: relative;
     width: 100%;
+    /* The open lid reaches above the drawing's box */
+    overflow: visible;
     filter: drop-shadow(0 6px 4px rgb(0 0 0 / 0.3));
   }
   .glow {
