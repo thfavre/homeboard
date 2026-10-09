@@ -106,6 +106,8 @@ interface Crew extends PirateCrew {
  */
 const RACE_SEA = 0.32;
 const SHIP_LEN = 2;
+/** Ships on top of each other take turns: each one shows this long */
+const BLINK_MS = 200;
 
 /** Paint over what is there (w: 0 to 1), so a ship keeps its own color on the sea */
 function cover(px: Float32Array, n: number, i: number, rgb: readonly number[], w: number): void {
@@ -141,7 +143,7 @@ function drawBuoys(px: Float32Array, n: number, from: number, to: number, k: num
 
 /**
  * The lights while the players read the rules: the race light shows the sea, the treasure glowing and the
- * crews' ships lined up at the start, breathing; every other light rolls the sea.
+ * crews' ships on the start line, taking turns; every other light rolls the sea.
  */
 export function pirateWaitingLights(deal: PirateCrewDeal[], settings: GamesSettings, strips: { id: string; leds: number; send(rgb: Uint8Array): void }[]): void {
   const now = Date.now();
@@ -159,7 +161,9 @@ export function pirateWaitingLights(deal: PirateCrewDeal[], settings: GamesSetti
       const start = (SHIP_LEN + 0.5) * u;
       drawBuoys(px, n, start, treasure, 1);
       drawTreasure(px, n, treasure, now, u, 0.75 + 0.25 * Math.sin(now / 260));
-      deal.forEach((d, k) => drawShip(px, n, start + k * (SHIP_LEN + 0.6) * u, SHIP_LED[d.ship], u, 0.8 + 0.2 * Math.sin(now / 400 + k * 1.3)));
+      // All on the start line, taking turns like ships on top of each other in the race
+      const d = deal[Math.floor(now / BLINK_MS) % deal.length];
+      if (d) drawShip(px, n, start, SHIP_LED[d.ship], u);
     }
     s.send(pack(px, n, race && settings.pirateReverse));
   }
@@ -333,7 +337,7 @@ export const pirateRace: GameFactory = (m) => {
       else groups.push([s]);
     }
     for (const g of groups) {
-      const shown = g[Math.floor(now / 200) % g.length];
+      const shown = g[Math.floor(now / BLINK_MS) % g.length];
       for (const { c, pos } of g) {
         const rgb = SHIP_LED[c.ship];
         const stern = pos - SHIP_LEN * u;
