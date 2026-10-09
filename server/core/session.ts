@@ -52,7 +52,7 @@ const GUEST_COLORS = [
 const LEDGER_SIZE = 500;
 const PIN_PATTERN = /^\d{4}$/;
 /** Wrong PINs allowed before a name is locked for a while (a 4-digit PIN is quick to guess otherwise) */
-const PIN_TRIES = 5;
+const PIN_TRIES = 10;
 const PIN_LOCK_MS = 60_000;
 
 function checkPin(pin: string, stored: NonNullable<Guest['pin']>): boolean {

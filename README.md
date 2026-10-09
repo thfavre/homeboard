@@ -106,7 +106,7 @@ When joining, each guest picks a name and a 4-digit PIN (they are told not to re
 The phone then remembers them: closing the page or the browser is fine. On another phone or
 browser, they enter the **same name and PIN** to get their account back. Guests can see their PIN
 (blurred until they tap the eye) in their profile; it is never sent to the TV or the host screen,
-and 5 wrong PINs lock that name for 5 minutes. Guests can change their PIN in their profile, and
+and 10 wrong PINs lock that name for a minute (longer each time). Guests can change their PIN in their profile, and
 the host can set a new one from the Guests screen if someone forgets it.
 
 Because the free tunnel URL changes when the server restarts, phones forget the account after a
