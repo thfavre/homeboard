@@ -4,6 +4,7 @@ import {
   DEFAULT_WLED_EFFECTS,
   DEFAULT_WLED_SCENES,
   LEGACY_WLED_EFFECTS,
+  LEGACY_WLED_SCENES,
   WLED_LIVE,
   type WledDevice,
   type WledEffect,
@@ -32,6 +33,8 @@ interface WledSettings {
   sceneBrightness: number;
   /** Default effects this list has already been offered (empty: the ones from before this was kept) */
   knownEffects: string[];
+  /** Same for scenes */
+  knownScenes: string[];
 }
 
 interface Job extends WledJob {
@@ -165,6 +168,7 @@ export default defineModule<WledSettings>({
     brightness: 255,
     sceneBrightness: 140,
     knownEffects: [],
+    knownScenes: [],
   },
 
   setup(ctx) {
@@ -179,6 +183,13 @@ export default defineModule<WledSettings>({
       const ids = DEFAULT_WLED_EFFECTS.map((e) => e.id);
       if (added.length || effects.some((e, i) => e !== s.effects[i]) || ids.some((id) => !s.knownEffects.includes(id))) {
         ctx.settings.update({ effects: [...effects, ...added], knownEffects: ids });
+      }
+      // New default scenes go first
+      const knownScenes = new Set(s.knownScenes.length ? s.knownScenes : LEGACY_WLED_SCENES);
+      const newScenes = DEFAULT_WLED_SCENES.filter((e) => !knownScenes.has(e.id) && !s.scenes.some((x) => x.id === e.id));
+      const sceneIds = DEFAULT_WLED_SCENES.map((e) => e.id);
+      if (newScenes.length || sceneIds.some((id) => !s.knownScenes.includes(id))) {
+        ctx.settings.update({ scenes: [...newScenes, ...s.scenes], knownScenes: sceneIds });
       }
     }
 

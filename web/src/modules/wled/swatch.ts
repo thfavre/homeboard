@@ -17,6 +17,7 @@ const NAMED: Record<string, string> = {
   storm: 'linear-gradient(160deg, transparent 45%, #e0e7ff 48%, transparent 52%), linear-gradient(180deg, #111a3a, #2d3f7a)',
   glitch: 'repeating-linear-gradient(90deg, #ff00c8 0 12%, #00f0ff 12% 22%, #ffe600 22% 30%, #120024 30% 38%)',
   // Scenes
+  'flow-orange': 'linear-gradient(120deg, #961e00, #ff6a00 40%, #ff8000 60%, #961e00)',
   embers: 'radial-gradient(circle at 30% 70%, #ffb347, transparent 55%), linear-gradient(135deg, #ff6500, #550d00)',
   northern: 'linear-gradient(170deg, #0b1d3a 10%, #05ffb2 45%, #66ccff 65%, #7b3fe4)',
   night: 'radial-gradient(circle at 25% 30%, #fff 0 3%, transparent 4%), radial-gradient(circle at 70% 55%, #c7d2fe 0 3%, transparent 4%), linear-gradient(135deg, #0b1033, #3b2a7a)',

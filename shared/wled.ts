@@ -125,6 +125,8 @@ export const DEFAULT_WLED_EFFECTS: WledEffect[] = [
 
 /** Calm looks, from the presets on the lights: they stay until another scene is picked */
 export const DEFAULT_WLED_SCENES: WledEffect[] = [
+  // The Corner's "Flow Chill Orange" preset, as it is, on every light
+  { id: 'flow-orange', name: 'Flow chill orange', fx: 110, pal: 4, sx: 4, ix: 15, colors: ['#ff8000', '#ff6a00', '#961e00'] },
   {
     id: 'embers',
     name: 'Warm embers',
@@ -209,3 +211,5 @@ export const DEFAULT_WLED_SCENES: WledEffect[] = [
 
 /** The default effects shipped before ones were added: any other default missing from a saved list is new to it */
 export const LEGACY_WLED_EFFECTS = ['rainbow', 'party', 'fireworks', 'fire', 'ocean', 'twinkle', 'meteor', 'lightning', 'heartbeat', 'aurora', 'disco'];
+/** Same for scenes */
+export const LEGACY_WLED_SCENES = ['embers', 'northern', 'night', 'sea', 'sunset', 'vapor', 'cyber', 'candles'];
