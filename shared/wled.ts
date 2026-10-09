@@ -134,7 +134,7 @@ export const DEFAULT_WLED_SCENES: WledEffect[] = [
   { id: 'moodlamp', name: 'Mood lamp', fx: 8, pal: 0, sx: 6, ix: 230, colors: [] },
   { id: 'lagoon', name: 'Lagoon', fx: 46, pal: 0, sx: 12, ix: 200, colors: ['#00c2b8', '#00233a'] },
   { id: 'lava', name: 'Lava lamp', fx: 107, pal: 41, sx: 10, ix: 0, colors: [] },
-  { id: 'forest', name: 'Forest shade', fx: 112, pal: 14, sx: 20, ix: 40, colors: [] },
+  { id: 'forest', name: 'Forest shade', fx: 67, pal: 10, sx: 10, ix: 60, colors: [] },
   { id: 'waves', name: 'Slow waves', fx: 15, pal: 0, sx: 20, ix: 8, colors: ['#ff9a3c', '#3a0a5a'] },
   { id: 'tide', name: 'Rainbow tide', fx: 63, pal: 0, sx: 18, ix: 128, colors: [] },
   {

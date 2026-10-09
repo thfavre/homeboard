@@ -186,14 +186,21 @@ export default defineModule<WledSettings>({
       }
       // New default scenes go where they are in the defaults: after the default before them still in the list
       const knownScenes = new Set(s.knownScenes.length ? s.knownScenes : LEGACY_WLED_SCENES);
-      const scenes = [...s.scenes];
+      // Default scenes that were changed since, still as they were shipped: the new version
+      const sameLook = (a: WledEffect, b: Omit<WledLook, 'colors'>) => a.fx === b.fx && a.pal === b.pal && a.sx === b.sx && a.ix === b.ix && !a.variants;
+      const upgrades: Record<string, Omit<WledLook, 'colors'>> = { forest: { fx: 112, pal: 14, sx: 20, ix: 40 } };
+      const scenes = s.scenes.map((x) => {
+        const was = upgrades[x.id];
+        return was && sameLook(x, was) ? { ...DEFAULT_WLED_SCENES.find((d) => d.id === x.id)!, name: x.name } : x;
+      });
+      const upgraded = scenes.some((x, i) => x !== s.scenes[i]);
       DEFAULT_WLED_SCENES.forEach((e, i) => {
         if (knownScenes.has(e.id) || scenes.some((x) => x.id === e.id)) return;
         const before = DEFAULT_WLED_SCENES.slice(0, i).map((p) => scenes.findIndex((x) => x.id === p.id));
         scenes.splice(Math.max(-1, ...before) + 1, 0, e);
       });
       const sceneIds = DEFAULT_WLED_SCENES.map((e) => e.id);
-      if (scenes.length !== s.scenes.length || sceneIds.some((id) => !s.knownScenes.includes(id))) {
+      if (upgraded || scenes.length !== s.scenes.length || sceneIds.some((id) => !s.knownScenes.includes(id))) {
         ctx.settings.update({ scenes, knownScenes: sceneIds });
       }
     }

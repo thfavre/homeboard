@@ -24,7 +24,7 @@ const NAMED: Record<string, string> = {
   moodlamp: 'radial-gradient(circle at 50% 50%, #ff7ad9, #7a5cff 70%)',
   lagoon: 'linear-gradient(90deg, #00233a, #00c2b8 50%, #00233a)',
   lava: 'radial-gradient(circle at 30% 65%, #ff2d55 0 22%, transparent 40%), radial-gradient(circle at 72% 30%, #c2185b 0 18%, transparent 36%), #2a0010',
-  forest: 'linear-gradient(135deg, #0b2e13, #2e7d32 45%, #a5d66f 60%, #0b2e13)',
+  forest: 'linear-gradient(120deg, #1b5e20, #43a047 35%, #9ccc65 60%, #2e7d32)',
   waves: 'repeating-linear-gradient(90deg, #ff9a3c 0 25%, #3a0a5a 50%, #ff9a3c 75%)',
   tide: 'linear-gradient(120deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3)',
   embers: 'radial-gradient(circle at 30% 70%, #ffb347, transparent 55%), linear-gradient(135deg, #ff6500, #550d00)',
