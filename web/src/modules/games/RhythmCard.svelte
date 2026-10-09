@@ -40,7 +40,7 @@
 {#if m}
   <div class="card rhythm" in:scale={{ start: 0.95 }}>
     <div class="title">
-      <span class="icon"><Guitar size="1.6rem" /></span>
+      <span class="icon"><Guitar size="1.1rem" /></span>
       <span class="what">
         <span class="eyebrow">Rhythm Rain{#if economy && m.pot > 0}<span>{' · pot '}</span><Money amount={m.pot} />{/if}</span>
         <strong class="truncate">{status}</strong>
@@ -52,8 +52,8 @@
       {@const won = m.result?.winners.includes(p.id)}
       <div class="player" class:won>
         <span class="face">
-          <Avatar name={p.name} color={p.color} id={p.id} size="3rem" />
-          {#if won}<span class="badge crown"><Crown size="1rem" /></span>{:else if m.phase === 'intro' && m.ready.includes(p.id)}<span class="badge ready"><Check size="1rem" strokeWidth={3} /></span>{/if}
+          <Avatar name={p.name} color={p.color} id={p.id} size="2rem" />
+          {#if won}<span class="badge crown"><Crown size="0.7rem" /></span>{:else if m.phase === 'intro' && m.ready.includes(p.id)}<span class="badge ready"><Check size="0.7rem" strokeWidth={3} /></span>{/if}
         </span>
         <span class="who">
           <span class="name truncate">{p.name}</span>
@@ -87,23 +87,23 @@
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 1.6rem;
-    padding: 0.9rem 1.6rem;
+    gap: 1rem;
+    padding: 0.45rem 1rem;
     overflow: hidden;
   }
   .title {
     display: flex;
     align-items: center;
-    gap: 0.9rem;
+    gap: 0.6rem;
     min-width: 0;
   }
   .icon {
     display: grid;
     place-items: center;
-    width: 3rem;
-    height: 3rem;
+    width: 2rem;
+    height: 2rem;
     flex: none;
-    border-radius: 0.9rem;
+    border-radius: 0.6rem;
     background: linear-gradient(135deg, #3dff9b, #8b3dff);
     color: #fff;
   }
@@ -116,13 +116,16 @@
     align-items: center;
     gap: 0.3rem;
   }
+  .what .eyebrow {
+    font-size: 0.65rem;
+  }
   .what strong {
-    font-size: 1.35rem;
+    font-size: 1rem;
   }
   .player {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
+    gap: 0.55rem;
     min-width: 0;
   }
   .face {
@@ -135,11 +138,11 @@
     bottom: -0.3rem;
     display: grid;
     place-items: center;
-    width: 1.6rem;
-    height: 1.6rem;
+    width: 1.05rem;
+    height: 1.05rem;
     border-radius: 50%;
     color: #fff;
-    box-shadow: 0 0 0 0.2rem var(--surface);
+    box-shadow: 0 0 0 0.15rem var(--surface);
   }
   .badge.crown {
     background: var(--coin);
@@ -152,23 +155,25 @@
     min-width: 0;
   }
   .name {
+    font-size: 0.8rem;
     font-weight: 600;
     color: var(--text-dim);
   }
   .line {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.45rem;
+    font-size: 0.85rem;
   }
   .score {
-    font-size: 1.9rem;
+    font-size: 1.3rem;
     line-height: 1.1;
   }
   .won .score {
     color: var(--coin);
   }
   .mult {
-    padding: 0.05rem 0.55rem;
+    padding: 0 0.4rem;
     border-radius: 999px;
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
@@ -223,10 +228,13 @@
   .time {
     display: grid;
     justify-items: end;
-    min-width: 4.5rem;
+    min-width: 3rem;
+  }
+  .time .eyebrow {
+    font-size: 0.6rem;
   }
   .clock {
-    font-size: 1.9rem;
+    font-size: 1.3rem;
     font-weight: 700;
     line-height: 1.1;
   }
@@ -234,7 +242,7 @@
     position: absolute;
     left: 0;
     bottom: 0;
-    height: 0.25rem;
+    height: 0.18rem;
     background: var(--gradient);
     transition: width 0.25s linear;
   }
