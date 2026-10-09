@@ -153,7 +153,7 @@
     {/each}
   </div>
   {#if more}<button class="btn ghost block" disabled={searching} onclick={() => search(true)}>More results</button>{/if}
-  <p class="faint small">E N H X X+: the charts the map has, Easy to Expert+. Maps with Easy or Normal up to Expert suit every level.</p>
+  <p class="faint small">E N H X X+: the difficulties the map has, Easy to Expert+. Guests only get the ones a song has: maps from Easy or Normal up to Expert suit everyone.</p>
 </div>
 
 <style>

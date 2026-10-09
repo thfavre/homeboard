@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Check, Crown, Guitar } from '@lucide/svelte';
   import { scale } from 'svelte/transition';
-  import { rhythmMultiplier, type RhythmGrade, type RhythmView } from '$shared/games.ts';
+  import { rhythmDifficulty, rhythmMultiplier, type RhythmGrade, type RhythmView } from '$shared/games.ts';
   import { hb, onEvent } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
@@ -53,7 +53,7 @@
     <div class="title">
       <span class="icon"><Guitar size="1.1rem" /></span>
       <span class="what">
-        <span class="eyebrow">Rhythm Rain{#if v}<span>{` · level ${v.difficulty}`}</span>{/if}{#if economy && m.pot > 0}<span>{' · pot '}</span><Money amount={m.pot} />{/if}</span>
+        <span class="eyebrow">Rhythm Rain{#if v}<span>{` · ${rhythmDifficulty(v.chart).name}`}</span>{/if}{#if economy && m.pot > 0}<span>{' · pot '}</span><Money amount={m.pot} />{/if}</span>
         <strong class="truncate">{status}</strong>
       </span>
     </div>

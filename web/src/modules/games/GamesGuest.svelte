@@ -1,6 +1,18 @@
 <script lang="ts">
   import { ChevronRight, Music, Pause, Play, Swords, User, Users, VolumeX } from '@lucide/svelte';
-  import { GAMES, RHYTHM_COLORS, RHYTHM_DEFAULT_LEVEL, rhythmLevel, type GameInfo, type GameMode, type RhythmSongInfo } from '$shared/games.ts';
+  import {
+    GAMES,
+    RHYTHM_COLORS,
+    RHYTHM_DEFAULT_COLORS,
+    RHYTHM_DEFAULT_DIFFICULTY,
+    RHYTHM_DIFFICULTIES,
+    RHYTHM_MAX_COLORS,
+    rhythmDifficulty,
+    type GameInfo,
+    type GameMode,
+    type RhythmDifficulty,
+    type RhythmSongInfo,
+  } from '$shared/games.ts';
   import { formatAmount, parseAmount } from '$shared/money.ts';
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
@@ -15,9 +27,10 @@
   /** Played alone (games that can be): no opponent, no bet */
   let solo = $state(false);
   let stakeText = $state('');
-  /** Rhythm Rain level, sent with the challenge */
-  let difficulty = $state(RHYTHM_DEFAULT_LEVEL);
-  const level = $derived(rhythmLevel(difficulty));
+  /** Rhythm Rain: number of colors (keys) and difficulty, sent with the challenge */
+  let colors = $state(RHYTHM_DEFAULT_COLORS);
+  let chart = $state<RhythmDifficulty>(RHYTHM_DEFAULT_DIFFICULTY);
+  const level = $derived(rhythmDifficulty(chart));
   let busy = $state(false);
   let error = $state('');
 
@@ -26,7 +39,12 @@
   let music = $state(false);
   let songPick = $state('');
   const songs = $derived((s?.rhythmSongs ?? []).filter((x) => x.status === 'ready'));
-  const song = $derived(songs.find((x) => x.key === songPick) ?? songs[0] ?? null);
+  const has = (x: RhythmSongInfo, d: RhythmDifficulty) => !!x.charts?.some((c) => c.id === d);
+  // Songs whose map has this difficulty come first; the others show theirs, a tap on one switches to it
+  const fits = $derived(songs.filter((x) => has(x, chart)));
+  const misses = $derived(songs.filter((x) => !has(x, chart)));
+  const song = $derived(fits.find((x) => x.key === songPick) ?? fits[0] ?? null);
+  const npsOf = (x: RhythmSongInfo) => x.charts?.find((c) => c.id === chart)?.nps;
   const withMusic = $derived(picked?.id === 'rhythm' && mode === 'duel' && music && !!song);
   const canSolo = $derived(mode === 'duel' && !!picked?.modes.includes('solo'));
   const isSolo = $derived(canSolo && solo);
@@ -99,7 +117,7 @@
     error = '';
     if (isSolo) {
       busy = true;
-      const ok = await attempt(() => rpc('games', 'solo', { game: picked!.id, difficulty, ...(withMusic ? { song: song!.key } : {}) }));
+      const ok = await attempt(() => rpc('games', 'solo', { game: picked!.id, colors, chart, ...(withMusic ? { song: song!.key } : {}) }));
       busy = false;
       if (ok) picked = null;
       return;
@@ -120,7 +138,7 @@
     busy = true;
     const ok =
       mode === 'duel'
-        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake, ...(picked!.id === 'rhythm' ? { difficulty, ...(withMusic ? { song: song!.key } : {}) } : {}) }))
+        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake, ...(picked!.id === 'rhythm' ? { colors, chart, ...(withMusic ? { song: song!.key } : {}) } : {}) }))
         : await attempt(() => rpc('games', 'startRoom', { game: picked!.id, stake }));
     busy = false;
     if (ok) picked = null;
@@ -157,21 +175,73 @@
   </div>
 </div>
 
+{#snippet songRow(x: RhythmSongInfo, fit: boolean)}
+  <div class="song-pick" class:active={fit && song?.key === x.key} class:miss={!fit}>
+    <button
+      class="art"
+      class:on={previewing === x.key}
+      style:background-image={x.cover ? `url("${x.cover}")` : undefined}
+      aria-label={previewing === x.key ? 'Stop' : `Listen to ${x.title}`}
+      onclick={() => listen(x)}
+    >
+      <span class="play">{#if previewing === x.key}<Pause size={16} />{:else}<Play size={16} />{/if}</span>
+    </button>
+    <span class="name">
+      <button class="title-btn" disabled={!fit} onclick={() => (songPick = x.key)}>
+        <strong class="truncate">{x.title}</strong>
+        {#if x.artist}<span class="faint small truncate">{x.artist}</span>{/if}
+      </button>
+      <span class="diffs">
+        {#each RHYTHM_DIFFICULTIES as d (d.id)}
+          {#if has(x, d.id)}
+            <button
+              class="diff"
+              class:on={d.id === chart}
+              title={d.name}
+              onclick={() => {
+                chart = d.id;
+                songPick = x.key;
+              }}>{d.short}</button
+            >
+          {/if}
+        {/each}
+        {#if fit && npsOf(x)}<span class="faint tiny">{npsOf(x)!.toFixed(1)} notes/s</span>{/if}
+      </span>
+    </span>
+  </div>
+{/snippet}
+
 {#if picked}
   <Sheet title={isSolo ? 'Solo game' : mode === 'duel' ? 'New duel' : 'Game for everyone'} onclose={() => (picked = null)}>
     <GameCard game={picked} />
 
     {#if picked.id === 'rhythm'}
       <div class="field">
-        <span class="label">Difficulty <strong class="mono level">{difficulty}</strong><span class="faint">/ 10</span></span>
-        <input class="slider" type="range" min="1" max="10" step="1" bind:value={difficulty} style:--p="{((difficulty - 1) / 9) * 100}%" />
-        <div class="helper">
-          <span class="keys">
-            {#each RHYTHM_COLORS.slice(0, level.lanes) as c (c.id)}<span class="key" style:--c={c.hex}></span>{/each}
-          </span>
-          <span class="dim small">{level.help}</span>
+        <span class="label">Colors <span class="faint">one key each on your phone</span></span>
+        <div class="seg">
+          {#each Array.from({ length: RHYTHM_MAX_COLORS }, (_, i) => i + 1) as n (n)}
+            <button class="seg-btn" class:active={colors === n} onclick={() => (colors = n)} aria-label={`${n} colors`}>
+              <span class="keys">{#each RHYTHM_COLORS.slice(0, n) as c (c.id)}<span class="key" style:--c={c.hex}></span>{/each}</span>
+              <strong class="mono">{n}</strong>
+            </button>
+          {/each}
         </div>
       </div>
+
+      <div class="field">
+        <span class="label">Difficulty</span>
+        <div class="seg five">
+          {#each RHYTHM_DIFFICULTIES as d (d.id)}
+            {@const count = songs.filter((x) => has(x, d.id)).length}
+            <button class="seg-btn" class:active={chart === d.id} onclick={() => (chart = d.id)}>
+              <strong>{d.name}</strong>
+              {#if music && songs.length}<span class="faint tiny">{count === 1 ? '1 song' : `${count} songs`}</span>{/if}
+            </button>
+          {/each}
+        </div>
+        <span class="dim small">{level.help}</span>
+      </div>
+
       {#if songs.length}
         <div class="field">
           <span class="label">Sound</span>
@@ -188,25 +258,19 @@
             </button>
             {#if music}
               <div class="songs">
-                {#each songs as x (x.key)}
-                  <div class="song-pick" class:active={song?.key === x.key}>
-                    <button
-                      class="art"
-                      class:on={previewing === x.key}
-                      style:background-image={x.cover ? `url("${x.cover}")` : undefined}
-                      aria-label={previewing === x.key ? 'Stop' : `Listen to ${x.title}`}
-                      onclick={() => listen(x)}
-                    >
-                      <span class="play">{#if previewing === x.key}<Pause size={16} />{:else}<Play size={16} />{/if}</span>
-                    </button>
-                    <button class="name" onclick={() => (songPick = x.key)}>
-                      <strong class="truncate">{x.title}</strong>
-                      {#if x.artist}<span class="faint small truncate">{x.artist}</span>{/if}
-                    </button>
-                  </div>
+                {#each fits as x (x.key)}
+                  {@render songRow(x, true)}
+                {:else}
+                  <p class="faint small none">No song has a {level.name} chart. Pick one of the difficulties below a song.</p>
                 {/each}
+                {#if misses.length}
+                  <span class="eyebrow other">Not in {level.name}</span>
+                  {#each misses as x (x.key)}
+                    {@render songRow(x, false)}
+                  {/each}
+                {/if}
               </div>
-              <span class="faint small">Tap a cover to hear 5 seconds of it.</span>
+              <span class="faint small">Tap a cover to hear 5 seconds of it. The letters are the difficulties a song has.</span>
             {/if}
           </div>
         </div>
@@ -430,11 +494,6 @@
     padding-top: 0.35rem;
     border-top: 1px solid var(--border);
   }
-  .level {
-    margin-left: 0.4rem;
-    font-size: 1.1rem;
-    color: var(--text);
-  }
   .sound {
     display: grid;
     gap: 0.5rem;
@@ -510,11 +569,75 @@
     flex: 1;
     min-width: 0;
     display: grid;
-    padding: 0.2rem 0;
+    gap: 0.25rem;
+  }
+  .title-btn {
+    min-width: 0;
+    display: grid;
+    padding: 0;
     border: 0;
     background: none;
     color: inherit;
     text-align: left;
+  }
+  .song-pick.miss .title-btn {
+    opacity: 0.55;
+  }
+  .diffs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .diff {
+    min-width: 1.7rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 0.35rem;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+  .diff.on {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .other {
+    margin-top: 0.4rem;
+  }
+  .none {
+    padding: 0.3rem 0;
+  }
+  .tiny {
+    font-size: 0.72rem;
+  }
+  .seg {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.35rem;
+  }
+  .seg.five {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  .seg-btn {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 0.25rem;
+    min-height: 3.2rem;
+    padding: 0.4rem 0.2rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 0.85rem;
+  }
+  .seg-btn.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--text);
   }
   .song-pick {
     display: flex;
@@ -537,23 +660,8 @@
     min-width: 0;
     display: grid;
   }
-  .slider {
-    width: 100%;
-    accent-color: var(--accent);
-    height: 1.6rem;
-  }
-  .helper {
-    display: flex;
-    align-items: center;
-    gap: 0.7rem;
-    min-height: 2.6rem;
-    padding: 0.5rem 0.8rem;
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-  }
   .keys {
-    display: grid;
-    grid-template-columns: repeat(4, 0.7rem);
+    display: flex;
     gap: 0.2rem;
     flex: none;
   }

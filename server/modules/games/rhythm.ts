@@ -3,11 +3,13 @@ import {
   RHYTHM_COLORS,
   RHYTHM_POINTS,
   RHYTHM_WRONG_PENALTY,
-  rhythmLevel,
+  rhythmColors,
+  rhythmDifficulty,
   rhythmGradeOf,
   rhythmMultiplier,
   rhythmTarget,
   type RhythmColor,
+  type RhythmDifficulty,
   type RhythmGrade,
   type RhythmNote,
   type RhythmScore,
@@ -15,7 +17,7 @@ import {
 } from '../../../shared/games.ts';
 import { HbError, clamp, num } from '../../core/util.ts';
 import { best, type GameFactory } from './engine.ts';
-import { BS_DIFFICULTIES, type BsDifficulty, type BsNote, type Song } from './beatsaver.ts';
+import { BS_DIFFICULTIES, type BsNote, type Song } from './beatsaver.ts';
 
 const FPS = 50;
 /** A tap reaches the server up to this late; notes count as missed only after it */
@@ -64,13 +66,13 @@ const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.
 
 /**
  * A song: notes on a steady beat, the lane wandering left and right like a guitar line.
- * `busy` starts it denser; with one or two colors it never gets to the densest patterns.
+ * `busy` starts it denser, `densest` caps it (one or two colors never get to the densest patterns).
  */
-function compose(firstAt: number, beatMs: number, songMs: number, lanes: RhythmColor[], busy: number): RhythmNote[] {
+function compose(firstAt: number, beatMs: number, songMs: number, lanes: RhythmColor[], busy: number, densestOf: number): RhythmNote[] {
   const notes: RhythmNote[] = [];
   const bars = Math.max(2, Math.floor(songMs / (beatMs * 4)));
   const top = lanes.length - 1;
-  const densest = lanes.length <= 2 ? 2 : 3;
+  const densest = Math.min(densestOf, lanes.length <= 2 ? 2 : 3);
   let lane = Math.floor(Math.random() * lanes.length);
   for (let bar = 0; bar < bars; bar++) {
     const last = bar === bars - 1;
@@ -79,7 +81,7 @@ function compose(firstAt: number, beatMs: number, songMs: number, lanes: RhythmC
     pattern.forEach((on, i) => {
       if (!on) return;
       // Calm songs repeat lanes more, busy ones jump around (further with many colors)
-      lane += pick(level < 1 ? [-1, 0, 0, 1] : lanes.length > 4 ? [-3, -2, -1, -1, 0, 1, 1, 2, 3] : [-2, -1, -1, 0, 1, 1, 2]);
+      lane += pick(level < 1 ? [-1, 0, 0, 1] : [-2, -1, -1, 0, 1, 1, 2]);
       if (lane < 0) lane = -lane;
       if (lane > top) lane = 2 * top - lane;
       lane = clamp(lane, 0, top);
@@ -89,17 +91,25 @@ function compose(firstAt: number, beatMs: number, songMs: number, lanes: RhythmC
   return notes;
 }
 
-/** Beat Saber chart for each level (the closest one the map has is used) */
-const CHART_FOR_LEVEL: BsDifficulty[] = ['Easy', 'Easy', 'Normal', 'Normal', 'Hard', 'Hard', 'Expert', 'Expert', 'ExpertPlus', 'ExpertPlus'];
-/** Shortest gap kept between two notes of a chart, per level: Beat Saber is played with two arms, here one strip and thumbs */
-const MIN_GAP_MS = [520, 450, 380, 340, 300, 260, 230, 200, 185, 185];
-
-function chartFor(song: Song, difficulty: number): BsNote[] {
-  const want = BS_DIFFICULTIES.indexOf(CHART_FOR_LEVEL[difficulty - 1]);
-  // The wanted one, then easier ones, then harder ones
+/** The song's chart of that difficulty, or the closest it has (easier first) */
+export function chartFor(song: Song, difficulty: RhythmDifficulty): { id: RhythmDifficulty; notes: BsNote[] } | null {
+  const want = BS_DIFFICULTIES.indexOf(difficulty);
   const order = [...BS_DIFFICULTIES.slice(0, want + 1).reverse(), ...BS_DIFFICULTIES.slice(want + 1)];
-  for (const d of order) if (song.charts[d]?.length) return song.charts[d]!;
-  return [];
+  for (const d of order) if (song.charts[d]?.length) return { id: d, notes: song.charts[d]! };
+  return null;
+}
+
+/** Notes a second of a chart as played here (closer notes are left out), over the whole song */
+export function chartNps(chart: BsNote[], minGapMs: number): number {
+  if (chart.length < 2) return 0;
+  let kept = 0;
+  let last = -Infinity;
+  for (const n of chart) {
+    if (n.ms - last < minGapMs) continue;
+    last = n.ms;
+    kept++;
+  }
+  return Math.round((kept / ((chart[chart.length - 1].ms - chart[0].ms) / 1000)) * 10) / 10;
 }
 
 /**
@@ -191,7 +201,7 @@ function songNotes(chart: BsNote[], fromMs: number, toMs: number, zeroAt: number
     if (n.ms < fromMs || n.ms >= toMs || n.ms - last < minGapMs) continue;
     last = n.ms;
     const k = lanes.length;
-    const lane = k === 8 ? n.x + 4 * n.c : k === 2 ? n.c : Math.min(k - 1, Math.floor((n.x * k) / 4));
+    const lane = k === 2 ? n.c : Math.min(k - 1, Math.floor((n.x * k) / 4));
     notes.push({ at: zeroAt + n.ms, color: lanes[lane] });
   }
   return notes;
@@ -214,12 +224,13 @@ const SOLO_FINALE: [number, readonly number[]][] = [
 
 /** Rhythm Rain: notes climb a light strip; tap their color as they cross the zone at the top */
 export const rhythmRain: GameFactory = (m) => {
-  const difficulty = Math.min(10, Math.max(1, Math.round(m.options.difficulty ?? 5)));
-  const level = rhythmLevel(difficulty);
-  const lanes = RHYTHM_COLORS.slice(0, level.lanes).map((c) => c.id);
-  const travelMs = level.travelMs;
   const song = m.song;
-  const chart = song ? chartFor(song, difficulty) : [];
+  const found = song ? chartFor(song, rhythmDifficulty(m.options.chart).id) : null;
+  // The chart played (the closest the song has, should it miss the one asked)
+  const level = rhythmDifficulty(found?.id ?? m.options.chart);
+  const chart = found?.notes ?? [];
+  const lanes = RHYTHM_COLORS.slice(0, rhythmColors(m.options.colors)).map((c) => c.id);
+  const travelMs = level.travelMs;
   const bpm = song ? Math.round(song.bpm * 100) / 100 : level.bpm[0] + Math.floor(Math.random() * (level.bpm[1] - level.bpm[0] + 1));
   const beatMs = 60_000 / bpm;
   const minMs = Math.min(m.settings.rhythmMinSec, m.settings.rhythmMaxSec) * 1000;
@@ -253,7 +264,7 @@ export const rhythmRain: GameFactory = (m) => {
       // The music starts once the count-in is over, the first notes already climbing
       const musicAt = startAt + Math.max(RHYTHM.leadMs, travelMs + 1000);
       beatZero = musicAt - part.fromMs;
-      notes = songNotes(chart, part.fromMs, part.toMs, beatZero, lanes, MIN_GAP_MS[difficulty - 1]);
+      notes = songNotes(chart, part.fromMs, part.toMs, beatZero, lanes, level.minGapMs);
       const lastAt = notes.length ? notes[notes.length - 1].at : musicAt + minMs;
       // Played to the song's end, or a little past the last note, fading out
       musicEndAt = part.toEnd ? beatZero + part.toMs : lastAt + RHYTHM.okMs + GRACE_MS + OUTRO_MS;
@@ -269,10 +280,10 @@ export const rhythmRain: GameFactory = (m) => {
     } else {
       // The count-in: whole beats, long enough for the first note to climb the strip
       const firstAt = startAt + Math.ceil(Math.max(RHYTHM.leadMs, travelMs + beatMs * 2) / beatMs) * beatMs;
-      notes = compose(firstAt, beatMs, minMs, lanes, level.busy);
+      notes = compose(firstAt, beatMs, minMs, lanes, level.busy, level.densest);
       beatZero = firstAt;
     }
-    if (!notes.length) notes = compose(startAt + RHYTHM.leadMs, beatMs, minMs, lanes, level.busy);
+    if (!notes.length) notes = compose(startAt + RHYTHM.leadMs, beatMs, minMs, lanes, level.busy, level.densest);
     hitCount = new Uint8Array(notes.length);
     finaleAt = notes[notes.length - 1].at + RHYTHM.okMs + GRACE_MS;
     endAt = Math.max(finaleAt + OUTRO_MS, musicEndAt);
@@ -521,7 +532,7 @@ export const rhythmRain: GameFactory = (m) => {
         bpm,
         music,
         loading,
-        difficulty,
+        chart: level.id,
         lanes,
         travelMs,
         startAt,

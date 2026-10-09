@@ -2,6 +2,7 @@
   import { Music } from '@lucide/svelte';
   import {
     RHYTHM_COLORS,
+    rhythmDifficulty,
     RHYTHM_WRONG_PENALTY,
     rhythmGradeOf,
     rhythmMultiplier,
@@ -81,13 +82,13 @@
       <span class="cover" style:background-image={v.music.cover ? `url("${v.music.cover}")` : undefined}>{#if !v.music.cover}<Music size={18} />{/if}</span>
       <span class="what">
         <strong class="truncate">{v.music.title}</strong>
-        <span class="faint truncate">{v.music.artist ? `${v.music.artist} · ` : ''}Level {v.difficulty}</span>
+        <span class="faint truncate">{v.music.artist ? `${v.music.artist} · ` : ''}{rhythmDifficulty(v.chart).name}</span>
       </span>
     {:else}
       <span class="cover beat"><Music size={18} /></span>
       <span class="what">
         <strong class="truncate">Rhythm Rain</strong>
-        <span class="faint truncate">Level {v.difficulty} · just the beat</span>
+        <span class="faint truncate">{rhythmDifficulty(v.chart).name} · just the beat</span>
       </span>
     {/if}
     <span class="mono time">{v.loading ? '-:--' : clock(left)}</span>

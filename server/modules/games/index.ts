@@ -2,7 +2,9 @@ import {
   GAMES,
   DUEL_INVITE_MS,
   GAME_COLORS,
-  RHYTHM_DEFAULT_LEVEL,
+  RHYTHM_DIFFICULTIES,
+  rhythmColors,
+  rhythmDifficulty,
   gameInfo,
   type DuelInvite,
   type GameColor,
@@ -24,14 +26,14 @@ import type { Guest } from '../../core/session.ts';
 import { HbError, clamp, num, uid } from '../../core/util.ts';
 import type { LightsApi } from '../wled/index.ts';
 import type { MusicApi } from '../spotify/index.ts';
-import type { GameFactory, GameRuntime, MatchApi, Outcome } from './engine.ts';
+import type { GameFactory, GameRuntime, MatchApi, MatchOptions, Outcome } from './engine.ts';
 import { blindTimer } from './timer.ts';
 import { lightSimon } from './simon.ts';
 import { colorReflex } from './reflex.ts';
 import { perfectCircle } from './circle.ts';
 import { bluff } from './bluff.ts';
 import { coinFlip } from './coin.ts';
-import { rhythmRain } from './rhythm.ts';
+import { chartFor, chartNps, rhythmRain } from './rhythm.ts';
 import { Turntable } from './turntable.ts';
 import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
 
@@ -83,7 +85,7 @@ interface Match {
   lightColor: GameColor | null;
   usesLights: boolean;
   ready: Set<string>;
-  options: { difficulty?: number; song?: string };
+  options: MatchOptions;
   /** The Spotify music was paused for this game: resumed when it ends */
   musicPaused: boolean;
 }
@@ -133,7 +135,8 @@ export default defineModule<GamesSettings>({
         const s = await loadSong(key, songDir);
         if (!songs.has(key)) return;
         songs.set(key, {
-          info: { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`), cover: s.cover, preview: s.preview, previewMs: s.previewMs, durationSec: s.durationSec },
+          info: { key, status: 'ready', title: s.title, artist: s.artist, url: ctx.mediaUrl(`rhythm/${s.audio}`), cover: s.cover, preview: s.preview, previewMs: s.previewMs, durationSec: s.durationSec,
+            charts: RHYTHM_DIFFICULTIES.filter((d) => s.charts[d.id]?.length).map((d) => ({ id: d.id, nps: chartNps(s.charts[d.id]!, d.minGapMs) })) },
           song: s,
         });
       } catch (err) {
@@ -151,6 +154,11 @@ export default defineModule<GamesSettings>({
     const readySong = (key: unknown) => {
       const e = songs.get(String(key ?? ''));
       return e?.song && e.info.url ? { ...e.song, url: e.info.url } : null;
+    };
+    /** Rhythm Rain options from a phone: colors, difficulty (the closest the song has), song */
+    const rhythmOptions = (args: any, song: Song | null): MatchOptions => {
+      const chart = rhythmDifficulty(args?.chart).id;
+      return { colors: rhythmColors(args?.colors), chart: song ? (chartFor(song, chart)?.id ?? chart) : chart, song: song?.key };
     };
     ctx.earn({ key: 'games.win', label: 'Games: win a room game', default: 2000, describe: (a) => `${a} for winning a game started for the room` });
     ctx.earn({ key: 'games.bluff', label: 'Bluff: both share', default: 2000, describe: (a) => `${a} each when both players share in Bluff` });
@@ -492,7 +500,7 @@ export default defineModule<GamesSettings>({
         to: player(opponent),
         stake,
         expiresAt: Date.now() + DUEL_INVITE_MS,
-        ...(game === 'rhythm' ? { difficulty: Math.min(10, Math.max(1, Math.round(num(args?.difficulty, RHYTHM_DEFAULT_LEVEL)))) } : {}),
+        ...(game === 'rhythm' ? (({ colors, chart }) => ({ colors, chart }))(rhythmOptions(args, song)) : {}),
         ...(song ? { song: { key: song.key, title: song.title, artist: song.artist } } : {}),
         charges: [fee, bet],
         timer: setTimeout(() => {
@@ -519,7 +527,7 @@ export default defineModule<GamesSettings>({
       if (inv.song && !readySong(inv.song.key)) throw new HbError('This song is not available any more');
       const bet = ctx.economy.pay(guest, inv.stake, `Duel bet: ${gameInfo(inv.game)!.name}`);
       try {
-        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet], { difficulty: inv.difficulty, song: inv.song?.key });
+        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet], { colors: inv.colors, chart: inv.chart, song: inv.song?.key });
         dropInvite(inv, null);
         intro(m);
       } catch (err) {
@@ -551,8 +559,7 @@ export default defineModule<GamesSettings>({
       const name = gameInfo(game)!.name;
       const fee = ctx.economy.charge(guest, song ? 'games.rhythmMusic' : 'games.solo', 1, `Solo: ${name}${song ? ' with music' : ''}`);
       try {
-        const difficulty = game === 'rhythm' ? Math.min(10, Math.max(1, Math.round(num(args?.difficulty, RHYTHM_DEFAULT_LEVEL)))) : undefined;
-        const m = createMatch(game, 'solo', player(guest), [player(guest)], 0, [fee], { difficulty, song: song?.key });
+        const m = createMatch(game, 'solo', player(guest), [player(guest)], 0, [fee], game === 'rhythm' ? rhythmOptions(args, song) : {});
         intro(m);
       } catch (err) {
         ctx.economy.refund(fee);

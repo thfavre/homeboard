@@ -1,6 +1,6 @@
 import type { Role } from '../../../shared/protocol.ts';
 import type { Song } from './beatsaver.ts';
-import type { CircleDrawing, GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine } from '../../../shared/games.ts';
+import type { CircleDrawing, GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine, RhythmDifficulty } from '../../../shared/games.ts';
 
 /** How a game ended. The match pays out from it. */
 export interface Outcome {
@@ -18,6 +18,13 @@ export interface Outcome {
   payouts?: Record<string, number>;
 }
 
+/** Rhythm Rain: number of colors, difficulty (a chart name) and song key */
+export interface MatchOptions {
+  colors?: number;
+  chart?: RhythmDifficulty;
+  song?: string;
+}
+
 /** What a game gets from the match it runs in */
 export interface MatchApi {
   readonly players: GamePlayer[];
@@ -26,8 +33,8 @@ export interface MatchApi {
   readonly pot: number;
   /** Host settings when the game started */
   readonly settings: GamesSettings;
-  /** Chosen with the challenge (Rhythm Rain level) */
-  readonly options: { difficulty?: number; song?: string };
+  /** Chosen with the challenge (Rhythm Rain: colors, difficulty and song) */
+  readonly options: MatchOptions;
   /** The Rhythm Rain song picked with the challenge, loaded (url: where the TV gets the audio) */
   readonly song: (Song & { url: string }) | null;
   /** Show a color on the lights (and on the TV). null: dark. */

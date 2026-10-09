@@ -123,8 +123,9 @@ export interface DuelInvite {
   to: GamePlayer;
   stake: number;
   expiresAt: number;
-  /** Rhythm Rain level, 1 to 10 */
-  difficulty?: number;
+  /** Rhythm Rain: number of colors (keys) and difficulty */
+  colors?: number;
+  chart?: RhythmDifficulty;
   /** Rhythm Rain played on one of the host's songs (costs the music price) */
   song?: { key: string; title: string; artist: string };
 }
@@ -374,24 +375,29 @@ export const RHYTHM_COLORS = [
 ] as const;
 export type RhythmColor = (typeof RHYTHM_COLORS)[number]['id'];
 
+/** Colors (keys) a player can pick: 1 to 4 */
+export const RHYTHM_MAX_COLORS = 4;
+export const RHYTHM_DEFAULT_COLORS = 3;
+
 /**
- * The 10 levels picked with the challenge: how many colors, how long a note takes to climb to the
- * zone (shorter = faster), the tempo, and `busy`: the song starts already dense.
+ * Difficulties, named like the Beat Saber charts: with music, the song's own chart of that name is
+ * played (a song only offers the ones its map has). `travelMs`: time a note takes to climb to the zone
+ * (shorter = faster). `minGapMs`: closest two notes can be (Beat Saber is played with two arms, here
+ * thumbs). Without music, the notes are made up: `bpm` the tempo, `busy` how dense it starts, `densest`
+ * the densest it gets (0 to 3).
  */
-export const RHYTHM_LEVELS = [
-  { lanes: 1, travelMs: 2000, bpm: [90, 100], busy: 0, help: '1 color, slow. Just feel the beat.' },
-  { lanes: 2, travelMs: 2000, bpm: [95, 105], busy: 0, help: '2 colors, slow.' },
-  { lanes: 2, travelMs: 1600, bpm: [108, 118], busy: 0, help: '2 colors, faster.' },
-  { lanes: 3, travelMs: 1900, bpm: [100, 110], busy: 0, help: '3 colors, steady.' },
-  { lanes: 3, travelMs: 1550, bpm: [110, 120], busy: 0, help: '3 colors, faster.' },
-  { lanes: 4, travelMs: 1800, bpm: [105, 115], busy: 0, help: '4 colors, steady. The classic.' },
-  { lanes: 4, travelMs: 1500, bpm: [112, 122], busy: 0, help: '4 colors, faster.' },
-  { lanes: 4, travelMs: 1300, bpm: [118, 126], busy: 1, help: '4 colors, fast, and busy from the start.' },
-  { lanes: 4, travelMs: 1100, bpm: [124, 132], busy: 1, help: '4 colors, very fast. For real guitar heroes.' },
-  { lanes: 8, travelMs: 1200, bpm: [118, 126], busy: 1, help: '8 colors on two rows of keys, fast. Good luck.' },
+export const RHYTHM_DIFFICULTIES = [
+  { id: 'Easy', name: 'Easy', short: 'E', travelMs: 2000, minGapMs: 480, bpm: [90, 100], busy: 0, densest: 1, help: 'Slow notes, lots of room between them.' },
+  { id: 'Normal', name: 'Normal', short: 'N', travelMs: 1800, minGapMs: 380, bpm: [100, 110], busy: 0, densest: 2, help: 'Steady. The best start.' },
+  { id: 'Hard', name: 'Hard', short: 'H', travelMs: 1550, minGapMs: 300, bpm: [110, 120], busy: 0, densest: 3, help: 'Faster, with quick runs.' },
+  { id: 'Expert', name: 'Expert', short: 'X', travelMs: 1300, minGapMs: 230, bpm: [118, 126], busy: 1, densest: 3, help: 'Fast and busy from the start.' },
+  { id: 'ExpertPlus', name: 'Expert+', short: 'X+', travelMs: 1100, minGapMs: 185, bpm: [124, 132], busy: 1, densest: 3, help: 'Very fast. For real guitar heroes.' },
 ] as const;
-export const RHYTHM_DEFAULT_LEVEL = 5;
-export const rhythmLevel = (n: number) => RHYTHM_LEVELS[Math.min(10, Math.max(1, Math.round(n || RHYTHM_DEFAULT_LEVEL))) - 1];
+export type RhythmDifficulty = (typeof RHYTHM_DIFFICULTIES)[number]['id'];
+export const RHYTHM_DEFAULT_DIFFICULTY: RhythmDifficulty = 'Normal';
+export const rhythmDifficulty = (id: unknown) => RHYTHM_DIFFICULTIES.find((d) => d.id === id) ?? RHYTHM_DIFFICULTIES[1];
+/** Colors from what a phone sent: 1 to 4 */
+export const rhythmColors = (n: unknown) => Math.min(RHYTHM_MAX_COLORS, Math.max(1, Math.round(Number(n) || RHYTHM_DEFAULT_COLORS)));
 
 /**
  * Timing of Rhythm Rain. A note climbs from the bottom of the strip to the middle of the hit zone
@@ -460,8 +466,8 @@ export interface RhythmView {
   /** Every note of the song, sorted (the lights show them anyway) */
   notes: RhythmNote[];
   bpm: number;
-  /** Level 1 to 10, its keys (left to right) and the time a note takes to climb to the zone */
-  difficulty: number;
+  /** The difficulty, the keys (left to right) and the time a note takes to climb to the zone */
+  chart: RhythmDifficulty;
   lanes: RhythmColor[];
   travelMs: number;
   /** Server time of the first beat of the count-in, and the end of the song */
@@ -492,6 +498,8 @@ export interface RhythmSongInfo {
   preview?: string;
   /** Where the map's best part starts in the song (ms), to preview it from the audio file */
   previewMs?: number;
+  /** The difficulties the map has, easiest first, with their notes per second as played here */
+  charts?: { id: RhythmDifficulty; nps: number }[];
   durationSec?: number;
   error?: string;
 }
