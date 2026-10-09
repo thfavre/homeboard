@@ -46,7 +46,7 @@
         <Toggle checked={privacy[n.key]} label={n.title} onchange={(v) => set({ [n.key]: v })} />
       </div>
     {/each}
-    <p class="faint small">The leaderboard can be hidden in Economy. Quiz scores always show names.</p>
+    <p class="faint small">The leaderboard can be hidden in Leaderboard. Quiz scores always show names.</p>
   </Section>
 {/if}
 

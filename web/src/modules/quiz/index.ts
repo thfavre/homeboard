@@ -12,5 +12,5 @@ export default {
   guestTakeover: QuizGuest,
   showGuestTakeover: showQuizScreen,
   guest: { title: 'Quiz', tagline: 'Start a quiz on the TV, or make your own', icon: Trophy, order: 70, component: QuizStart, priceKey: 'quiz.start' },
-  admin: { title: 'Quiz', icon: Trophy, order: 70, component: QuizAdmin },
+  admin: { title: 'Quiz', icon: Trophy, order: 20, group: 'play', keywords: 'trivia questions custom scores', component: QuizAdmin },
 } satisfies ClientModule;

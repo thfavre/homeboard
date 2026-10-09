@@ -40,5 +40,5 @@ export default {
   guestTakeover: GamesPlay,
   showGuestTakeover: showGamesScreen,
   guest: { title: 'Games', tagline: 'Duel someone for money, or start a game for everyone', icon: Gamepad2, order: 65, component: GamesGuest, priceKey: 'games.duel' },
-  admin: { title: 'Games', icon: Gamepad2, order: 65, component: GamesAdmin, prices: GamesPrices },
+  admin: { title: 'Games', icon: Gamepad2, order: 10, group: 'play', keywords: 'duel bet stake rhythm rain guitar songs beatsaver coin flip timer simon reflex circle bluff room', component: GamesAdmin, prices: GamesPrices },
 } satisfies ClientModule;

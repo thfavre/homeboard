@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, Coins, EyeOff, KeyRound, Menu, Palette, Users, X } from '@lucide/svelte';
+  import { Activity, Coins, EyeOff, KeyRound, Medal, Menu, Palette, Search, Users, X } from '@lucide/svelte';
   import type { Component } from 'svelte';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Toasts from '$lib/ui/Toasts.svelte';
@@ -15,6 +15,8 @@
   import Appearance from '../modules/core/admin/Appearance.svelte';
   import Access from '../modules/core/admin/Access.svelte';
   import Privacy from '../modules/core/admin/Privacy.svelte';
+  import Leaderboard from '../modules/core/admin/Leaderboard.svelte';
+  import type { AdminGroup } from '../modules/types.ts';
 
   interface Section {
     id: string;
@@ -25,20 +27,52 @@
     module?: string;
     /** The module's own lines in its "Prices and rewards" section */
     prices?: Component;
+    /** More words the menu search finds it by */
+    keywords?: string;
   }
 
-  const sections: Section[] = [
-    { id: 'live', title: 'Live', icon: Activity, component: Live },
-    { id: 'guests', title: 'Guests', icon: Users, component: Guests },
-    { id: 'economy', title: 'Economy', icon: Coins, component: Economy },
-    ...clientModules
-      .filter((m) => m.admin)
+  /**
+   * The side menu, in groups: the party as it goes, the features (play, sound, TV and lights),
+   * then the settings you set once.
+   */
+  const features = (group: AdminGroup): Section[] =>
+    clientModules
+      .filter((m) => m.admin?.group === group)
       .sort((a, b) => a.admin!.order - b.admin!.order)
-      .map((m) => ({ id: m.id, title: m.admin!.title, icon: m.admin!.icon, component: m.admin!.component, module: m.id, prices: m.admin!.prices })),
-    { id: 'appearance', title: 'Appearance', icon: Palette, component: Appearance },
-    { id: 'privacy', title: 'Privacy', icon: EyeOff, component: Privacy },
-    { id: 'access', title: 'Access', icon: KeyRound, component: Access },
+      .map((m) => ({ id: m.id, title: m.admin!.title, icon: m.admin!.icon, component: m.admin!.component, module: m.id, prices: m.admin!.prices, keywords: m.admin!.keywords }));
+
+  const groups: { title: string; sections: Section[] }[] = [
+    {
+      title: 'Party',
+      sections: [
+        { id: 'live', title: 'Live', icon: Activity, component: Live, keywords: 'now money rain features on off activity stop' },
+        { id: 'guests', title: 'Guests', icon: Users, component: Guests, keywords: 'people pin kick rename balance gift give take money selfie avatar picture' },
+        { id: 'leaderboard', title: 'Leaderboard', icon: Medal, component: Leaderboard, keywords: 'ranking scores boards rotate richest spenders earners hidden tv' },
+      ],
+    },
+    { title: 'Play', sections: features('play') },
+    { title: 'Music and sound', sections: features('sound') },
+    { title: 'TV and lights', sections: features('screen') },
+    {
+      title: 'Settings',
+      sections: [
+        { id: 'economy', title: 'Economy', icon: Coins, component: Economy, keywords: 'money currency prices price rewards earn earning passive income transactions ledger free' },
+        { id: 'appearance', title: 'Appearance', icon: Palette, component: Appearance, keywords: 'theme name colors look' },
+        { id: 'privacy', title: 'Privacy', icon: EyeOff, component: Privacy, keywords: 'names anonymous activity feed hide' },
+        { id: 'access', title: 'Access', icon: KeyRound, component: Access, keywords: 'password pairing phone remote qr code link url tunnel joining session new reset' },
+      ],
+    },
   ];
+  const sections = groups.flatMap((g) => g.sections);
+
+  // Search: every word typed must be in the title or the keywords
+  let query = $state('');
+  const matches = (s: Section) => {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const text = `${s.title} ${s.keywords ?? ''}`.toLowerCase();
+    return words.every((w) => text.includes(w));
+  };
+  const shown = $derived(groups.map((g) => ({ ...g, sections: g.sections.filter(matches) })).filter((g) => g.sections.length));
 
   const initial = new URLSearchParams(location.hash.slice(1)).get('s');
   let current = $state(sections.find((s) => s.id === initial)?.id ?? 'live');
@@ -74,18 +108,35 @@
         <span class="brand">{hb.core.appName}</span>
         <span class="pill">Host</span>
       </div>
-      {#each sections as s (s.id)}
-        {@const f = featureOf(s.module)}
-        <!-- The name opens the page (even when off); the switch only turns the feature on or off -->
-        <div class="nav-row" class:active={s.id === current} class:off={f && !f.enabled}>
-          <button class="nav-item" onclick={() => select(s.id)}>
-            <s.icon size={18} />
-            <span class="truncate">{s.title}</span>
-          </button>
-          {#if f}
-            <span class="nav-toggle"><Toggle checked={f.enabled} label="{f.name} on or off" onchange={(v) => toggleFeature(f.id, v)} /></span>
-          {/if}
-        </div>
+      <label class="search">
+        <Search size={16} />
+        <input
+          type="search"
+          placeholder="Find a setting"
+          bind:value={query}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' && shown[0]) select(shown[0].sections[0].id);
+            if (e.key === 'Escape') query = '';
+          }}
+        />
+      </label>
+      {#each shown as g (g.title)}
+        <span class="group">{g.title}</span>
+        {#each g.sections as s (s.id)}
+          {@const f = featureOf(s.module)}
+          <!-- The name opens the page (even when off); the switch only turns the feature on or off -->
+          <div class="nav-row" class:active={s.id === current} class:off={f && !f.enabled}>
+            <button class="nav-item" onclick={() => select(s.id)}>
+              <s.icon size={18} />
+              <span class="truncate">{s.title}</span>
+            </button>
+            {#if f}
+              <span class="nav-toggle"><Toggle checked={f.enabled} label="{f.name} on or off" onchange={(v) => toggleFeature(f.id, v)} /></span>
+            {/if}
+          </div>
+        {/each}
+      {:else}
+        <p class="faint none">Nothing found. Try another word.</p>
       {/each}
     </nav>
     <button class="scrim" aria-label="Close menu" onclick={() => (menuOpen = false)}></button>
@@ -154,6 +205,43 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0.2rem 0.4rem;
+    padding: 0 0.7rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-faint);
+  }
+  .search:focus-within {
+    border-color: var(--accent);
+  }
+  .search input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.55rem 0;
+    border: 0;
+    outline: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+  }
+  .group {
+    padding: 0.9rem 0.7rem 0.3rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .none {
+    padding: 0.6rem 0.7rem;
+    font-size: 0.88rem;
   }
   .nav-row {
     display: flex;

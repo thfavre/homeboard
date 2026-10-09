@@ -111,9 +111,12 @@
       0 0 0 calc(var(--s) * 0.028) #f8d97a,
       0 calc(var(--s) * 0.01) calc(var(--s) * 0.04) calc(var(--s) * 0.02) rgba(80, 40, 0, 0.5);
   }
+  /* A face without a selfie: its initials struck in the gold */
   .portrait :global(.avatar) {
     border: none;
-    background-color: #f3d17a;
+    background: radial-gradient(circle at 35% 30%, #fbe39a, #e2b043);
+    color: #6b3d00;
+    text-shadow: 0 1px 0 rgba(255, 240, 190, 0.8);
   }
   /* A warm gold tint over the picture, so it looks struck in the coin */
   .portrait::after {

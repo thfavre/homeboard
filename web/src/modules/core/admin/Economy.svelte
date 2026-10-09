@@ -27,8 +27,6 @@
   const currencySymbol = new Synced(() => hb.core?.currency.symbol, '');
   const passive = new Synced(() => hb.core?.admin?.passiveMinutes, 5);
   const passiveAway = new Synced(() => hb.core?.admin?.passiveAwayMinutes, 60);
-  const boardSeconds = new Synced(() => hb.core?.admin?.boardSeconds, 15);
-  const songBoardPlayers = new Synced(() => hb.core?.admin?.songBoardPlayers, 6);
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('core', 'setGeneral', args));
   const setEarn = (key: string, amount: number) => attempt(() => rpc('core', 'setEarn', { key, amount }));
@@ -62,48 +60,6 @@
       <input class="input" maxlength="4" bind:value={currencySymbol.value} onfocus={currencySymbol.start} onblur={() => { set({ currency: { symbol: currencySymbol.value } }); currencySymbol.end(); }} />
     </label>
   </div>
-  <div class="grid2">
-    <label class="field">
-      <span>TV leaderboard</span>
-      <select class="input" value={core.leaderboardMode} onchange={(e) => set({ leaderboardMode: e.currentTarget.value })}>
-        <option value="balance">Richest guests</option>
-        <option value="spent">Big spenders</option>
-        <option value="earned">Top earners</option>
-        <option value="off">Hidden</option>
-      </select>
-    </label>
-  </div>
-  {#if core.leaderboardMode !== 'off'}
-    <div class="line">
-      <div>
-        <strong>Take turns with other boards</strong>
-        <p class="dim small">Most pixels painted, stickers sent, games played and won, songs queued... and the Rhythm Rain scores of each song.</p>
-      </div>
-      <Toggle checked={admin.leaderboardRotate} label="Rotate boards" onchange={(v) => set({ leaderboardRotate: v })} />
-    </div>
-    {#if admin.leaderboardRotate}
-      <div class="line">
-        <div>
-          <span>Each board stays</span>
-          <p class="faint small">Seconds before the next one fades in.</p>
-        </div>
-        <span class="unit">
-          <input class="input num" type="number" min="5" max="300" bind:value={boardSeconds.value} onfocus={boardSeconds.start} onblur={() => { set({ boardSeconds: Number(boardSeconds.value) }); boardSeconds.end(); }} />
-          <span class="faint">s</span>
-        </span>
-      </div>
-      <div class="line">
-        <div>
-          <span>Song boards from</span>
-          <p class="faint small">A Rhythm Rain song gets its own board once this many guests played it with music, at the same difficulty and number of colors.</p>
-        </div>
-        <span class="unit">
-          <input class="input num" type="number" min="1" max="50" bind:value={songBoardPlayers.value} onfocus={songBoardPlayers.start} onblur={() => { set({ songBoardPlayers: Number(songBoardPlayers.value) }); songBoardPlayers.end(); }} />
-          <span class="faint">players</span>
-        </span>
-      </div>
-    {/if}
-  {/if}
 </Section>
 
 <Section title="Earning" hint="How guests get money. They see these rules on their Earn tab.">

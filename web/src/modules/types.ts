@@ -27,10 +27,18 @@ export interface GuestFeature {
   priceKey?: string;
 }
 
+/** Groups of the admin side menu, for the features: play, sound, and what shows on the TV or the lights */
+export type AdminGroup = 'play' | 'sound' | 'screen';
+
 export interface AdminSection {
   title: string;
   icon: Component<any>;
+  /** Place in its group of the side menu (lower first) */
   order: number;
+  /** Group of the side menu it is listed in */
+  group: AdminGroup;
+  /** More words the menu search finds it by (its title always counts) */
+  keywords?: string;
   component: Component;
   /** Extra lines at the end of the module's "Prices and rewards" section, at the top of its page */
   prices?: Component;

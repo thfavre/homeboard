@@ -8,5 +8,5 @@ export default {
   id: 'soundboard',
   tv: [{ slot: 'overlay', order: 40, component: SoundboardTv }],
   guest: { title: 'Soundboard', tagline: 'Play a sound effect on the TV', icon: AudioLines, order: 60, component: SoundboardGuest, priceKey: 'soundboard.sound' },
-  admin: { title: 'Soundboard', icon: AudioLines, order: 60, component: SoundboardAdmin },
+  admin: { title: 'Soundboard', icon: AudioLines, order: 20, group: 'sound', keywords: 'sounds myinstants cooldown upload volume', component: SoundboardAdmin },
 } satisfies ClientModule;

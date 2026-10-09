@@ -8,5 +8,5 @@ export default {
   id: 'wled',
   tv: [{ slot: 'overlay', order: 30, component: WledTv }],
   guest: { title: 'Lights', tagline: 'Start a light show in the room', icon: Lightbulb, order: 50, component: WledGuest, priceKey: 'wled.all' },
-  admin: { title: 'Lights', icon: Lightbulb, order: 50, component: WledAdmin },
+  admin: { title: 'Lights', icon: Lightbulb, order: 40, group: 'screen', keywords: 'wled leds effects devices strip', component: WledAdmin },
 } satisfies ClientModule;

@@ -23,7 +23,9 @@ export default {
   admin: {
     title: 'Text-to-Speech',
     icon: Megaphone,
-    order: 45,
+    order: 30,
+    group: 'sound',
+    keywords: 'voice announcement speech say',
     component: TtsAdmin,
   },
 } satisfies ClientModule;

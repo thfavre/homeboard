@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { fade, scale } from 'svelte/transition';
+  import { scale } from 'svelte/transition';
+  import { Tv } from '@lucide/svelte';
   import type { CoinView, MatchState } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
@@ -106,14 +107,17 @@
       <Coin3D {heads} {tails} size="10rem" transform="rotateX({v.outcome === 'tails' ? 180 : 0}deg) rotateX(12deg)" />
     </span>
     <p class="dim">{landed.id === me ? 'The pot is yours!' : 'Not this time...'}</p>
+  {:else if v.step === 'toss'}
+    <!-- Nothing on the TV yet: just who we are waiting for -->
+    {@const thrower = player(v.flipper)}
+    <span class="eyebrow">Waiting for the throw</span>
+    <span class="waiting"><Avatar name={thrower.name} color={thrower.color} id={thrower.id} size="6rem" /></span>
+    <h1 class="small-title">{thrower.name} is about to throw the coin</h1>
+    {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Thrown by itself in" />{/if}
   {:else}
-    <span class="eyebrow">{v.step === 'toss' ? `${player(v.flipper).name} throws the coin` : 'The coin is in the air'}</span>
+    <span class="eyebrow">The coin is in the air</span>
+    <span class="tv" in:scale={{ start: 0.6, duration: 400 }}><Tv size={56} /></span>
     <h1>Watch the TV!</h1>
-    <Coin3D {heads} {tails} size="8.5rem" idle />
-    {#if v.step === 'toss'}
-      <p class="dim" in:fade>Your face is on one side, {other.name}'s on the other.</p>
-      {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Thrown by itself in" />{/if}
-    {/if}
   {/if}
 </div>
 
@@ -154,6 +158,30 @@
   }
   .pick.lit :global(.avatar) {
     box-shadow: 0 0 0 0.25rem var(--coin);
+  }
+  .small-title {
+    font-size: 1.7rem;
+  }
+  .waiting {
+    display: grid;
+    border-radius: 50%;
+    animation: breathe 1.6s ease-in-out infinite;
+  }
+  .tv {
+    display: grid;
+    place-items: center;
+    width: 6rem;
+    height: 6rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--coin) 16%, transparent);
+    color: var(--coin);
+    animation: breathe 1.6s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    50% {
+      transform: scale(1.06);
+      box-shadow: 0 0 0 0.5rem color-mix(in srgb, var(--coin) 18%, transparent);
+    }
   }
   .pad {
     height: 18rem;

@@ -8,5 +8,5 @@ export default {
   id: 'canvas',
   tv: [{ slot: 'main', order: 10, component: CanvasTv }],
   guest: { title: 'Pixel canvas', tagline: 'Paint on the TV, pixel by pixel', icon: Grid3x3, order: 20, component: CanvasGuest, priceKey: 'canvas.pixel' },
-  admin: { title: 'Pixel canvas', icon: Grid3x3, order: 20, component: CanvasAdmin },
+  admin: { title: 'Pixel canvas', icon: Grid3x3, order: 30, group: 'screen', keywords: 'pixels paint draw clear size', component: CanvasAdmin },
 } satisfies ClientModule;
