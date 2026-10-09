@@ -7,11 +7,13 @@
   import Money from '$lib/ui/Money.svelte';
   import { Now, gamesState } from './store.svelte.ts';
   import { rhythmSound } from './ui/rhythmSound.ts';
+  import { playMusic, preloadMusic, stopMusic, type MusicCue } from './ui/rhythmMusic.ts';
 
   /**
    * Rhythm Rain is played on the light strip: the TV keeps its screen and only shows this card above
    * the main widget, with the time left and both scores. The TV that plays the sound plucks each hit,
-   * the first player on the left speaker, the second on the right.
+   * the first player on the left speaker, the second on the right (softer over a song). With music,
+   * that TV also plays the song, in time with the notes on the light.
    */
   const m = $derived(gamesState()?.match ?? null);
   const v = $derived(m?.phase === 'play' || m?.phase === 'result' ? (m.view as RhythmView | null) : null);
@@ -19,9 +21,25 @@
   const economy = $derived(!!hb.core?.economyEnabled);
   const LABEL: Record<RhythmGrade, string> = { perfect: 'Perfect', good: 'Good', ok: 'Just', miss: 'Miss' };
 
+  const withMusic = $derived(!!v?.music);
   $effect(() =>
-    onEvent<{ player: number; lane: number; grade: RhythmGrade }>('games', 'rhythm', (d) => rhythmSound(d.grade, d.lane, d.player === 0 ? -0.7 : 0.7, 0.6)),
+    onEvent<{ player: number; lane: number; grade: RhythmGrade }>('games', 'rhythm', (d) =>
+      rhythmSound(d.grade, d.lane, d.player === 0 ? -0.7 : 0.7, withMusic ? 0.3 : 0.6),
+    ),
   );
+
+  // Decode the song while the players read the rules, play it on cue, stop it when the game goes away
+  const songUrl = $derived(gamesState()?.rhythmSong?.url);
+  $effect(() => {
+    if (songUrl) void preloadMusic(songUrl).catch(() => {});
+  });
+  $effect(() => {
+    const off = onEvent<MusicCue>('games', 'rhythmMusic', (cue) => void playMusic(cue).catch(() => {}));
+    return () => {
+      off();
+      stopMusic();
+    };
+  });
 
   const firstAt = $derived(v?.notes[0]?.at ?? 0);
   const countIn = $derived(v ? Math.ceil((firstAt - now.value) / 1000) : 0);
@@ -33,7 +51,7 @@
     if (m.phase === 'intro') return 'Reading the rules';
     if (m.phase === 'result') return m.result?.headline ?? 'Over';
     if (countIn > 0) return `Starts in ${countIn}`;
-    return 'Watch the light';
+    return v?.music ? `${v.music.artist ? `${v.music.artist} - ` : ''}${v.music.title}` : 'Watch the light';
   });
 </script>
 

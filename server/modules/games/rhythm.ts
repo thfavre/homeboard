@@ -15,6 +15,7 @@ import {
 } from '../../../shared/games.ts';
 import { HbError, clamp, num } from '../../core/util.ts';
 import { best, type GameFactory } from './engine.ts';
+import { BS_DIFFICULTIES, type BsDifficulty, type BsNote, type Song } from './beatsaver.ts';
 
 const FPS = 40;
 /** A tap reaches the server up to this late; notes count as missed only after it */
@@ -80,6 +81,36 @@ function compose(firstAt: number, beatMs: number, songMs: number, lanes: RhythmC
   return notes;
 }
 
+/** Beat Saber chart for each level (the closest one the map has is used) */
+const CHART_FOR_LEVEL: BsDifficulty[] = ['Easy', 'Easy', 'Normal', 'Normal', 'Hard', 'Hard', 'Expert', 'Expert', 'ExpertPlus', 'ExpertPlus'];
+/** Shortest gap kept between two notes of a chart, per level: Beat Saber is played with two arms, here one strip and thumbs */
+const MIN_GAP_MS = [520, 450, 380, 340, 300, 260, 230, 200, 185, 185];
+
+function chartFor(song: Song, difficulty: number): BsNote[] {
+  const want = BS_DIFFICULTIES.indexOf(CHART_FOR_LEVEL[difficulty - 1]);
+  // The wanted one, then easier ones, then harder ones
+  const order = [...BS_DIFFICULTIES.slice(0, want + 1).reverse(), ...BS_DIFFICULTIES.slice(want + 1)];
+  for (const d of order) if (song.charts[d]?.length) return song.charts[d]!;
+  return [];
+}
+
+/**
+ * The song's notes between `fromMs` and `toMs`, timed for this game. The 4 columns of Beat Saber become
+ * the keys: 2 keys follow the two sabers, 8 keys are the 4 columns of each saber.
+ */
+function songNotes(chart: BsNote[], fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
+  const notes: RhythmNote[] = [];
+  let last = -Infinity;
+  for (const n of chart) {
+    if (n.ms < fromMs || n.ms > toMs || n.ms - last < minGapMs) continue;
+    last = n.ms;
+    const k = lanes.length;
+    const lane = k === 8 ? n.x + 4 * n.c : k === 2 ? n.c : Math.min(k - 1, Math.floor((n.x * k) / 4));
+    notes.push({ at: zeroAt + n.ms, color: lanes[lane] });
+  }
+  return notes;
+}
+
 const rgbOf = (hex: string): [number, number, number] => {
   const n = parseInt(hex.replace('#', ''), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
@@ -94,12 +125,39 @@ export const rhythmRain: GameFactory = (m) => {
   const lanes = RHYTHM_COLORS.slice(0, level.lanes).map((c) => c.id);
   // The host's speed scales how fast the notes climb, at every level
   const travelMs = Math.round(level.travelMs / (Math.max(50, m.settings.rhythmSpeed || 100) / 100));
-  const bpm = level.bpm[0] + Math.floor(Math.random() * (level.bpm[1] - level.bpm[0] + 1));
+  const song = m.options.music ? m.song : null;
+  const chart = song ? chartFor(song, difficulty) : [];
+  const bpm = song ? Math.round(song.bpm * 100) / 100 : level.bpm[0] + Math.floor(Math.random() * (level.bpm[1] - level.bpm[0] + 1));
   const beatMs = 60_000 / bpm;
   const startAt = Date.now();
-  // The count-in: whole beats, long enough for the first note to climb the strip
-  const firstAt = startAt + Math.ceil(Math.max(RHYTHM.leadMs, travelMs + beatMs * 2) / beatMs) * beatMs;
-  const notes = compose(firstAt, beatMs, m.settings.rhythmSec * 1000, lanes, level.busy);
+  const songMs = m.settings.rhythmSec * 1000;
+  let notes: RhythmNote[];
+  let music: RhythmView['music'] = null;
+  /** Server time of the song's beat 0 (the zone pulses on its beats) */
+  let beatZero = startAt;
+  if (song && chart.length) {
+    // The map's "best part", or from the first note when it has none
+    let fromMs = song.previewMs > 0 ? song.previewMs : chart[0].ms;
+    if (chart.filter((n) => n.ms >= fromMs && n.ms <= fromMs + songMs).length < 10) fromMs = Math.max(0, chart[0].ms - 1000);
+    // The music starts once the count-in is over, the first notes already climbing
+    const musicAt = startAt + Math.max(RHYTHM.leadMs, travelMs + 1000);
+    beatZero = musicAt - fromMs;
+    notes = songNotes(chart, fromMs, fromMs + songMs, beatZero, lanes, MIN_GAP_MS[difficulty - 1]);
+    const lastAt = notes.length ? notes[notes.length - 1].at : musicAt + songMs;
+    music = {
+      url: song.url,
+      title: song.title,
+      artist: song.artist,
+      at: musicAt,
+      offsetMs: fromMs,
+      durationMs: lastAt + RHYTHM.okMs + GRACE_MS + OUTRO_MS - musicAt,
+    };
+  } else {
+    // The count-in: whole beats, long enough for the first note to climb the strip
+    const firstAt = startAt + Math.ceil(Math.max(RHYTHM.leadMs, travelMs + beatMs * 2) / beatMs) * beatMs;
+    notes = compose(firstAt, beatMs, songMs, lanes, level.busy);
+  }
+  if (!notes.length) notes = compose(startAt + RHYTHM.leadMs, beatMs, songMs, lanes, level.busy);
   const endAt = notes[notes.length - 1].at + RHYTHM.okMs + GRACE_MS + OUTRO_MS;
 
   const scores = new Map<string, RhythmScore>(
@@ -128,7 +186,7 @@ export const rhythmRain: GameFactory = (m) => {
     };
     const zone = Math.round(RHYTHM.zoneAt * (leds - 1));
     const speed = zone / travelMs;
-    const sinceBeat = (((now - startAt) % beatMs) + beatMs) % beatMs;
+    const sinceBeat = (((now - beatZero) % beatMs) + beatMs) % beatMs;
     const pulse = now >= startAt && now < endAt ? Math.exp(-sinceBeat / 140) : 0;
     for (let i = 0; i < leds; i++) {
       const gap = Math.abs(i - zone) / speed;
@@ -211,6 +269,7 @@ export const rhythmRain: GameFactory = (m) => {
   return {
     start() {
       stopTicks = m.every(1000 / FPS, tick);
+      if (music) m.sound('rhythmMusic', { ...music, earlyMs: m.settings.rhythmAudioOffset });
       m.publish();
     },
 
@@ -220,7 +279,7 @@ export const rhythmRain: GameFactory = (m) => {
       const now = Date.now();
       // The phone sends when it was tapped (server clock), a little before the message got here
       const at = clamp(num(args?.at, now), now - GRACE_MS, now + 50);
-      if (over || at < firstAt - travelMs) return { grade: null };
+      if (over || at < notes[0].at - travelMs) return { grade: null };
       const s = scores.get(id)!;
       const player = m.players.findIndex((p) => p.id === id);
       const lane = lanes.indexOf(color);
@@ -252,6 +311,7 @@ export const rhythmRain: GameFactory = (m) => {
       return {
         notes,
         bpm,
+        music,
         difficulty,
         lanes,
         travelMs,

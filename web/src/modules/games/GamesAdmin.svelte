@@ -195,6 +195,49 @@
     </div>
     <div class="line">
       <span>
+        Rhythm Rain song
+        <span class="faint small">
+          {#if s.rhythmSong?.status === 'ready'}
+            {s.rhythmSong.artist ? `${s.rhythmSong.artist} - ` : ''}{s.rhythmSong.title}: guests can pay for a duel with music
+          {:else if s.rhythmSong?.status === 'loading'}
+            Downloading from BeatSaver...
+          {:else if s.rhythmSong?.status === 'error'}
+            <span class="bad">{s.rhythmSong.error}</span>
+          {:else}
+            None: duels are played without music
+          {/if}
+        </span>
+        <span class="faint small">A map key or link from beatsaver.com (its song and notes are used)</span>
+      </span>
+      <span class="song">
+        <input
+          class="input key mono"
+          placeholder="747"
+          value={s.settings.rhythmSong}
+          onchange={(e) => setSettings({ rhythmSong: e.currentTarget.value, reloadSong: true })}
+        />
+        {#if s.rhythmSong?.status === 'error'}
+          <button class="btn small" onclick={() => setSettings({ reloadSong: true })}>Retry</button>
+        {/if}
+      </span>
+    </div>
+    <div class="line">
+      <span>
+        Rhythm Rain: music timing <strong class="mono">{s.settings.rhythmAudioOffset > 0 ? '+' : ''}{s.settings.rhythmAudioOffset} ms</strong>
+        <span class="faint small">If the notes reach the zone after the beat you hear, move it to +; before the beat, to -</span>
+      </span>
+      <input
+        class="speed"
+        type="range"
+        min="-500"
+        max="500"
+        step="10"
+        value={s.settings.rhythmAudioOffset}
+        onchange={(e) => setSettings({ rhythmAudioOffset: Number(e.currentTarget.value) })}
+      />
+    </div>
+    <div class="line">
+      <span>
         Show the light colors on the TV too
         <span class="faint small">{s.lights ? 'Light Simon and Color Reflex use your WLED lights' : 'No light reachable: the TV always shows the colors'}</span>
       </span>
@@ -204,6 +247,16 @@
 {/if}
 
 <style>
+  .song {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .key {
+    width: 7rem;
+  }
+  .bad {
+    color: var(--danger);
+  }
   .speed {
     width: 10rem;
     accent-color: var(--accent);
@@ -247,7 +300,7 @@
   }
   /* Label with a hint under it */
   .game > span,
-  .line > span:not(.game, .stepper) {
+  .line > span:not(.game, .stepper, .song) {
     display: grid;
   }
   .small {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronRight, Swords, Users } from '@lucide/svelte';
+  import { ChevronRight, Music, Swords, Users, VolumeX } from '@lucide/svelte';
   import { GAMES, RHYTHM_COLORS, RHYTHM_DEFAULT_LEVEL, rhythmLevel, type GameInfo, type GameMode } from '$shared/games.ts';
   import { formatAmount, parseAmount } from '$shared/money.ts';
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
@@ -20,13 +20,17 @@
   let error = $state('');
 
   const s = $derived(gamesState());
+  /** Rhythm Rain on the host's song (its own price) */
+  let music = $state(false);
+  const song = $derived(s?.rhythmSong?.status === 'ready' ? s.rhythmSong : null);
+  const withMusic = $derived(picked?.id === 'rhythm' && mode === 'duel' && music && !!song);
   const economy = $derived(!!hb.core?.economyEnabled);
   const list = $derived(GAMES.filter((g) => g.modes.includes(mode) && s?.settings.enabled.includes(g.id)));
   // Richest first: the ones who can match a big bet
   const others = $derived((s?.online ?? []).filter((p) => p.id !== hb.me?.id).sort((a, b) => b.balance - a.balance));
   const opponentName = $derived(others.find((p) => p.id === opponent)?.name);
   const stake = $derived(economy ? Math.max(0, parseAmount(stakeText || '0')) : 0);
-  const fee = $derived(price(mode === 'duel' ? 'games.duel' : 'games.room'));
+  const fee = $derived(price(mode === 'duel' ? (withMusic ? 'games.rhythmMusic' : 'games.duel') : 'games.room'));
   const maxStake = $derived(s?.settings.maxStake ?? 0);
   const tvBusy = $derived(!!s?.match || (!!hb.core?.takeover && hb.core.takeover !== 'games'));
 
@@ -54,7 +58,7 @@
     busy = true;
     const ok =
       mode === 'duel'
-        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake, ...(picked!.id === 'rhythm' ? { difficulty } : {}) }))
+        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake, ...(picked!.id === 'rhythm' ? { difficulty, music: withMusic } : {}) }))
         : await attempt(() => rpc('games', 'startRoom', { game: picked!.id, stake }));
     busy = false;
     if (ok) picked = null;
@@ -106,6 +110,23 @@
           <span class="dim small">{level.help}</span>
         </div>
       </div>
+      {#if song}
+        <div class="field">
+          <span class="label">Sound</span>
+          <div class="sound">
+            <button class="choice" class:active={!music} onclick={() => (music = false)}>
+              <VolumeX size={20} />
+              <span class="what"><strong>No music</strong><span class="faint small">Just the beat of the lights</span></span>
+              {#if economy}<Money amount={price('games.duel')} free />{/if}
+            </button>
+            <button class="choice" class:active={music} onclick={() => (music = true)}>
+              <Music size={20} />
+              <span class="what"><strong>With music</strong><span class="faint small truncate">{song.artist ? `${song.artist} - ` : ''}{song.title}</span></span>
+              {#if economy}<Money amount={price('games.rhythmMusic')} free />{/if}
+            </button>
+          </div>
+        </div>
+      {/if}
     {/if}
 
     {#if mode === 'duel'}
@@ -305,6 +326,31 @@
     margin-left: 0.4rem;
     font-size: 1.1rem;
     color: var(--text);
+  }
+  .sound {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .choice {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.7rem 0.9rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    text-align: left;
+  }
+  .choice.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--text);
+  }
+  .choice .what {
+    flex: 1;
+    min-width: 0;
+    display: grid;
   }
   .slider {
     width: 100%;
