@@ -51,6 +51,9 @@ const GUEST_COLORS = [
 
 const LEDGER_SIZE = 500;
 const PIN_PATTERN = /^\d{4}$/;
+/** Wrong PINs allowed before a name is locked for a while (a 4-digit PIN is quick to guess otherwise) */
+const PIN_TRIES = 5;
+const PIN_LOCK_MS = 60_000;
 
 function checkPin(pin: string, stored: NonNullable<Guest['pin']>): boolean {
   const [a, b] =
@@ -81,6 +84,8 @@ export class Session extends EventEmitter {
   private file = new JsonFile<SessionData>(join(DATA_DIR, 'session.json'), freshSession());
   guests = new Map<string, Guest>();
   private bootAt = Date.now();
+  /** Wrong PINs by guest id, not persisted */
+  private pinFails = new Map<string, { count: number; until: number }>();
 
   constructor() {
     super();
@@ -99,6 +104,7 @@ export class Session extends EventEmitter {
   reset(): void {
     this.file.data = freshSession();
     this.guests.clear();
+    this.pinFails.clear();
     this.save();
     this.emit('reset');
     this.emit('guests-changed');
@@ -157,7 +163,19 @@ export class Session extends EventEmitter {
   }
 
   private login(guest: Guest, pin: string): Guest {
-    if (!guest.pin || !checkPin(pin, guest.pin)) {
+    const fails = this.pinFails.get(guest.id);
+    if (fails && fails.until > Date.now()) {
+      throw new HbError(`Too many wrong PINs for ${guest.name}. Wait a minute and try again.`);
+    }
+    if (guest.pin && checkPin(pin, guest.pin)) {
+      this.pinFails.delete(guest.id);
+    } else {
+      if (guest.pin) {
+        const count = (fails?.count ?? 0) + 1;
+        // Each lock after the first lasts longer
+        const locks = Math.floor(count / PIN_TRIES);
+        this.pinFails.set(guest.id, { count, until: count % PIN_TRIES === 0 ? Date.now() + PIN_LOCK_MS * locks : 0 });
+      }
       throw new HbError(
         guest.pin
           ? `${guest.name} is already here. If it is you, check your PIN. Otherwise pick another name.`
@@ -170,6 +188,7 @@ export class Session extends EventEmitter {
 
   setPin(guest: Guest, rawPin: unknown): void {
     guest.pin = validPin(rawPin);
+    this.pinFails.delete(guest.id);
     this.changed(guest);
   }
 

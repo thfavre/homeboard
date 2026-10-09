@@ -101,7 +101,12 @@ export default defineModule<PhotoSettings>({
         const charge = ctx.economy.charge(guest, 'photos.photo', 1, 'Photo on the TV');
         const id = uid(8);
         const file = `${id}.${ext}`;
-        writeFileSync(join(media, file), req.body);
+        try {
+          writeFileSync(join(media, file), req.body);
+        } catch (err) {
+          ctx.economy.refund(charge);
+          throw err;
+        }
         const photo: StoredPhoto = {
           id,
           file,
