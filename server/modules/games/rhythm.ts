@@ -25,12 +25,14 @@ const GRACE_MS = 400;
 /** Time after the last note is judged before the result: the light plays the finale */
 const OUTRO_MS = 2200;
 /** A hit lights up the zone for this long */
-const FLASH_MS = 320;
+const FLASH_MS = 280;
 /** A new multiplier sends a wave down the strip for this long */
 const WAVE_MS = 700;
 /** A note's head and tail, in time of travel: the same look whatever the strip's density */
-const NOTE_HEAD_MS = 35;
-const NOTE_TAIL_MS = 150;
+const NOTE_HEAD_MS = 22;
+const NOTE_TAIL_MS = 110;
+/** Brightness where the tail starts, next to the head (1: as bright as the head) */
+const TAIL_START = 0.3;
 /** Longest a whole song goes on after its last note (its outro, fading out) */
 const SONG_TAIL_MS = 6000;
 /** Best part ("preview start") the map editors set when the mapper picks none */
@@ -221,6 +223,13 @@ const ZONE = { perfect: [0, 255, 40], good: [255, 110, 0], ok: [255, 0, 0] } as 
 const WHITE = [255, 255, 255] as const;
 /** The band of the zone a pixel is in, from its distance to the middle in ms (null: outside) */
 const gradeAt = (gapMs: number) => (gapMs <= RHYTHM.perfectMs ? 'perfect' : gapMs <= RHYTHM.goodMs ? 'good' : gapMs <= RHYTHM.okMs ? 'ok' : null);
+/** Sparks of a hit: direction (up 1, down -1) and how far they fly, in sixtieths of the strip */
+const SPARKS: [number, number][] = [
+  [1, 3],
+  [1, 1.6],
+  [-1, 2.4],
+  [-1, 1.2],
+];
 /** Finale color of a solo game, by the share of notes hit: gold, green, blue, red */
 const SOLO_FINALE: [number, readonly number[]][] = [
   [0.9, [255, 176, 0]],
@@ -394,7 +403,7 @@ export const rhythmRain: GameFactory = (m) => {
       for (let i = Math.floor(bottom - tail); i <= Math.ceil(top); i++) {
         const cover = Math.max(0, Math.min(i + 1, top) - Math.max(i, bottom));
         const below = bottom - (i + 0.5);
-        const t = cover > 0 ? cover + (1 - cover) * (below > 0 ? 0.55 : 0) : below > 0 ? 0.55 * Math.exp((-below * 3) / tail) : 0;
+        const t = cover > 0 ? cover + (1 - cover) * (below > 0 ? TAIL_START : 0) : below > 0 ? TAIL_START * Math.exp((-below * 3.5) / tail) : 0;
         add(i, rgb, Math.min(1, t) * k);
         if (Math.abs(i + 0.5 - pos) < Math.max(0.5, head / 4)) add(i, WHITE, 0.2 * k);
       }
@@ -407,22 +416,20 @@ export const rhythmRain: GameFactory = (m) => {
         for (let i = Math.floor(zone - u); i <= Math.ceil(zone + u); i++) add(i, f.rgb, 0.5 * (1 - t));
         continue;
       }
-      // The band the hit was judged in (green, orange or red, on the side of the note) lights up
-      const side = Math.sign(f.gapMs ?? 0);
-      for (let i = 0; i < leds; i++) {
-        const off = i - zone;
-        const kind = gradeAt(Math.abs(off) / speed);
-        if (kind !== f.grade || (f.grade !== 'perfect' && Math.sign(off) !== side)) continue;
-        add(i, ZONE[kind], 0.75 * (1 - t));
-      }
-      // A ring of the note's color opening up and down from where the note was hit; a perfect starts white hot
+      // A small explosion where the note was hit: a short flash, white hot on a perfect, and a few sparks
+      // of the note's color flying out a little way up and down, fading as they go
       const at = zone + (f.gapMs ?? 0) * speed;
-      const spread = u + t * 6 * u;
-      for (let i = Math.floor(at - spread - 2 * u); i <= Math.ceil(at + spread + 2 * u); i++) {
-        const edge = Math.max(0, 1 - Math.abs(Math.abs(i - at) - spread) / (1.6 * u));
-        const core = Math.max(0, 1 - Math.abs(i - at) / (2 * u));
-        add(i, f.rgb, (1 - t) * (0.8 * edge + 0.5 * core));
-        if (f.grade === 'perfect') add(i, WHITE, Math.max(0, 1 - t * 2.5) * core);
+      const flash = Math.max(0, 1 - t * 3);
+      for (let i = Math.floor(at - u); i <= Math.ceil(at + u); i++) {
+        const core = Math.max(0, 1 - Math.abs(i + 0.5 - at) / u);
+        add(i, f.grade === 'perfect' ? WHITE : f.rgb, 0.7 * flash * core);
+      }
+      for (const [dir, reach] of SPARKS) {
+        const p = at + dir * reach * u * (1 - (1 - t) * (1 - t));
+        const k = 0.6 * (1 - t);
+        const i = Math.floor(p);
+        add(i, f.rgb, k * (1 - (p - i)));
+        add(i + 1, f.rgb, k * (p - i));
       }
     }
 
