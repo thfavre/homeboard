@@ -10,6 +10,8 @@ import {
   rhythmColors,
   rhythmDifficulty,
   gameInfo,
+  isCardGame,
+  bluffDeal,
   PIRATE_LENGTHS,
   PIRATE_SONG_TEST_SEC,
   PIRATE_SOUNDS,
@@ -64,6 +66,7 @@ const FACTORIES: Record<GameId, GameFactory> = {
 };
 
 const LOBBY_MS = 45_000;
+const MINUTE = 60_000;
 /** Time to read the rules; it starts sooner once every player pressed Ready */
 const INTRO_MS = 30_000;
 const ALL_READY_MS = 3_000;
@@ -103,6 +106,8 @@ interface Match {
   options: MatchOptions;
   /** The Spotify music was paused for this game: resumed when it ends */
   musicPaused: boolean;
+  /** Took the whole TV (the small card games leave it as it is) */
+  takeover: boolean;
 }
 
 const player = (g: Guest): GamePlayer => ({ id: g.id, name: g.name, color: g.color });
@@ -113,7 +118,7 @@ const songBoard = (song: string, chart: string, colors: number) => `rhythm:${son
 /** What the games share with other modules */
 export interface GamesApi {
   busy(guestId: string): boolean;
-  /** Name of the game being played, also the ones that leave the TV free (Coin Flip, Rhythm Rain...) */
+  /** Name of a game being played, also the ones that leave the TV free (Coin Flip, Rhythm Rain...) */
   playing(): string | null;
   /** The song of a Rhythm Rain board (see songBoard), null when it is not one of the host's songs any more */
   songBoard(board: string): { title: string; artist: string; cover?: string; chart: string; colors: number } | null;
@@ -127,11 +132,28 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
-    let match: Match | null = null;
+    /** Games being played: one on the whole TV, or several card games at once (see isCardGame) */
+    const matches = new Map<string, Match>();
+    const alive = (m: Match) => matches.get(m.id) === m;
+    /** The match this guest plays in (not the ones whose result is showing, unless `phase` says so) */
+    const matchOf = (guestId: string, phase?: MatchPhase) =>
+      [...matches.values()].find((m) => m.players.some((p) => p.id === guestId) && (phase ? m.phase === phase : m.phase !== 'result'));
+    /** The room game waiting for players (room games take the whole TV: one at most) */
+    const lobby = () => [...matches.values()].find((m) => m.mode === 'room' && m.phase === 'lobby');
+    /** When the last Bluff was played: the next one waits the cooldown */
+    let lastBluff = 0;
+    const bluffReadyAt = () => {
+      const at = lastBluff + ctx.settings.get().bluffCooldownMin * MINUTE;
+      return lastBluff && at > Date.now() ? at : null;
+    };
+    const checkBluff = (game: GameId) => {
+      const at = game === 'bluff' ? bluffReadyAt() : null;
+      if (at) throw new HbError(`Bluff can be played again in ${Math.ceil((at - Date.now()) / MINUTE)} min`);
+    };
     let perk: Perk | null = null;
     let perkTimer: NodeJS.Timeout | null = null;
     /** The scratch record on a light strip, while the scratch prize lasts */
@@ -208,7 +230,7 @@ export default defineModule<GamesSettings>({
 
     /** Throws when this guest is already playing or has a challenge waiting (who: their name, or null for "you") */
     const checkFree = (guestId: string, who: string | null) => {
-      if (match?.players.some((p) => p.id === guestId) && match.phase !== 'result') {
+      if (matchOf(guestId)) {
         throw new HbError(who ? `${who} is already in a game` : 'You are already in a game');
       }
       for (const inv of invites.values()) {
@@ -227,8 +249,16 @@ export default defineModule<GamesSettings>({
       }
     };
 
-    const tvFree = () => {
-      if (match) throw new HbError('A game is already on the TV, wait for it to end');
+    /**
+     * A game on the whole TV needs it free. Card games (a small card at the top of the TV) can be
+     * played together, one of each, but not during a game on the whole TV.
+     */
+    const tvFree = (game: GameId) => {
+      const card = isCardGame(game);
+      for (const m of matches.values()) {
+        if (!card || !isCardGame(m.game)) throw new HbError('A game is already on the TV, wait for it to end');
+        if (m.game === game) throw new HbError(`${gameInfo(game)!.name} is already being played, wait for it to end`);
+      }
       if (ctx.hub.takeover && ctx.hub.takeover !== ctx.id) throw new HbError('Something else is on the TV right now');
     };
 
@@ -255,7 +285,7 @@ export default defineModule<GamesSettings>({
     const later = (m: Match, ms: number, fn: () => void) => {
       const t = setTimeout(() => {
         m.timers.delete(t);
-        if (match === m) fn();
+        if (alive(m)) fn();
       }, ms);
       m.timers.add(t);
     };
@@ -275,7 +305,7 @@ export default defineModule<GamesSettings>({
         .then((paused) => {
           if (!paused) return;
           // The game may be over already: then resume straight away
-          if (match === m && m.phase === 'play') m.musicPaused = true;
+          if (alive(m) && m.phase === 'play') m.musicPaused = true;
           else void music()?.resume().catch(() => {});
         })
         .catch((err) => ctx.log.warn('Could not pause the music', err instanceof Error ? err.message : err));
@@ -294,17 +324,16 @@ export default defineModule<GamesSettings>({
       m.fullLight = undefined;
     };
 
-    const close = () => {
-      const m = match;
-      if (!m) return;
+    const close = (m: Match) => {
+      if (!alive(m)) return;
       for (const t of m.timers) clearTimeout(t);
-      match = null;
+      matches.delete(m.id);
       resumeMusic(m);
       if (m.usesLights) {
         dimLight(m);
         void lights()?.release();
       }
-      ctx.takeover.stop();
+      if (m.takeover) ctx.takeover.stop();
       ctx.publish();
     };
 
@@ -358,10 +387,10 @@ export default defineModule<GamesSettings>({
       return true;
     };
 
-    const cancel = (why: string, refund = true) => {
-      if (!match) return;
-      if (refund && match.phase !== 'result') refundAll(match.charges, why, match.players.map((p) => p.id));
-      close();
+    const cancel = (m: Match, why: string, refund = true) => {
+      if (!alive(m)) return;
+      if (refund && m.phase !== 'result') refundAll(m.charges, why, m.players.map((p) => p.id));
+      close(m);
     };
 
     const potOf = (m: Match) => m.stake * m.players.length;
@@ -380,13 +409,14 @@ export default defineModule<GamesSettings>({
       charges: Charge[],
       options: Match['options'] = {},
     ) => {
-      tvFree();
-      // A new game ends the prize; a light game takes the lights straight from it
+      tvFree(game);
+      // A new game on the TV or the lights ends the prize; a light game takes the lights straight from it
       const handOver = perk?.kind === 'lights' && !!gameInfo(game)?.lights;
-      endPerk(handOver);
+      const takeover = !isCardGame(game);
+      if (takeover || gameInfo(game)?.lights) endPerk(handOver);
       // Light-only and phone games leave the TV as it is (a small card shows how it goes)
-      if (!gameInfo(game)?.lightOnly && !gameInfo(game)?.phoneOnly) ctx.takeover.start();
-      match = {
+      if (takeover) ctx.takeover.start();
+      const match: Match = {
         id: uid(6),
         game,
         mode,
@@ -407,7 +437,9 @@ export default defineModule<GamesSettings>({
         ready: new Set(),
         options,
         musicPaused: false,
+        takeover,
       };
+      matches.set(match.id, match);
       return match;
     };
 
@@ -429,7 +461,7 @@ export default defineModule<GamesSettings>({
           void lights()?.boost(race);
         }
         const t = setInterval(() => {
-          if (match !== m || m.phase !== 'intro' || !m.options.crews) {
+          if (!alive(m) || m.phase !== 'intro' || !m.options.crews) {
             clearInterval(t);
             m.timers.delete(t);
             return;
@@ -447,6 +479,7 @@ export default defineModule<GamesSettings>({
       // The rules timer and "everyone is ready" can both get here
       if (m.phase !== 'intro') return;
       m.phase = 'play';
+      if (m.game === 'bluff') lastBluff = Date.now();
       m.endsAt = null;
       m.phaseMs = 0;
       const api: MatchApi = {
@@ -468,7 +501,7 @@ export default defineModule<GamesSettings>({
         deadline: (ms) => deadline(m, ms),
         later: (ms, fn) => later(m, ms, fn),
         every: (ms, fn) => {
-          const t = setInterval(() => (match === m ? fn() : stop()), ms);
+          const t = setInterval(() => (alive(m) ? fn() : stop()), ms);
           const stop = () => {
             clearInterval(t);
             m.timers.delete(t);
@@ -551,7 +584,7 @@ export default defineModule<GamesSettings>({
       const top = outcome.winners.length === 1 ? ctx.session.guests.get(outcome.winners[0]) : undefined;
       if (top) ctx.activity(`{name} won ${name}${pot ? ` and a pot of ${fmt(pot)}` : ''}`, { guest: top });
       deadline(m, RESULT_MS);
-      later(m, RESULT_MS, close);
+      later(m, RESULT_MS, () => close(m));
     };
 
     // ------------------------------------------------------------ duels
@@ -570,6 +603,7 @@ export default defineModule<GamesSettings>({
       if (!opponent) throw new HbError('Pick someone to challenge');
       if (opponent.id === guest.id) throw new HbError('You cannot challenge yourself');
       checkLight(game);
+      checkBluff(game);
       if (opponent.sockets === 0) throw new HbError(`${opponent.name} is not online`);
       checkFree(guest.id, null);
       checkFree(opponent.id, opponent.name);
@@ -581,6 +615,7 @@ export default defineModule<GamesSettings>({
       const music = !!song;
 
       const fee = ctx.economy.charge(guest, music ? 'games.rhythmMusic' : 'games.duel', 1, `Duel: ${name}${music ? ' with music' : ''}`);
+      const deal = game === 'bluff' ? bluffDeal(stake, ctx.economy.enabled ? ctx.economy.earnAmount('games.bluff') : 0, ctx.settings.get().bluffMultiplier) : null;
       let bet: Charge;
       try {
         bet = ctx.economy.pay(guest, stake, `Duel bet: ${name}`);
@@ -597,6 +632,7 @@ export default defineModule<GamesSettings>({
         expiresAt: Date.now() + DUEL_INVITE_MS,
         ...(game === 'rhythm' ? (({ colors, chart }) => ({ colors, chart }))(rhythmOptions(args, song)) : {}),
         ...(song ? { song: { key: song.key, title: song.title, artist: song.artist } } : {}),
+        ...(deal ? { bluff: deal } : {}),
         charges: [fee, bet],
         timer: setTimeout(() => {
           if (!invites.has(inv.id)) return;
@@ -617,12 +653,13 @@ export default defineModule<GamesSettings>({
         dropInvite(inv, `${guest.name} declined your challenge`);
         return true;
       }
-      tvFree();
+      tvFree(inv.game);
       checkLight(inv.game);
+      checkBluff(inv.game);
       if (inv.song && !readySong(inv.song.key)) throw new HbError('This song is not available any more');
       const bet = ctx.economy.pay(guest, inv.stake, `Duel bet: ${gameInfo(inv.game)!.name}`);
       try {
-        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet], { colors: inv.colors, chart: inv.chart, song: inv.song?.key });
+        const m = createMatch(inv.game, 'duel', inv.from, [inv.from, player(guest)], inv.stake, [...inv.charges, bet], { colors: inv.colors, chart: inv.chart, song: inv.song?.key, bluff: inv.bluff });
         dropInvite(inv, null);
         intro(m);
       } catch (err) {
@@ -646,7 +683,7 @@ export default defineModule<GamesSettings>({
     ctx.onGuest('solo', (args, guest) => {
       const game = String(args?.game ?? '') as GameId;
       if (!allowed(game, 'solo')) throw new HbError('This game cannot be played solo');
-      tvFree();
+      tvFree(game);
       checkLight(game);
       checkFree(guest.id, null);
       const song = game === 'rhythm' && args?.song ? readySong(args.song) : null;
@@ -669,7 +706,7 @@ export default defineModule<GamesSettings>({
     const startRoom = (game: GameId, starter: Guest | null, rawStake: unknown, rawPrize?: unknown) => {
       if (!allowed(game, 'room') && starter) throw new HbError('This game cannot be started for the room');
       if (!gameInfo(game)?.modes.includes('room')) throw new HbError('This game is for duels only');
-      tvFree();
+      tvFree(game);
       const stake = cleanStake(rawStake);
       const charges: Charge[] = [];
       if (starter) {
@@ -698,7 +735,7 @@ export default defineModule<GamesSettings>({
     const beginRoom = (m: Match) => {
       if (m.phase !== 'lobby') return;
       if (m.players.length < 2) {
-        cancel('Nobody else joined, game cancelled');
+        cancel(m, 'Nobody else joined, game cancelled');
         return;
       }
       intro(m);
@@ -710,8 +747,8 @@ export default defineModule<GamesSettings>({
     });
 
     ctx.onGuest('join', (_args, guest) => {
-      const m = match;
-      if (!m || m.mode !== 'room' || m.phase !== 'lobby') throw new HbError('Too late to join');
+      const m = lobby();
+      if (!m) throw new HbError('Too late to join');
       if (m.players.some((p) => p.id === guest.id)) return true;
       checkFree(guest.id, null);
       const most = gameInfo(m.game)?.maxPlayers;
@@ -723,10 +760,10 @@ export default defineModule<GamesSettings>({
     });
 
     ctx.onGuest('leave', (_args, guest) => {
-      const m = match;
-      if (!m || m.mode !== 'room' || m.phase !== 'lobby') throw new HbError('The game has started');
+      const m = lobby();
+      if (!m) throw new HbError('The game has started');
       if (m.starter?.id === guest.id) {
-        cancel(`${guest.name} cancelled the game`);
+        cancel(m, `${guest.name} cancelled the game`);
         return true;
       }
       m.players = m.players.filter((p) => p.id !== guest.id);
@@ -739,9 +776,8 @@ export default defineModule<GamesSettings>({
 
     /** Rules screen: this player has read them */
     ctx.onGuest('ready', (_args, guest) => {
-      const m = match;
-      if (!m || m.phase !== 'intro') throw new HbError('Not now');
-      if (!m.players.some((p) => p.id === guest.id)) throw new HbError('You are not in this game');
+      const m = matchOf(guest.id, 'intro');
+      if (!m) throw new HbError('Not now');
       if (m.ready.has(guest.id)) return true;
       m.ready.add(guest.id);
       if (m.ready.size >= m.players.length && (m.endsAt ?? 0) - Date.now() > ALL_READY_MS) {
@@ -752,8 +788,8 @@ export default defineModule<GamesSettings>({
     });
 
     ctx.onGuest('begin', (_args, guest) => {
-      const m = match;
-      if (!m || m.phase !== 'lobby') throw new HbError('Not now');
+      const m = lobby();
+      if (!m) throw new HbError('Not now');
       if (m.starter?.id !== guest.id) throw new HbError('Only the person who started it can do that');
       if (m.players.length < 2) throw new HbError('Wait for at least one more player');
       beginRoom(m);
@@ -761,9 +797,8 @@ export default defineModule<GamesSettings>({
     });
 
     ctx.onGuest('play', (args, guest) => {
-      const m = match;
-      if (!m || m.phase !== 'play' || !m.runtime) throw new HbError('Not now');
-      if (!m.players.some((p) => p.id === guest.id)) throw new HbError('You are not in this game');
+      const m = matchOf(guest.id, 'play');
+      if (!m?.runtime) throw new HbError('Not now');
       return m.runtime.input(guest.id, args) ?? true;
     });
 
@@ -942,16 +977,27 @@ export default defineModule<GamesSettings>({
     ctx.onAdmin('stopPirateSongTest', () => ctx.emit('tv-audio', 'pirateSongTest', null));
 
     ctx.onTv('play', (args) => {
-      match?.runtime?.tvInput?.(args);
+      for (const m of matches.values()) m.runtime?.tvInput?.(args);
       return true;
     });
 
     ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake, args?.prize));
-    ctx.onAdmin('begin', () => {
-      if (match?.phase === 'lobby') beginRoom(match);
-      else if (match?.phase === 'intro') play(match);
+    /** The match the host acts on: the one named, else the only one */
+    const hostMatch = (args: any) => (args?.id ? matches.get(String(args.id)) : matches.size === 1 ? [...matches.values()][0] : undefined);
+    ctx.onAdmin('begin', (args) => {
+      const m = hostMatch(args);
+      if (m?.phase === 'lobby') beginRoom(m);
+      else if (m?.phase === 'intro') play(m);
     });
-    ctx.onAdmin('stop', () => cancel('The host stopped the game'));
+    ctx.onAdmin('stop', (args) => {
+      const m = hostMatch(args);
+      if (m) cancel(m, 'The host stopped the game');
+    });
+    /** Bluff can be played again right away */
+    ctx.onAdmin('resetBluff', () => {
+      lastBluff = 0;
+      ctx.publish();
+    });
     ctx.onAdmin('cancelInvite', (args) => {
       const inv = invites.get(String(args?.id ?? ''));
       if (inv) dropInvite(inv, 'The host cancelled your challenge');
@@ -969,6 +1015,8 @@ export default defineModule<GamesSettings>({
         reflexPerkSec: args?.reflexPerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.reflexPerkSec, 60)))) : s.reflexPerkSec,
         circlePerkSec: args?.circlePerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.circlePerkSec, 60)))) : s.circlePerkSec,
         rhythmPerkSec: args?.rhythmPerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.rhythmPerkSec, 45)))) : s.rhythmPerkSec,
+        bluffMultiplier: args?.bluffMultiplier !== undefined ? Math.round(clamp(num(args.bluffMultiplier, 0.5), 0, 3) * 100) / 100 : s.bluffMultiplier,
+        bluffCooldownMin: args?.bluffCooldownMin !== undefined ? Math.round(clamp(num(args.bluffCooldownMin, 30), 0, 240)) : s.bluffCooldownMin,
         scratchLight:
           typeof args?.scratchLight === 'string' && (args.scratchLight === '' || lights()?.list().some((d) => d.id === args.scratchLight))
             ? args.scratchLight
@@ -1008,8 +1056,11 @@ export default defineModule<GamesSettings>({
     /** For other modules: is this guest playing, or in a challenge? (no pop-ups then). And the song leaderboards. */
     ctx.provide<GamesApi>('games', {
       busy: (guestId: string) =>
-        !!match?.players.some((p) => p.id === guestId) || [...invites.values()].some((i) => i.from.id === guestId || i.to.id === guestId),
-      playing: () => (match ? (gameInfo(match.game)?.name ?? 'A game') : null),
+        [...matches.values()].some((m) => m.players.some((p) => p.id === guestId)) || [...invites.values()].some((i) => i.from.id === guestId || i.to.id === guestId),
+      playing: () => {
+        const m = [...matches.values()][0];
+        return m ? (gameInfo(m.game)?.name ?? 'A game') : null;
+      },
       songBoard: (board) => {
         const [, key, chart, colors] = board.split(':');
         const info = songs.get(key)?.info;
@@ -1018,34 +1069,38 @@ export default defineModule<GamesSettings>({
       },
     });
 
+    const matchState = (m: Match, role: Parameters<GameRuntime['view']>[0]): MatchState => ({
+      id: m.id,
+      game: m.game,
+      mode: m.mode,
+      starter: m.starter,
+      players: m.players,
+      stake: m.stake,
+      pot: potOf(m),
+      prize: prizeOf(m),
+      phase: m.phase,
+      endsAt: m.endsAt,
+      phaseMs: m.phaseMs,
+      view: m.runtime?.view(role) ?? null,
+      result: m.result,
+      ready: [...m.ready],
+      ...(m.options.crews ? { crews: m.options.crews } : {}),
+      ...(m.options.bluff ? { bluff: m.options.bluff } : {}),
+    });
+
     ctx.state((role): GamesState => {
-      const m = match;
-      const state: MatchState | null = m && {
-        id: m.id,
-        game: m.game,
-        mode: m.mode,
-        starter: m.starter,
-        players: m.players,
-        stake: m.stake,
-        pot: potOf(m),
-        prize: prizeOf(m),
-        phase: m.phase,
-        endsAt: m.endsAt,
-        phaseMs: m.phaseMs,
-        view: m.runtime?.view(role) ?? null,
-        result: m.result,
-        ready: [...m.ready],
-        ...(m.options.crews ? { crews: m.options.crews } : {}),
-      };
+      const s = ctx.settings.get();
       return {
         invites: [...invites.values()].map(({ charges: _c, timer: _t, ...inv }) => inv),
-        match: state,
+        matches: [...matches.values()].map((m) => matchState(m, role)),
+        bluffReadyAt: bluffReadyAt(),
+        bluffBase: ctx.economy.enabled ? ctx.economy.earnAmount('games.bluff') : 0,
         perk,
         ...(role === 'admin' ? { lightDevices: (lights()?.list() ?? []).map(({ id, name, online }) => ({ id, name, online })) } : {}),
         lights: lightsOn(),
-        rhythmSongs: ctx.settings.get().rhythmSongs.map((key) => songs.get(key)?.info ?? { key, status: 'loading' as const }),
+        rhythmSongs: s.rhythmSongs.map((key) => songs.get(key)?.info ?? { key, status: 'loading' as const }),
         online: role === 'tv' ? [] : [...ctx.session.guests.values()].filter((g) => g.sockets > 0).map((g) => ({ ...player(g), balance: g.balance })),
-        settings: ctx.settings.get(),
+        settings: s,
       };
     });
 
@@ -1056,13 +1111,13 @@ export default defineModule<GamesSettings>({
         if (inv.from.id === g.id) dropInvite(inv, null);
         else if (inv.to.id === g.id) dropInvite(inv, `${g.name} left the party`);
       }
-      const m = match;
-      if (!m || !m.players.some((p) => p.id === g.id)) return;
+      const m = matchOf(g.id);
+      if (!m) return;
       if (m.phase !== 'lobby' && m.phase !== 'intro') return;
       const left = m.players.filter((p) => p.id !== g.id);
       // A duel or solo game without its player, or a room game left with one: the others get their money back
       if (m.mode !== 'room' || (m.phase === 'lobby' ? m.starter?.id === g.id : left.length < 2)) {
-        cancel(`${g.name} left the party, game cancelled`);
+        cancel(m, `${g.name} left the party, game cancelled`);
         return;
       }
       m.players = left;
@@ -1077,7 +1132,7 @@ export default defineModule<GamesSettings>({
 
     const stopAll = (refund: boolean) => {
       for (const inv of [...invites.values()]) dropInvite(inv, refund ? 'Your challenge was cancelled' : null);
-      cancel('The game was stopped', refund);
+      for (const m of [...matches.values()]) cancel(m, 'The game was stopped', refund);
       endPerk();
     };
 
@@ -1104,11 +1159,11 @@ export default defineModule<GamesSettings>({
     ctx.onGuest('scratch', (args, guest) => {
       if (perk?.kind !== 'scratch' || perk.guest.id !== guest.id) return false;
       // The record is in the side column: scratching cuts the result short (it stays at least 7 s)
-      const m = match;
-      if (m?.phase === 'result' && m.game === 'circle' && m.endsAt && cutShort !== m.id) {
+      const m = [...matches.values()].find((x) => x.game === 'circle');
+      if (m?.phase === 'result' && m.endsAt && cutShort !== m.id) {
         cutShort = m.id;
         const shown = Date.now() - (m.endsAt - RESULT_MS);
-        later(m, Math.max(0, RESULT_SCRATCH_MS - shown), close);
+        later(m, Math.max(0, RESULT_SCRATCH_MS - shown), () => close(m));
       }
       const raw = num(args?.angle, 0);
       const angle = Number.isFinite(raw) ? clamp(raw, -1e6, 1e6) : 0;

@@ -1,6 +1,6 @@
 import type { Role } from '../../../shared/protocol.ts';
 import type { Song } from './beatsaver.ts';
-import type { CircleDrawing, GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine, PirateCrewDeal, RhythmDifficulty } from '../../../shared/games.ts';
+import type { BluffDeal, CircleDrawing, GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine, PirateCrewDeal, RhythmDifficulty } from '../../../shared/games.ts';
 
 /** How a game ended. The match pays out from it. */
 export interface Outcome {
@@ -27,6 +27,8 @@ export interface MatchOptions {
   colors?: number;
   chart?: RhythmDifficulty;
   song?: string;
+  /** Bluff: what each player can win */
+  bluff?: BluffDeal;
 }
 
 /** What a game gets from the match it runs in */

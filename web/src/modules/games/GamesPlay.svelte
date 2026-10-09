@@ -1,25 +1,28 @@
 <script lang="ts">
   import { Check, Crown, Play, Swords, X } from '@lucide/svelte';
   import { fade, fly, scale } from 'svelte/transition';
-  import { DUEL_INVITE_MS, PIRATE_SHIPS, formationName, gameInfo, rhythmDifficulty, type GamePlayer } from '$shared/games.ts';
+  import { DUEL_INVITE_MS, PIRATE_SHIPS, formationName, gameInfo, isCardGame, rhythmDifficulty, type GamePlayer } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
-  import { Now, gamesState, local, myMatch, secondsLeft } from './store.svelte.ts';
+  import { Now, gameMatch, gamesState, local, myMatch, roomLobby, secondsLeft, tvMatch } from './store.svelte.ts';
   import { GAME_UI } from './registry.ts';
   import GameCard from './ui/GameCard.svelte';
   import Versus from './ui/Versus.svelte';
   import PotPanel from './ui/PotPanel.svelte';
   import Fuse from './ui/Fuse.svelte';
   import PirateCrewCard from './phone/PirateCrewCard.svelte';
+  import BluffRules from './phone/BluffRules.svelte';
+  import BluffOdds from './ui/BluffOdds.svelte';
   import PerkPanel from './perk/PerkPanel.svelte';
 
   /** Everything a phone shows for games: challenges, the room lobby, the game itself, the result */
   const s = $derived(gamesState());
   const me = $derived(hb.me?.id ?? '');
   const meAsPlayer = $derived<GamePlayer>({ id: me, name: hb.me?.name ?? '', color: hb.me?.color ?? '#888' });
-  const m = $derived(s?.match ?? null);
-  const inMatch = $derived(!!myMatch());
+  /** The game I play in, and the room game anyone can join */
+  const m = $derived(myMatch());
+  const lobby = $derived(roomLobby());
   const received = $derived(s?.invites.find((i) => i.to.id === me));
   const sent = $derived(s?.invites.find((i) => i.from.id === me));
   const economy = $derived(!!hb.core?.economyEnabled);
@@ -71,10 +74,10 @@
   </div>
 {/snippet}
 
-{#if myPerk && !(m && inMatch && m.phase !== 'result')}
+{#if myPerk && !(m && m.phase !== 'result')}
   <!-- The winner's prize, from the result on: one place, so it stays put when the game closes (a finger may be on it) -->
   <div class="screen"><div class="col"><PerkPanel perk={myPerk} /></div></div>
-{:else if m && inMatch}
+{:else if m}
   {@const info = gameInfo(m.game)!}
   <div class="screen" class:fill={m.phase === 'play' && GAME_UI[m.game].fill}>
     {#if m.phase === 'lobby'}
@@ -107,7 +110,7 @@
             rightLabel={m.ready.includes(m.players[1].id) ? 'Ready' : 'Reading...'}
           />
         {/if}
-        <GameCard game={info} eyebrow="Read the rules" />
+        {#if m.game === 'bluff'}<BluffRules {m} />{:else}<GameCard game={info} eyebrow="Read the rules" />{/if}
         {#if allReady}
           <div class="count-wrap">
             {#key secondsLeft(m.endsAt, now.value)}
@@ -124,7 +127,8 @@
           {#if m.mode === 'room'}<p class="faint note">{m.ready.length} of {m.players.length} ready</p>{/if}
         {/if}
       </div>
-    {:else if m.phase === 'play'}
+    {:else if m.phase === 'play' || (m.result && GAME_UI[m.game].phoneResult)}
+      <!-- One block for both, so the game's screen stays mounted into its result -->
       {@const Game = GAME_UI[m.game].phone}
       <Game {m} />
     {:else if m.result}
@@ -162,7 +166,9 @@
           {#if received.song}Played on {received.song.artist ? `${received.song.artist} - ` : ''}{received.song.title}.{/if}
         </p>
       {/if}
-      {#if economy && received.stake > 0}<PotPanel inLabel="You put in" stake={received.stake} outLabel="Winner takes" pot={received.stake * 2} />{/if}
+      {#if received.bluff}
+        <div class="odds"><span class="eyebrow">What you can win</span><BluffOdds deal={received.bluff} other={received.from.name} {economy} /></div>
+      {:else if economy && received.stake > 0}<PotPanel inLabel="You put in" stake={received.stake} outLabel="Winner takes" pot={received.stake * 2} />{/if}
       <div class="answer">
         <button class="btn decline" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={20} /> Decline</button>
         <button class="btn primary accept" disabled={busy} onclick={() => act('respond', { id: received.id, accept: true })}><Check size={20} /> Accept</button>
@@ -177,14 +183,17 @@
       <span class="eyebrow center"><Swords size={14} /> Challenge sent</span>
       <Versus left={meAsPlayer} right={sent.to} leftLabel="You" rightLabel="Thinking..." waiting />
       <GameCard game={info} steps={false} />
-      {#if economy && sent.stake > 0}<PotPanel inLabel="You put in" stake={sent.stake} outLabel="Winner takes" pot={sent.stake * 2} />{/if}
+      {#if sent.bluff}
+        <div class="odds"><span class="eyebrow">What you can win</span><BluffOdds deal={sent.bluff} other={sent.to.name} {economy} /></div>
+      {:else if economy && sent.stake > 0}<PotPanel inLabel="You put in" stake={sent.stake} outLabel="Winner takes" pot={sent.stake * 2} />{/if}
       <Fuse endsAt={sent.expiresAt} totalMs={DUEL_INVITE_MS} label={`Waiting for ${sent.to.name}`} />
-      {#if m}<p class="faint note">A game is on the TV: your duel starts once it is over.</p>{/if}
+      {#if tvMatch() || (isCardGame(sent.game) && gameMatch(sent.game))}<p class="faint note">A game is on the TV: your duel starts once it is over.</p>{/if}
       <button class="btn ghost block" disabled={busy} onclick={() => act('cancelInvite', { id: sent.id })}>Cancel the challenge</button>
       {#if economy}<p class="faint note">You get everything back if they decline, do not answer, or you cancel.</p>{/if}
     </div>
   </div>
-{:else if m && m.mode === 'room' && m.phase === 'lobby'}
+{:else if lobby}
+  {@const m = lobby}
   {@const info = gameInfo(m.game)!}
   <div class="screen">
     <div class="col" in:fly={{ y: 24, duration: 300 }}>
@@ -262,6 +271,11 @@
   }
   .accept {
     background: var(--gradient);
+  }
+  .odds {
+    display: grid;
+    gap: 0.5rem;
+    width: 100%;
   }
   .note {
     font-size: 0.8rem;

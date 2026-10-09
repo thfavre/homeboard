@@ -50,7 +50,12 @@
 
     <main>
       <section class="main" class:stacked={above.length > 0}>
-        {#each above as w}<div class="above" transition:fade={{ duration: 300 }}><w.component /></div>{/each}
+        <!-- Cards side by side (several games can be played at once on the lights and the phones) -->
+        {#if above.length}
+          <div class="above-row">
+            {#each above as w (w)}<div class="above" transition:fade={{ duration: 300 }}><w.component /></div>{/each}
+          </div>
+        {/if}
         {#if main}<div class="main-widget">{#key main}<main.component />{/key}</div>{/if}
       </section>
       <aside>
@@ -143,6 +148,18 @@
   .main.stacked {
     grid-template-rows: auto minmax(0, 1fr);
     gap: var(--tv-gap);
+  }
+  .above-row {
+    display: flex;
+    justify-content: center;
+    gap: var(--tv-gap);
+    min-width: 0;
+  }
+  /* One card takes half the width, centered; more share the row */
+  .above {
+    flex: 0 1 50%;
+    min-width: 0;
+    display: grid;
   }
   .main-widget {
     min-height: 0;

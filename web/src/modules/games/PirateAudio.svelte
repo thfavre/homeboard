@@ -2,7 +2,7 @@
   import { PIRATE, PIRATE_SONG_TEST_SEC, type PirateSoundId, type PirateView } from '$shared/games.ts';
   import { onEvent, serverNow } from '$lib/client.svelte.ts';
   import { audioContext } from '../soundboard/player.ts';
-  import { gamesState } from './store.svelte.ts';
+  import { gameMatch, gamesState } from './store.svelte.ts';
   import { loadPirateSound, pirateSound } from './ui/pirateSound.ts';
   import { FADE_OUT_SEC, SongOnBeats } from './ui/pirateSong.ts';
 
@@ -13,7 +13,8 @@
    * start, fading in). Also plays a sound or a song the host tries from the admin.
    */
   const s = $derived(gamesState());
-  const v = $derived(s?.match?.game === 'pirates' && s.match.phase === 'play' ? (s.match.view as PirateView | null) : null);
+  const raceMatch = $derived(gameMatch('pirates'));
+  const v = $derived(raceMatch?.phase === 'play' ? (raceMatch.view as PirateView | null) : null);
   const url = (kind: PirateSoundId) => s?.settings.pirateSounds?.[kind]?.url ?? null;
   /** The drum at the host's level */
   const drum = (volume: number) => (volume * (s?.settings.pirateDrumVolume ?? 100)) / 100;
@@ -22,7 +23,7 @@
   $effect(() => {
     for (const pick of Object.values(s?.settings.pirateSounds ?? {})) if (pick?.url) void loadPirateSound(pick.url);
     // The songs too, once a race is on its way (each is a few MB once decoded)
-    if (s?.match?.game === 'pirates') for (const song of s.settings.pirateSongs ?? []) void loadPirateSound(song.url);
+    if (raceMatch) for (const song of s?.settings.pirateSongs ?? []) void loadPirateSound(song.url);
   });
 
   /** The race songs playing or about to, by the drum beat their beat 0 falls on */
@@ -47,7 +48,7 @@
   let roared = false;
   let race = '';
   $effect(() => {
-    const id = s?.match?.id ?? '';
+    const id = raceMatch?.id ?? '';
     if (id !== race) {
       race = id;
       lastBeat = -1;

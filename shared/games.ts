@@ -69,9 +69,10 @@ export const GAMES: GameInfo[] = [
     id: 'bluff',
     name: 'Bluff',
     tagline: 'Share or steal the pot',
-    rules: 'Both share: you split the pot and get a bonus. One steals: the thief takes everything. Both steal: nobody gets anything.',
+    rules: 'You both put the same bet in the pot, then choose in secret: share or steal. Both share: each gets their bet back plus a bonus. One steals: the thief takes the whole pot, the other gets nothing. Both steal: nobody gets anything.',
     modes: ['duel'],
-    steps: ['Talk it over, then choose in secret', 'Both share: split the pot, plus a bonus', 'One steals: takes it all. Both steal: nobody wins'],
+    phoneOnly: true,
+    steps: ['Talk it over, then choose in secret: share or steal', 'Both share: your bet back, plus a bonus', 'One steals: takes it all. Both steal: nobody wins'],
     colors: ['#ff3b8d', '#8b3dff'],
   },
   {
@@ -110,6 +111,8 @@ export const GAMES: GameInfo[] = [
 ];
 
 export const gameInfo = (id: string) => GAMES.find((g) => g.id === id);
+/** Played on a light or the phones: a small card at the top of the TV, so several can be played at once */
+export const isCardGame = (id: string) => !!(gameInfo(id)?.lightOnly || gameInfo(id)?.phoneOnly);
 
 /** Colors used by Light Simon and Color Reflex. `led` is what the WLED lights show. */
 export const GAME_COLORS = [
@@ -144,6 +147,8 @@ export interface DuelInvite {
   chart?: RhythmDifficulty;
   /** Rhythm Rain played on one of the host's songs (costs the music price) */
   song?: { key: string; title: string; artist: string };
+  /** Bluff: what each player can win */
+  bluff?: BluffDeal;
 }
 
 export type MatchPhase = 'lobby' | 'intro' | 'play' | 'result';
@@ -187,6 +192,8 @@ export interface MatchState {
   ready: string[];
   /** Pirate Race: the crews, dealt when the rules show so everyone already knows their ship */
   crews?: PirateCrewDeal[];
+  /** Bluff: what each player can win, set when the duel starts */
+  bluff?: BluffDeal;
 }
 
 /**
@@ -211,7 +218,15 @@ export interface ScratchMove {
 
 export interface GamesState {
   invites: DuelInvite[];
-  match: MatchState | null;
+  /**
+   * Games being played: one on the whole TV, or several small ones at once (played on a light or the
+   * phones, shown as cards at the top of the TV: Bluff, Coin Flip, Rhythm Rain)
+   */
+  matches: MatchState[];
+  /** Bluff can be played again from then on (null: now) */
+  bluffReadyAt: number | null;
+  /** Bluff: the fixed part of the bonus each player gets when both share */
+  bluffBase: number;
   perk: Perk | null;
   /** Admin only: the WLED lights, to pick the scratch light */
   lightDevices?: { id: string; name: string; online: boolean }[];
@@ -245,6 +260,10 @@ export interface GamesSettings {
   rhythmPerkSec: number;
   /** WLED light that turns with the scratch record ('' = none) */
   scratchLight: string;
+  /** Bluff: when both share, each gets the base bonus plus this many times their bet (0 to 3) */
+  bluffMultiplier: number;
+  /** Minutes between two Bluff games (0: no wait) */
+  bluffCooldownMin: number;
   /** Colors in the first sequence of Light Simon */
   simonStart: number;
   /** WLED light the Rhythm Rain notes climb ('' = the TV only) */
@@ -373,10 +392,33 @@ export interface CircleView {
   stepMs?: number;
 }
 
+export type BluffChoice = 'share' | 'steal';
+
+/** What a Bluff player can win, the same for both (they bet the same) */
+export interface BluffDeal {
+  /** Each player's bet */
+  stake: number;
+  /** Bonus each gets when both share (base + multiplier x bet) */
+  bonus: number;
+  /** Both share: each gets this (their bet back + the bonus) */
+  share: number;
+  /** One steals: the thief gets this (the whole pot) */
+  steal: number;
+}
+
+export const bluffDeal = (stake: number, base: number, multiplier: number): BluffDeal => {
+  const bonus = Math.max(0, base) + Math.round(stake * Math.max(0, multiplier));
+  return { stake, bonus, share: stake + bonus, steal: stake * 2 };
+};
+
+/** Bluff payout of one player, from both choices */
+export const bluffGain = (deal: BluffDeal, mine: BluffChoice, theirs: BluffChoice) =>
+  mine === 'share' ? (theirs === 'share' ? deal.share : 0) : theirs === 'share' ? deal.steal : 0;
+
 export interface BluffView {
   chosen: string[];
   /** After the game */
-  choices?: Record<string, 'share' | 'steal'>;
+  choices?: Record<string, BluffChoice>;
 }
 
 export type CoinSide = 'heads' | 'tails';

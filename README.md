@@ -151,6 +151,16 @@ Coin Flip is played on the two phones: each player's face is on one side of the 
 is drawn to swipe it up, and only the throw shows on the TV (in the middle of the screen, over
 what is there), tumbling on its way, then the pot flies to the face it landed on.
 
+Bluff is played on the two phones too: the phones explain the rules with what each outcome pays
+(both share: your bet back plus a bonus, the fixed bonus plus a number of times the bet, set in the
+admin; one steals: the thief takes the pot; both steal: nothing), then each picks Share or Steal in
+secret. The TV only shows a small card at the top: who has chosen, then both cards turned over.
+A Bluff can be played once every 30 minutes for the whole party (set in the admin).
+
+Bluff, Coin Flip and Rhythm Rain leave the TV as it is (a small card at the top), so they can be
+played at the same time, one of each; a game on the whole TV waits for them to end, and they wait
+for it.
+
 Light Simon and Color Reflex drive the WLED lights with solid colors (queued light effects wait,
 and every light goes back to what it was doing afterwards). The TV shows the colors too, or only
 when no light is reachable if the host turns that off. Each game is one file in
