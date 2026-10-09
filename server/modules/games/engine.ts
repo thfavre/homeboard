@@ -10,7 +10,7 @@ export interface Outcome {
   lines: MatchResultLine[];
   headline?: string;
   /** A prize for the winner when there is only one (see Perk) */
-  perk?: { kind: 'lights' } | { kind: 'scratch'; drawing: CircleDrawing };
+  perk?: { kind: 'lights' } | { kind: 'scratch'; drawing: CircleDrawing } | { kind: 'fireworks' };
   /**
    * Custom payout instead of "winners share the pot" (amounts credited per guest id).
    * Room rewards are not added then.

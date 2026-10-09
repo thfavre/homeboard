@@ -579,6 +579,8 @@ export const rhythmRain: GameFactory = (m) => {
       return;
     }
     m.finish({
+      // A duel's winner shoots fireworks on the light for a while
+      perk: { kind: 'fireworks' },
       winners: best(m.players, score),
       lines: [...m.players]
         .sort((a, b) => score(b.id) - score(a.id))

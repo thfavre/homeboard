@@ -2,6 +2,7 @@ import {
   GAMES,
   DUEL_INVITE_MS,
   GAME_COLORS,
+  RHYTHM_COLORS,
   RHYTHM_DIFFICULTIES,
   rhythmColors,
   rhythmDifficulty,
@@ -17,6 +18,7 @@ import {
   type MatchResult,
   type MatchState,
   type Perk,
+  type RhythmColor,
   type RhythmSongInfo,
 } from '../../../shared/games.ts';
 import { formatAmount } from '../../../shared/money.ts';
@@ -35,6 +37,7 @@ import { bluff } from './bluff.ts';
 import { coinFlip } from './coin.ts';
 import { chartFor, chartNps, chartSteadiness, rhythmRain } from './rhythm.ts';
 import { Turntable } from './turntable.ts';
+import { Fireworks } from './fireworks.ts';
 import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
 
 /** Songs a new party starts with: well known, well rated maps with charts from Easy or Normal to Expert */
@@ -100,7 +103,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -109,6 +112,8 @@ export default defineModule<GamesSettings>({
     let perkTimer: NodeJS.Timeout | null = null;
     /** The scratch record on a light strip, while the scratch prize lasts */
     let turntable: Turntable | null = null;
+    /** The fireworks on the Rhythm Rain strip, while that prize lasts */
+    let fireworks: Fireworks | null = null;
     /** Match whose result is already set to close early for the scratch */
     let cutShort: string | null = null;
 
@@ -282,6 +287,8 @@ export default defineModule<GamesSettings>({
       perkTimer = null;
       turntable?.stop();
       turntable = null;
+      fireworks?.stop();
+      fireworks = null;
       if (p.kind === 'lights' && !keepLights) void lights()?.release();
       ctx.publish();
     };
@@ -291,13 +298,25 @@ export default defineModule<GamesSettings>({
       const winner = outcome.winners.length === 1 ? m.players.find((p) => p.id === outcome.winners[0]) : undefined;
       if (!outcome.perk || !winner) return false;
       const s = ctx.settings.get();
-      const sec = outcome.perk.kind === 'lights' ? s.reflexPerkSec : s.circlePerkSec;
+      const kind = outcome.perk.kind;
+      const sec = kind === 'lights' ? s.reflexPerkSec : kind === 'scratch' ? s.circlePerkSec : s.rhythmPerkSec;
       if (sec <= 0) return false;
-      if (outcome.perk.kind === 'lights' && !(m.usesLights && lightsOn())) return false;
+      if (kind === 'lights' && !(m.usesLights && lightsOn())) return false;
+      // Fireworks need the game's strip
+      const gameStrip = lights()?.list().find((d) => d.id === s.rhythmLight && d.online);
+      if (kind === 'fireworks' && !gameStrip) return false;
       endPerk();
       const base = { guest: winner, until: Date.now() + sec * 1000, totalMs: sec * 1000 };
-      perk = outcome.perk.kind === 'lights' ? { ...base, kind: 'lights', color: null } : { ...base, kind: 'scratch', drawing: outcome.perk.drawing };
+      perk =
+        outcome.perk.kind === 'lights'
+          ? { ...base, kind: 'lights', color: null }
+          : outcome.perk.kind === 'scratch'
+            ? { ...base, kind: 'scratch', drawing: outcome.perk.drawing }
+            : { ...base, kind: 'fireworks', colors: RHYTHM_COLORS.slice(0, 4).map((c) => c.id) };
       perkTimer = setTimeout(() => endPerk(), sec * 1000);
+      if (perk.kind === 'fireworks' && gameStrip) {
+        fireworks = new Fireworks(Math.min(490, gameStrip.leds ?? 60), winner.color, s.rhythmReverse, (rgb) => lights()?.frame(gameStrip.id, rgb));
+      }
       const strip = lights()?.list().find((d) => d.id === s.scratchLight && d.online);
       if (perk.kind === 'scratch' && strip) {
         turntable = new Turntable(Math.min(490, strip.leds ?? 60), winner.color, (rgb) => lights()?.frame(strip.id, rgb));
@@ -731,6 +750,7 @@ export default defineModule<GamesSettings>({
         simonStart: args?.simonStart !== undefined ? Math.min(10, Math.max(1, Math.round(num(args.simonStart, 1)))) : s.simonStart,
         reflexPerkSec: args?.reflexPerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.reflexPerkSec, 60)))) : s.reflexPerkSec,
         circlePerkSec: args?.circlePerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.circlePerkSec, 60)))) : s.circlePerkSec,
+        rhythmPerkSec: args?.rhythmPerkSec !== undefined ? Math.min(300, Math.max(0, Math.round(num(args.rhythmPerkSec, 45)))) : s.rhythmPerkSec,
         scratchLight:
           typeof args?.scratchLight === 'string' && (args.scratchLight === '' || lights()?.list().some((d) => d.id === args.scratchLight))
             ? args.scratchLight
@@ -835,6 +855,15 @@ export default defineModule<GamesSettings>({
       const angle = Number.isFinite(raw) ? clamp(raw, -1e6, 1e6) : 0;
       ctx.emit('tv', 'scratch', { angle, touching: !!args?.touching });
       turntable?.move(angle, !!args?.touching);
+      return true;
+    });
+
+    /** Fireworks: the winner taps a color, a shot goes up the strip (straight there, no state update) */
+    ctx.onGuest('perkShoot', (args, guest) => {
+      if (perk?.kind !== 'fireworks' || perk.guest.id !== guest.id) return false;
+      const color = String(args?.color ?? '') as RhythmColor;
+      if (!perk.colors.includes(color)) return false;
+      fireworks?.shoot(color);
       return true;
     });
 

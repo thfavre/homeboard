@@ -1,14 +1,18 @@
 <script lang="ts">
   import { X } from '@lucide/svelte';
   import { scale } from 'svelte/transition';
-  import type { GameColor, Perk } from '$shared/games.ts';
+  import { RHYTHM_COLORS, type GameColor, type Perk, type RhythmColor } from '$shared/games.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
   import ColorPad from '../ColorPad.svelte';
   import Fuse from '../ui/Fuse.svelte';
   import Vinyl from './Vinyl.svelte';
   import { NORMAL_SPEED } from './scratch.ts';
+  import { rhythmSound } from '../ui/rhythmSound.ts';
 
-  /** The winner's prize on their phone: the light colors (Color Reflex) or the record to scratch (Perfect Circle) */
+  /**
+   * The winner's prize on their phone: the light colors (Color Reflex), the record to scratch (Perfect
+   * Circle), or the keys that shoot fireworks up the game's light (Rhythm Rain)
+   */
   let { perk }: { perk: Perk } = $props();
   let busy = $state(false);
 
@@ -19,6 +23,17 @@
   }
 
   const pickColor = (c: GameColor) => void attempt(() => rpc('games', 'perkColor', { color: c }));
+
+  const WON: Record<Perk['kind'], string> = { lights: 'Color Reflex', scratch: 'Perfect Circle', fireworks: 'Rhythm Rain' };
+  // Fireworks: each tap shoots one up the light, with its note here
+  const keys = $derived(perk.kind === 'fireworks' ? perk.colors.map((id) => RHYTHM_COLORS.find((c) => c.id === id)!) : []);
+  let fired = $state<Record<string, number>>({});
+  function shoot(color: RhythmColor, lane: number) {
+    rhythmSound('perfect', lane, 0, 0.4);
+    navigator.vibrate?.(8);
+    fired = { ...fired, [color]: (fired[color] ?? 0) + 1 };
+    void rpc('games', 'perkShoot', { color }).catch(() => {});
+  }
 
   // Scratch: the record follows the finger around its center, the angle goes to the TV 25 times a second
   let angle = $state(0);
@@ -85,8 +100,27 @@
 </script>
 
 <div class="perk" in:scale={{ start: 0.9, duration: 300 }}>
-  <span class="eyebrow">You won {perk.kind === 'lights' ? 'Color Reflex' : 'Perfect Circle'}! Your prize</span>
-  {#if perk.kind === 'lights'}
+  <span class="eyebrow">You won {WON[perk.kind]}! Your prize</span>
+  {#if perk.kind === 'fireworks'}
+    <h1>Light it up</h1>
+    <p class="dim">Tap the colors: each one shoots a firework up the light.</p>
+    <div class="launch">
+      {#each keys as c, i (c.id)}
+        <button
+          class="key"
+          style:--c={c.hex}
+          aria-label={`Shoot ${c.name}`}
+          onpointerdown={(e) => {
+            e.preventDefault();
+            shoot(c.id, i);
+          }}
+          oncontextmenu={(e) => e.preventDefault()}
+        >
+          <span class="gem">{#key fired[c.id]}{#if fired[c.id]}<span class="burst"></span>{/if}{/key}</span>
+        </button>
+      {/each}
+    </div>
+  {:else if perk.kind === 'lights'}
     <h1>The lights are yours</h1>
     <p class="dim">Pick a color for every light in the room.</p>
     <ColorPad onpick={pickColor} lit={perk.color} />
@@ -125,6 +159,57 @@
   }
   .perk :global(.pad) {
     width: 100%;
+  }
+  /* The fireworks keys: four tall pads like the game's, a gem each */
+  .launch {
+    width: 100%;
+    height: min(22rem, 45vh);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .key {
+    display: grid;
+    place-items: end center;
+    padding: 0 0 1rem;
+    border: 0;
+    border-radius: 1.3rem;
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--c) 8%, var(--surface)), color-mix(in srgb, var(--c) 30%, var(--surface)));
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c) 55%, transparent);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    overflow: hidden;
+  }
+  .key:active {
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--c) 30%, var(--surface)), var(--c));
+    box-shadow:
+      inset 0 0 0 2px var(--c),
+      0 0 1.6rem color-mix(in srgb, var(--c) 60%, transparent);
+  }
+  .gem {
+    position: relative;
+    width: min(3.6rem, 74%);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, #fff 55%, var(--c)), var(--c) 45%, color-mix(in srgb, #000 35%, var(--c)));
+    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--c) 25%, transparent);
+  }
+  /* A ring flying up out of the gem: the shot leaving */
+  .burst {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3px solid var(--c);
+    animation: launch 0.5s ease-out forwards;
+  }
+  @keyframes launch {
+    to {
+      transform: translateY(-9rem) scale(0.4);
+      opacity: 0;
+    }
   }
   .disc {
     touch-action: none;

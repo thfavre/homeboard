@@ -71,7 +71,7 @@
         return `${formatAmount(bluffBonus?.amount ?? 0)} each if both share`;
       case 'rhythm':
         return st.rhythmLight
-          ? `on ${lightName(st.rhythmLight)}, ${plural(s?.rhythmSongs.length ?? 0, 'song')}, ${st.rhythmFullSong ? 'whole songs' : `${clock(st.rhythmMinSec)} to ${clock(st.rhythmMaxSec)}`}`
+          ? `on ${lightName(st.rhythmLight)}, ${plural(s?.rhythmSongs.length ?? 0, 'song')}, ${st.rhythmFullSong ? 'whole songs' : `${clock(st.rhythmMinSec)} to ${clock(st.rhythmMaxSec)}`}, ${perkText(st.rhythmPerkSec)}`
           : 'needs a light';
       default:
         return '';
@@ -111,7 +111,7 @@
   {@render stepper(label, `1 to ${max}`, n, 1, max, (dir) => setSettings({ [key]: n + dir }))}
 {/snippet}
 
-{#snippet perk(label: string, key: 'reflexPerkSec' | 'circlePerkSec')}
+{#snippet perk(label: string, key: 'reflexPerkSec' | 'circlePerkSec' | 'rhythmPerkSec')}
   {@const n = s!.settings[key]}
   {@render stepper(label, 'Seconds, 0 = no prize', n, 0, 300, (dir) => setSettings({ [key]: stepIn(PERK_STEPS, n, dir) }))}
 {/snippet}
@@ -195,6 +195,7 @@
       {@render length('Shortest', 'rhythmMinSec')}
       {@render length('Longest', 'rhythmMaxSec')}
     {/if}
+    {@render perk('Duel winner shoots fireworks on the light', 'rhythmPerkSec')}
     {@render slider('Music timing', 'Notes reach the zone after the beat you hear: move it to +. Before the beat: to -. Speakers in Bluetooth or a sound bar can need a lot', 'rhythmAudioOffset', -2000, 2000, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
     <RhythmSongsAdmin songs={s!.rhythmSongs} />
   {/if}
