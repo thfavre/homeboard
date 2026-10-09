@@ -41,7 +41,7 @@ import { coinFlip } from './coin.ts';
 import { chartFor, chartNps, chartSteadiness, rhythmRain } from './rhythm.ts';
 import { Turntable } from './turntable.ts';
 import { Fireworks } from './fireworks.ts';
-import { dealPirateCrews, pirateRace } from './pirates.ts';
+import { dealPirateCrews, pirateRace, pirateWaitingLights } from './pirates.ts';
 import { cleanMp3, downloadMp3 } from '../soundboard/myinstants.ts';
 import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
 
@@ -402,6 +402,19 @@ export default defineModule<GamesSettings>({
         m.usesLights = true;
         lights()!.claim();
         lights()!.color(null);
+      }
+      // Pirate Race: the lights already show the sea and the ships waiting at the start
+      if (m.game === 'pirates' && m.usesLights && m.options.crews) {
+        const t = setInterval(() => {
+          if (match !== m || m.phase !== 'intro' || !m.options.crews) {
+            clearInterval(t);
+            m.timers.delete(t);
+            return;
+          }
+          const strips = (lights()?.list() ?? []).filter((d) => d.online).map((d) => ({ id: d.id, leds: Math.min(490, d.leds ?? 60), send: (rgb: Uint8Array) => lights()?.frame(d.id, rgb) }));
+          pirateWaitingLights(m.options.crews, ctx.settings.get(), strips);
+        }, 40);
+        m.timers.add(t);
       }
       deadline(m, INTRO_MS);
       later(m, INTRO_MS, () => play(m));

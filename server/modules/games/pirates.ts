@@ -9,6 +9,7 @@ import {
   type PirateBeat,
   type PirateCrew,
   type PirateCrewDeal,
+  type GamesSettings,
   type PirateGrade,
   type PirateSoundId,
   type PirateView,
@@ -97,6 +98,38 @@ function sameCrews(deal: PirateCrewDeal[], ids: string[]): boolean {
 interface Crew extends PirateCrew {
   /** Distance rowed, in perfect strokes */
   distance: number;
+}
+
+/**
+ * The lights while the players read the rules: the race light shows the sea, the treasure glowing and the
+ * crews' ships waiting side by side at the start, bobbing; every other light rolls the sea.
+ */
+export function pirateWaitingLights(deal: PirateCrewDeal[], settings: GamesSettings, strips: { id: string; leds: number; send(rgb: Uint8Array): void }[]): void {
+  const now = Date.now();
+  for (const s of strips) {
+    const n = s.leds;
+    const u = Math.max(1, n / 60);
+    const px = new Float32Array(n * 3);
+    const race = s.id === settings.pirateLight;
+    const treasure = (clamp(settings.pirateTreasure, 10, 100) / 100) * (n - 1);
+    for (let i = 0; i < n; i++) {
+      const rgb = sea(i, now, u, race && i > treasure + u ? 0.35 : 0.8);
+      for (let c = 0; c < 3; c++) px[i * 3 + c] = rgb[c];
+    }
+    if (race) {
+      const dot = (pos: number, rgb: readonly number[], k: number, width: number) => {
+        for (let i = Math.floor(pos - width); i <= Math.ceil(pos + width); i++) {
+          if (i < 0 || i >= n) continue;
+          // Over the sea, not added to it: the ship keeps its own color
+          const w = Math.min(1, 1.6 * Math.max(0, 1 - Math.abs(i + 0.5 - pos) / width));
+          for (let c = 0; c < 3; c++) px[i * 3 + c] = px[i * 3 + c] * (1 - w) + rgb[c] * k * w;
+        }
+      };
+      dot(treasure, GOLD, 0.55 + 0.3 * Math.sin(now / 260), 1.4 * u);
+      deal.forEach((d, k) => dot(0.8 * u + k * 2.8 * u, SHIP_LED[d.ship], 0.8 + 0.2 * Math.sin(now / 400 + k * 1.3), 1.2 * u));
+    }
+    s.send(pack(px, n, race && settings.pirateReverse));
+  }
 }
 
 /**
