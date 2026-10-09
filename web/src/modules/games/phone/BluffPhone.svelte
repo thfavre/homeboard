@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, Eye, EyeOff, HandCoins, Handshake, Lock, Tv } from '@lucide/svelte';
+  import { Check, Eye, EyeOff, Lock, Tv } from '@lucide/svelte';
   import { fly, scale } from 'svelte/transition';
   import { bluffDeal, bluffGain, type BluffChoice, type BluffView, type MatchState } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
@@ -8,6 +8,7 @@
   import { local } from '../store.svelte.ts';
   import Fuse from '../ui/Fuse.svelte';
   import MoneyFlow from '../ui/MoneyFlow.svelte';
+  import BluffCardFace from '../ui/BluffCardFace.svelte';
 
   /**
    * Bluff on the phone: two big cards, Share and Steal, each with what it pays whatever the other one
@@ -95,23 +96,20 @@
           onpointercancel={() => (peek = false)}
           oncontextmenu={(e) => e.preventDefault()}
         >
-          {#if peek}
-            <span class="peeked">{#if choice === 'share'}<Handshake size={22} />{:else}<HandCoins size={22} />{/if} {choice === 'share' ? 'Share' : 'Steal'}</span>
-          {:else}
-            <span class="lock"><Lock size={26} /></span>
-            <strong>Locked in</strong>
-            <span class="faint small"><Eye size={13} /> Hold to peek</span>
-          {/if}
+          <BluffCardFace kind="back" width="10.5rem" />
+          <span class="seal"><Lock size={14} /> Locked in</span>
         </button>
+        <!-- Peeking: small and plain, no big color a neighbour would notice -->
+        <span class="peek-line faint small">
+          {#if peek}You chose <strong>{choice === 'share' ? 'Share' : 'Steal'}</strong>{:else}<Eye size={13} /> Hold the card to peek{/if}
+        </span>
         {#if !bothChose}<button class="btn ghost block" onclick={() => (sealed = false)}>Change my mind</button>{/if}
       </div>
     {:else}
       <div class="choices" class:made={!!choice} class:locked={bothChose}>
         {#each ['share', 'steal'] as const as c, i (c)}
-          <button class="choice {c}" class:active={choice === c} disabled={bothChose} onclick={() => pick(c)} in:fly={{ y: 24, delay: 80 + i * 90 }}>
-            {#if choice === c}<span class="picked" in:scale={{ start: 0.4, duration: 250 }}><Check size={14} strokeWidth={3} /></span>{/if}
-            <span class="icon">{#if c === 'share'}<Handshake size={34} />{:else}<HandCoins size={34} />{/if}</span>
-            <strong class="name">{c === 'share' ? 'Share' : 'Steal'}</strong>
+          <button class="choice {c}" class:active={choice === c} disabled={bothChose} onclick={() => pick(c)} in:fly={{ y: 30, delay: 80 + i * 110 }}>
+            <span class="hold"><BluffCardFace kind={c} width="min(9.5rem, 40vw)" shine /></span>
             <span class="pays">
               <span class="row"><span>If {other.name} shares</span><b class="mono">{@render amount(bluffGain(deal, c, 'share'))}</b></span>
               <span class="row"><span>If {other.name} steals</span><b class="mono">{@render amount(bluffGain(deal, c, 'steal'))}</b></span>
@@ -131,13 +129,10 @@
       {#each [{ p: meP, c: mine, label: 'You' }, { p: other, c: theirs, label: other.name }] as side, i (side.p.id)}
         <div class="seat">
           <div class="flip" style:--delay="{0.25 + i * 0.6}s">
-            <span class="card-side back"><Avatar name={side.p.name} color={side.p.color} id={side.p.id} size="2.6rem" /></span>
-            <span class="card-side front {side.c}">
-              {#if side.c === 'share'}<Handshake size={36} />{:else}<HandCoins size={36} />{/if}
-              <strong>{side.c === 'share' ? 'Share' : 'Steal'}</strong>
-            </span>
+            <span class="card-side"><BluffCardFace kind="back" width="7.5rem" /></span>
+            <span class="card-side front"><BluffCardFace kind={side.c} width="7.5rem" /></span>
           </div>
-          <span class="who truncate">{side.label}</span>
+          <span class="who truncate"><Avatar name={side.p.name} color={side.p.color} id={side.p.id} size="1.4rem" /> {side.label}</span>
         </div>
       {/each}
     </div>
@@ -217,7 +212,7 @@
     animation-delay: 0.4s;
   }
 
-  /* The two big cards */
+  /* The two cards, held like a hand: a little fanned out, straight once picked */
   .choices {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -225,68 +220,49 @@
   }
   .choice {
     --c: var(--success);
-    position: relative;
     display: grid;
     justify-items: center;
-    align-content: start;
-    gap: 0.5rem;
-    padding: 1.2rem 0.7rem 0.8rem;
-    border-radius: var(--radius);
-    border: 2px solid color-mix(in srgb, var(--c) 40%, transparent);
-    background: color-mix(in srgb, var(--c) 9%, var(--surface));
-    color: var(--c);
-    transition:
-      transform 0.25s cubic-bezier(0.3, 1.6, 0.5, 1),
-      background 0.2s ease,
-      box-shadow 0.25s ease,
-      opacity 0.2s ease;
+    gap: 0.7rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    transition: opacity 0.2s ease;
   }
   .choice.steal {
     --c: var(--danger);
   }
-  .choice:active:not(:disabled) {
-    transform: scale(0.97);
+  .hold {
+    display: grid;
+    transform: rotate(-4deg) translateY(4px);
+    transition: transform 0.3s cubic-bezier(0.3, 1.6, 0.5, 1);
   }
-  .choice.active {
-    background: var(--c);
-    border-color: var(--c);
-    color: #fff;
-    transform: translateY(-4px) scale(1.02);
-    box-shadow: 0 18px 40px -16px var(--c);
+  .steal .hold {
+    transform: rotate(4deg) translateY(4px);
   }
-  .made .choice:not(.active) {
-    opacity: 0.55;
+  .choice:active:not(:disabled) .hold {
+    transform: rotate(0deg) translateY(-6px) scale(0.97);
   }
+  .choice.active .hold {
+    transform: rotate(0deg) translateY(-8px) scale(1.03);
+    border-radius: 0.9rem;
+    box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--c);
+  }
+  .made .choice:not(.active),
   .locked .choice:not(.active) {
-    opacity: 0.3;
+    opacity: 0.5;
   }
   .choice:disabled {
     cursor: default;
-  }
-  .icon {
-    display: grid;
-    place-items: center;
-    width: 4rem;
-    height: 4rem;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--c) 16%, transparent);
-  }
-  .active .icon {
-    background: rgba(255, 255, 255, 0.2);
-    animation: bump 0.35s ease-out;
-  }
-  .name {
-    font-family: var(--font-display);
-    font-size: 1.5rem;
-    line-height: 1;
   }
   .pays {
     display: grid;
     gap: 0.25rem;
     width: 100%;
-    margin-top: 0.3rem;
-    padding-top: 0.55rem;
-    border-top: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+    padding: 0.5rem 0.6rem;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--c) 8%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--c) 25%, transparent);
   }
   .row {
     display: flex;
@@ -297,77 +273,56 @@
     color: var(--text-dim);
     text-align: left;
   }
-  .active .row {
-    color: rgba(255, 255, 255, 0.85);
-  }
   .row b {
     font-size: 0.85rem;
     color: var(--text);
     white-space: nowrap;
   }
-  .active .row b {
-    color: #fff;
-  }
-  .picked {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: #fff;
-    color: var(--c);
-  }
+
   /* The choice made, face down */
   .sealed {
     display: grid;
     justify-items: center;
-    gap: 0.6rem;
+    gap: 0.7rem;
   }
   .facedown {
+    position: relative;
     display: grid;
-    place-content: center;
-    justify-items: center;
-    gap: 0.45rem;
-    width: 11rem;
-    height: 14rem;
-    border-radius: var(--radius);
-    border: 2px solid #ff3b8d;
-    background: repeating-linear-gradient(45deg, var(--surface-2) 0 0.7rem, var(--surface-3) 0.7rem 1.4rem), var(--surface);
-    box-shadow: 0 20px 44px -22px #ff3b8d;
-    color: var(--text);
+    padding: 0;
+    border: 0;
+    background: none;
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
     touch-action: none;
-    transition: transform 0.2s ease;
+    animation: float 3.2s ease-in-out infinite;
   }
   .facedown.peek {
+    animation: none;
     transform: scale(0.97);
   }
-  .facedown .small {
+  .seal {
+    position: absolute;
+    left: 50%;
+    bottom: 1.1rem;
+    translate: -50% 0;
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(23, 10, 38, 0.85);
+    border: 1px solid rgba(255, 59, 141, 0.5);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
   }
-  .lock {
-    display: grid;
-    place-items: center;
-    width: 3.6rem;
-    height: 3.6rem;
-    border-radius: 50%;
-    background: color-mix(in srgb, #ff3b8d 18%, transparent);
-    color: #ff3b8d;
-  }
-  /* Peeking: small and plain, no big color a neighbour would notice */
-  .peeked {
+  .peek-line {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    font-weight: 700;
-    color: var(--text-dim);
+    gap: 0.3rem;
+    min-height: 1.2rem;
   }
   .hint {
     display: flex;
@@ -407,40 +362,26 @@
     min-width: 0;
   }
   .who {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     max-width: 8rem;
     font-weight: 600;
     color: var(--text-dim);
   }
   .flip {
     position: relative;
-    width: 7.5rem;
-    height: 10rem;
+    display: grid;
     transform-style: preserve-3d;
     animation: turn 0.8s cubic-bezier(0.3, 1.3, 0.5, 1) var(--delay) both;
   }
   .card-side {
-    position: absolute;
-    inset: 0;
+    grid-area: 1 / 1;
     display: grid;
-    place-content: center;
-    justify-items: center;
-    gap: 0.5rem;
-    border-radius: var(--radius);
     backface-visibility: hidden;
-  }
-  .back {
-    background: repeating-linear-gradient(45deg, var(--surface-2) 0 0.6rem, var(--surface-3) 0.6rem 1.2rem), var(--surface);
-    border: 2px solid #ff3b8d;
   }
   .front {
     transform: rotateY(180deg);
-    background: var(--success);
-    color: #fff;
-    font-family: var(--font-display);
-    font-size: 1.3rem;
-  }
-  .front.steal {
-    background: var(--danger);
   }
   .outcome {
     display: grid;
@@ -478,9 +419,9 @@
       opacity: 0.25;
     }
   }
-  @keyframes bump {
-    40% {
-      transform: scale(1.18);
+  @keyframes float {
+    50% {
+      transform: translateY(-6px) rotate(-1deg);
     }
   }
 </style>
