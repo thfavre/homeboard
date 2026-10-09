@@ -7,6 +7,7 @@
   import AmountInput from '$lib/ui/AmountInput.svelte';
   import Money from '$lib/ui/Money.svelte';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
+  import { formatAmount } from '$shared/money.ts';
   import { GAME_ICONS, gamesState } from './store.svelte.ts';
   import RhythmSongsAdmin from './RhythmSongsAdmin.svelte';
 
@@ -37,7 +38,10 @@
 
   // The game whose options are open (one at a time keeps the list short on a phone)
   let open = $state<GameId | null>(null);
-  const HAS_OPTIONS: GameId[] = ['timer', 'simon', 'reflex', 'circle', 'rhythm'];
+  // Bluff's only option is its reward, which needs the money system
+  const hasOptions = (id: GameId) => id !== 'coin' && (id !== 'bluff' || !!hb.core?.economyEnabled);
+  /** Bonus each player gets when both share in Bluff (also listed in Prices and rewards) */
+  const bluffBonus = $derived(hb.core?.admin?.earnRules.find((r) => r.key === 'games.bluff'));
 
   // A slider shows its value while it moves, and saves when it is let go
   type SliderKey = 'rhythmSpeed' | 'rhythmAudioOffset';
@@ -61,6 +65,8 @@
         return `${plural(st.reflexRounds, 'round')}, ${perkText(st.reflexPerkSec)}`;
       case 'circle':
         return `${plural(st.circleCount, 'circle')} each, ${perkText(st.circlePerkSec)}`;
+      case 'bluff':
+        return `${formatAmount(bluffBonus?.amount ?? 0)} each if both share`;
       case 'rhythm':
         return st.rhythmLight ? `on ${lightName(st.rhythmLight)}, ${plural(s?.rhythmSongs.length ?? 0, 'song')}` : 'needs a light';
       default:
@@ -146,6 +152,11 @@
     {@render count('Circles each', 'circleCount', 10)}
     {@render perk('Winner scratches their circle on the TV', 'circlePerkSec')}
     {@render lightSelect('Scratch light', 'A WLED light that turns with the record, following every scratch', 'scratchLight')}
+  {:else if id === 'bluff' && bluffBonus}
+    <div class="line">
+      <span class="label">Bonus when both share <span class="faint small">Paid by you to each player, on top of their half of the pot</span></span>
+      <AmountInput value={bluffBonus.amount} oncommit={(v) => attempt(() => rpc('core', 'setEarn', { key: 'games.bluff', amount: v }))} />
+    </div>
   {:else if id === 'rhythm'}
     <h4 class="group">Light</h4>
     {@render lightSelect('Light strip', 'The WLED strip the game is played on, best hung upright. The game can only start when it is reachable', 'rhythmLight')}
@@ -218,7 +229,7 @@
       {#each GAMES as g (g.id)}
         {@const Icon = GAME_ICONS[g.id]}
         {@const on = s.settings.enabled.includes(g.id)}
-        {@const expandable = HAS_OPTIONS.includes(g.id)}
+        {@const expandable = hasOptions(g.id)}
         {@const isOpen = open === g.id}
         <div class="game" class:off={!on} class:open={isOpen} style:--g1={g.colors[0]} style:--g2={g.colors[1]}>
           <div class="head">
