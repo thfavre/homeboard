@@ -324,11 +324,12 @@ export const pirateRace: GameFactory = (m) => {
       for (let i = Math.round(behind) + 1; i <= Math.round(pos - SHIP_LEN * u); i++) add(px, n, i, SHIP_LED[c.ship], 0.07 * fade);
     });
 
-    // Ships on top of each other take turns, so each one can be seen
+    // Ships are drawn back to front, so a ship partly behind another still shows its stern; ships covering
+    // each other by 3/4 or more take turns blinking, so each one can be seen
     const groups: (typeof ships)[] = [];
     for (const s of ships) {
       const g = groups[groups.length - 1];
-      if (g && s.pos - g[g.length - 1].pos < (SHIP_LEN + 0.3) * u) g.push(s);
+      if (g && s.pos - g[g.length - 1].pos < SHIP_LEN * u * 0.25) g.push(s);
       else groups.push([s]);
     }
     for (const g of groups) {
