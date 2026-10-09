@@ -19,7 +19,7 @@ import { HbError, clamp, num } from '../../core/util.ts';
 import { best, type GameFactory } from './engine.ts';
 import { BS_DIFFICULTIES, type BsNote, type Song } from './beatsaver.ts';
 
-const FPS = 50;
+const FPS = 60;
 /** A tap reaches the server up to this late; notes count as missed only after it */
 const GRACE_MS = 400;
 /** Time after the last note is judged before the result: the light plays the finale */
@@ -28,10 +28,15 @@ const OUTRO_MS = 2200;
 const FLASH_MS = 320;
 /** A new multiplier sends a wave down the strip for this long */
 const WAVE_MS = 700;
+/** A note's head and tail, in time of travel: the same look whatever the strip's density */
+const NOTE_HEAD_MS = 35;
+const NOTE_TAIL_MS = 150;
 /** Longest a whole song goes on after its last note (its outro, fading out) */
 const SONG_TAIL_MS = 6000;
 /** Best part ("preview start") the map editors set when the mapper picks none */
 const DEFAULT_PREVIEW_MS = 12_000;
+/** The music starts this long after the TV gets its cue (time for the message to get there) */
+const MUSIC_CUE_MS = 1000;
 /** Longest wait for the TV to have the song ready before starting anyway */
 const TV_WAIT_MS = 12_000;
 
@@ -263,9 +268,11 @@ export const rhythmRain: GameFactory = (m) => {
       if (chart.filter((n) => n.ms >= part.fromMs && n.ms < part.toMs).length < 10) {
         part = { fromMs: Math.max(0, chart[0].ms - 1000), toMs: chart[0].ms + maxMs, toEnd: false };
       }
-      // The music starts once the count-in is over, the first notes already climbing
-      const musicAt = startAt + Math.max(RHYTHM.leadMs, travelMs + 1000);
-      beatZero = musicAt - part.fromMs;
+      // The part starts once the count-in is over, the first notes already climbing. The music starts
+      // right away a little before the part, so the count-in and the first climbing notes are not silent.
+      beatZero = startAt + Math.max(RHYTHM.leadMs, travelMs + 1000) - part.fromMs;
+      const musicFrom = Math.max(0, part.fromMs - Math.max(RHYTHM.leadMs, travelMs + 1000) + MUSIC_CUE_MS);
+      const musicAt = beatZero + musicFrom;
       notes = songNotes(chart, part.fromMs, part.toMs, beatZero, lanes, level.minGapMs);
       const lastAt = notes.length ? notes[notes.length - 1].at : musicAt + minMs;
       // Played to the song's end, or a little past the last note, fading out
@@ -276,7 +283,7 @@ export const rhythmRain: GameFactory = (m) => {
         artist: song.artist,
         cover: song.cover,
         at: musicAt,
-        offsetMs: part.fromMs,
+        offsetMs: musicFrom,
         durationMs: musicEndAt - musicAt,
       };
     } else {
@@ -345,6 +352,11 @@ export const rhythmRain: GameFactory = (m) => {
     };
     const zone = Math.round(RHYTHM.zoneAt * (leds - 1));
     const speed = zone / travelMs;
+    // Sizes: a note is sized by time, so it looks the same on any strip (a dense one moves more pixels a
+    // second); the bursts and waves scale with the strip, drawn for 60 pixels (u = 1)
+    const u = Math.max(1, leds / 60);
+    const head = Math.max(1.2, NOTE_HEAD_MS * speed);
+    const tail = Math.max(4, NOTE_TAIL_MS * speed);
     const sinceBeat = (((now - beatZero) % beatMs) + beatMs) % beatMs;
     const playing = now < finaleAt;
     const pulse = playing ? Math.exp(-sinceBeat / 140) : 0;
@@ -357,13 +369,13 @@ export const rhythmRain: GameFactory = (m) => {
       if (kind) add(i, ZONE[kind], (0.09 + 0.16 * pulse) * zoneK);
     }
     // While the TV loads the song, the middle of the zone breathes: the game is on
-    if (loading) add(zone, WHITE, 0.15 + 0.15 * Math.sin(now / 300));
+    if (loading) for (let i = Math.floor(zone - u); i <= Math.ceil(zone + u); i++) add(i, WHITE, 0.15 + 0.15 * Math.sin(now / 300));
 
     for (let n = 0; n < notes.length; n++) {
       const note = notes[n];
       const pos = zone - (note.at - now) * speed;
-      if (pos < -1) break;
-      if (pos > leds + 8) continue;
+      if (pos < -head) break;
+      if (pos > leds + tail) continue;
       // Hit by everyone: the burst takes over. Hit by one of two: dimmer, still there for the other.
       if (hitCount[n] >= m.players.length) continue;
       let k = hitCount[n] ? 0.4 : 1;
@@ -375,12 +387,16 @@ export const rhythmRain: GameFactory = (m) => {
         if (k <= 0) continue;
         rgb = [rgb[0] * 0.5 + 120, rgb[1] * 0.3, rgb[2] * 0.3];
       }
-      for (let i = Math.floor(pos - 7); i <= Math.ceil(pos + 1); i++) {
-        // A bright head with a white hot core, and a tail fading below it
-        const d = pos - i;
-        const t = d < -1 ? 0 : d < 0 ? 1 + d : d < 1 ? 1 : 0.55 * Math.exp(-(d - 1) * 0.7);
-        add(i, rgb, t * k);
-        if (d >= -0.5 && d < 1) add(i, WHITE, 0.18 * k);
+      // A bright head centered on `pos` with a white hot core, and a tail fading below it; the edges are
+      // shaded by how much of a pixel they cover, so the note glides instead of jumping pixel to pixel
+      const top = pos + head / 2;
+      const bottom = pos - head / 2;
+      for (let i = Math.floor(bottom - tail); i <= Math.ceil(top); i++) {
+        const cover = Math.max(0, Math.min(i + 1, top) - Math.max(i, bottom));
+        const below = bottom - (i + 0.5);
+        const t = cover > 0 ? cover + (1 - cover) * (below > 0 ? 0.55 : 0) : below > 0 ? 0.55 * Math.exp((-below * 3) / tail) : 0;
+        add(i, rgb, Math.min(1, t) * k);
+        if (Math.abs(i + 0.5 - pos) < Math.max(0.5, head / 4)) add(i, WHITE, 0.2 * k);
       }
     }
 
@@ -388,7 +404,7 @@ export const rhythmRain: GameFactory = (m) => {
       const t = (now - f.at) / FLASH_MS;
       if (t < 0 || t > 1) continue;
       if (f.wrong) {
-        for (let i = zone - 1; i <= zone + 1; i++) add(i, f.rgb, 0.5 * (1 - t));
+        for (let i = Math.floor(zone - u); i <= Math.ceil(zone + u); i++) add(i, f.rgb, 0.5 * (1 - t));
         continue;
       }
       // The band the hit was judged in (green, orange or red, on the side of the note) lights up
@@ -401,10 +417,10 @@ export const rhythmRain: GameFactory = (m) => {
       }
       // A ring of the note's color opening up and down from where the note was hit; a perfect starts white hot
       const at = zone + (f.gapMs ?? 0) * speed;
-      const spread = 1 + t * 6;
-      for (let i = Math.floor(at - spread - 2); i <= Math.ceil(at + spread + 2); i++) {
-        const edge = Math.max(0, 1 - Math.abs(Math.abs(i - at) - spread) / 1.6);
-        const core = Math.max(0, 1 - Math.abs(i - at) / 2);
+      const spread = u + t * 6 * u;
+      for (let i = Math.floor(at - spread - 2 * u); i <= Math.ceil(at + spread + 2 * u); i++) {
+        const edge = Math.max(0, 1 - Math.abs(Math.abs(i - at) - spread) / (1.6 * u));
+        const core = Math.max(0, 1 - Math.abs(i - at) / (2 * u));
         add(i, f.rgb, (1 - t) * (0.8 * edge + 0.5 * core));
         if (f.grade === 'perfect') add(i, WHITE, Math.max(0, 1 - t * 2.5) * core);
       }
@@ -414,7 +430,7 @@ export const rhythmRain: GameFactory = (m) => {
       const t = (now - w.at) / WAVE_MS;
       if (t < 0 || t > 1) continue;
       const pos = zone - t * zone * 1.1;
-      for (let i = Math.floor(pos - 3); i <= Math.ceil(pos + 3); i++) add(i, w.rgb, 0.8 * (1 - t) * Math.max(0, 1 - Math.abs(i - pos) / 3));
+      for (let i = Math.floor(pos - 3 * u); i <= Math.ceil(pos + 3 * u); i++) add(i, w.rgb, 0.8 * (1 - t) * Math.max(0, 1 - Math.abs(i - pos) / (3 * u)));
     }
 
     if (now >= finaleAt) {
@@ -423,7 +439,7 @@ export const rhythmRain: GameFactory = (m) => {
       const fill = Math.min(1, (now - finaleAt) / 700) * leds;
       const fade = Math.max(0, Math.min(1, (endAt - now) / 700));
       for (let i = 0; i <= fill && i < leds; i++) {
-        const front = Math.max(0, 1 - (fill - i) / 4);
+        const front = Math.max(0, 1 - (fill - i) / (4 * u));
         add(i, finale, (0.35 + 0.65 * front) * fade);
         if (Math.random() < 0.05) add(i, WHITE, 0.6 * fade);
       }

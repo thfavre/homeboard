@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onEvent, rpc } from '$lib/client.svelte.ts';
+  import { onEvent, resyncClock, rpc } from '$lib/client.svelte.ts';
   import { preloadMusic, warmAudio } from './ui/rhythmMusic.ts';
 
   /**
@@ -13,7 +13,8 @@
   $effect(() =>
     onEvent<{ url: string }>('games', 'rhythmPrepare', async ({ url }) => {
       try {
-        await preloadMusic(url);
+        // The song starts at a server time: this TV's idea of it must be right
+        await Promise.all([preloadMusic(url), resyncClock()]);
         await warmAudio();
       } finally {
         // Ready or not (broken file), the game must go on

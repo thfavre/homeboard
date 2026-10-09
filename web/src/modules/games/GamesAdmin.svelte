@@ -195,7 +195,7 @@
       {@render length('Shortest', 'rhythmMinSec')}
       {@render length('Longest', 'rhythmMaxSec')}
     {/if}
-    {@render slider('Music timing', 'Notes reach the zone after the beat you hear: move it to +. Before the beat: to -', 'rhythmAudioOffset', -500, 500, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
+    {@render slider('Music timing', 'Notes reach the zone after the beat you hear: move it to +. Before the beat: to -. Speakers in Bluetooth or a sound bar can need a lot', 'rhythmAudioOffset', -2000, 2000, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
     <RhythmSongsAdmin songs={s!.rhythmSongs} />
   {/if}
 {/snippet}

@@ -95,6 +95,10 @@ async function syncClock(s: Socket): Promise<void> {
     }
   }
 }
+/** Measure the clock again (before something that must be on time: a device's clock can move after it connected) */
+export async function resyncClock(): Promise<void> {
+  if (socket?.connected) await syncClock(socket);
+}
 const listeners = new Map<string, Set<(data: any) => void>>();
 let toastSeq = 0;
 let flashSeq = 0;

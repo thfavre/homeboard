@@ -240,7 +240,7 @@ export interface GamesSettings {
   rhythmFullSong: boolean;
   /** BeatSaver maps (keys) guests can play Rhythm Rain on, with their song and notes */
   rhythmSongs: string[];
-  /** The music starts this many ms early, to make up for the TV's sound delay (-500 to 500) */
+  /** The music starts this many ms early, to make up for the sound delay of the TV or its speakers (-2000 to 2000) */
   rhythmAudioOffset: number;
 }
 

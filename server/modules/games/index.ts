@@ -741,7 +741,7 @@ export default defineModule<GamesSettings>({
             : s.rhythmLight,
         rhythmReverse: typeof args?.rhythmReverse === 'boolean' ? args.rhythmReverse : s.rhythmReverse,
         rhythmAudioOffset:
-          args?.rhythmAudioOffset !== undefined ? Math.min(500, Math.max(-500, Math.round(num(args.rhythmAudioOffset, 0)))) : s.rhythmAudioOffset,
+          args?.rhythmAudioOffset !== undefined ? Math.min(2000, Math.max(-2000, Math.round(num(args.rhythmAudioOffset, 0)))) : s.rhythmAudioOffset,
         rhythmMinSec: args?.rhythmMinSec !== undefined ? Math.min(600, Math.max(20, Math.round(num(args.rhythmMinSec, 60)))) : s.rhythmMinSec,
         rhythmMaxSec: args?.rhythmMaxSec !== undefined ? Math.min(600, Math.max(20, Math.round(num(args.rhythmMaxSec, 120)))) : s.rhythmMaxSec,
         rhythmFullSong: typeof args?.rhythmFullSong === 'boolean' ? args.rhythmFullSong : s.rhythmFullSong,
