@@ -189,13 +189,16 @@ export default defineModule<SpotifySettings>({
       spotifyQueue = (q?.queue ?? [])
         .filter((i: any) => i?.type === 'track')
         .map((i: any) => ({ ...toTrack(i), requestedBy: requests.get(i.uri) }));
+      // Once it plays it is no longer waiting, even if the playlist has it again later
+      if (now) handedOver.delete(now.uri);
       for (const uri of handedOver) if (!spotifyQueue.some((t) => t.uri === uri)) handedOver.delete(uri);
     };
 
     /** Play order: songs already handed over, then the held ones, then the playlist */
     const fullQueue = (): Track[] => {
       let last = -1;
-      spotifyQueue.forEach((t, i) => handedOver.has(t.uri) && (last = i));
+      // Only the first copy of a song is the one handed over, a later one is from the playlist
+      for (const uri of handedOver) last = Math.max(last, spotifyQueue.findIndex((t) => t.uri === uri));
       const mine = held.map(({ charge: _, ...t }) => t);
       return [...spotifyQueue.slice(0, last + 1), ...mine, ...spotifyQueue.slice(last + 1)];
     };
@@ -353,7 +356,7 @@ export default defineModule<SpotifySettings>({
         connected: connected(),
         now,
         queue: fullQueue().slice(0, PUBLIC_QUEUE),
-        guestQueued: spotifyQueue.filter((t) => handedOver.has(t.uri)).length + held.length,
+        guestQueued: handedOver.size + held.length,
         allowSkip: s.allowSkip,
         ...(role === 'admin'
           ? {
@@ -397,7 +400,8 @@ export default defineModule<SpotifySettings>({
       if (!TRACK_URI.test(uri)) throw new HbError('Unknown song');
       const track = toTrack(await api('GET', `/tracks/${uri.split(':')[2]}?market=from_token`));
       if (track.explicit && !ctx.settings.get().allowExplicit) throw new HbError('Explicit songs are turned off');
-      if (held.some((t) => t.uri === uri) || spotifyQueue.some((t) => t.uri === uri) || now?.uri === uri) throw new HbError('This song is already playing or queued');
+      // A song coming up from the playlist can still be added: the guest's copy plays first
+      if (held.some((t) => t.uri === uri) || handedOver.has(uri) || now?.uri === uri) throw new HbError('This song is already playing or queued');
       if (!device) throw new HbError('Spotify is not playing on any device right now');
       const charge = ctx.economy.charge(guest, 'spotify.queue', 1, `Song: ${track.title}`);
       const requestedBy = { name: guest.name, color: guest.color };
