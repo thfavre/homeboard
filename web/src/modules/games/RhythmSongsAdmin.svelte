@@ -2,7 +2,6 @@
   import { Check, Music, Pause, Play, Plus, RotateCw, Search, ThumbsUp, X } from '@lucide/svelte';
   import type { RhythmSongInfo } from '$shared/games.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
-  import Section from '$lib/ui/Section.svelte';
 
   /**
    * The host's Rhythm Rain songs: the ones guests can pick, and a BeatSaver search to add more.
@@ -83,7 +82,9 @@
   </button>
 {/snippet}
 
-<Section title="Rhythm Rain songs" hint="Guests pick one of these when they pay for a duel with music. Tap a cover to hear it.">
+<div class="part">
+  <h4 class="group">Songs</h4>
+  <p class="faint small">Guests pick one of these when they pay for a duel with music. Tap a cover to hear it.</p>
   <div class="list">
     {#each songs as x (x.key)}
       <div class="row">
@@ -109,9 +110,11 @@
       <p class="faint small">No song: duels are played without music. Search below to add some.</p>
     {/each}
   </div>
-</Section>
+</div>
 
-<Section title="Find more songs" hint="Searches beatsaver.com, a free library of songs with hand made notes. A song is downloaded once, when you add it.">
+<div class="part">
+  <h4 class="group">Find more songs</h4>
+  <p class="faint small">Searches beatsaver.com, a free library of songs with hand made notes. A song is downloaded once, when you add it.</p>
   <form
     class="search"
     novalidate
@@ -151,9 +154,24 @@
   </div>
   {#if more}<button class="btn ghost block" disabled={searching} onclick={() => search(true)}>More results</button>{/if}
   <p class="faint small">E N H X X+: the charts the map has, Easy to Expert+. Maps with Easy or Normal up to Expert suit every level.</p>
-</Section>
+</div>
 
 <style>
+  .part {
+    display: grid;
+    gap: 0.6rem;
+    margin-top: 0.3rem;
+  }
+  .group {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .part > .group + .small {
+    margin-top: -0.4rem;
+  }
   .list {
     display: grid;
     gap: 0.5rem;

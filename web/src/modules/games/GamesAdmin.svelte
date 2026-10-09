@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Minus, Play, Plus, Square, X } from '@lucide/svelte';
-  import { GAMES, gameInfo, type GameId } from '$shared/games.ts';
+  import { ChevronDown, Minus, Play, Plus, Square, X } from '@lucide/svelte';
+  import { GAMES, gameInfo, type GameId, type GamesSettings } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -19,33 +19,137 @@
   const defaultPrize = () => hb.core?.admin?.earnRules.find((r) => r.key === 'games.win')?.amount ?? 0;
   let prize = $state<number | null>(null);
 
-  /** Number settings with a stepper (the server keeps them in the same range) */
-  const COUNTS = [
-    { key: 'timerRounds', label: 'Blind Timer rounds', max: 10 },
-    { key: 'circleCount', label: 'Perfect Circle: circles each', max: 10 },
-    { key: 'reflexRounds', label: 'Color Reflex rounds', max: 15 },
-    { key: 'simonStart', label: 'Light Simon: colors in the first round', max: 10 },
-  ] as const;
-  /** Seconds the winner plays with their prize (0: no prize) */
-  const PERKS = [
-    { key: 'reflexPerkSec', label: 'Color Reflex: the winner controls the lights' },
-    { key: 'circlePerkSec', label: 'Perfect Circle: the winner scratches their circle on the TV' },
-  ] as const;
-  const PERK_STEPS = [0, 15, 30, 45, 60, 90, 120, 180, 300];
-  const perkStep = (now: number, dir: 1 | -1) =>
-    dir > 0 ? (PERK_STEPS.find((x) => x > now) ?? now) : ([...PERK_STEPS].reverse().find((x) => x < now) ?? now);
-  /** Rhythm Rain song lengths, in seconds */
-  const SONG_STEPS = [20, 30, 45, 60, 75, 90, 120];
-  const songStep = (now: number, dir: 1 | -1) =>
-    dir > 0 ? (SONG_STEPS.find((x) => x > now) ?? now) : ([...SONG_STEPS].reverse().find((x) => x < now) ?? now);
   const PHASES = { lobby: 'Waiting for players', intro: 'Showing the rules', play: 'Playing', result: 'Showing the result' } as const;
-  const setSettings = (patch: object) => attempt(() => rpc('games', 'setSettings', patch));
+  const setSettings = (patch: Partial<GamesSettings>) => attempt(() => rpc('games', 'setSettings', patch));
 
   function toggleGame(id: GameId, on: boolean) {
     const list = s?.settings.enabled ?? [];
     setSettings({ enabled: on ? [...list, id] : list.filter((x) => x !== id) });
   }
+
+  /** Next value up or down a list of allowed steps */
+  const stepIn = (steps: number[], now: number, dir: 1 | -1) =>
+    dir > 0 ? (steps.find((x) => x > now) ?? now) : ([...steps].reverse().find((x) => x < now) ?? now);
+  /** Seconds the winner plays with their prize (0: no prize) */
+  const PERK_STEPS = [0, 15, 30, 45, 60, 90, 120, 180, 300];
+  /** Rhythm Rain song lengths, in seconds */
+  const SONG_STEPS = [20, 30, 45, 60, 75, 90, 120];
+
+  // The game whose options are open (one at a time keeps the list short on a phone)
+  let open = $state<GameId | null>(null);
+  const HAS_OPTIONS: GameId[] = ['timer', 'simon', 'reflex', 'circle', 'rhythm'];
+
+  // A slider shows its value while it moves, and saves when it is let go
+  type SliderKey = 'rhythmSpeed' | 'rhythmAudioOffset';
+  let drag = $state<Partial<Record<SliderKey, number>>>({});
+  async function saveSlider(key: SliderKey, v: number) {
+    await setSettings({ [key]: v });
+    delete drag[key];
+  }
+
+  const lightName = (id: string) => s?.lightDevices?.find((d) => d.id === id)?.name ?? 'a light';
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const perkText = (sec: number) => (sec > 0 ? `${sec}s prize` : 'no prize');
+  /** What the closed card says about the game's options */
+  function summary(id: GameId, st: GamesSettings): string {
+    switch (id) {
+      case 'timer':
+        return plural(st.timerRounds, 'round');
+      case 'simon':
+        return `starts with ${plural(st.simonStart, 'color')}`;
+      case 'reflex':
+        return `${plural(st.reflexRounds, 'round')}, ${perkText(st.reflexPerkSec)}`;
+      case 'circle':
+        return `${plural(st.circleCount, 'circle')} each, ${perkText(st.circlePerkSec)}`;
+      case 'rhythm':
+        return st.rhythmLight ? `on ${lightName(st.rhythmLight)}, ${plural(s?.rhythmSongs.length ?? 0, 'song')}` : 'needs a light';
+      default:
+        return '';
+    }
+  }
+  const modes = (id: GameId) => {
+    const g = gameInfo(id)!;
+    return `${g.modes.includes('room') ? '1 vs 1 or room' : '1 vs 1'}${g.lights ? ', lights' : ''}`;
+  };
 </script>
+
+{#snippet stepper(label: string, hint: string, n: number, min: number, max: number, set: (dir: 1 | -1) => void)}
+  <div class="line">
+    <span class="label">{label} <span class="faint small">{hint}</span></span>
+    <span class="stepper">
+      <button class="btn small" aria-label="Less" disabled={n <= min} onclick={() => set(-1)}><Minus size={16} /></button>
+      <strong class="mono">{n}</strong>
+      <button class="btn small" aria-label="More" disabled={n >= max} onclick={() => set(1)}><Plus size={16} /></button>
+    </span>
+  </div>
+{/snippet}
+
+{#snippet count(label: string, key: 'timerRounds' | 'circleCount' | 'reflexRounds' | 'simonStart', max: number)}
+  {@const n = s!.settings[key]}
+  {@render stepper(label, `1 to ${max}`, n, 1, max, (dir) => setSettings({ [key]: n + dir }))}
+{/snippet}
+
+{#snippet perk(label: string, key: 'reflexPerkSec' | 'circlePerkSec')}
+  {@const n = s!.settings[key]}
+  {@render stepper(label, 'Seconds, 0 = no prize', n, 0, 300, (dir) => setSettings({ [key]: stepIn(PERK_STEPS, n, dir) }))}
+{/snippet}
+
+{#snippet lightSelect(label: string, hint: string, key: 'scratchLight' | 'rhythmLight')}
+  <div class="line">
+    <span class="label">{label} <span class="faint small">{hint}</span></span>
+    <select class="input light" value={s!.settings[key]} onchange={(e) => setSettings({ [key]: e.currentTarget.value })}>
+      <option value="">None</option>
+      {#each s!.lightDevices ?? [] as d (d.id)}<option value={d.id}>{d.name}{d.online ? '' : ' (offline)'}</option>{/each}
+    </select>
+  </div>
+{/snippet}
+
+{#snippet slider(label: string, hint: string, key: SliderKey, min: number, max: number, show: (v: number) => string)}
+  {@const v = drag[key] ?? s!.settings[key]}
+  <div class="line wrap">
+    <span class="label"><span>{label} <strong class="mono value">{show(v)}</strong></span> <span class="faint small">{hint}</span></span>
+    <input
+      class="range"
+      type="range"
+      {min}
+      {max}
+      step="10"
+      value={v}
+      aria-label={label}
+      oninput={(e) => (drag[key] = Number(e.currentTarget.value))}
+      onchange={(e) => saveSlider(key, Number(e.currentTarget.value))}
+    />
+  </div>
+{/snippet}
+
+{#snippet options(id: GameId)}
+  {#if id === 'timer'}
+    {@render count('Rounds', 'timerRounds', 10)}
+  {:else if id === 'simon'}
+    {@render count('Colors in the first round', 'simonStart', 10)}
+  {:else if id === 'reflex'}
+    {@render count('Rounds', 'reflexRounds', 15)}
+    {@render perk('Winner controls the lights', 'reflexPerkSec')}
+  {:else if id === 'circle'}
+    {@render count('Circles each', 'circleCount', 10)}
+    {@render perk('Winner scratches their circle on the TV', 'circlePerkSec')}
+    {@render lightSelect('Scratch light', 'A WLED light that turns with the record, following every scratch', 'scratchLight')}
+  {:else if id === 'rhythm'}
+    <h4 class="group">Light</h4>
+    {@render lightSelect('Light strip', 'The WLED strip the game is played on, best hung upright. The game can only start when it is reachable', 'rhythmLight')}
+    {#if s!.settings.rhythmLight}
+      <div class="line">
+        <span class="label">First LED at the top <span class="faint small">Turn it on if the notes fall instead of climbing</span></span>
+        <Toggle checked={s!.settings.rhythmReverse} onchange={(v) => setSettings({ rhythmReverse: v })} label="First LED at the top" />
+      </div>
+    {/if}
+    <h4 class="group">Play</h4>
+    {@render stepper('Song length', 'Seconds, 20 to 120', s!.settings.rhythmSec, 20, 120, (dir) => setSettings({ rhythmSec: stepIn(SONG_STEPS, s!.settings.rhythmSec, dir) }))}
+    {@render slider('Note speed', 'How fast the notes climb at every level, 100% = as designed', 'rhythmSpeed', 50, 200, (v) => `${v}%`)}
+    {@render slider('Music timing', 'Notes reach the zone after the beat you hear: move it to +. Before the beat: to -', 'rhythmAudioOffset', -500, 500, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
+    <RhythmSongsAdmin songs={s!.rhythmSongs} />
+  {/if}
+{/snippet}
 
 {#if s}
   {#if m}
@@ -74,11 +178,11 @@
       </div>
       {#if hb.core?.economyEnabled}
         <div class="line">
-          <span>Entry for each player <span class="faint small">Goes in the pot, 0 = free to join</span></span>
+          <span class="label">Entry for each player <span class="faint small">Goes in the pot, 0 = free to join</span></span>
           <AmountInput value={stake} oncommit={(v) => (stake = v)} />
         </div>
         <div class="line">
-          <span>Prize for the winner <span class="faint small">Paid by you, on top of the pot</span></span>
+          <span class="label">Prize for the winner <span class="faint small">Paid by you, on top of the pot</span></span>
           <AmountInput value={prize ?? defaultPrize()} oncommit={(v) => (prize = v)} />
         </div>
       {/if}
@@ -97,139 +201,53 @@
     </Section>
   {/if}
 
-  <Section title="Games guests can start" hint="1 vs 1 duels cost the challenge fee; room games cost the start fee (see prices above).">
-    {#each GAMES as g (g.id)}
-      {@const Icon = GAME_ICONS[g.id]}
-      <div class="line">
-        <span class="game">
-          <Icon size={18} />
-          <span>
-            {g.name}
-            <span class="faint small">{g.modes.includes('room') ? '1 vs 1 or room' : '1 vs 1 only'}{g.lights ? ', uses the lights' : ''}</span>
-          </span>
-        </span>
-        <Toggle checked={s.settings.enabled.includes(g.id)} onchange={(v) => toggleGame(g.id, v)} label={g.name} />
-      </div>
-    {/each}
+  <Section title="Games" hint="Switch on the games guests can start, and tap a game for its options. Duels cost the challenge fee, room games the start fee.">
+    <div class="games">
+      {#each GAMES as g (g.id)}
+        {@const Icon = GAME_ICONS[g.id]}
+        {@const on = s.settings.enabled.includes(g.id)}
+        {@const expandable = HAS_OPTIONS.includes(g.id)}
+        {@const isOpen = open === g.id}
+        <div class="game" class:off={!on} class:open={isOpen} style:--g1={g.colors[0]} style:--g2={g.colors[1]}>
+          <div class="head">
+            <button class="name" disabled={!expandable} aria-expanded={expandable ? isOpen : undefined} onclick={() => (open = isOpen ? null : g.id)}>
+              <span class="tile"><Icon size={20} /></span>
+              <span class="label">
+                <strong>{g.name}</strong>
+                <span class="faint small truncate">
+                  {modes(g.id)}{#if expandable}<span class:warn={g.id === 'rhythm' && !s.settings.rhythmLight}> · {summary(g.id, s.settings)}</span>{/if}
+                </span>
+              </span>
+              {#if expandable}<span class="chev"><ChevronDown size={18} /></span>{/if}
+            </button>
+            <Toggle checked={on} onchange={(v) => toggleGame(g.id, v)} label={g.name} />
+          </div>
+          {#if isOpen}
+            <div class="opts">{@render options(g.id)}</div>
+          {/if}
+        </div>
+      {/each}
+    </div>
   </Section>
 
-  <Section title="Options">
+  <Section title="For every game">
     {#if hb.core?.economyEnabled}
       <div class="line">
-        <span>Highest bet <span class="faint small">0 = no limit</span></span>
+        <span class="label">Highest bet <span class="faint small">0 = no limit</span></span>
         <AmountInput value={s.settings.maxStake} oncommit={(v) => setSettings({ maxStake: v })} />
       </div>
     {/if}
-    {#each COUNTS as r (r.key)}
-      {@const n = s.settings[r.key]}
-      <div class="line">
-        <span>{r.label} <span class="faint small">1 to {r.max}</span></span>
-        <span class="stepper">
-          <button class="btn small" disabled={n <= 1} onclick={() => setSettings({ [r.key]: n - 1 })}><Minus size={16} /></button>
-          <strong class="mono">{n}</strong>
-          <button class="btn small" disabled={n >= r.max} onclick={() => setSettings({ [r.key]: n + 1 })}><Plus size={16} /></button>
-        </span>
-      </div>
-    {/each}
-    {#each PERKS as r (r.key)}
-      {@const n = s.settings[r.key]}
-      <div class="line">
-        <span>{r.label} <span class="faint small">Seconds, 0 = no prize</span></span>
-        <span class="stepper">
-          <button class="btn small" disabled={n <= 0} onclick={() => setSettings({ [r.key]: perkStep(n, -1) })}><Minus size={16} /></button>
-          <strong class="mono">{n}</strong>
-          <button class="btn small" disabled={n >= 300} onclick={() => setSettings({ [r.key]: perkStep(n, 1) })}><Plus size={16} /></button>
-        </span>
-      </div>
-    {/each}
     <div class="line">
-      <span>
-        Scratch light
-        <span class="faint small">A WLED light that turns with the Perfect Circle record, following every scratch</span>
-      </span>
-      <select class="input light" value={s.settings.scratchLight} onchange={(e) => setSettings({ scratchLight: e.currentTarget.value })}>
-        <option value="">None</option>
-        {#each s.lightDevices ?? [] as d (d.id)}<option value={d.id}>{d.name}{d.online ? '' : ' (offline)'}</option>{/each}
-      </select>
-    </div>
-    <div class="line">
-      <span>
-        Rhythm Rain light
-        <span class="faint small">The WLED strip the game is played on, best hung upright. The game can only be started when it is reachable</span>
-      </span>
-      <select class="input light" value={s.settings.rhythmLight} onchange={(e) => setSettings({ rhythmLight: e.currentTarget.value })}>
-        <option value="">None</option>
-        {#each s.lightDevices ?? [] as d (d.id)}<option value={d.id}>{d.name}{d.online ? '' : ' (offline)'}</option>{/each}
-      </select>
-    </div>
-    {#if s.settings.rhythmLight}
-      <div class="line">
-        <span>
-          Rhythm Rain: first LED at the top
-          <span class="faint small">Turn it on if the notes fall instead of climbing</span>
-        </span>
-        <Toggle checked={s.settings.rhythmReverse} onchange={(v) => setSettings({ rhythmReverse: v })} label="First LED at the top" />
-      </div>
-    {/if}
-    <div class="line">
-      <span>
-        Rhythm Rain: note speed <strong class="mono">{s.settings.rhythmSpeed}%</strong>
-        <span class="faint small">Scales how fast the notes climb at every level, 100% = as designed</span>
-      </span>
-      <input
-        class="speed"
-        type="range"
-        min="50"
-        max="200"
-        step="10"
-        value={s.settings.rhythmSpeed}
-        onchange={(e) => setSettings({ rhythmSpeed: Number(e.currentTarget.value) })}
-      />
-    </div>
-    <div class="line">
-      <span>Rhythm Rain: song length <span class="faint small">Seconds, 20 to 120</span></span>
-      <span class="stepper">
-        <button class="btn small" disabled={s.settings.rhythmSec <= 20} onclick={() => setSettings({ rhythmSec: songStep(s.settings.rhythmSec, -1) })}><Minus size={16} /></button>
-        <strong class="mono">{s.settings.rhythmSec}</strong>
-        <button class="btn small" disabled={s.settings.rhythmSec >= 120} onclick={() => setSettings({ rhythmSec: songStep(s.settings.rhythmSec, 1) })}><Plus size={16} /></button>
-      </span>
-    </div>
-    <div class="line">
-      <span>
-        Rhythm Rain: music timing <strong class="mono">{s.settings.rhythmAudioOffset > 0 ? '+' : ''}{s.settings.rhythmAudioOffset} ms</strong>
-        <span class="faint small">If the notes reach the zone after the beat you hear, move it to +; before the beat, to -</span>
-      </span>
-      <input
-        class="speed"
-        type="range"
-        min="-500"
-        max="500"
-        step="10"
-        value={s.settings.rhythmAudioOffset}
-        onchange={(e) => setSettings({ rhythmAudioOffset: Number(e.currentTarget.value) })}
-      />
-    </div>
-    <div class="line">
-      <span>
+      <span class="label">
         Show the light colors on the TV too
         <span class="faint small">{s.lights ? 'Light Simon and Color Reflex use your WLED lights' : 'No light reachable: the TV always shows the colors'}</span>
       </span>
       <Toggle checked={s.settings.tvColors} onchange={(v) => setSettings({ tvColors: v })} label="Colors on the TV" />
     </div>
   </Section>
-
-  <RhythmSongsAdmin songs={s.rhythmSongs} />
 {/if}
 
 <style>
-  .speed {
-    width: 10rem;
-    accent-color: var(--accent);
-  }
-  .light {
-    width: auto;
-    min-width: 10rem;
-  }
   .players,
   .choices {
     display: flex;
@@ -252,33 +270,141 @@
     background: color-mix(in srgb, var(--accent) 18%, transparent);
     color: var(--accent);
   }
+
+  /* One card per game: its switch on the right, its options under it */
+  .games {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .game {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    transition: border-color 0.2s ease;
+  }
+  .game.open {
+    border-color: color-mix(in srgb, var(--g1) 45%, var(--border));
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem 0.6rem 0.6rem;
+  }
+  .name {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    text-align: left;
+  }
+  .name:disabled {
+    cursor: default;
+  }
+  .name .label {
+    flex: 1;
+  }
+  .tile {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.7rem;
+    background: linear-gradient(135deg, var(--g1), var(--g2));
+    color: #fff;
+    box-shadow: 0 6px 18px -8px var(--g1);
+    transition:
+      filter 0.2s ease,
+      opacity 0.2s ease;
+  }
+  .off .tile {
+    filter: grayscale(0.85);
+    opacity: 0.55;
+  }
+  .off .name strong {
+    color: var(--text-dim);
+  }
+  .chev {
+    flex: none;
+    display: grid;
+    color: var(--text-faint);
+    transition: transform 0.2s ease;
+  }
+  .open .chev {
+    transform: rotate(180deg);
+  }
+  .warn {
+    color: var(--danger);
+  }
+  .opts {
+    display: grid;
+    gap: 0.85rem;
+    padding: 0.85rem 0.85rem 0.95rem;
+    border-top: 1px solid var(--border);
+  }
+  .group {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-top: 0.3rem;
+  }
+  .opts > .group:first-child {
+    margin-top: 0;
+  }
+
   .line {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
   }
-  .game {
-    display: flex;
-    align-items: center;
-    gap: 0.7rem;
+  .line.wrap {
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
   }
   /* Label with a hint under it */
-  .game > span,
-  .line > span:not(.game, .stepper) {
+  .label {
     display: grid;
+    min-width: 0;
+  }
+  .line > .label {
+    flex: 1 1 12rem;
+  }
+  .value {
+    font-size: 0.9rem;
+    color: var(--accent);
+    margin-left: 0.25rem;
   }
   .small {
     font-size: 0.78rem;
   }
-  .line > .stepper {
+  .stepper {
+    flex: none;
     display: flex;
     align-items: center;
     gap: 0.6rem;
   }
   .stepper strong {
-    min-width: 1.5rem;
+    min-width: 1.75rem;
     text-align: center;
     font-size: 1.1rem;
+  }
+  .range {
+    flex: 1 1 10rem;
+    max-width: 14rem;
+    accent-color: var(--accent);
+  }
+  .light {
+    flex: none;
+    width: auto;
+    min-width: 9rem;
+    max-width: 12rem;
   }
 </style>
