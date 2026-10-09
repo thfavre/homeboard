@@ -122,14 +122,26 @@
   </div>
 {/snippet}
 
+{#snippet tvColors()}
+  <div class="line">
+    <span class="label">
+      Show the light colors on the TV too
+      <span class="faint small">{s!.lights ? 'Shared by Light Simon and Color Reflex' : 'No light reachable: the TV always shows the colors'}</span>
+    </span>
+    <Toggle checked={s!.settings.tvColors} onchange={(v) => setSettings({ tvColors: v })} label="Colors on the TV" />
+  </div>
+{/snippet}
+
 {#snippet options(id: GameId)}
   {#if id === 'timer'}
     {@render count('Rounds', 'timerRounds', 10)}
   {:else if id === 'simon'}
     {@render count('Colors in the first round', 'simonStart', 10)}
+    {@render tvColors()}
   {:else if id === 'reflex'}
     {@render count('Rounds', 'reflexRounds', 15)}
     {@render perk('Winner controls the lights', 'reflexPerkSec')}
+    {@render tvColors()}
   {:else if id === 'circle'}
     {@render count('Circles each', 'circleCount', 10)}
     {@render perk('Winner scratches their circle on the TV', 'circlePerkSec')}
@@ -230,21 +242,14 @@
     </div>
   </Section>
 
-  <Section title="For every game">
-    {#if hb.core?.economyEnabled}
+  {#if hb.core?.economyEnabled}
+    <Section title="For every game">
       <div class="line">
         <span class="label">Highest bet <span class="faint small">0 = no limit</span></span>
         <AmountInput value={s.settings.maxStake} oncommit={(v) => setSettings({ maxStake: v })} />
       </div>
-    {/if}
-    <div class="line">
-      <span class="label">
-        Show the light colors on the TV too
-        <span class="faint small">{s.lights ? 'Light Simon and Color Reflex use your WLED lights' : 'No light reachable: the TV always shows the colors'}</span>
-      </span>
-      <Toggle checked={s.settings.tvColors} onchange={(v) => setSettings({ tvColors: v })} label="Colors on the TV" />
-    </div>
-  </Section>
+    </Section>
+  {/if}
 {/if}
 
 <style>
