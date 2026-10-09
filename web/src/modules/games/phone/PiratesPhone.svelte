@@ -18,21 +18,29 @@
   const ship = $derived(PIRATE_SHIPS.find((s) => s.id === crew?.ship) ?? PIRATE_SHIPS[0]);
   const oarUrl = $derived(gamesState()?.settings.pirateSounds?.oar?.url ?? null);
 
+  const step = $derived(v.step);
+  const raceAt = $derived(v.raceAt);
+  /** My last tap: the oars of my ship make one stroke */
+  let tappedAt = $state(0);
+
+  /**
+   * The clock moves every frame only while something does: the count-in, and the stroke after a tap.
+   * The rest of the race the phone stays idle (a nonstop redraw heats it up and slows it down over time).
+   */
   let now = $state(serverNow());
   $effect(() => {
+    const until = Math.max(step === 'race' ? raceAt + 200 : 0, tappedAt + 700);
     let raf = 0;
     const loop = () => {
       now = serverNow();
-      raf = requestAnimationFrame(loop);
+      if (now < until) raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   });
 
   const prev = $derived([...v.beats].reverse().find((b) => b.at <= now - 40) ?? null);
-  const countIn = $derived(v.step === 'race' && now < v.raceAt ? PIRATE.countIn - (prev?.i ?? -1) : null);
-  /** My last tap: the oars of my ship make one stroke */
-  let tappedAt = $state(0);
+  const countIn = $derived(step === 'race' && now < raceAt ? PIRATE.countIn - (prev?.i ?? -1) : null);
   const myStroke = $derived(now - tappedAt < 650 ? (now - tappedAt) / 650 : null);
 
   const LABEL: Record<PirateGrade, string> = { perfect: 'Perfect!', good: 'Good', ok: 'Almost', splash: 'Splash!' };

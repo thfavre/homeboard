@@ -68,7 +68,7 @@
   const wake = $derived(Math.min(1, Math.max(0, speed)) * (boosted ? 1.4 : 1));
 </script>
 
-<div class="ship" class:boosted style:--team={color} style:--wake={wake}>
+<div class="ship" class:boosted class:still={wake === 0} style:--team={color} style:--wake={wake}>
   <svg class="water" viewBox="0 0 66 113" aria-hidden="true">
     <defs>
       <linearGradient id="wake-{uid}" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="0" y2={-20 - 60 * wake}>
@@ -160,6 +160,10 @@
   }
   .boosted .foam path {
     animation-duration: 0.25s;
+  }
+  /* A ship standing still: no foam rushing by (and nothing to repaint every frame) */
+  .still .foam path {
+    animation-play-state: paused;
   }
   .bowwave {
     fill: none;

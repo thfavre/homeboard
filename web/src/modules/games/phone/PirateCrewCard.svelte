@@ -104,7 +104,9 @@
     opacity: 1;
     font-weight: 800;
   }
+  /* While rowing: no blur behind the rolling ship, it would be redrawn every frame */
   .compact {
+    backdrop-filter: none;
     padding: 0.7rem;
     gap: 0.8rem;
   }
