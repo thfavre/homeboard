@@ -18,7 +18,12 @@
   const v = $derived(m?.phase === 'play' || m?.phase === 'result' ? (m.view as BluffView | null) : null);
   const now = new Now(250);
   const economy = $derived(!!hb.core?.economyEnabled);
-  const left = $derived(m?.phase === 'play' && m.endsAt && m.phaseMs ? Math.max(0, Math.min(1, (m.endsAt - now.value) / m.phaseMs)) : 0);
+  /** Each player has their own clock: the bar follows the last one still deciding */
+  const left = $derived.by(() => {
+    if (m?.phase !== 'play' || !v || v.locked) return 0;
+    const ends = m.players.filter((p) => !v.chosen.includes(p.id)).map((p) => v.endsAt[p.id] ?? 0);
+    return ends.length ? Math.max(0, Math.min(1, (Math.max(...ends) - now.value) / v.chooseMs)) : 0;
+  });
   /** Coins flying out of a winner's face: angle (deg), distance (rem), when (s) */
   const BURST = Array.from({ length: 7 }, (_, i) => ({ a: -160 + i * 23 + Math.random() * 10, d: 2.4 + Math.random() * 1.2, at: Math.random() * 0.25 }));
   /** The reveal: both cards have turned over (the second one 0.5 s after the first) */
@@ -28,7 +33,7 @@
     if (m.phase === 'intro') return 'Reading the rules';
     if (m.phase === 'result') return m.result?.headline ?? 'Over';
     const chosen = v?.chosen ?? [];
-    if (chosen.length >= m.players.length) return 'Both have chosen...';
+    if (v?.locked) return chosen.length >= m.players.length ? 'Both have chosen...' : 'Time is up...';
     if (chosen.length === 1) return `${m.players.find((p) => p.id === chosen[0])?.name} has chosen`;
     return 'Share or steal?';
   });

@@ -197,7 +197,7 @@
     {/if}
     {@const sec = s!.settings.bluffChooseSec || 30}
     <div class="line">
-      <span class="label">Time to choose <span class="faint small">Seconds. No choice in time counts as sharing</span></span>
+      <span class="label">Time to choose <span class="faint small">Seconds per player, counted from when the cards show on their phone. No choice in time counts as sharing</span></span>
       <span class="stepper">
         <button class="btn small" aria-label="Less" disabled={sec <= CHOOSE_STEPS[0]} onclick={() => setSettings({ bluffChooseSec: stepIn(CHOOSE_STEPS, sec, -1) })}><Minus size={16} /></button>
         <strong class="mono">{sec}</strong>

@@ -31,7 +31,7 @@
   <ol class="tips">
     <li style:animation-delay="300ms"><MessagesSquare size={18} /><span>Talk it over with {other}. Promise what you like: nobody has to keep it.</span></li>
     <li style:animation-delay="380ms"><EyeOff size={18} /><span>Choose in secret on your phone. You can change your mind until you have both chosen.</span></li>
-    <li style:animation-delay="460ms"><Timer size={18} /><span>{chooseSec} seconds to choose. No choice counts as sharing. The TV turns both cards over.</span></li>
+    <li style:animation-delay="460ms"><Timer size={18} /><span>{chooseSec} seconds to choose, counted from when the cards show on your phone. No choice in time counts as sharing. The TV turns both cards over.</span></li>
   </ol>
 </div>
 
