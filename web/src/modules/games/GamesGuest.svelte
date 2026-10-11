@@ -71,7 +71,7 @@
     const card = !!picked && isCardGame(picked.id);
     return (s?.matches ?? []).some((m) => !card || !isCardGame(m.game) || m.game === picked?.id);
   });
-  /** After starting a Bluff, a guest waits a while before starting another: minutes left (0: they can) */
+  /** After playing a Bluff, a guest waits a while before playing another: minutes left (0: they can) */
   const now = new Now(5000);
   const myBluffAt = $derived(s?.bluffReadyAt[hb.me?.id ?? ''] ?? 0);
   const bluffWait = $derived(myBluffAt > now.value ? Math.ceil((myBluffAt - now.value) / 60_000) : 0);
@@ -335,11 +335,15 @@
         <div class="people">
           {#each others as p (p.id)}
             {@const short = economy && stake > p.balance}
-            <button class="person" class:active={!isSolo && opponent === p.id} class:short disabled={short} onclick={() => ((opponent = p.id), (solo = false))}>
+            {@const theirBluffAt = picked?.id === 'bluff' ? (s?.bluffReadyAt[p.id] ?? 0) : 0}
+            {@const resting = theirBluffAt > now.value}
+            <button class="person" class:active={!isSolo && opponent === p.id} class:short={short || resting} disabled={short || resting} onclick={() => ((opponent = p.id), (solo = false))}>
               <Avatar name={p.name} color={p.color} id={p.id} size="2.2rem" />
               <span class="who">
                 <span class="truncate">{p.name}</span>
-                {#if economy}
+                {#if resting}
+                  <span class="bal">Bluff in {Math.ceil((theirBluffAt - now.value) / 60_000)} min</span>
+                {:else if economy}
                   <span class="bal">{#if short}Can't match{:else}<Money amount={p.balance} whole />{/if}</span>
                 {/if}
               </span>
@@ -386,7 +390,7 @@
         <BluffOdds {deal} other={opponentName ?? 'Opponent'} {economy} />
       </div>
     {/if}
-    {#if waiting}<p class="error">You can start another Bluff in {bluffWait} min.</p>{/if}
+    {#if waiting}<p class="error">You can play another Bluff in {bluffWait} min.</p>{/if}
     {#if tvBusy}<p class="faint small">A game is on the TV right now. {mode === 'duel' ? 'They can accept once it is over.' : 'Wait for it to end.'}</p>{/if}
     {#if error}<p class="error">{error}</p>{/if}
 

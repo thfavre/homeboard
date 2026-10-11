@@ -145,11 +145,11 @@ export default defineModule<GamesSettings>({
     /** The room game waiting for players (room games take the whole TV: one at most) */
     const lobby = () => [...matches.values()].find((m) => m.mode === 'room' && m.phase === 'lobby');
     /**
-     * When each guest last started a Bluff: they wait the cooldown before starting another one, so
-     * nobody can farm the bonus with back-to-back duels
+     * When each guest last played a Bluff (both players): they wait the cooldown before playing
+     * another one, so nobody can farm the bonus with back-to-back duels, even taking turns to challenge
      */
     const lastBluff = new Map<string, number>();
-    /** Guests who cannot start a Bluff yet, with when they can */
+    /** Guests who cannot play a Bluff yet, with when they can */
     const bluffReadyAt = () => {
       const wait = ctx.settings.get().bluffCooldownMin * MINUTE;
       const now = Date.now();
@@ -157,12 +157,16 @@ export default defineModule<GamesSettings>({
       for (const [id, at] of lastBluff) if (at + wait > now) ready[id] = at + wait;
       return ready;
     };
-    /** The guest who starts a Bluff must be done waiting (`me`: they are the one asking) */
-    const checkBluff = (game: GameId, starter: GamePlayer, me: boolean) => {
-      const at = game === 'bluff' ? bluffReadyAt()[starter.id] : undefined;
-      if (!at) return;
-      const min = Math.ceil((at - Date.now()) / MINUTE);
-      throw new HbError(me ? `You can start another Bluff in ${min} min` : `${starter.name} can start another Bluff in ${min} min`);
+    /** Both players of a Bluff must be done waiting (`me`: the guest asking) */
+    const checkBluff = (game: GameId, players: GamePlayer[], me: string) => {
+      if (game !== 'bluff') return;
+      const ready = bluffReadyAt();
+      for (const p of players) {
+        const at = ready[p.id];
+        if (!at) continue;
+        const min = Math.ceil((at - Date.now()) / MINUTE);
+        throw new HbError(p.id === me ? `You can play another Bluff in ${min} min` : `${p.name} can play another Bluff in ${min} min`);
+      }
     };
     let perk: Perk | null = null;
     let perkTimer: NodeJS.Timeout | null = null;
@@ -489,7 +493,7 @@ export default defineModule<GamesSettings>({
       // The rules timer and "everyone is ready" can both get here
       if (m.phase !== 'intro') return;
       m.phase = 'play';
-      if (m.game === 'bluff' && m.starter) lastBluff.set(m.starter.id, Date.now());
+      if (m.game === 'bluff') for (const p of m.players) lastBluff.set(p.id, Date.now());
       m.endsAt = null;
       m.phaseMs = 0;
       const api: MatchApi = {
@@ -613,7 +617,7 @@ export default defineModule<GamesSettings>({
       if (!opponent) throw new HbError('Pick someone to challenge');
       if (opponent.id === guest.id) throw new HbError('You cannot challenge yourself');
       checkLight(game);
-      checkBluff(game, player(guest), true);
+      checkBluff(game, [player(guest), player(opponent)], guest.id);
       if (opponent.sockets === 0) throw new HbError(`${opponent.name} is not online`);
       checkFree(guest.id, null);
       checkFree(opponent.id, opponent.name);
@@ -665,7 +669,7 @@ export default defineModule<GamesSettings>({
       }
       tvFree(inv.game);
       checkLight(inv.game);
-      checkBluff(inv.game, inv.from, false);
+      checkBluff(inv.game, [player(guest), inv.from], guest.id);
       if (inv.song && !readySong(inv.song.key)) throw new HbError('This song is not available any more');
       const bet = ctx.economy.pay(guest, inv.stake, `Duel bet: ${gameInfo(inv.game)!.name}`);
       try {

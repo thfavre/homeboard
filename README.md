@@ -156,7 +156,8 @@ Bluff is played on the two phones too: the phones explain the rules with what ea
 admin; one steals: the thief takes the whole pot, both bets and both bonuses, twice what sharing
 pays; both steal: nothing), then each picks Share or Steal in
 secret. The TV only shows a small card at the top: who has chosen, then both cards turned over.
-Each guest can start one Bluff every 30 minutes (set in the admin), so nobody can farm the bonus with back-to-back duels.
+Each guest can play one Bluff every 30 minutes (set in the admin): after a Bluff, both players wait,
+so nobody can farm the bonus with back-to-back duels, even taking turns to challenge.
 
 Bluff, Coin Flip and Rhythm Rain leave the TV as it is (a small card at the top), so they can be
 played at the same time, one of each; a game on the whole TV waits for them to end, and they wait

@@ -49,7 +49,7 @@
   /** Seconds the Bluff players have to choose */
   const CHOOSE_STEPS = [10, 15, 20, 30, 45, 60, 90, 120, 180];
   const now = new Now(10_000);
-  /** Guests who cannot start a Bluff yet, with the minutes left */
+  /** Guests who cannot play a Bluff yet, with the minutes left */
   const bluffWaits = $derived(
     Object.entries(s?.bluffReadyAt ?? {})
       .filter(([, at]) => at > now.value)
@@ -212,7 +212,7 @@
     </div>
     {@const cd = s!.settings.bluffCooldownMin}
     <div class="line">
-      <span class="label">Wait between two games <span class="faint small">Minutes a guest waits after starting a Bluff before starting another. 0 = no wait</span></span>
+      <span class="label">Wait between two games <span class="faint small">Minutes both players wait after a Bluff before playing another. 0 = no wait</span></span>
       <span class="stepper">
         <button class="btn small" aria-label="Less" disabled={cd <= 0} onclick={() => setSettings({ bluffCooldownMin: stepIn(COOLDOWN_STEPS, cd, -1) })}><Minus size={16} /></button>
         <strong class="mono">{cd}</strong>
@@ -221,7 +221,7 @@
     </div>
     {#each bluffWaits as w (w.id)}
       <div class="line">
-        <span class="label">{w.name} can start a Bluff in {w.min} min</span>
+        <span class="label">{w.name} can play a Bluff in {w.min} min</span>
         <button class="btn small" onclick={() => attempt(() => rpc('games', 'resetBluff', { guestId: w.id }))}>Allow now</button>
       </div>
     {/each}
