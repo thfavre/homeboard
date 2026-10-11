@@ -419,12 +419,6 @@ export const bluffGain = (deal: BluffDeal, mine: BluffChoice, theirs: BluffChoic
 
 export interface BluffView {
   chosen: string[];
-  /** Each player's own deadline (server time), set once their clock has started */
-  endsAt: Record<string, number>;
-  /** The time each player has to choose */
-  chooseMs: number;
-  /** Everyone has chosen or run out of time: the cards are about to turn over */
-  locked: boolean;
   /** After the game */
   choices?: Record<string, BluffChoice>;
 }

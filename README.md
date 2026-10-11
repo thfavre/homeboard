@@ -155,8 +155,7 @@ Bluff is played on the two phones too: the phones explain the rules with what ea
 (both share: your bet back plus a bonus, the fixed bonus plus a number of times the bet, set in the
 admin; one steals: the thief takes the whole pot, both bets and both bonuses, twice what sharing
 pays; both steal: nothing), then each picks Share or Steal in
-secret. Each player has their own clock, started when the cards show on their phone (set in the
-admin, 30 s by default; no choice in time counts as sharing). The TV only shows a small card at the top: who has chosen, then both cards turned over.
+secret. The TV only shows a small card at the top: who has chosen, then both cards turned over.
 A Bluff can be played once every 30 minutes for the whole party (set in the admin).
 
 Bluff, Coin Flip and Rhythm Rain leave the TV as it is (a small card at the top), so they can be

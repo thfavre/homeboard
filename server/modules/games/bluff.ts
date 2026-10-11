@@ -11,32 +11,7 @@ const LABEL: Record<BluffChoice, string> = { share: 'Share', steal: 'Steal' };
 export const bluff: GameFactory = (m) => {
   const choices = new Map<string, BluffChoice>();
   const deal = m.options.bluff ?? bluffDeal(m.stake, m.reward('games.bluff'), m.settings.bluffMultiplier);
-  // The host's time to choose (settings saved before it existed have none)
-  const chooseMs = (m.settings.bluffChooseSec || 30) * 1000;
-  /** Each player's own deadline: their clock starts when the cards show on their phone */
-  const endsAt = new Map<string, number>();
   let over = false;
-  /** Both are done: no more changes during the short pause before the reveal */
-  let locked = false;
-
-  const timeUp = (id: string) => (endsAt.get(id) ?? Infinity) <= Date.now();
-
-  const startClock = (id: string) => {
-    if (endsAt.has(id) || over) return;
-    endsAt.set(id, Date.now() + chooseMs);
-    // A little after the deadline: a timer firing a few ms early would find the time not up yet
-    m.later(chooseMs + 50, check);
-    m.publish();
-  };
-
-  /** Everyone has chosen or run out of time: turn the cards over */
-  const check = () => {
-    if (locked || over) return;
-    if (!m.players.every((p) => choices.has(p.id) || timeUp(p.id))) return;
-    locked = true;
-    m.later(REVEAL_MS, end);
-    m.publish();
-  };
 
   const end = () => {
     if (over) return;
@@ -73,38 +48,29 @@ export const bluff: GameFactory = (m) => {
 
   return {
     start() {
-      // A phone that never shows the cards still gets its clock started, so the duel always ends
-      m.later(chooseMs, () => m.players.forEach((p) => startClock(p.id)));
-      m.publish();
+      // The host's time to choose (settings saved before it existed have none)
+      const ms = (m.settings.bluffChooseSec || 30) * 1000;
+      m.deadline(ms);
+      m.later(ms, end);
     },
 
     input(id, args) {
-      // The phone shows the cards: its clock starts
-      if (args?.seen) {
-        startClock(id);
-        return true;
-      }
-      if (over || locked) throw new HbError('Too late');
-      if (timeUp(id)) throw new HbError('Time is up');
+      // Locked once both have chosen, during the short pause before the reveal too
+      if (over || choices.size >= m.players.length) throw new HbError('Too late');
       const choice = args?.choice;
       if (choice !== 'share' && choice !== 'steal') throw new HbError('Share or steal?');
-      // Changing your mind is allowed until both are done
+      // Changing your mind is allowed until both have chosen
       choices.set(id, choice);
-      // Choosing before the phone said it shows the cards (a lost message): the clock starts now
-      startClock(id);
-      check();
+      if (choices.size >= m.players.length) {
+        m.deadline(null);
+        m.later(REVEAL_MS, end);
+      }
       m.publish();
       return true;
     },
 
     view(): BluffView {
-      return {
-        chosen: [...choices.keys()],
-        endsAt: Object.fromEntries(endsAt),
-        chooseMs,
-        locked,
-        ...(over ? { choices: Object.fromEntries(choices) } : {}),
-      };
+      return { chosen: [...choices.keys()], ...(over ? { choices: Object.fromEntries(choices) } : {}) };
     },
   };
 };

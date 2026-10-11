@@ -5,7 +5,7 @@
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
-  import { Now, local } from '../store.svelte.ts';
+  import { local } from '../store.svelte.ts';
   import Fuse from '../ui/Fuse.svelte';
   import MoneyFlow from '../ui/MoneyFlow.svelte';
   import BluffCardFace from '../ui/BluffCardFace.svelte';
@@ -23,22 +23,8 @@
   const deal = $derived(m.bluff ?? bluffDeal(m.stake, 0, 0));
   const economy = $derived(!!hb.core?.economyEnabled);
   const chosen = $derived(v?.chosen ?? []);
-  /** Both are done (chosen or out of time): the cards are about to turn over */
-  const bothChose = $derived(!!v?.locked);
+  const bothChose = $derived(chosen.length >= m.players.length);
   const theyChose = $derived(chosen.includes(other.id));
-  // Each player has their own clock, started when the cards show on their phone
-  const now = new Now(250);
-  const myEndsAt = $derived(v?.endsAt[me] ?? null);
-  const myTimeUp = $derived(!!myEndsAt && now.value >= myEndsAt);
-  const theirTimeUp = $derived(!theyChose && !!v?.endsAt[other.id] && now.value >= v.endsAt[other.id]);
-  /** Nothing more to choose on this phone */
-  const closed = $derived(bothChose || myTimeUp);
-  let seenSent = false;
-  $effect(() => {
-    if (m.phase !== 'play' || !v || myEndsAt || seenSent) return;
-    seenSent = true;
-    rpc('games', 'play', { seen: true }).catch(() => (seenSent = false));
-  });
   let choice = $state<BluffChoice | null>(null);
   let sending = $state(false);
   /** The choice is behind the face-down card; `peek` while a finger holds it */
@@ -46,7 +32,7 @@
   let peek = $state(false);
 
   async function pick(c: BluffChoice) {
-    if (closed || sending) return;
+    if (bothChose || sending) return;
     const before = choice;
     choice = c;
     // Hidden at once: the colors of the picked card would give it away
@@ -89,14 +75,14 @@
       <span class="state">
         {#key theyChose}
           <strong in:fly={{ y: 8, duration: 250 }}>
-            {#if bothChose}Both done{:else if theyChose}{other.name} has chosen{:else if theirTimeUp}{other.name} ran out of time{:else}{other.name} is thinking<span class="dots"><i></i><i></i><i></i></span>{/if}
+            {#if bothChose}Both chosen{:else if theyChose}{other.name} has chosen{:else}{other.name} is thinking<span class="dots"><i></i><i></i><i></i></span>{/if}
           </strong>
         {/key}
-        <span class="faint small">{bothChose ? 'Turning the cards over...' : myTimeUp ? (choice ? 'Your choice is locked in' : 'Time is up: you share') : choice ? 'Your choice is in' : 'Your move'}</span>
+        <span class="faint small">{bothChose ? 'Turning the cards over...' : choice ? 'Your choice is in' : 'Your move'}</span>
       </span>
     </div>
 
-    {#if myEndsAt && v && !closed}<Fuse endsAt={myEndsAt} totalMs={v.chooseMs} label="Choose within" />{/if}
+    {#if m.endsAt && !bothChose}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Choose within" />{/if}
 
     {#if choice && sealed}
       <div class="sealed" in:scale={{ start: 0.85, duration: 300 }}>
@@ -117,12 +103,12 @@
         <span class="peek-line faint small">
           {#if peek}You chose <strong>{choice === 'share' ? 'Share' : 'Steal'}</strong>{:else}<Eye size={13} /> Hold the card to peek{/if}
         </span>
-        {#if !closed}<button class="btn ghost block" onclick={() => (sealed = false)}>Change my mind</button>{/if}
+        {#if !bothChose}<button class="btn ghost block" onclick={() => (sealed = false)}>Change my mind</button>{/if}
       </div>
     {:else}
-      <div class="choices" class:made={!!choice} class:locked={closed}>
+      <div class="choices" class:made={!!choice} class:locked={bothChose}>
         {#each ['share', 'steal'] as const as c, i (c)}
-          <button class="choice {c}" class:active={choice === c} disabled={closed} onclick={() => pick(c)} in:fly={{ y: 30, delay: 80 + i * 110 }}>
+          <button class="choice {c}" class:active={choice === c} disabled={bothChose} onclick={() => pick(c)} in:fly={{ y: 30, delay: 80 + i * 110 }}>
             <span class="hold"><BluffCardFace kind={c} width="min(9.5rem, 40vw)" shine /></span>
             <span class="pays">
               <span class="row"><span>If {other.name} shares</span><b class="mono">{@render amount(bluffGain(deal, c, 'share'))}</b></span>
@@ -134,7 +120,7 @@
     {/if}
 
     <p class="hint faint">
-      {#if closed}<Tv size={14} /> Watch the TV{:else}<EyeOff size={14} /> Keep your screen hidden{/if}
+      {#if bothChose}<Tv size={14} /> Watch the TV{:else}<EyeOff size={14} /> Keep your screen hidden{/if}
     </p>
   </div>
 {:else if r}
