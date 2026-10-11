@@ -21,8 +21,8 @@ export function collectScreen(): 'writing' | 'ready' | null {
   if (!c || !me) return null;
   if (quizResult.collectClosed.includes(`${c.id}:${c.phase}`)) return null;
   if (c.phase === 'writing') return c.skipped.includes(me) ? null : 'writing';
-  // Once written, offer to play it to those who took part
-  return c.by?.id === me || c.done.some((d) => d.id === me) ? 'ready' : null;
+  // Once written, only the guest who asked for it is offered to play it (the host plays it from the admin)
+  return c.by?.id === me ? 'ready' : null;
 }
 
 export function closeCollectScreen(): void {
