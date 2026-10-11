@@ -11,6 +11,7 @@
     lit = null,
     on = 'down',
   }: { onpick: (c: GameColor) => void; disabled?: boolean; lit?: GameColor | null; on?: 'down' | 'up' } = $props();
+  let pressed: GameColor | null = null;
 </script>
 
 <div class="pad">
@@ -23,10 +24,21 @@
       {disabled}
       onpointerdown={(e) => {
         e.preventDefault();
-        if (!disabled && on === 'down') onpick(c.id);
+        if (disabled) return;
+        if (on === 'down') return onpick(c.id);
+        // Counted on lift even if the finger slid a little (a plain click is lost then)
+        pressed = c.id;
+        e.currentTarget.setPointerCapture?.(e.pointerId);
       }}
-      onclick={() => {
-        if (!disabled && on === 'up') onpick(c.id);
+      onpointerup={() => {
+        if (pressed !== c.id) return;
+        pressed = null;
+        if (!disabled) onpick(c.id);
+      }}
+      onpointercancel={() => (pressed = null)}
+      onclick={(e) => {
+        // Keyboard (Enter / Space): pointer taps are handled above
+        if (!disabled && on === 'up' && e.detail === 0) onpick(c.id);
       }}
     ></button>
   {/each}
@@ -51,6 +63,8 @@
       transform 0.08s ease,
       filter 0.08s ease;
     -webkit-tap-highlight-color: transparent;
+    /* No scroll or zoom gesture can swallow a tap */
+    touch-action: none;
   }
   .key:active:not(:disabled),
   .key.lit {

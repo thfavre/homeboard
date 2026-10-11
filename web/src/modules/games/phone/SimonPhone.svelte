@@ -3,6 +3,7 @@
   import type { GameColor, MatchState, SimonView } from '$shared/games.ts';
   import { hb, rpc } from '$lib/client.svelte.ts';
   import ColorPad from '../ColorPad.svelte';
+  import Fuse from '../ui/Fuse.svelte';
 
   let { m }: { m: MatchState } = $props();
   const v = $derived(m.view as SimonView);
@@ -28,8 +29,11 @@
     taps += 1;
     lit = c;
     setTimeout(() => lit === c && (lit = null), 180);
-    const r = await rpc<{ ok: boolean }>('games', 'play', { color: c }).catch(() => ({ ok: true }));
-    if (!r.ok) wrong = true;
+    const r = await rpc<{ ok: boolean }>('games', 'play', { color: c }).catch(() => null);
+    // Not received by the server (connection hiccup...): take the tap back, so the next one is
+    // not checked against the wrong color
+    if (!r) taps = Math.max(0, taps - 1);
+    else if (!r.ok) wrong = true;
   }
 </script>
 
@@ -65,6 +69,7 @@
   {:else}
     <p class="dim center">Your turn: {v.length === 1 ? 'tap that color' : `repeat the ${v.length} colors`}. It counts when you lift your finger.</p>
     <ColorPad onpick={pick} {lit} on="up" />
+    {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Time left" />{/if}
   {/if}
 </div>
 
