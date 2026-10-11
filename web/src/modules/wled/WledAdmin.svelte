@@ -132,6 +132,34 @@
     </div>
   </Section>
 
+  <Section title="Settings">
+    <div class="grid2">
+      <label class="field">
+        <span>Effect length (seconds)</span>
+        <input class="input" type="number" min="5" max="600" bind:value={duration.value} onfocus={duration.start} onblur={() => { set({ durationSec: Number(duration.value) }); duration.end(); }} />
+      </label>
+      <label class="field">
+        <span>Brightness during effects (0 = keep current)</span>
+        <input class="input" type="number" min="0" max="255" bind:value={brightness.value} onfocus={brightness.start} onblur={() => { set({ brightness: Number(brightness.value) }); brightness.end(); }} />
+      </label>
+      <label class="field">
+        <span>Brightness of scenes (0 = keep current)</span>
+        <input class="input" type="number" min="0" max="255" bind:value={sceneBrightness.value} onfocus={sceneBrightness.start} onblur={() => { set({ sceneBrightness: Number(sceneBrightness.value) }); sceneBrightness.end(); }} />
+      </label>
+      <label class="field">
+        <span>When Homeboard starts</span>
+        <select class="input" value={mod.sceneOnStart === false ? 'none' : 'scene'} onchange={(e) => set({ sceneOnStart: e.currentTarget.value === 'scene' })}>
+          <option value="scene">Put the scene back on</option>
+          <option value="none">No scene, leave the lights as they are</option>
+        </select>
+      </label>
+      <label class="check">
+        <input type="checkbox" checked={mod.guestScenes} onchange={(e) => set({ guestScenes: e.currentTarget.checked })} />
+        Guests can change the scene
+      </label>
+    </div>
+  </Section>
+
   <Section title="Lights">
     {#snippet actions()}
       <button class="btn small" disabled={!mod.devices.some((d) => d.online)} onclick={() => reboot()}><Power size={16} /> Reboot all</button>
@@ -305,34 +333,6 @@
       </form>
     </Sheet>
   {/if}
-
-  <Section title="Settings">
-    <div class="grid2">
-      <label class="field">
-        <span>Effect length (seconds)</span>
-        <input class="input" type="number" min="5" max="600" bind:value={duration.value} onfocus={duration.start} onblur={() => { set({ durationSec: Number(duration.value) }); duration.end(); }} />
-      </label>
-      <label class="field">
-        <span>Brightness during effects (0 = keep current)</span>
-        <input class="input" type="number" min="0" max="255" bind:value={brightness.value} onfocus={brightness.start} onblur={() => { set({ brightness: Number(brightness.value) }); brightness.end(); }} />
-      </label>
-      <label class="field">
-        <span>Brightness of scenes (0 = keep current)</span>
-        <input class="input" type="number" min="0" max="255" bind:value={sceneBrightness.value} onfocus={sceneBrightness.start} onblur={() => { set({ sceneBrightness: Number(sceneBrightness.value) }); sceneBrightness.end(); }} />
-      </label>
-      <label class="field">
-        <span>When Homeboard starts</span>
-        <select class="input" value={mod.sceneOnStart === false ? 'none' : 'scene'} onchange={(e) => set({ sceneOnStart: e.currentTarget.value === 'scene' })}>
-          <option value="scene">Put the scene back on</option>
-          <option value="none">No scene, leave the lights as they are</option>
-        </select>
-      </label>
-      <label class="check">
-        <input type="checkbox" checked={mod.guestScenes} onchange={(e) => set({ guestScenes: e.currentTarget.checked })} />
-        Guests can change the scene
-      </label>
-    </div>
-  </Section>
 {/if}
 
 <style>
