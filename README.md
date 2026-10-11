@@ -27,6 +27,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [x] Color Reflex: Tap the button matching the color the lights turn, faster than your opponent.
 - [x] Bluff: Secretly choose to share or steal the pot, hoping to guess what the other player will do.
 - [x] Coin Flip: each player's face is on one side of the coin, one of them throws it to the TV, the face it lands on takes the pot.
+- [x] Participative quiz: everyone writes 1 to 3 questions (or skips), they are saved as one quiz, then the host or anyone can start it (guests cannot edit it or see the answers).
 - [ ] Blind Drawing: Draw the given word on a black screen, then discover the result in full on the TV.
 - [ ] From Memory: Study an image for 5 seconds, redraw it, then compare your drawing to the original on the TV.
 - [x] Perfect Circle: Draw the most perfect circle you can in one stroke, and the app scores your precision.
@@ -95,7 +96,7 @@ Environment variables: `PORT` (default 4300), `HB_TUNNEL=0` (no public tunnel),
 | **Photos** | Photo with caption shown big on the TV | Remove (with refund), replay, duration |
 | **Lights** (WLED) | Pick an effect, on all lights or one | Devices, effect editor, test, stop |
 | **Soundboard** | Play a sound on the TV speakers, or search MyInstants | Volume, cooldown, upload sounds, add sounds from MyInstants, let guests search MyInstants and keep their own "My sounds" (with a length limit) |
-| **Quiz** | Answer; start a quiz (random trivia or custom) for a fee; create custom quizzes | Start, pause, live time per question, custom quiz library with pictures |
+| **Quiz** | Answer; start a quiz (random trivia or custom) for a fee; create custom quizzes; write questions for a participative quiz | Start, pause, live time per question, custom quiz library with pictures, participative quiz |
 | **Games** | Challenge someone to a 1 vs 1 duel with a bet, or start a game anyone can join: Blind Timer, Light Simon, Color Reflex, Perfect Circle, Bluff (duel), Coin Flip (duel) | Start a room game, stop with refund, choose which games guests can start, bet limit, light colors on the TV |
 
 Core features: session code, name + PIN to rejoin from another phone, live activity feed, leaderboard
@@ -136,6 +137,13 @@ A host-started quiz waits up to 60 seconds for players; pressing Ready makes it 
 that guest, or by itself after 60 seconds. The host can pause and change the time per question
 live. At the end, for 20 seconds: the winner drives their picture with a joystick and spins it,
 2nd and 3rd have a small effect, and everyone else can make their picture peek in from the side.
+
+**Participative quiz**: the host or any guest (Quiz tile, Custom tab) asks everyone for questions.
+Every phone shows a form to write 1 to 3 questions, or skip; a card on the TV shows who is done.
+When everyone online has answered, the time is up (5 minutes by default) or whoever asked for it
+ends it, the questions are shuffled into one custom quiz saved in the library. Only the host can
+edit it, guests never see its answers, and each question shows who wrote it: its author sits it
+out and cannot score on it. The host or anyone (for the usual fee) can then start it.
 
 ### Games
 

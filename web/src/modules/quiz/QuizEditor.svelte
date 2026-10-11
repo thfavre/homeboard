@@ -12,11 +12,20 @@
     busy = false,
     onsave,
     oncancel,
+    withTitle = true,
+    maxQuestions = 50,
+    saveLabel = 'Save quiz',
+    cancelLabel = 'Cancel',
   }: {
-    initial?: CustomQuiz | null;
+    initial?: (Pick<CustomQuiz, 'title' | 'questions'> & { id?: string }) | null;
     busy?: boolean;
     onsave: (quiz: QuizDraft) => void;
     oncancel: () => void;
+    /** Participative quiz: no title, only a few questions */
+    withTitle?: boolean;
+    maxQuestions?: number;
+    saveLabel?: string;
+    cancelLabel?: string;
   } = $props();
 
   interface Draft {
@@ -61,7 +70,7 @@
 
   function save(e: SubmitEvent) {
     e.preventDefault();
-    if (!title.trim()) return toast({ text: 'Give your quiz a title', kind: 'error' });
+    if (withTitle && !title.trim()) return toast({ text: 'Give your quiz a title', kind: 'error' });
     for (const [i, q] of questions.entries()) {
       if (!q.text.trim()) return toast({ text: `Question ${i + 1} has no text`, kind: 'error' });
       if (q.answers.filter((a) => a.trim()).length < 2) return toast({ text: `Question ${i + 1} needs at least 2 answers`, kind: 'error' });
@@ -73,10 +82,12 @@
 </script>
 
 <form novalidate class="editor" onsubmit={save}>
-  <label class="field">
-    <span>Title</span>
-    <input class="input" bind:value={title} maxlength="60" placeholder="Movie night, Our holidays..." />
-  </label>
+  {#if withTitle}
+    <label class="field">
+      <span>Title</span>
+      <input class="input" bind:value={title} maxlength="60" placeholder="Movie night, Our holidays..." />
+    </label>
+  {/if}
 
   {#each questions as q, i}
     <div class="question">
@@ -114,11 +125,11 @@
     </div>
   {/each}
 
-  <button type="button" class="btn" disabled={questions.length >= 50} onclick={() => questions.push(blank())}><Plus size={18} /> Add a question</button>
+  <button type="button" class="btn" disabled={questions.length >= maxQuestions} onclick={() => questions.push(blank())}><Plus size={18} /> Add a question{maxQuestions < 50 ? ` (${questions.length}/${maxQuestions})` : ''}</button>
 
   <div class="actions">
-    <button type="button" class="btn ghost" onclick={oncancel}>Cancel</button>
-    <button class="btn primary" disabled={busy}>{busy ? 'Saving...' : 'Save quiz'}</button>
+    <button type="button" class="btn ghost" onclick={oncancel}>{cancelLabel}</button>
+    <button class="btn primary" disabled={busy}>{busy ? 'Saving...' : saveLabel}</button>
   </div>
   <input bind:this={fileInput} type="file" accept="image/*" hidden onchange={onFile} />
 </form>

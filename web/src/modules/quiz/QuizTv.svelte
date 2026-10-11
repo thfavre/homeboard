@@ -28,6 +28,7 @@
         <span class="pill">Question {q.index + 1} of {q.total}</span>
         <span class="dim category">{q.category}</span>
         {#if q.difficulty}<span class="pill accent cap">{q.difficulty}</span>{/if}
+        {#if q.question?.author}<span class="pill accent">Question from {q.question.author.name}</span>{/if}
       {/if}
     </header>
 

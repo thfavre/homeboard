@@ -1,6 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { Pencil, Play, Plus, Search, Trash2 } from '@lucide/svelte';
+  import { PenLine, Pencil, Play, Plus, Search, Trash2, Users } from '@lucide/svelte';
+  import { COLLECT_DEFAULT_MIN, COLLECT_MAX_QUESTIONS } from '$shared/quiz.ts';
+  import { openCollectScreen } from './result.svelte.ts';
   import type { CustomQuiz, QuizDraft, QuizState, QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
@@ -50,6 +52,20 @@
   let chosen = $state<string | null>(null);
   let editing = $state<CustomQuiz | null | 'new'>(null);
   let busy = $state(false);
+  // Participative quiz
+  let collectTitle = $state('');
+  let collectMinutes = $state(COLLECT_DEFAULT_MIN);
+  const collect = $derived(q?.collect ?? null);
+
+  async function askEveryone() {
+    busy = true;
+    const ok = await attempt(() => rpc('quiz', 'collectStart', { title: collectTitle, minutes: collectMinutes }));
+    busy = false;
+    if (ok) {
+      collectTitle = '';
+      openCollectScreen();
+    }
+  }
 
   rpc<{ id: number; name: string }[]>('quiz', 'categories')
     .then((c) => (categories = c))
@@ -165,6 +181,28 @@
           </label>
         </div>
       {:else}
+        <div class="card box">
+          <div class="together">
+            <span class="icon"><Users size={18} /></span>
+            <div>
+              <strong>Participative quiz</strong>
+              <p class="faint small">Everyone writes 1 to {COLLECT_MAX_QUESTIONS} questions on their phone, then you all play them. Nobody sees the answers.</p>
+            </div>
+          </div>
+          {#if collect?.phase === 'writing'}
+            <p class="small">
+              <strong>{collect.title}</strong> is being written: {collect.done.length} sent, {collect.waiting.length} still writing.
+            </p>
+            <button class="btn block" onclick={openCollectScreen}><PenLine size={16} /> {collect.done.some((d) => d.id === hb.me?.id) ? 'See or change my questions' : 'Write my questions'}</button>
+          {:else}
+            <input class="input" bind:value={collectTitle} maxlength="60" placeholder="Title (optional)" />
+            <label class="field">
+              <span>Time to write: {collectMinutes} min</span>
+              <input type="range" min="1" max="15" bind:value={collectMinutes} />
+            </label>
+            <button class="btn block" disabled={busy || q.phase !== 'idle'} onclick={askEveryone}><Users size={16} /> Ask everyone for questions</button>
+          {/if}
+        </div>
         <button class="btn block create" onclick={() => (editing = 'new')}><Plus size={18} /> Create a quiz</button>
         <div class="card list">
           {#each q.library as item (item.id)}
@@ -173,7 +211,7 @@
                 <span class="radio"></span>
                 <span class="text">
                   <strong class="truncate">{item.title}</strong>
-                  <span class="faint small">{item.count} {item.count === 1 ? 'question' : 'questions'} &middot; by {item.author}</span>
+                  <span class="faint small">{item.count} {item.count === 1 ? 'question' : 'questions'} &middot; {item.collective ? 'written by' : 'by'} {item.author}</span>
                 </span>
               </button>
               {#if item.authorId === hb.me?.id}
@@ -351,5 +389,20 @@
   }
   .center {
     text-align: center;
+  }
+  .together {
+    display: flex;
+    gap: 0.7rem;
+    align-items: flex-start;
+  }
+  .together .icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 0.7rem;
+    background: var(--gradient);
+    color: #fff;
   }
 </style>

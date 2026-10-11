@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Minus, Pause, Pencil, Play, Plus, SkipForward, Square, Trash2 } from '@lucide/svelte';
-  import type { CustomQuiz, QuizDraft, QuizState, QuizTopic } from '$shared/quiz.ts';
-  import { hb, rpc, attempt } from '$lib/client.svelte.ts';
+  import { Flag, Minus, Pause, Pencil, Play, Plus, SkipForward, Square, Trash2, Users, X } from '@lucide/svelte';
+  import { COLLECT_DEFAULT_MIN, COLLECT_MAX_QUESTIONS, type CustomQuiz, type QuizDraft, type QuizState, type QuizTopic } from '$shared/quiz.ts';
+  import { hb, rpc, attempt, serverNow } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import { Synced } from '$lib/synced.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -66,6 +66,35 @@
   async function remove(id: string, title: string) {
     if (await ask({ title: `Delete "${title}"?`, message: 'Its pictures are deleted too.', confirm: 'Delete', danger: true })) {
       attempt(() => rpc('quiz', 'deleteCustom', { id }), 'Quiz deleted');
+    }
+  }
+
+  // Participative quiz
+  let collectTitle = $state('');
+  let collectMinutes = $state(COLLECT_DEFAULT_MIN);
+  const collect = $derived(q?.collect ?? null);
+  let now = $state(serverNow());
+  $effect(() => {
+    const t = setInterval(() => (now = serverNow()), 1000);
+    return () => clearInterval(t);
+  });
+  const collectLeft = $derived(collect ? Math.max(0, Math.ceil((collect.endsAt - now) / 1000)) : 0);
+
+  async function askEveryone() {
+    if (await attempt(() => rpc('quiz', 'collectStart', { title: collectTitle, minutes: collectMinutes }))) collectTitle = '';
+  }
+
+  async function playCollected() {
+    if (!collect?.quizId) return;
+    starting = true;
+    await attempt(() => rpc('quiz', 'start', { source: 'custom', quizId: collect.quizId, timeSec: timeSec.value }));
+    starting = false;
+  }
+
+  async function cancelCollect() {
+    if (collect?.phase === 'ready') return attempt(() => rpc('quiz', 'collectCancel'));
+    if (await ask({ title: 'Cancel the participative quiz?', message: 'Every question sent is thrown away.', confirm: 'Cancel it', danger: true })) {
+      attempt(() => rpc('quiz', 'collectCancel'));
     }
   }
 
@@ -204,6 +233,51 @@
     {/if}
   {/if}
 
+  <Section title="Participative quiz" hint={`Every guest writes 1 to ${COLLECT_MAX_QUESTIONS} questions on their phone (or skips). Then the host or anyone can start it; guests never see the answers and nobody scores on their own question.`}>
+    {#if collect?.phase === 'writing'}
+      <div class="status">
+        <span class="pill accent">Writing</span>
+        <span class="dim truncate">{collect.title}{collect.by ? `, asked by ${collect.by.name}` : ''}</span>
+        <span class="mono faint">{Math.floor(collectLeft / 60)}:{String(collectLeft % 60).padStart(2, '0')}</span>
+      </div>
+      {#each collect.done as p (p.id)}
+        <div class="line"><span class="grow">{p.name}</span><span class="faint small">{p.count} {p.count === 1 ? 'question' : 'questions'}</span></div>
+      {/each}
+      {#each collect.waiting as p (p.id)}
+        <div class="line"><span class="grow faint">{p.name}</span><span class="faint small">writing...</span></div>
+      {/each}
+      {#if collect.skipped.length}<p class="faint small">{collect.skipped.length} skipped</p>{/if}
+      <div class="row wrap">
+        <button class="btn primary" disabled={!collect.done.length} onclick={() => attempt(() => rpc('quiz', 'collectEnd'))}><Flag size={18} /> Make the quiz now</button>
+        <button class="btn danger" onclick={cancelCollect}><X size={18} /> Cancel</button>
+      </div>
+    {:else if collect?.phase === 'ready'}
+      <div class="status">
+        <span class="pill accent">Ready</span>
+        <span class="dim truncate">{collect.title}: {collect.total} questions from {collect.done.length} {collect.done.length === 1 ? 'player' : 'players'}</span>
+      </div>
+      <div class="row wrap">
+        <button class="btn primary" disabled={starting || q.phase !== 'idle'} onclick={playCollected}><Play size={18} /> Play it now</button>
+        <button class="btn" onclick={cancelCollect}>Later</button>
+      </div>
+      <p class="faint small">It is saved with the custom quizzes below.</p>
+    {:else}
+      <div class="grid2">
+        <label class="field">
+          <span>Title (optional)</span>
+          <input class="input" bind:value={collectTitle} maxlength="60" placeholder="Party quiz" />
+        </label>
+        <label class="field">
+          <span>Minutes to write</span>
+          <input class="input" type="number" min="1" max="30" bind:value={collectMinutes} />
+        </label>
+      </div>
+      <div>
+        <button class="btn" disabled={q.phase !== 'idle'} onclick={askEveryone}><Users size={18} /> Ask everyone for questions</button>
+      </div>
+    {/if}
+  </Section>
+
   <Section title="Custom quizzes" hint="Made by you or by guests. Kept from one party to the next.">
     {#snippet actions()}
       <button class="btn small" onclick={() => (editing = 'new')}><Plus size={16} /> New</button>
@@ -212,7 +286,7 @@
       <div class="line">
         <div class="grow">
           <strong class="truncate block">{item.title}</strong>
-          <p class="faint small">{item.count} {item.count === 1 ? 'question' : 'questions'} &middot; by {item.author}{item.hasImages ? ' · with pictures' : ''}</p>
+          <p class="faint small">{item.count} {item.count === 1 ? 'question' : 'questions'} &middot; {item.collective ? 'written by' : 'by'} {item.author}{item.hasImages ? ' · with pictures' : ''}</p>
         </div>
         <button class="btn ghost small" aria-label="Edit" onclick={() => edit(item.id)}><Pencil size={15} /></button>
         <button class="btn ghost small" aria-label="Delete" onclick={() => remove(item.id, item.title)}><Trash2 size={15} /></button>

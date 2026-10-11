@@ -1,0 +1,206 @@
+<script lang="ts">
+  import { CircleCheck, Flag, PenLine, Play, X } from '@lucide/svelte';
+  import { fade } from 'svelte/transition';
+  import { COLLECT_MAX_QUESTIONS, type CustomQuestion, type QuizDraft, type QuizState } from '$shared/quiz.ts';
+  import { hb, rpc, attempt, price, serverNow } from '$lib/client.svelte.ts';
+  import { ask } from '$lib/dialog.svelte.ts';
+  import Avatar from '$lib/ui/Avatar.svelte';
+  import Money from '$lib/ui/Money.svelte';
+  import QuizEditor from './QuizEditor.svelte';
+  import { closeCollectScreen } from './result.svelte.ts';
+
+  /** Participative quiz on the phone: write 1 to 3 questions (or skip), then play the result */
+  const c = $derived((hb.modules.quiz as QuizState | undefined)?.collect ?? null);
+  const meId = $derived(hb.me?.id);
+  const mine = $derived(c?.done.find((d) => d.id === meId));
+  const isBy = $derived(!!meId && c?.by?.id === meId);
+  const cost = $derived(price('quiz.start'));
+  const running = $derived((hb.modules.quiz as QuizState | undefined)?.phase !== 'idle');
+
+  let editing = $state(false);
+  let initial = $state<{ title: string; questions: CustomQuestion[] } | null>(null);
+  let busy = $state(false);
+
+  let now = $state(serverNow());
+  $effect(() => {
+    const t = setInterval(() => (now = serverNow()), 1000);
+    return () => clearInterval(t);
+  });
+  const left = $derived(c ? Math.max(0, Math.ceil((c.endsAt - now) / 1000)) : 0);
+  const clock = $derived(`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`);
+
+  async function send(draft: QuizDraft) {
+    busy = true;
+    const ok = await attempt(() => rpc('quiz', 'collectSubmit', { questions: draft.questions }), 'Questions sent');
+    busy = false;
+    if (ok) editing = false;
+  }
+
+  async function change() {
+    const qs = await attempt(() => rpc<CustomQuestion[]>('quiz', 'collectMine'));
+    if (!qs) return;
+    initial = { title: '', questions: qs };
+    editing = true;
+  }
+
+  async function skip() {
+    if (mine && !(await ask({ title: 'Take back your questions?', message: 'They will not be in the quiz.', confirm: 'Take back', danger: true }))) return;
+    if (await attempt(() => rpc('quiz', 'collectSkip'))) closeCollectScreen();
+  }
+
+  async function end() {
+    if (await ask({ title: 'Stop the writing now?', message: 'The questions sent so far make the quiz.', confirm: 'Make the quiz' })) attempt(() => rpc('quiz', 'collectEnd'));
+  }
+
+  async function cancel() {
+    if (await ask({ title: 'Cancel the participative quiz?', message: 'Every question sent is thrown away.', confirm: 'Cancel it', danger: true })) attempt(() => rpc('quiz', 'collectCancel'));
+  }
+
+  async function play() {
+    if (!c?.quizId) return;
+    busy = true;
+    await attempt(() => rpc('quiz', 'start', { source: 'custom', quizId: c.quizId, timeSec: 20 }));
+    busy = false;
+  }
+</script>
+
+{#if c}
+  <div class="collect" in:fade>
+    {#if c.phase === 'writing'}
+      <header>
+        <span class="eyebrow">Participative quiz{c.by ? ` · asked by ${c.by.name}` : ''}</span>
+        <h1>{c.title}</h1>
+        <p class="dim">
+          {c.done.length} sent{c.waiting.length ? ` · ${c.waiting.length} still writing` : ''} · <span class="mono">{clock}</span> left
+        </p>
+      </header>
+
+      {#if editing || !mine}
+        <p class="dim intro">
+          Write 1 to {COLLECT_MAX_QUESTIONS} questions for everyone. Nobody sees your answers, and you will not score on your own questions.
+        </p>
+        {#key initial}
+          <QuizEditor
+            initial={editing ? initial : null}
+            withTitle={false}
+            maxQuestions={COLLECT_MAX_QUESTIONS}
+            saveLabel={mine ? 'Update' : 'Send my questions'}
+            cancelLabel={editing ? 'Back' : 'Skip'}
+            {busy}
+            onsave={send}
+            oncancel={() => (editing ? (editing = false) : skip())}
+          />
+        {/key}
+        {#if !mine}
+          <button class="btn ghost block" onclick={closeCollectScreen}><X size={16} /> Later (open it again from the Quiz tile)</button>
+        {/if}
+      {:else}
+        <div class="thanks card">
+          <span class="ok"><CircleCheck size={44} /></span>
+          <h2>Thanks, {hb.me?.name}!</h2>
+          <p class="dim">Your {mine.count === 1 ? 'question is' : `${mine.count} questions are`} in. The quiz is made when everyone is done.</p>
+          <button class="btn" onclick={change}><PenLine size={16} /> Change my questions</button>
+        </div>
+      {/if}
+
+      {#if !editing && mine}
+        <div class="people">
+          {#each c.done as p (p.id)}
+            <span class="person done"><Avatar name={p.name} color={p.color} id={p.id} size="1.6rem" />{p.name}</span>
+          {/each}
+          {#each c.waiting as p (p.id)}
+            <span class="person"><Avatar name={p.name} color={p.color} id={p.id} size="1.6rem" />{p.name}</span>
+          {/each}
+        </div>
+      {/if}
+
+      {#if isBy && !editing}
+        <div class="row owner">
+          <button class="btn primary" disabled={!c.done.length} onclick={end}><Flag size={16} /> Make the quiz now</button>
+          <button class="btn ghost" onclick={cancel}>Cancel it</button>
+        </div>
+      {/if}
+      {#if mine && !editing}
+        <button class="btn block" onclick={closeCollectScreen}>Close</button>
+      {/if}
+    {:else}
+      <div class="ready">
+        <span class="eyebrow">Participative quiz</span>
+        <h1>{c.title} is ready!</h1>
+        <p class="dim">{c.total} questions from {c.done.length} {c.done.length === 1 ? 'player' : 'players'}. It is saved with the custom quizzes.</p>
+        <button class="btn primary big" disabled={busy || running} onclick={play}>
+          <Play size={20} />
+          {running ? 'A quiz is running' : 'Play it now'}
+          {#if hb.core?.economyEnabled && cost}<span>&middot;</span><Money amount={cost} />{/if}
+        </button>
+        <button class="btn ghost" onclick={closeCollectScreen}>Later</button>
+      </div>
+    {/if}
+  </div>
+{/if}
+
+<style>
+  .collect {
+    display: grid;
+    align-content: center;
+    gap: 1rem;
+  }
+  header {
+    display: grid;
+    gap: 0.3rem;
+    text-align: center;
+  }
+  h1 {
+    font-size: 1.6rem;
+  }
+  .intro {
+    font-size: 0.9rem;
+  }
+  .thanks {
+    display: grid;
+    justify-items: center;
+    gap: 0.6rem;
+    padding: 1.4rem 1rem;
+    text-align: center;
+  }
+  .ok {
+    color: var(--success);
+  }
+  .people {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: center;
+  }
+  .person {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.6rem 0.2rem 0.2rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    font-size: 0.8rem;
+    opacity: 0.5;
+  }
+  .person.done {
+    opacity: 1;
+    box-shadow: inset 0 0 0 1px var(--success);
+  }
+  .owner {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .ready {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 0.8rem;
+    padding: 2rem 0.5rem;
+    text-align: center;
+  }
+  .big {
+    min-height: 3.4rem;
+    padding: 0 1.6rem;
+    font-size: 1.1rem;
+  }
+</style>

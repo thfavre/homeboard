@@ -7,6 +7,7 @@
   import Money from '$lib/ui/Money.svelte';
   import Shape from './Shape.svelte';
   import Joystick from './Joystick.svelte';
+  import QuizCollectPhone from './QuizCollectPhone.svelte';
   import { quizResult, closeQuizScreen } from './result.svelte.ts';
 
   const live = $derived(hb.modules.quiz as QuizState | undefined);
@@ -31,6 +32,8 @@
   let mine = $state<{ index: number; choice: number } | null>(null);
   const myChoice = $derived(mine && q && mine.index === q.index ? mine.choice : null);
   const answered = $derived(myChoice !== null || (!!meId && !!q?.answered.includes(meId)));
+  // Participative quiz: the author of the question watches the others answer it
+  const myQuestion = $derived(!!meId && q?.question?.author?.id === meId);
 
   // Seconds left in the current phase
   let now = $state(serverNow());
@@ -53,7 +56,9 @@
   const celebrate = () => void rpc('quiz', 'celebrate').catch(() => {});
 </script>
 
-{#if q}
+{#if !q || q.phase === 'idle'}
+  <QuizCollectPhone />
+{:else}
   <div class="quiz">
     {#if q.paused}
       <div class="paused" transition:fade>
@@ -93,7 +98,13 @@
         <p class="dim">Look at the TV.</p>
       </div>
     {:else if q.phase === 'question' && q.question}
-      {#if answered}
+      {#if myQuestion}
+        <div class="center" in:scale={{ start: 0.9 }}>
+          <span class="eyebrow">Your question</span>
+          <h1>Watch them sweat</h1>
+          <p class="dim">You wrote this one, so you sit it out. {q.answered.length} of {Math.max(0, q.playerCount - 1)} answered.</p>
+        </div>
+      {:else if answered}
         <div class="center" in:scale={{ start: 0.9 }}>
           {#if myChoice !== null}<Shape shape={ANSWER_STYLES[myChoice].shape} color={ANSWER_STYLES[myChoice].color} size="5rem" />{/if}
           <h1>Answer locked</h1>
@@ -115,8 +126,10 @@
       {/if}
     {:else if q.phase === 'reveal' && q.reveal}
       {@const right = myChoice !== null ? myChoice === q.reveal.correct : (me?.delta ?? 0) > 0}
-      <div class="center result" class:right in:scale={{ start: 0.85 }}>
-        {#if !answered}
+      <div class="center result" class:right class:own={myQuestion} in:scale={{ start: 0.85 }}>
+        {#if myQuestion}
+          <h1>{q.reveal.counts[q.reveal.correct]} found your answer</h1>
+        {:else if !answered}
           <CircleX size={72} />
           <h1>Too slow</h1>
         {:else if right}
@@ -261,6 +274,9 @@
   }
   .result.right {
     color: var(--success);
+  }
+  .result.own {
+    color: var(--text);
   }
   .result h1 {
     color: var(--text);

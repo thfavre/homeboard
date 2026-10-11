@@ -2,11 +2,14 @@ import { unlinkSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import express from 'express';
 import {
+  COLLECT_DEFAULT_MIN,
+  COLLECT_MAX_QUESTIONS,
   FINAL_SEC,
   LOBBY_MAX_SEC,
   type CustomQuestion,
   type CustomQuiz,
   type LibraryItem,
+  type QuizCollect,
   type QuizFx,
   type QuizPhase,
   type QuizPlayer,
@@ -29,6 +32,8 @@ interface Question {
   category: string;
   difficulty: string;
   image?: string;
+  /** Participative quiz: who wrote it */
+  author?: { id: string; name: string };
 }
 
 const COUNTDOWN_MS = 5_000;
@@ -41,6 +46,8 @@ const HALF_READY_MS = 15_000;
 const MAX_POINTS = 1000;
 const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 /** Minimum time between two celebrations of the same guest */
+/** How long a finished participative quiz stays offered on the phones */
+const COLLECT_READY_MS = 10 * 60_000;
 const FX_COOLDOWN: Record<QuizFx['kind'], number> = { spin: 1200, hop: 900, wiggle: 900, peek: 2500 };
 
 const decode = (s: string) => {
@@ -94,6 +101,23 @@ export default defineModule<QuizSettings>({
     let reveal: QuizState['reveal'] = null;
     let paidBy: Charge | null = null;
     const lastFx = new Map<string, number>();
+
+    // Participative quiz being written (or just written, waiting to be played)
+    interface Collect {
+      id: string;
+      title: string;
+      by: { id: string; name: string } | null;
+      phase: 'writing' | 'ready';
+      endsAt: number;
+      entries: Map<string, { name: string; color: string; questions: CustomQuestion[] }>;
+      skipped: Set<string>;
+      quizId: string | null;
+      total: number;
+      timer: NodeJS.Timeout | null;
+      /** Who was online and still writing at the last check, to publish only on changes */
+      waitingKey: string;
+    }
+    let collect: Collect | null = null;
 
     // Timer of the current phase (can be paused)
     let timer: NodeJS.Timeout | null = null;
@@ -210,7 +234,15 @@ export default defineModule<QuizSettings>({
     };
 
     const customQuestions = (quiz: CustomQuiz): Question[] =>
-      quiz.questions.map((q) => ({ text: q.text, answers: q.answers, correct: q.correct, category: '', difficulty: '', image: q.image }));
+      quiz.questions.map((q) => ({
+        text: q.text,
+        answers: q.answers,
+        correct: q.correct,
+        category: '',
+        difficulty: '',
+        image: q.image,
+        author: q.authorId ? { id: q.authorId, name: q.authorName ?? '' } : undefined,
+      }));
 
     // ------------------------------------------------------------ timer
 
@@ -258,6 +290,12 @@ export default defineModule<QuizSettings>({
     // ------------------------------------------------------------ flow
 
     const onlineCount = () => [...ctx.session.guests.values()].filter((g) => g.sockets > 0).length;
+    /** Players expected to answer the current question: its author watches the others */
+    const answerCount = () => {
+      const author = questions[index]?.author;
+      const authorOnline = !!author && (ctx.session.guests.get(author.id)?.sockets ?? 0) > 0;
+      return Math.max(1, onlineCount() - (authorOnline ? 1 : 0));
+    };
 
     const player = (g: Guest): QuizPlayer => {
       let p = players.get(g.id);
@@ -298,7 +336,7 @@ export default defineModule<QuizSettings>({
       for (const [guestId, a] of answers) {
         counts[a.choice] = (counts[a.choice] ?? 0) + 1;
         const p = players.get(guestId);
-        if (!p || a.choice !== q.correct) continue;
+        if (!p || a.choice !== q.correct || q.author?.id === guestId) continue;
         const remaining = Math.max(0, limit - (a.at - startedAt));
         p.delta = Math.round(MAX_POINTS / 2 + (MAX_POINTS / 2) * (remaining / limit));
         p.score += p.delta;
@@ -367,8 +405,11 @@ export default defineModule<QuizSettings>({
     const launch = (src: QuizSource, by: Guest | null, charge: Charge | null) => {
       if (!ctx.enabled()) throw new HbError('The quiz is turned off');
       if (phase !== 'idle') throw new HbError('A quiz is already running');
+      if (collect?.phase === 'writing') throw new HbError('Everyone is writing questions for a quiz, wait for it to end');
       checkNoGame();
       ctx.takeover.start();
+      // The participative quiz offered on the phones is played now (or another quiz is)
+      if (collect) closeCollect(false);
       runId = uid(6);
       phase = 'loading';
       error = null;
@@ -451,15 +492,15 @@ export default defineModule<QuizSettings>({
       authorId: q.authorId,
       count: q.questions.length,
       hasImages: q.questions.some((x) => x.image),
+      collective: q.collective,
     });
 
-    const cleanQuiz = (raw: any): Pick<CustomQuiz, 'title' | 'questions'> => {
-      const titleText = cleanName(raw?.title, 60);
-      if (!titleText) throw new HbError('Give your quiz a title');
-      const list = Array.isArray(raw?.questions) ? raw.questions : [];
+    /** keepAuthors: the host editing a participative quiz keeps who wrote each question */
+    const cleanQuestions = (raw: unknown, max: number, keepAuthors = false): CustomQuestion[] => {
+      const list = Array.isArray(raw) ? raw : [];
       if (!list.length) throw new HbError('Add at least one question');
-      if (list.length > 50) throw new HbError('50 questions at most');
-      const qs: CustomQuestion[] = list.map((q: any, i: number) => {
+      if (list.length > max) throw new HbError(`${max} questions at most`);
+      return list.map((q: any, i: number) => {
         const text = String(q?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
         if (!text) throw new HbError(`Question ${i + 1} has no text`);
         const filled = (Array.isArray(q?.answers) ? q.answers : []).map((a: unknown) => cleanName(a, 80));
@@ -468,12 +509,22 @@ export default defineModule<QuizSettings>({
         if (answersList.length < 2) throw new HbError(`Question ${i + 1} needs at least 2 answers`);
         if (!correctText) throw new HbError(`Question ${i + 1}: choose the right answer`);
         const image = typeof q?.image === 'string' && q.image.startsWith(ctx.mediaUrl('')) ? q.image : undefined;
-        return { text, answers: answersList, correct: answersList.indexOf(correctText), image };
+        const clean: CustomQuestion = { text, answers: answersList, correct: answersList.indexOf(correctText), image };
+        if (keepAuthors && typeof q?.authorId === 'string' && q.authorId) {
+          clean.authorId = q.authorId.slice(0, 40);
+          clean.authorName = cleanName(q.authorName, 40);
+        }
+        return clean;
       });
-      return { title: titleText, questions: qs };
     };
 
-    const removeImages = (quiz: CustomQuiz, keep: Set<string> = new Set()) => {
+    const cleanQuiz = (raw: any, keepAuthors = false): Pick<CustomQuiz, 'title' | 'questions'> => {
+      const titleText = cleanName(raw?.title, 60);
+      if (!titleText) throw new HbError('Give your quiz a title');
+      return { title: titleText, questions: cleanQuestions(raw?.questions, 50, keepAuthors) };
+    };
+
+    const removeImages = (quiz: Pick<CustomQuiz, 'questions'>, keep: Set<string> = new Set()) => {
       for (const q of quiz.questions) {
         if (!q.image || keep.has(q.image)) continue;
         try {
@@ -485,7 +536,7 @@ export default defineModule<QuizSettings>({
     };
 
     const saveQuiz = (raw: any, author: { name: string; id: string } | null) => {
-      const clean = cleanQuiz(raw);
+      const clean = cleanQuiz(raw, !author);
       const existing = library.data.quizzes.find((q) => q.id === raw?.id);
       if (existing) {
         if (author && existing.authorId !== author.id) throw new HbError('You can only edit your own quizzes');
@@ -518,6 +569,138 @@ export default defineModule<QuizSettings>({
       if (!quiz) throw new HbError('Quiz not found');
       if (author && quiz.authorId !== author.id) throw new HbError('You can only edit your own quizzes');
       return quiz;
+    };
+
+    // ------------------------------------------------------------ participative quiz
+    //
+    // Everyone online writes 1 to 3 questions on their phone (or skips). When all have answered,
+    // the time is up or whoever asked for it ends it, the questions become one custom quiz
+    // that only the host can edit. Nobody scores on their own question.
+
+    const collectView = (c: Collect): QuizCollect => {
+      const online = [...ctx.session.guests.values()].filter((g) => g.sockets > 0);
+      return {
+        id: c.id,
+        title: c.title,
+        by: c.by,
+        phase: c.phase,
+        endsAt: c.endsAt,
+        done: [...c.entries].map(([id, e]) => ({ id, name: e.name, color: e.color, count: e.questions.length })),
+        skipped: [...c.skipped],
+        waiting: c.phase === 'writing' ? online.filter((g) => !c.entries.has(g.id) && !c.skipped.has(g.id)).map((g) => ({ id: g.id, name: g.name, color: g.color })) : [],
+        quizId: c.quizId,
+        total: c.total,
+      };
+    };
+
+    /** dropImages: the questions were not saved, so their pictures can go */
+    const closeCollect = (dropImages: boolean) => {
+      if (!collect) return;
+      if (collect.timer) clearInterval(collect.timer);
+      if (dropImages) for (const e of collect.entries.values()) removeImages(e);
+      collect = null;
+      ctx.publish();
+    };
+
+    const startCollect = (args: any, by: Guest | null) => {
+      if (!ctx.enabled()) throw new HbError('The quiz is turned off');
+      if (collect?.phase === 'writing') throw new HbError('Questions are already being written');
+      if (phase !== 'idle') throw new HbError('A quiz is running, wait for it to end');
+      if (library.data.quizzes.length >= 200) throw new HbError('The quiz library is full, delete some quizzes first');
+      if (collect) closeCollect(false);
+      const minutes = clamp(Math.round(num(args?.minutes, COLLECT_DEFAULT_MIN)), 1, 30);
+      const c: Collect = {
+        id: uid(6),
+        title: cleanName(args?.title, 60) || (by ? `${by.name}'s party quiz` : 'Party quiz'),
+        by: by ? { id: by.id, name: by.name } : null,
+        phase: 'writing',
+        endsAt: Date.now() + minutes * 60_000,
+        entries: new Map(),
+        skipped: new Set(),
+        quizId: null,
+        total: 0,
+        timer: null,
+        waitingKey: '',
+      };
+      // Also notices guests who left without answering, so nobody waits for them
+      c.timer = setInterval(() => (Date.now() >= c.endsAt ? endCollect() : checkCollectDone()), 3000);
+      collect = c;
+      error = null;
+      ctx.activity(by ? '{name} wants everyone to write quiz questions, check your phone' : 'Write your own quiz questions, check your phone', { guest: by ?? undefined });
+      ctx.publish();
+      return true;
+    };
+
+    const collecting = (): Collect => {
+      if (!collect || collect.phase !== 'writing') throw new HbError('The questions are not being written anymore');
+      return collect;
+    };
+
+    /** Everyone online has sent questions or skipped */
+    const checkCollectDone = () => {
+      const c = collect;
+      if (!c || c.phase !== 'writing') return;
+      const online = [...ctx.session.guests.values()].filter((g) => g.sockets > 0);
+      const waiting = online.filter((g) => !c.entries.has(g.id) && !c.skipped.has(g.id));
+      if (online.length && !waiting.length && (c.entries.size || c.skipped.size)) return endCollect();
+      const key = waiting.map((g) => g.id).join();
+      if (key === c.waitingKey) return;
+      c.waitingKey = key;
+      ctx.publish();
+    };
+
+    const endCollect = () => {
+      const c = collect;
+      if (!c || c.phase !== 'writing') return;
+      if (c.timer) clearInterval(c.timer);
+      c.timer = null;
+      const all = shuffle([...c.entries].flatMap(([id, e]) => e.questions.map((q) => ({ ...q, authorId: id, authorName: e.name }))));
+      if (!all.length) {
+        closeCollect(false);
+        ctx.activity('Nobody wrote a quiz question this time');
+        return;
+      }
+      if (library.data.quizzes.length >= 200) {
+        closeCollect(true);
+        error = 'The quiz library is full: the participative quiz could not be saved';
+        ctx.publish();
+        return;
+      }
+      const names = [...c.entries.values()].map((e) => e.name);
+      const author = names.length <= 3 ? names.join(', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+      const quiz: CustomQuiz = { id: uid(6), title: c.title, author, authorId: '', createdAt: Date.now(), questions: all, collective: true };
+      library.data.quizzes.push(quiz);
+      library.save();
+      c.phase = 'ready';
+      c.quizId = quiz.id;
+      c.total = all.length;
+      c.endsAt = Date.now() + COLLECT_READY_MS;
+      c.timer = setInterval(() => Date.now() >= c.endsAt && closeCollect(false), 10_000);
+      ctx.activity(`"${c.title}" is ready: ${all.length} questions from ${names.length} ${names.length === 1 ? 'player' : 'players'}`);
+      ctx.publish();
+    };
+
+    const submitCollect = (raw: unknown, guest: Guest) => {
+      const c = collecting();
+      const qs = cleanQuestions(raw, COLLECT_MAX_QUESTIONS);
+      const before = c.entries.get(guest.id);
+      if (before) removeImages(before, new Set(qs.map((q) => q.image ?? '')));
+      c.entries.set(guest.id, { name: guest.name, color: guest.color, questions: qs });
+      c.skipped.delete(guest.id);
+      ctx.publish();
+      checkCollectDone();
+      return true;
+    };
+
+    const skipCollect = (guest: Guest) => {
+      const c = collecting();
+      const before = c.entries.get(guest.id);
+      if (before) removeImages(before);
+      c.entries.delete(guest.id);
+      c.skipped.add(guest.id);
+      ctx.publish();
+      checkCollectDone();
+      return true;
     };
 
     // Question pictures, from the host or a guest
@@ -554,7 +737,7 @@ export default defineModule<QuizSettings>({
         timeSec,
         category: q?.category ?? '',
         difficulty: q?.difficulty ?? '',
-        question: showQuestion && q ? { text: q.text, answers: q.answers, image: q.image } : null,
+        question: showQuestion && q ? { text: q.text, answers: q.answers, image: q.image, author: q.author } : null,
         endsAt,
         phaseMs,
         paused: !!paused,
@@ -567,6 +750,7 @@ export default defineModule<QuizSettings>({
         error,
         settings: ctx.settings.get(),
         library: library.data.quizzes.map(libraryItem),
+        collect: collect ? collectView(collect) : null,
       };
     });
 
@@ -575,6 +759,7 @@ export default defineModule<QuizSettings>({
     ctx.onGuest('start', (args, guest) => {
       if (ctx.hub.takeover) throw new HbError('Something else is on the TV right now');
       if (phase !== 'idle') throw new HbError('A quiz is already running');
+      if (collect?.phase === 'writing') throw new HbError('Everyone is writing questions for a quiz, wait for it to end');
       checkNoGame();
       const src = parseSource(args);
       if (src.kind === 'custom' && !library.data.quizzes.some((q) => q.id === src.quizId)) throw new HbError('Pick a quiz');
@@ -612,12 +797,13 @@ export default defineModule<QuizSettings>({
       if (phase !== 'question') throw new HbError('Too late for this question');
       if (paused) throw new HbError('The quiz is paused');
       if (answers.has(guest.id)) throw new HbError('You already answered');
+      if (questions[index]?.author?.id === guest.id) throw new HbError('You wrote this question, let the others answer');
       const choice = Math.round(num(args.choice, -1));
       if (choice < 0 || choice >= (questions[index]?.answers.length ?? 0)) throw new HbError('Pick an answer');
       player(guest);
       answers.set(guest.id, { choice, at: Date.now() });
       // Everyone answered: no need to wait for the timer
-      if (answers.size >= onlineCount()) showReveal();
+      if (answers.size >= answerCount()) showReveal();
       else ctx.publish();
       return true;
     });
@@ -649,6 +835,25 @@ export default defineModule<QuizSettings>({
     ctx.onGuest('getCustom', (args, guest) => getQuiz(args.id, guest));
     ctx.onGuest('deleteCustom', (args, guest) => {
       deleteQuiz(String(args.id), guest);
+      return true;
+    });
+
+    ctx.onGuest('collectStart', (args, guest) => startCollect(args, guest));
+    ctx.onGuest('collectSubmit', (args, guest) => submitCollect(args.questions, guest));
+    ctx.onGuest('collectSkip', (_args, guest) => skipCollect(guest));
+    /** The questions this guest sent, to change them (nobody else ever gets them) */
+    ctx.onGuest('collectMine', (_args, guest) => collect?.entries.get(guest.id)?.questions ?? []);
+    /** Whoever asked for the questions can stop the writing early */
+    ctx.onGuest('collectEnd', (_args, guest) => {
+      const c = collecting();
+      if (c.by?.id !== guest.id) throw new HbError('Only the person who asked for the questions can do that');
+      endCollect();
+      return true;
+    });
+    ctx.onGuest('collectCancel', (_args, guest) => {
+      const c = collecting();
+      if (c.by?.id !== guest.id) throw new HbError('Only the person who asked for the questions can do that');
+      closeCollect(true);
       return true;
     });
 
@@ -714,11 +919,24 @@ export default defineModule<QuizSettings>({
       return true;
     });
 
+    ctx.onAdmin('collectStart', (args) => startCollect(args, null));
+    ctx.onAdmin('collectEnd', () => {
+      collecting();
+      endCollect();
+      return true;
+    });
+    ctx.onAdmin('collectCancel', () => {
+      closeCollect(collect?.phase === 'writing');
+      return true;
+    });
+
     ctx.onToggle((on) => {
       if (!on && phase !== 'idle') close();
+      if (!on) closeCollect(collect?.phase === 'writing');
     });
     ctx.onSessionReset(() => {
       if (phase !== 'idle') close();
+      closeCollect(collect?.phase === 'writing');
     });
   },
 });
