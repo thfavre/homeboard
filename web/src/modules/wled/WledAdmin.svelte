@@ -320,6 +320,13 @@
         <span>Brightness of scenes (0 = keep current)</span>
         <input class="input" type="number" min="0" max="255" bind:value={sceneBrightness.value} onfocus={sceneBrightness.start} onblur={() => { set({ sceneBrightness: Number(sceneBrightness.value) }); sceneBrightness.end(); }} />
       </label>
+      <label class="field">
+        <span>When Homeboard starts</span>
+        <select class="input" value={mod.sceneOnStart === false ? 'none' : 'scene'} onchange={(e) => set({ sceneOnStart: e.currentTarget.value === 'scene' })}>
+          <option value="scene">Put the scene back on</option>
+          <option value="none">No scene, leave the lights as they are</option>
+        </select>
+      </label>
       <label class="check">
         <input type="checkbox" checked={mod.guestScenes} onchange={(e) => set({ guestScenes: e.currentTarget.checked })} />
         Guests can change the scene

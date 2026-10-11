@@ -65,6 +65,8 @@ export interface WledState {
   /** Admin only */
   brightness?: number;
   sceneBrightness?: number;
+  /** At startup: the scene goes back on (true) or the lights are left as they are, with no scene (false) */
+  sceneOnStart?: boolean;
 }
 
 export const DEFAULT_WLED_EFFECTS: WledEffect[] = [

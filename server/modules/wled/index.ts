@@ -24,6 +24,8 @@ interface WledSettings {
   scenes: WledEffect[];
   /** The scene on now: it stays, across restarts, until another one is picked */
   scene: { id: string; by: string } | null;
+  /** At startup: put the scene back on the lights, or start with no scene and leave the lights alone */
+  sceneOnStart: boolean;
   /** Guests may change the scene (for a price) */
   guestScenes: boolean;
   durationSec: number;
@@ -163,6 +165,7 @@ export default defineModule<WledSettings>({
     effects: DEFAULT_WLED_EFFECTS,
     scenes: DEFAULT_WLED_SCENES,
     scene: null,
+    sceneOnStart: true,
     guestScenes: true,
     durationSec: 30,
     brightness: 255,
@@ -232,6 +235,14 @@ export default defineModule<WledSettings>({
         store.saveNow();
       },
     };
+    // Starting with no scene: the lights stay exactly as they are now, nothing from the last run is put back
+    if (!ctx.settings.get().sceneOnStart) {
+      if (ctx.settings.get().scene) ctx.settings.update({ scene: null });
+      if (saved.keys().length) {
+        store.data.devices = {};
+        store.saveNow();
+      }
+    }
     /** Snapshots from a previous run, or whose restore failed: put back once the light answers */
     const pending = new Set(saved.keys());
     let queue: Job[] = [];
@@ -601,7 +612,7 @@ export default defineModule<WledSettings>({
         durationSec: s.durationSec,
         current: current ? { ...pub(current), until: current.until } : null,
         queue: queue.map(pub),
-        ...(role === 'admin' ? { brightness: s.brightness, sceneBrightness: s.sceneBrightness } : {}),
+        ...(role === 'admin' ? { brightness: s.brightness, sceneBrightness: s.sceneBrightness, sceneOnStart: s.sceneOnStart } : {}),
       };
     });
 
@@ -653,6 +664,7 @@ export default defineModule<WledSettings>({
         brightness: args.brightness !== undefined ? clamp(num(args.brightness, 255), 0, 255) : s.brightness,
         sceneBrightness: args.sceneBrightness !== undefined ? clamp(num(args.sceneBrightness, 140), 0, 255) : s.sceneBrightness,
         guestScenes: args.guestScenes !== undefined ? args.guestScenes === true : s.guestScenes,
+        sceneOnStart: args.sceneOnStart !== undefined ? args.sceneOnStart === true : s.sceneOnStart,
       });
       ctx.publish();
       // The scene on now, at its new brightness
