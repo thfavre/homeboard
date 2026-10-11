@@ -223,8 +223,8 @@ export interface GamesState {
    * phones, shown as cards at the top of the TV: Bluff, Coin Flip, Rhythm Rain)
    */
   matches: MatchState[];
-  /** Bluff can be played again from then on (null: now) */
-  bluffReadyAt: number | null;
+  /** Guests who cannot start a Bluff yet, by id: when they can (each waits after starting one) */
+  bluffReadyAt: Record<string, number>;
   /** Bluff: the fixed part of the bonus each player gets when both share */
   bluffBase: number;
   perk: Perk | null;
@@ -262,7 +262,7 @@ export interface GamesSettings {
   scratchLight: string;
   /** Bluff: when both share, each gets the base bonus plus this many times their bet (0 to 3) */
   bluffMultiplier: number;
-  /** Minutes between two Bluff games (0: no wait) */
+  /** Minutes a guest waits after starting a Bluff before starting another one (0: no wait) */
   bluffCooldownMin: number;
   /** Seconds the Bluff players have to choose (no choice counts as sharing) */
   bluffChooseSec: number;

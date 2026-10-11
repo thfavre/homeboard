@@ -144,15 +144,25 @@ export default defineModule<GamesSettings>({
       [...matches.values()].find((m) => m.players.some((p) => p.id === guestId) && (phase ? m.phase === phase : m.phase !== 'result'));
     /** The room game waiting for players (room games take the whole TV: one at most) */
     const lobby = () => [...matches.values()].find((m) => m.mode === 'room' && m.phase === 'lobby');
-    /** When the last Bluff was played: the next one waits the cooldown */
-    let lastBluff = 0;
+    /**
+     * When each guest last started a Bluff: they wait the cooldown before starting another one, so
+     * nobody can farm the bonus with back-to-back duels
+     */
+    const lastBluff = new Map<string, number>();
+    /** Guests who cannot start a Bluff yet, with when they can */
     const bluffReadyAt = () => {
-      const at = lastBluff + ctx.settings.get().bluffCooldownMin * MINUTE;
-      return lastBluff && at > Date.now() ? at : null;
+      const wait = ctx.settings.get().bluffCooldownMin * MINUTE;
+      const now = Date.now();
+      const ready: Record<string, number> = {};
+      for (const [id, at] of lastBluff) if (at + wait > now) ready[id] = at + wait;
+      return ready;
     };
-    const checkBluff = (game: GameId) => {
-      const at = game === 'bluff' ? bluffReadyAt() : null;
-      if (at) throw new HbError(`Bluff can be played again in ${Math.ceil((at - Date.now()) / MINUTE)} min`);
+    /** The guest who starts a Bluff must be done waiting (`me`: they are the one asking) */
+    const checkBluff = (game: GameId, starter: GamePlayer, me: boolean) => {
+      const at = game === 'bluff' ? bluffReadyAt()[starter.id] : undefined;
+      if (!at) return;
+      const min = Math.ceil((at - Date.now()) / MINUTE);
+      throw new HbError(me ? `You can start another Bluff in ${min} min` : `${starter.name} can start another Bluff in ${min} min`);
     };
     let perk: Perk | null = null;
     let perkTimer: NodeJS.Timeout | null = null;
@@ -479,7 +489,7 @@ export default defineModule<GamesSettings>({
       // The rules timer and "everyone is ready" can both get here
       if (m.phase !== 'intro') return;
       m.phase = 'play';
-      if (m.game === 'bluff') lastBluff = Date.now();
+      if (m.game === 'bluff' && m.starter) lastBluff.set(m.starter.id, Date.now());
       m.endsAt = null;
       m.phaseMs = 0;
       const api: MatchApi = {
@@ -603,7 +613,7 @@ export default defineModule<GamesSettings>({
       if (!opponent) throw new HbError('Pick someone to challenge');
       if (opponent.id === guest.id) throw new HbError('You cannot challenge yourself');
       checkLight(game);
-      checkBluff(game);
+      checkBluff(game, player(guest), true);
       if (opponent.sockets === 0) throw new HbError(`${opponent.name} is not online`);
       checkFree(guest.id, null);
       checkFree(opponent.id, opponent.name);
@@ -655,7 +665,7 @@ export default defineModule<GamesSettings>({
       }
       tvFree(inv.game);
       checkLight(inv.game);
-      checkBluff(inv.game);
+      checkBluff(inv.game, inv.from, false);
       if (inv.song && !readySong(inv.song.key)) throw new HbError('This song is not available any more');
       const bet = ctx.economy.pay(guest, inv.stake, `Duel bet: ${gameInfo(inv.game)!.name}`);
       try {
@@ -993,9 +1003,10 @@ export default defineModule<GamesSettings>({
       const m = hostMatch(args);
       if (m) cancel(m, 'The host stopped the game');
     });
-    /** Bluff can be played again right away */
-    ctx.onAdmin('resetBluff', () => {
-      lastBluff = 0;
+    /** A guest (or everyone, with no guest) can start a Bluff again right away */
+    ctx.onAdmin('resetBluff', (args) => {
+      if (args?.guestId) lastBluff.delete(String(args.guestId));
+      else lastBluff.clear();
       ctx.publish();
     });
     ctx.onAdmin('cancelInvite', (args) => {
@@ -1191,7 +1202,10 @@ export default defineModule<GamesSettings>({
     ctx.onToggle((on) => {
       if (!on) stopAll(true);
     });
-    ctx.onSessionReset(() => stopAll(false));
+    ctx.onSessionReset(() => {
+      stopAll(false);
+      lastBluff.clear();
+    });
     ctx.onShutdown(() => stopAll(true));
   },
 });

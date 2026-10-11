@@ -71,9 +71,10 @@
     const card = !!picked && isCardGame(picked.id);
     return (s?.matches ?? []).some((m) => !card || !isCardGame(m.game) || m.game === picked?.id);
   });
-  /** Bluff waits a while between two games: minutes left (0: it can be played) */
+  /** After starting a Bluff, a guest waits a while before starting another: minutes left (0: they can) */
   const now = new Now(5000);
-  const bluffWait = $derived(s?.bluffReadyAt && s.bluffReadyAt > now.value ? Math.ceil((s.bluffReadyAt - now.value) / 60_000) : 0);
+  const myBluffAt = $derived(s?.bluffReadyAt[hb.me?.id ?? ''] ?? 0);
+  const bluffWait = $derived(myBluffAt > now.value ? Math.ceil((myBluffAt - now.value) / 60_000) : 0);
   const waiting = $derived(picked?.id === 'bluff' && bluffWait > 0);
   const deal = $derived(picked?.id === 'bluff' ? bluffDeal(stake, s?.bluffBase ?? 0, s?.settings.bluffMultiplier ?? 0) : null);
 
@@ -385,7 +386,7 @@
         <BluffOdds {deal} other={opponentName ?? 'Opponent'} {economy} />
       </div>
     {/if}
-    {#if waiting}<p class="error">Bluff can be played again in {bluffWait} min.</p>{/if}
+    {#if waiting}<p class="error">You can start another Bluff in {bluffWait} min.</p>{/if}
     {#if tvBusy}<p class="faint small">A game is on the TV right now. {mode === 'duel' ? 'They can accept once it is over.' : 'Wait for it to end.'}</p>{/if}
     {#if error}<p class="error">{error}</p>{/if}
 
