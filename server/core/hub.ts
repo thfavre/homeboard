@@ -52,6 +52,9 @@ export interface CoreSettings {
   adminPassword: string;
   adminTokens: string[];
   tunnel: boolean;
+  /** Own domain: a named Cloudflare tunnel routed to it (empty: a quick tunnel with a random URL) */
+  tunnelName: string;
+  tunnelDomain: string;
 }
 
 const CORE_DEFAULTS: CoreSettings = {
@@ -75,6 +78,8 @@ const CORE_DEFAULTS: CoreSettings = {
   adminPassword: '',
   adminTokens: [],
   tunnel: true,
+  tunnelName: '',
+  tunnelDomain: '',
 };
 
 type VisitorHandler = (args: any, socket: Socket, bind: (guest: Guest) => void) => unknown | Promise<unknown>;
@@ -630,6 +635,13 @@ export class Hub {
   get tunnelTarget(): string {
     if (process.env.HB_TUNNEL_TARGET) return process.env.HB_TUNNEL_TARGET;
     return process.argv.includes('--dev') ? 'http://localhost:5173' : `http://localhost:${this.port}`;
+  }
+
+  /** Start the public tunnel: on the own domain when one is set, else a quick tunnel */
+  startTunnel(): Promise<void> {
+    const { tunnelName, tunnelDomain } = this.core;
+    const named = tunnelName && tunnelDomain ? { name: tunnelName, domain: tunnelDomain } : null;
+    return this.tunnel.start(this.tunnelTarget, named);
   }
 
   /** Serve the built web apps (production). In development Vite serves them. */

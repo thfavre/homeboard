@@ -12,6 +12,8 @@
   let pair = $state<{ url: string; qrSvg: string } | null>(null);
   let password = $state<string | null>(null);
   let newPassword = $state('');
+  let domain = $state(hb.core!.admin!.tunnelDomain);
+  let tunnelName = $state(hb.core!.admin!.tunnelName || 'homeboard');
 
   // The password is only readable from the PC itself
   rpc<{ password: string }>('core', 'security')
@@ -45,7 +47,12 @@
   </Sheet>
 {/if}
 
-<Section title="Public link" hint="A free Cloudflare tunnel lets guests join from any network. The address changes when the server restarts.">
+<Section
+  title="Public link"
+  hint={admin.tunnelDomain
+    ? 'A Cloudflare tunnel on your own domain lets guests join from any network. The address never changes.'
+    : 'A free Cloudflare tunnel lets guests join from any network. The address changes when the server restarts, unless you set your own domain below.'}
+>
   <div class="line">
     <span class="dim">Status</span>
     <span class="pill" class:success={admin.tunnel === 'up'} class:danger={admin.tunnel === 'error'}>{admin.tunnel}</span>
@@ -62,6 +69,21 @@
     <button class="btn small" onclick={() => attempt(() => rpc('core', 'restartTunnel'), 'Restarting tunnel')}>
       <RefreshCw size={15} /> Restart tunnel
     </button>
+  </div>
+</Section>
+
+<Section
+  title="Own domain"
+  hint="Create the tunnel once on this PC with cloudflared (tunnel login, tunnel create, tunnel route dns), then enter its name and domain. Leave the domain empty to go back to a random address."
+>
+  <div class="row wrap">
+    <input class="input" bind:value={domain} placeholder="homeboard.online" aria-label="Domain" />
+    <input class="input" bind:value={tunnelName} placeholder="Tunnel name" aria-label="Tunnel name" />
+    <button
+      class="btn"
+      onclick={() => attempt(() => rpc('core', 'setDomain', { domain, name: tunnelName }), domain.trim() ? 'Domain saved, tunnel restarting' : 'Back to a random address')}
+      >Save</button
+    >
   </div>
 </Section>
 

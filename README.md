@@ -113,6 +113,19 @@ the host can set a new one from the Guests screen if someone forgets it.
 Because the free tunnel URL changes when the server restarts, phones forget the account after a
 restart. Balances are kept on the server, so guests just join again with their name and PIN.
 
+### Own domain
+
+With your own domain on Cloudflare (free plan, no card), the address never changes. Once on this PC:
+
+```
+cloudflared tunnel login
+cloudflared tunnel create homeboard
+cloudflared tunnel route dns homeboard yourdomain.com
+```
+
+Then in the admin, **Access > Own domain**, enter the domain and the tunnel name and save. The QR
+code and the links use the domain from then on. Leave the domain empty to go back to a random address.
+
 ### Quiz
 
 Questions come from Open Trivia DB (by category and difficulty), from The Trivia API (search any of

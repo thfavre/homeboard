@@ -195,6 +195,9 @@ export interface CoreAdminState {
   publicUrl: string | null;
   lanUrl: string;
   tunnel: 'off' | 'starting' | 'up' | 'error';
+  /** Own domain through a named Cloudflare tunnel (empty: quick tunnel) */
+  tunnelName: string;
+  tunnelDomain: string;
   sessionStartedAt: number;
   passiveMinutes: number;
   passiveAwayMinutes: number;

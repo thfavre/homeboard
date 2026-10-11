@@ -213,6 +213,8 @@ export default defineModule({
           publicUrl: hub.tunnel.url,
           lanUrl: hub.lanUrl,
           tunnel: hub.tunnel.status,
+          tunnelName: c.tunnelName,
+          tunnelDomain: c.tunnelDomain,
           sessionStartedAt: session.startedAt,
           passiveMinutes: c.passiveMinutes,
           passiveAwayMinutes: c.passiveAwayMinutes,
@@ -555,7 +557,17 @@ export default defineModule({
 
     ctx.onAdmin('restartTunnel', () => {
       hub.tunnel.stop();
-      void hub.tunnel.start(hub.tunnelTarget);
+      void hub.startTunnel();
+    });
+
+    ctx.onAdmin('setDomain', (args) => {
+      const domain = String(args.domain ?? '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      const name = String(args.name ?? '').trim();
+      if (domain && !/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(domain)) throw new HbError('That is not a domain name');
+      if (domain && !/^[\w.-]{1,64}$/.test(name)) throw new HbError('Enter the tunnel name');
+      hub.settings.update<CoreSettings>('core', { tunnelDomain: domain, tunnelName: domain ? name : '' });
+      hub.tunnel.stop();
+      void hub.startTunnel();
     });
   },
 });
