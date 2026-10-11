@@ -144,7 +144,8 @@ Every phone shows a form to write 1 to 3 questions, or skip; a card on the TV sh
 When everyone online has answered, the time is up (5 minutes by default) or whoever asked for it
 ends it, the questions are shuffled into one custom quiz saved in the library. Only the host can
 edit it, guests never see its answers, and each question shows who wrote it: its author sits it
-out and cannot score on it. The host or anyone (for the usual fee) can then start it.
+out and cannot score on it. The guest who asked for it gets a "Play it now" button on their
+phone (the host has one in the admin); anyone can also start it later from the library (for the usual fee).
 
 ### Games
 
