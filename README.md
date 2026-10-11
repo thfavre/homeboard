@@ -48,6 +48,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [x] Let the admin choose the delay for the passive earning.
 - Add more fun emoji for the selfie avatars (like a crown, a hat, a mustache, a monocle, etc.)
 - [x] add some lights effects (dark, a better fiework that uses the firework effect, some effects that are not just copied on all devices the same). and also some scene that will be stay until a new scene is selected, only chill thigs
+- [x] Writing a quiz on a phone was lost when someone started an activity; quiz drafts are now autosaved on the phone too.
 - [x] show a +x to the music queue when there is more than the screen can display in te queue.
 - [ ] buy domain name
 - [ ] redo a more fair economy

@@ -7,6 +7,7 @@
   import Section from '$lib/ui/Section.svelte';
   import Sheet from '$lib/ui/Sheet.svelte';
   import QuizEditor from './QuizEditor.svelte';
+  import { clearDraft, draftKey } from './drafts.svelte.ts';
 
   const q = $derived(hb.modules.quiz as QuizState | undefined);
   const settings = () => (hb.modules.quiz as QuizState | undefined)?.settings;
@@ -32,6 +33,7 @@
   let starting = $state(false);
   let editing = $state<CustomQuiz | 'new' | null>(null);
   let saving = $state(false);
+  const editorDraft = $derived(editing === 'new' ? draftKey('host.new') : editing ? draftKey(`host.edit.${editing.id}`) : undefined);
 
   rpc<{ id: number; name: string }[]>('quiz', 'categories')
     .then((c) => (categories = c))
@@ -60,7 +62,10 @@
     saving = true;
     const ok = await attempt(() => rpc('quiz', 'saveCustom', { quiz }), 'Quiz saved');
     saving = false;
-    if (ok) editing = null;
+    if (ok) {
+      if (editorDraft) clearDraft(editorDraft);
+      editing = null;
+    }
   }
 
   async function remove(id: string, title: string) {
@@ -298,7 +303,7 @@
 
   {#if editing}
     <Sheet title={editing === 'new' ? 'New quiz' : `Edit ${editing.title}`} onclose={() => (editing = null)}>
-      <QuizEditor initial={editing === 'new' ? null : editing} busy={saving} onsave={save} oncancel={() => (editing = null)} />
+      <QuizEditor initial={editing === 'new' ? null : editing} draft={editorDraft} busy={saving} onsave={save} oncancel={() => (editing = null)} />
     </Sheet>
   {/if}
 {/if}

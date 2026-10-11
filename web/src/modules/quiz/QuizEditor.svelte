@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
-  import { ImagePlus, Plus, Trash2, X } from '@lucide/svelte';
+  import { onDestroy, untrack } from 'svelte';
+  import { History, ImagePlus, Plus, Trash2, X } from '@lucide/svelte';
   import { ANSWER_STYLES, type CustomQuiz, type QuizDraft } from '$shared/quiz.ts';
   import { toast, upload } from '$lib/client.svelte.ts';
   import { shrinkImage } from '$lib/image.ts';
   import Shape from './Shape.svelte';
+  import { clearDraft, loadDraft, openEditors, saveDraft } from './drafts.svelte.ts';
 
   /** Create or edit a custom quiz: title, questions, 2 to 4 answers each, optional picture */
   let {
@@ -16,6 +17,7 @@
     maxQuestions = 50,
     saveLabel = 'Save quiz',
     cancelLabel = 'Cancel',
+    draft,
   }: {
     initial?: (Pick<CustomQuiz, 'title' | 'questions'> & { id?: string }) | null;
     busy?: boolean;
@@ -26,6 +28,8 @@
     maxQuestions?: number;
     saveLabel?: string;
     cancelLabel?: string;
+    /** Key the draft is autosaved under on this phone (see drafts.svelte.ts); the parent clears it once saved */
+    draft?: string;
   } = $props();
 
   interface Draft {
@@ -38,10 +42,37 @@
   // No answer is ticked until the author picks the right one (-1 = none yet)
   const blank = (): Draft => ({ text: '', answers: ['', '', '', ''], correct: -1 });
   const start = untrack(() => initial);
-  let title = $state(start?.title ?? '');
-  let questions = $state<Draft[]>(
-    start?.questions.map((q) => ({ ...q, answers: [...q.answers, '', '', ''].slice(0, 4) })) ?? [blank()],
-  );
+  const key = untrack(() => draft);
+  const fromInitial = () => ({
+    title: start?.title ?? '',
+    questions: start?.questions.map((q) => ({ ...q, answers: [...q.answers, '', '', ''].slice(0, 4) })) ?? [blank()],
+  });
+  const original = JSON.stringify(fromInitial());
+  // A draft left on this phone wins over the saved version: it has the changes not sent yet
+  const saved = key ? loadDraft(key) : null;
+  const restore = saved && JSON.stringify({ title: saved.title, questions: saved.questions }) !== original ? saved : null;
+  let title = $state(restore?.title ?? fromInitial().title);
+  let questions = $state<Draft[]>((restore?.questions as Draft[] | undefined) ?? fromInitial().questions);
+  let restored = $state(!!restore);
+
+  // Autosave every change; nothing is kept while it matches what was opened
+  $effect(() => {
+    if (!key) return;
+    const now = JSON.stringify({ title, questions });
+    if (now === original) clearDraft(key);
+    else saveDraft(key, title, JSON.parse(now).questions);
+  });
+
+  openEditors.count++;
+  onDestroy(() => openEditors.count--);
+
+  function discard() {
+    const fresh = fromInitial();
+    title = fresh.title;
+    questions = fresh.questions;
+    restored = false;
+    if (key) clearDraft(key);
+  }
   let uploading = $state<number | null>(null);
   let pickFor = -1;
   let fileInput = $state<HTMLInputElement>();
@@ -82,6 +113,13 @@
 </script>
 
 <form novalidate class="editor" onsubmit={save}>
+  {#if restored}
+    <div class="restored">
+      <History size={16} />
+      <span>Your draft is back, as you left it.</span>
+      <button type="button" class="btn ghost small" onclick={discard}>{start ? 'Discard changes' : 'Start over'}</button>
+    </div>
+  {/if}
   {#if withTitle}
     <label class="field">
       <span>Title</span>
@@ -138,6 +176,18 @@
   .editor {
     display: grid;
     gap: 1rem;
+  }
+  .restored {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.4rem 0.5rem 0.8rem;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    font-size: 0.85rem;
+  }
+  .restored span {
+    flex: 1;
   }
   .question {
     display: grid;

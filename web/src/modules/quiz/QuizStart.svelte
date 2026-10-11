@@ -3,6 +3,7 @@
   import { PenLine, Pencil, Play, Plus, Search, Trash2, Users } from '@lucide/svelte';
   import { COLLECT_DEFAULT_MIN, COLLECT_MAX_QUESTIONS } from '$shared/quiz.ts';
   import { openCollectScreen } from './result.svelte.ts';
+  import { clearDraft, draftKey, hasDraft } from './drafts.svelte.ts';
   import type { CustomQuiz, QuizDraft, QuizState, QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt, price } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
@@ -51,6 +52,9 @@
   let categories = $state<{ id: number; name: string }[]>([]);
   let chosen = $state<string | null>(null);
   let editing = $state<CustomQuiz | null | 'new'>(null);
+  const editorDraft = $derived(editing === 'new' ? draftKey('new') : editing ? draftKey(`edit.${editing.id}`) : undefined);
+  // Checked again each time the editor closes
+  const newDraft = $derived(editing === null && hasDraft(draftKey('new')));
   let busy = $state(false);
   // Participative quiz
   let collectTitle = $state('');
@@ -102,6 +106,7 @@
     const item = await attempt(() => rpc<{ id: string }>('quiz', 'saveCustom', { quiz }), 'Quiz saved');
     busy = false;
     if (item) {
+      if (editorDraft) clearDraft(editorDraft);
       editing = null;
       chosen = item.id;
       tab = 'custom';
@@ -125,7 +130,7 @@
 
     {#if editing}
       <Sheet title={editing === 'new' ? 'Create a quiz' : `Edit ${editing.title}`} onclose={() => (editing = null)}>
-        <QuizEditor initial={editing === 'new' ? null : editing} {busy} onsave={saved} oncancel={() => (editing = null)} />
+        <QuizEditor initial={editing === 'new' ? null : editing} draft={editorDraft} {busy} onsave={saved} oncancel={() => (editing = null)} />
       </Sheet>
     {/if}
 
@@ -203,7 +208,7 @@
             <button class="btn block" disabled={busy || q.phase !== 'idle'} onclick={askEveryone}><Users size={16} /> Ask everyone for questions</button>
           {/if}
         </div>
-        <button class="btn block create" onclick={() => (editing = 'new')}><Plus size={18} /> Create a quiz</button>
+        <button class="btn block create" onclick={() => (editing = 'new')}><Plus size={18} /> {newDraft ? 'Continue my quiz draft' : 'Create a quiz'}</button>
         <div class="card list">
           {#each q.library as item (item.id)}
             <div class="item" class:active={chosen === item.id}>

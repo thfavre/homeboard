@@ -8,6 +8,7 @@
   import Money from '$lib/ui/Money.svelte';
   import QuizEditor from './QuizEditor.svelte';
   import { closeCollectScreen } from './result.svelte.ts';
+  import { clearDraft, draftKey } from './drafts.svelte.ts';
 
   /** Participative quiz on the phone: write 1 to 3 questions (or skip), then play the result */
   const c = $derived((hb.modules.quiz as QuizState | undefined)?.collect ?? null);
@@ -33,7 +34,10 @@
     busy = true;
     const ok = await attempt(() => rpc('quiz', 'collectSubmit', { questions: draft.questions }), 'Questions sent');
     busy = false;
-    if (ok) editing = false;
+    if (ok) {
+      if (c) clearDraft(draftKey(`collect.${c.id}`));
+      editing = false;
+    }
   }
 
   async function change() {
@@ -82,6 +86,7 @@
         {#key initial}
           <QuizEditor
             initial={editing ? initial : null}
+            draft={draftKey(`collect.${c.id}`)}
             withTitle={false}
             maxQuestions={COLLECT_MAX_QUESTIONS}
             saveLabel={mine ? 'Update' : 'Send my questions'}
