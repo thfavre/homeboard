@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Check, Eye, EyeOff, Lock, Tv } from '@lucide/svelte';
   import { fly, scale } from 'svelte/transition';
+  import { backOut } from 'svelte/easing';
   import { bluffDeal, bluffGain, type BluffChoice, type BluffView, type MatchState } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
@@ -48,6 +49,37 @@
     sending = false;
   }
 
+  /** The card follows the finger: it leans toward where it is pressed (a little 3D) */
+  function tilt(node: HTMLElement) {
+    const move = (e: PointerEvent) => {
+      const r = node.getBoundingClientRect();
+      node.style.setProperty('--ry', `${((e.clientX - r.left) / r.width - 0.5) * 22}deg`);
+      node.style.setProperty('--rx', `${(0.5 - (e.clientY - r.top) / r.height) * 22}deg`);
+    };
+    const leave = () => {
+      node.style.setProperty('--rx', '0deg');
+      node.style.setProperty('--ry', '0deg');
+    };
+    node.addEventListener('pointermove', move);
+    node.addEventListener('pointerdown', move);
+    node.addEventListener('pointerleave', leave);
+    node.addEventListener('pointerup', leave);
+    return {
+      destroy() {
+        node.removeEventListener('pointermove', move);
+        node.removeEventListener('pointerdown', move);
+        node.removeEventListener('pointerleave', leave);
+        node.removeEventListener('pointerup', leave);
+      },
+    };
+  }
+  /** The choice made turns over onto its back */
+  const flipIn = (_node: Element) => ({
+    duration: 650,
+    easing: backOut,
+    css: (t: number) => `transform: perspective(40rem) rotateY(${(1 - t) * 100}deg) scale(${0.85 + 0.15 * t}); opacity: ${Math.min(1, t * 3)}`,
+  });
+
   // The result
   const r = $derived(m.result);
   const mine = $derived(v?.choices?.[me] ?? choice ?? 'share');
@@ -85,7 +117,7 @@
     {#if m.endsAt && !bothChose}<Fuse endsAt={m.endsAt} totalMs={m.phaseMs} label="Choose within" />{/if}
 
     {#if choice && sealed}
-      <div class="sealed" in:scale={{ start: 0.85, duration: 300 }}>
+      <div class="sealed" in:flipIn>
         <button
           class="facedown"
           class:peek
@@ -96,7 +128,7 @@
           onpointercancel={() => (peek = false)}
           oncontextmenu={(e) => e.preventDefault()}
         >
-          <BluffCardFace kind="back" width="10.5rem" />
+          <BluffCardFace kind="back" width="10.5rem" alive />
           <span class="seal"><Lock size={14} /> Locked in</span>
         </button>
         <!-- Peeking: small and plain, no big color a neighbour would notice -->
@@ -109,7 +141,9 @@
       <div class="choices" class:made={!!choice} class:locked={bothChose}>
         {#each ['share', 'steal'] as const as c, i (c)}
           <button class="choice {c}" class:active={choice === c} disabled={bothChose} onclick={() => pick(c)} in:fly={{ y: 30, delay: 80 + i * 110 }}>
-            <span class="hold"><BluffCardFace kind={c} width="min(9.5rem, 40vw)" shine /></span>
+            <span class="sway" style:animation-delay="{i * -1.7}s">
+              <span class="hold"><span class="tilt" use:tilt><BluffCardFace kind={c} width="min(9.5rem, 40vw)" shine alive /></span></span>
+            </span>
             <span class="pays">
               <span class="row"><span>If {other.name} shares</span><b class="mono">{@render amount(bluffGain(deal, c, 'share'))}</b></span>
               <span class="row"><span>If {other.name} steals</span><b class="mono">{@render amount(bluffGain(deal, c, 'steal'))}</b></span>
@@ -129,8 +163,8 @@
       {#each [{ p: meP, c: mine, label: 'You' }, { p: other, c: theirs, label: other.name }] as side, i (side.p.id)}
         <div class="seat">
           <div class="flip" style:--delay="{0.25 + i * 0.6}s">
-            <span class="card-side"><BluffCardFace kind="back" width="7.5rem" /></span>
-            <span class="card-side front"><BluffCardFace kind={side.c} width="7.5rem" /></span>
+            <span class="card-side"><BluffCardFace kind="back" width="7.5rem" alive /></span>
+            <span class="card-side front"><span class="pop {side.c}"><BluffCardFace kind={side.c} width="7.5rem" shine /></span></span>
           </div>
           <span class="who truncate"><Avatar name={side.p.name} color={side.p.color} id={side.p.id} size="1.4rem" /> {side.label}</span>
         </div>
@@ -231,6 +265,16 @@
   }
   .choice.steal {
     --c: var(--danger);
+  }
+  /* Never quite still: each card sways on its own beat */
+  .sway {
+    display: grid;
+    animation: sway 3.4s ease-in-out infinite;
+  }
+  .tilt {
+    display: grid;
+    transform: perspective(30rem) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+    transition: transform 0.25s ease-out;
   }
   .hold {
     display: grid;
@@ -375,6 +419,16 @@
     transform-style: preserve-3d;
     animation: turn 0.8s cubic-bezier(0.3, 1.3, 0.5, 1) var(--delay) both;
   }
+  /* The card lands once turned over: a bounce, Steal with a shake */
+  .pop {
+    display: grid;
+    animation: land 0.6s cubic-bezier(0.3, 1.6, 0.5, 1) calc(var(--delay) + 0.7s) both;
+  }
+  .pop.steal {
+    animation:
+      land 0.6s cubic-bezier(0.3, 1.6, 0.5, 1) calc(var(--delay) + 0.7s) both,
+      shake 0.4s ease calc(var(--delay) + 1.2s);
+  }
   .card-side {
     grid-area: 1 / 1;
     display: grid;
@@ -417,6 +471,34 @@
   @keyframes blink {
     50% {
       opacity: 0.25;
+    }
+  }
+  @keyframes sway {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-5px) rotate(1.2deg);
+    }
+  }
+  @keyframes land {
+    0% {
+      transform: scale(1);
+    }
+    40% {
+      transform: scale(1.12);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes shake {
+    25% {
+      transform: rotate(-5deg);
+    }
+    75% {
+      transform: rotate(5deg);
     }
   }
   @keyframes float {

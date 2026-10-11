@@ -4,13 +4,14 @@
   /**
    * One Bluff playing card: Share (green), Steal (red) or the back (the game's mask). Portrait, with
    * an inner frame, the symbol in two corners like a real card, a big emblem and a light sheen.
-   * Its width is `width`; the height follows (5 by 7).
+   * Its width is `width`; the height follows (5 by 7). `alive`: it never sits still (the emblem
+   * breathes, a light sweeps over now and then, the back's pattern drifts and its mask glows).
    */
-  let { kind, width = '8rem', shine = false }: { kind: 'share' | 'steal' | 'back'; width?: string; shine?: boolean } = $props();
+  let { kind, width = '8rem', shine = false, alive = false }: { kind: 'share' | 'steal' | 'back'; width?: string; shine?: boolean; alive?: boolean } = $props();
   const Icon = $derived(kind === 'share' ? Handshake : kind === 'steal' ? HandCoins : VenetianMask);
 </script>
 
-<span class="bcard {kind}" class:shine style:--w={width}>
+<span class="bcard {kind}" class:shine class:alive style:--w={width}>
   <span class="frame"></span>
   {#if kind === 'back'}
     <span class="emblem"><Icon size="45%" strokeWidth={1.8} /></span>
@@ -137,6 +138,67 @@
   }
   .shine::before {
     animation: sweep 1.1s ease-out 0.15s;
+  }
+  /* Alive: the light comes back every few seconds, the emblem breathes */
+  .alive::before {
+    animation: sweep-again 4.5s ease-in-out infinite;
+  }
+  .alive .emblem {
+    animation: breathe 2.6s ease-in-out infinite;
+  }
+  .alive .emblem :global(svg) {
+    animation: nudge 2.6s ease-in-out infinite;
+  }
+  /* The diamonds slide along: one stripe period, horizontally (period x sqrt 2 for 45deg stripes) */
+  .alive.back {
+    animation: drift 3s linear infinite;
+  }
+  .alive.back .emblem {
+    animation: glow 2.2s ease-in-out infinite;
+  }
+  @keyframes sweep-again {
+    0%,
+    55% {
+      transform: translateX(-70%);
+    }
+    80%,
+    100% {
+      transform: translateX(70%);
+    }
+  }
+  @keyframes breathe {
+    50% {
+      transform: scale(1.07);
+      box-shadow:
+        inset 0 0 0 1.5px rgba(255, 255, 255, 0.5),
+        0 0 calc(var(--w) * 0.12) rgba(255, 255, 255, 0.35);
+    }
+  }
+  @keyframes nudge {
+    25% {
+      transform: rotate(-8deg);
+    }
+    75% {
+      transform: rotate(8deg);
+    }
+  }
+  @keyframes drift {
+    to {
+      background-position:
+        calc(var(--w) * 0.07 * 1.4142) 0,
+        calc(var(--w) * 0.07 * 1.4142) 0,
+        0 0,
+        0 0;
+    }
+  }
+  @keyframes glow {
+    50% {
+      transform: scale(1.06);
+      box-shadow:
+        0 0 0 calc(var(--w) * 0.025) rgba(23, 10, 38, 0.9),
+        0 0 0 calc(var(--w) * 0.035) rgba(255, 59, 141, 0.9),
+        0 0 calc(var(--w) * 0.35) rgba(255, 59, 141, 0.8);
+    }
   }
   @keyframes sweep {
     to {
