@@ -38,7 +38,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [ ] on the a selecatble Wled deviceZone cible : un point lumineux monte et descend, et il faut presser pile quand il traverse la zone verte. La zone rétrécit et la vitesse augmente à chaque réussite.
 - [x] on the a selecatble Wled device (with direction) Pluie rythmique : des lumières montent depuis le bas, et il faut presser quand elles touchent le haut, comme Guitar Hero. Le haut-parleur joue un son à chaque note réussie.
 - [x] make the Led guitar hero playable in solo, gusest should be able to preview 5s of the song, make the WLED effect a bit nicer? Also it should pause the spotify music when the game is played, and resume it after the game is finished. Only play the sound of the button on the TV speaker when he plays solo with music, otherwise only do the effect on the player phone (so at 2 player with or without music it should only play the sound on the guest deivce that is playing, to his own action). Also make sure the games in sync music / led effect.
-
+- [ ] quiz participatif, it asks to all participants to write 1 to 3 questions (and possibility to skip), then saves it and the host or everyone can start it (guest can no modify it / see answers of course)
 
 # Bugs / improvements
 - [x] The TV page sometimes cahnge the layout and the right part become too big (for ex when I add a lot of music to the queue...)
