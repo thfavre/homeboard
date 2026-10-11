@@ -17,6 +17,12 @@ export const RESTART_CODE = 75;
 
 export const uid = (bytes = 12) => randomBytes(bytes).toString('base64url');
 
+/** A password easy to read out and type: no 0/o or 1/l/i to mix up */
+export function readablePassword(length = 12): string {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+  return Array.from({ length }, () => alphabet[randomInt(alphabet.length)]).join('');
+}
+
 export const sessionCode = () => String(randomInt(0, 10000)).padStart(4, '0');
 
 /** Calls fn at most once per `ms`, always running the trailing call */
@@ -43,6 +49,42 @@ export function debounce(fn: () => void, ms: number): () => void {
       fn();
     }, ms);
   };
+}
+
+/**
+ * Counts wrong guesses by key (an IP address) and locks the key for a while after too many.
+ * Each lock lasts longer than the previous one, so guessing through every value takes forever.
+ */
+export class Attempts {
+  private fails = new Map<string, { count: number; until: number; at: number }>();
+
+  constructor(
+    private readonly tries: number,
+    private readonly lockMs: number,
+  ) {}
+
+  /** Milliseconds this key still has to wait (0: it may try) */
+  wait(key: string): number {
+    return Math.max(0, (this.fails.get(key)?.until ?? 0) - Date.now());
+  }
+
+  fail(key: string): void {
+    const now = Date.now();
+    this.prune(now);
+    const count = (this.fails.get(key)?.count ?? 0) + 1;
+    const locks = Math.floor(count / this.tries);
+    this.fails.set(key, { count, until: count % this.tries === 0 ? now + this.lockMs * locks : 0, at: now });
+  }
+
+  succeed(key: string): void {
+    this.fails.delete(key);
+  }
+
+  /** Forget keys that have been quiet for a day */
+  private prune(now: number): void {
+    if (this.fails.size < 1000) return;
+    for (const [k, v] of this.fails) if (now - v.at > 86_400_000 && v.until < now) this.fails.delete(k);
+  }
 }
 
 export function isPlainObject(v: unknown): v is Record<string, unknown> {

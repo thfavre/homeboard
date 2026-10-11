@@ -9,10 +9,15 @@ import type { CoreSettings } from '../../core/hub.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
 import type { GamesApi } from '../games/index.ts';
-import { HbError, cleanName, clamp, num, uid } from '../../core/util.ts';
+import { Attempts, HbError, cleanName, clamp, num, uid } from '../../core/util.ts';
 
 const TICK_SECONDS = 5;
-const MAX_JOIN_FAILURES = 8;
+/**
+ * Wrong session codes by IP (not by connection: reconnecting would start over), then a lock that
+ * grows each time, so nobody can try all 10 000 codes. Guests on the same Wi-Fi share an IP:
+ * a few typos only cost them a minute.
+ */
+const codeFails = new Attempts(8, 60_000);
 /** Away at least this long: the guest gets a welcome back card instead of the usual toast */
 const AWAY_CARD_MS = 60_000;
 
@@ -231,9 +236,11 @@ export default defineModule({
 
     const checkCode = (socketData: Record<string, any>, code: unknown) => {
       if (!core().requireCode) return;
-      if ((socketData.joinFailures ?? 0) >= MAX_JOIN_FAILURES) throw new HbError('Too many wrong codes. Ask the host for help.');
+      const ip = String(socketData.ip ?? '');
+      const wait = codeFails.wait(ip);
+      if (wait > 0) throw new HbError(`Too many wrong codes. Try again in ${Math.ceil(wait / 1000)} s, or ask the host for help.`);
       if (String(code ?? '').trim() !== session.code) {
-        socketData.joinFailures = (socketData.joinFailures ?? 0) + 1;
+        codeFails.fail(ip);
         throw new HbError('Wrong session code. Look at the TV.');
       }
     };
@@ -541,7 +548,7 @@ export default defineModule({
     ctx.onAdmin('setPassword', (args, caller) => {
       if (!caller.local) throw new HbError('Only available on the PC');
       const password = String(args.password ?? '').trim();
-      if (password.length < 4) throw new HbError('At least 4 characters');
+      if (password.length < 8) throw new HbError('At least 8 characters');
       hub.settings.update<CoreSettings>('core', { adminPassword: password, adminTokens: args.logoutAll ? [] : core().adminTokens });
       return true;
     });
