@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingHttpHeaders } from 'node:http';
@@ -24,7 +25,7 @@ import { DATA_DIR, MEDIA_DIR, WEB_DIST, ensureDir } from './paths.ts';
 import { Session, type Guest } from './session.ts';
 import { Settings } from './settings.ts';
 import { TunnelManager } from './tunnel.ts';
-import { HbError, log, throttle, uid } from './util.ts';
+import { Attempts, HbError, log, readablePassword, throttle, uid } from './util.ts';
 
 export interface CoreSettings {
   appName: string;
@@ -103,9 +104,38 @@ interface StoredActivity {
 const RPC_PER_SECOND = 40;
 const ACTIVITY_SIZE = 40;
 
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * The PC itself: a loopback connection asking for localhost, that no proxy forwarded.
+ * cloudflared and Vite connect from loopback too: Cloudflare adds cf-connecting-ip, and the
+ * Host header still names the public domain or the LAN address, so neither counts as local.
+ */
 function isLocal(address: string | undefined, headers: IncomingHttpHeaders): boolean {
-  const loopback = address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
-  return loopback && !headers['cf-connecting-ip'] && !headers['x-forwarded-for'];
+  const host = String(headers.host ?? '').replace(/:\d+$/, '').toLowerCase();
+  return (
+    LOOPBACK.has(address ?? '') &&
+    LOCAL_HOSTS.has(host) &&
+    !headers['cf-connecting-ip'] &&
+    !headers['x-forwarded-for']
+  );
+}
+
+/** Who is really connecting: behind the tunnel (a loopback connection) the IP comes from Cloudflare */
+export function clientIp(address: string | undefined, headers: IncomingHttpHeaders): string {
+  if (!LOOPBACK.has(address ?? '')) return address ?? '';
+  const cf = headers['cf-connecting-ip'];
+  if (typeof cf === 'string' && cf) return cf;
+  const xff = headers['x-forwarded-for'];
+  const first = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
+  return first || (address ?? '');
+}
+
+function samePassword(a: unknown, b: string): boolean {
+  const x = Buffer.from(String(a ?? ''));
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
 }
 
 /**
@@ -121,6 +151,8 @@ export class Hub {
   readonly app = express();
   readonly server = createServer(this.app);
   readonly io: Server;
+  /** Wrong admin passwords by IP: 5 tries, then a lock that grows (1 min, 2 min, 3 min...) */
+  private loginFails = new Attempts(5, 60_000);
 
   readonly activity: StoredActivity[] = [];
   takeover: string | null = null;
@@ -138,18 +170,34 @@ export class Hub {
     this.bus.setMaxListeners(100);
     this.settings.register('core', CORE_DEFAULTS);
     if (!this.core.adminPassword) {
-      this.settings.update<CoreSettings>('core', { adminPassword: uid(4).replace(/[-_]/g, 'x').slice(0, 6).toLowerCase() });
+      this.settings.update<CoreSettings>('core', { adminPassword: readablePassword() });
     }
     this.economy = new Economy(this.settings, this.session);
     this.io = new Server(this.server, { maxHttpBufferSize: 2e6, pingInterval: 10000, pingTimeout: 8000 });
 
+    this.app.disable('x-powered-by');
+    // No other site may show these pages in a frame (and trick a click on the admin)
+    this.app.use((_req, res, next) => {
+      res.setHeader('X-Frame-Options', 'DENY');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      next();
+    });
     // Avatars are sent as two small JPEGs in JSON
     this.app.use('/api', express.json({ limit: '4mb' }));
     this.app.post('/api/admin/login', (req, res) => {
-      if (req.body?.password !== this.core.adminPassword) {
+      const ip = clientIp(req.socket.remoteAddress, req.headers);
+      const wait = this.loginFails.wait(ip);
+      if (wait > 0) {
+        res.status(429).json({ error: `Too many wrong passwords. Try again in ${Math.ceil(wait / 1000)} s.` });
+        return;
+      }
+      if (!samePassword(req.body?.password, this.core.adminPassword)) {
+        this.loginFails.fail(ip);
+        log.warn('hub', `Wrong admin password from ${ip}`);
         res.status(401).json({ error: 'Wrong password' });
         return;
       }
+      this.loginFails.succeed(ip);
       res.json({ token: this.issueAdminToken() });
     });
     this.app.use(
@@ -411,6 +459,7 @@ export class Hub {
     const auth = (socket.handshake.auth ?? {}) as Record<string, unknown>;
     const local = isLocal(socket.handshake.address, socket.handshake.headers);
     socket.data.local = local;
+    socket.data.ip = clientIp(socket.handshake.address, socket.handshake.headers);
     if (auth.role === 'admin' || auth.role === 'tv') {
       if (!local && !this.isAdminToken(auth.adminToken)) return next(new Error('ADMIN_AUTH'));
       socket.data.role = auth.role;
