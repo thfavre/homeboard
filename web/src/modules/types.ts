@@ -25,6 +25,8 @@ export interface GuestFeature {
   component: Component;
   /** Price key shown on the home tile */
   priceKey?: string;
+  /** Keep this panel open when this module's takeover ends (default: go back home), e.g. while a form is being filled */
+  stayAfterTakeover?: () => boolean;
 }
 
 /** Groups of the admin side menu, for the features: play, sound, and what shows on the TV or the lights */

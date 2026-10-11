@@ -11,6 +11,9 @@ export const ANSWER_STYLES = [
 export const LOBBY_MAX_SEC = 60;
 /** Length of the end screen, where the podium can play */
 export const FINAL_SEC = 20;
+/** Participative quiz: questions each guest can write, and how long they get by default */
+export const COLLECT_MAX_QUESTIONS = 3;
+export const COLLECT_DEFAULT_MIN = 5;
 
 export interface QuizPlayer {
   id: string;
@@ -49,6 +52,9 @@ export interface CustomQuestion {
   answers: string[];
   correct: number;
   image?: string;
+  /** Participative quiz: the guest who wrote it (they cannot score on it) */
+  authorId?: string;
+  authorName?: string;
 }
 
 export interface CustomQuiz {
@@ -59,6 +65,8 @@ export interface CustomQuiz {
   authorId: string;
   createdAt: number;
   questions: CustomQuestion[];
+  /** Written by several guests (participative quiz): only the host can edit it */
+  collective?: boolean;
 }
 
 /** A quiz being created or edited */
@@ -76,6 +84,26 @@ export interface LibraryItem {
   authorId: string;
   count: number;
   hasImages: boolean;
+  collective?: boolean;
+}
+
+/** A participative quiz being written: every guest writes 1 to 3 questions, or skips */
+export interface QuizCollect {
+  id: string;
+  title: string;
+  /** Guest who asked for it, null for the host */
+  by: { id: string; name: string } | null;
+  phase: 'writing' | 'ready';
+  /** When writing ends by itself (ms timestamp) */
+  endsAt: number;
+  /** Guests who sent questions, and how many */
+  done: { id: string; name: string; color: string; count: number }[];
+  skipped: string[];
+  /** Guests online who have not answered yet */
+  waiting: { id: string; name: string; color: string }[];
+  /** Once ready: the saved quiz */
+  quizId: string | null;
+  total: number;
 }
 
 export interface QuizState {
@@ -94,7 +122,7 @@ export interface QuizState {
   timeSec: number;
   category: string;
   difficulty: string;
-  question: { text: string; answers: string[]; image?: string } | null;
+  question: { text: string; answers: string[]; image?: string; author?: { id: string; name: string } } | null;
   /** When the current phase ends (ms timestamp), null while paused or waiting */
   endsAt: number | null;
   /** Length of the current phase, for countdown bars */
@@ -111,6 +139,7 @@ export interface QuizState {
   error: string | null;
   settings: QuizSettings;
   library: LibraryItem[];
+  collect: QuizCollect | null;
 }
 
 export interface QuizFx {

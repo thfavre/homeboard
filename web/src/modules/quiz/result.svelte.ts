@@ -10,14 +10,38 @@ export const quizResult = $state({
   /** When the final screen started (server time) */
   finalAt: 0,
   closed: '',
+  /** Participative quiz screens this phone closed: `${id}:writing` or `${id}:ready` */
+  collectClosed: [] as string[],
 });
+
+/** Which screen of the participative quiz this phone shows, if any */
+export function collectScreen(): 'writing' | 'ready' | null {
+  const c = (hb.modules.quiz as QuizState | undefined)?.collect;
+  const me = hb.me?.id;
+  if (!c || !me) return null;
+  if (quizResult.collectClosed.includes(`${c.id}:${c.phase}`)) return null;
+  if (c.phase === 'writing') return c.skipped.includes(me) ? null : 'writing';
+  // Once written, offer to play it to those who took part
+  return c.by?.id === me || c.done.some((d) => d.id === me) ? 'ready' : null;
+}
+
+export function closeCollectScreen(): void {
+  const c = (hb.modules.quiz as QuizState | undefined)?.collect;
+  if (c) quizResult.collectClosed.push(`${c.id}:${c.phase}`);
+}
+
+export function openCollectScreen(): void {
+  const c = (hb.modules.quiz as QuizState | undefined)?.collect;
+  if (c) quizResult.collectClosed = quizResult.collectClosed.filter((k) => k !== `${c.id}:${c.phase}`);
+}
 
 export function showQuizScreen(live: boolean): boolean {
   const q = hb.modules.quiz as QuizState | undefined;
   // A quiz is running and this phone did not close its results
   if (live && q && !(q.phase === 'final' && quizResult.closed === q.runId)) return true;
   // The quiz is over on the server, but the results stay until closed
-  return !!quizResult.snapshot && quizResult.closed !== quizResult.snapshot.runId;
+  if (quizResult.snapshot && quizResult.closed !== quizResult.snapshot.runId) return true;
+  return !!collectScreen();
 }
 
 export function closeQuizScreen(): void {

@@ -39,7 +39,7 @@
   let lastTakeover: string | null = null;
   $effect(() => {
     const id = takeoverModule?.id ?? null;
-    if (lastTakeover && !id && feature === lastTakeover) {
+    if (lastTakeover && !id && feature === lastTakeover && !featureModule?.guest?.stayAfterTakeover?.()) {
       feature = null;
       tab = 'home';
     }
@@ -115,11 +115,17 @@
       {#if takeover}
         {@const Takeover = takeover}
         <div class="takeover"><Takeover /></div>
-      {:else if featureModule?.guest}
+      {/if}
+      {#if featureModule?.guest}
+        <!-- Stays mounted (hidden) under a takeover, so a form being filled is not lost -->
         {@const Panel = featureModule.guest.component}
-        {#key featureModule.id}
-          <div in:fly={{ x: 30, duration: 200 }}><Panel /></div>
-        {/key}
+        <div style:display={takeover ? 'none' : null}>
+          {#key featureModule.id}
+            <div in:fly={{ x: 30, duration: 200 }}><Panel /></div>
+          {/key}
+        </div>
+      {:else if takeover}
+        <!-- Home, Earn and Me come back when the takeover ends -->
       {:else if tab === 'home'}
         <Home {open} earn={() => go('earn')} />
       {:else if tab === 'earn'}
