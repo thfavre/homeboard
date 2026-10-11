@@ -4,6 +4,8 @@ import { best, type GameFactory } from './engine.ts';
 
 const MAX_ROUNDS = 25;
 const BETWEEN_MS = 2200;
+/** Dark gap before the same color again */
+const REPEAT_GAP_MS = 650;
 
 const randomColor = (): GameColor => GAME_COLORS[Math.floor(Math.random() * GAME_COLORS.length)].id;
 
@@ -31,14 +33,16 @@ export const lightSimon: GameFactory = (m) => {
     progress = new Map();
     step = 'show';
     m.deadline(null);
-    // Faster flashes as the rounds go
-    const on = Math.max(320, 620 - round * 25);
-    const off = Math.max(140, 240 - round * 8);
+    // Faster flashes as the rounds go. The dark gap stays long enough for the lights to really go
+    // off (each change is a request to WLED, a newer one replaces one still waiting), and longer
+    // before the same color again, or two reds in a row look like a single long red.
+    const on = Math.max(380, 650 - round * 20);
+    const off = Math.max(300, 400 - round * 8);
     let t = 900;
-    sequence.forEach((c) => {
+    sequence.forEach((c, i) => {
       m.later(t, () => m.light(c));
       m.later(t + on, () => m.light(null));
-      t += on + off;
+      t += on + (sequence[i + 1] === c ? Math.max(off, REPEAT_GAP_MS) : off);
     });
     m.later(t + 200, startInput);
     m.publish();
@@ -47,7 +51,7 @@ export const lightSimon: GameFactory = (m) => {
   const startInput = () => {
     step = 'input';
     // Plenty of time: the challenge is the memory, not the speed
-    const ms = 6000 + sequence.length * 1500;
+    const ms = 10000 + sequence.length * 2000;
     m.deadline(ms);
     m.later(ms, endRound);
     m.publish();
