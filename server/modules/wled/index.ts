@@ -42,7 +42,11 @@ interface WledSettings {
 interface Job extends WledJob {
   guestId: string | null;
   paid: number;
+  /** A preview from the admin editor: this look (not saved yet), its brightness and length */
+  preview?: { effect: WledEffect; bri: number; ms: number };
 }
+
+const PREVIEW_MS = 15_000;
 
 /** A device Homeboard took over */
 interface Snapshot {
@@ -444,10 +448,10 @@ export default defineModule<WledSettings>({
         ctx.publish();
         return;
       }
-      const effect = ctx.settings.get().effects.find((e) => e.id === job.effect.id);
+      const effect = job.preview?.effect ?? ctx.settings.get().effects.find((e) => e.id === job.effect.id);
       // Looks dealt from a random one, so the same light does not always get the same
       const k = Math.floor(Math.random() * 64);
-      const bri = ctx.settings.get().brightness;
+      const bri = job.preview?.bri ?? ctx.settings.get().brightness;
       const results = effect
         ? await Promise.all(
             job.devices.map((id, i) => {
@@ -466,7 +470,7 @@ export default defineModule<WledSettings>({
         }
         return runNext();
       }
-      const ms = ctx.settings.get().durationSec * 1000;
+      const ms = job.preview?.ms ?? ctx.settings.get().durationSec * 1000;
       current = { ...job, until: Date.now() + ms };
       timer = setTimeout(finish, ms);
       ctx.publish();
@@ -655,6 +659,35 @@ export default defineModule<WledSettings>({
 
     ctx.onAdmin('test', (args) => enqueue(makeJob(args.effectId, args.target ?? 'all', { name: 'Host', color: '#8b7cff' }, null)));
     ctx.onAdmin('stop', (args) => stopAll(args.refund !== false));
+
+    /** The effect or scene being edited, on every light for a few seconds; a new preview replaces the last one at once */
+    ctx.onAdmin('preview', async (args) => {
+      const effect = cleanEffect({ ...(args.effect ?? {}), id: 'preview' });
+      const s = ctx.settings.get();
+      const ids = devices().filter((d) => health.get(d.id)?.online).map((d) => d.id);
+      if (!ids.length) throw new HbError('No lights are reachable right now');
+      const job: Job = {
+        id: uid(6),
+        effect: { id: effect.id, name: `Preview: ${effect.name}`, colors: effect.colors },
+        devices: ids,
+        guest: { name: 'Host', color: '#8b7cff' },
+        guestId: null,
+        paid: 0,
+        preview: { effect, bri: args.kind === 'scene' ? s.sceneBrightness : s.brightness, ms: PREVIEW_MS },
+      };
+      queue = [job, ...queue.filter((j) => !j.preview)];
+      if (current?.preview) await finish();
+      else void runNext();
+      ctx.publish();
+      return { waiting: !!current && current.id !== job.id, held };
+    });
+
+    /** The editor closed: its preview ends (or never starts) */
+    ctx.onAdmin('stopPreview', async () => {
+      queue = queue.filter((j) => !j.preview);
+      if (current?.preview) await finish();
+      ctx.publish();
+    });
     ctx.onAdmin('skip', () => finish());
 
     ctx.onAdmin('setOptions', (args) => {

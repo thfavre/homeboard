@@ -65,12 +65,35 @@
     lookIdx = Math.max(0, lookIdx - 1);
   }
 
+  /** The effect as the editor has it now */
+  function draft() {
+    const { id, name, live, looks } = editing!;
+    return { id, name, ...looks[0], variants: looks.length > 1 ? looks : undefined, live: live || undefined };
+  }
+
+  let previewing = $state(false);
+
+  /** Play the unsaved effect on every light for a few seconds */
+  async function preview() {
+    if (!editing) return;
+    const r = await attempt(() => rpc<{ waiting: boolean; held: boolean }>('wled', 'preview', { effect: { ...draft(), name: editing!.name || 'Effect' }, kind: editing!.kind }));
+    if (!r) return;
+    previewing = true;
+    if (r.held) toast({ text: 'A game is using the lights: the preview plays after it' });
+    else if (r.waiting) toast({ text: 'The preview plays after the current effect' });
+  }
+
+  function closeEditor() {
+    editing = null;
+    if (previewing) void rpc('wled', 'stopPreview').catch(() => {});
+    previewing = false;
+  }
+
   async function saveEffect() {
     if (!editing) return;
-    const { kind, id, name, live, looks } = editing;
-    const effect = { id, name, ...looks[0], variants: looks.length > 1 ? looks : undefined, live: live || undefined };
-    const saved = await attempt(() => rpc<WledEffect>('wled', 'saveEffect', { effect, kind }), kind === 'scene' ? 'Scene saved' : 'Effect saved');
-    if (saved) editing = null;
+    const { kind } = editing;
+    const saved = await attempt(() => rpc<WledEffect>('wled', 'saveEffect', { effect: draft(), kind }), kind === 'scene' ? 'Scene saved' : 'Effect saved');
+    if (saved) closeEditor();
   }
 
   const remove = async (kind: Kind, e: WledEffect) =>
@@ -268,7 +291,7 @@
   </Section>
 
   {#if editing && catalog && look}
-    <Sheet title={editing.id ? `Edit ${editing.name}` : editing.kind === 'scene' ? 'New scene' : 'New effect'} onclose={() => (editing = null)}>
+    <Sheet title={editing.id ? `Edit ${editing.name}` : editing.kind === 'scene' ? 'New scene' : 'New effect'} onclose={closeEditor}>
       <form
         novalidate
         class="form"
@@ -328,7 +351,8 @@
         </div>
         <div class="row">
           <button class="btn primary">{editing.kind === 'scene' ? 'Save scene' : 'Save effect'}</button>
-          <button type="button" class="btn ghost" onclick={() => (editing = null)}>Cancel</button>
+          <button type="button" class="btn" onclick={preview}><Play size={16} /> Preview</button>
+          <button type="button" class="btn ghost" onclick={closeEditor}>Cancel</button>
         </div>
       </form>
     </Sheet>
