@@ -6,7 +6,7 @@ export interface Sound {
   myinstants?: boolean;
 }
 
-/** A sound found on MyInstants. `mp3` is its file name on myinstants.com. */
+/** A sound found on MyInstants (`mp3` is its file name on myinstants.com) or on Freesound (`mp3` starts with "fs--") */
 export interface MiSound {
   id: string;
   title: string;
@@ -19,6 +19,8 @@ export interface MiPage {
   items: MiSound[];
   page: number;
   hasNext: boolean;
+  /** Set when MyInstants is down and the results come from Freesound */
+  source?: 'freesound';
 }
 
 export interface SoundboardState {

@@ -12,6 +12,7 @@
   let items = $state<MiSound[]>([]);
   let page = $state(1);
   let hasNext = $state(false);
+  let fallback = $state(false);
   let loading = $state(false);
   let error = $state('');
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -27,6 +28,7 @@
       items = p === 1 ? res.items : [...items, ...res.items.filter((r) => !items.some((i) => i.id === r.id))];
       page = res.page;
       hasNext = res.hasNext;
+      fallback = res.source === 'freesound';
     } catch (err) {
       if (mine === run) error = (err as Error).message;
     } finally {
@@ -53,7 +55,9 @@
     <Search size={17} />
     <input class="input" type="search" bind:value={query} oninput={onInput} placeholder="Search sounds" maxlength="60" enterkeyhint="search" />
   </label>
-  <p class="faint small">{query.trim() ? 'Results' : 'Popular sounds'}</p>
+  <p class="faint small">
+    {query.trim() ? 'Results' : fallback ? 'Suggested sounds' : 'Popular sounds'}{fallback ? ' from Freesound (MyInstants is not answering)' : ''}
+  </p>
 
   <div class="grid">
     {#each items as s, i (s.id)}{@render item(s, i)}{/each}
