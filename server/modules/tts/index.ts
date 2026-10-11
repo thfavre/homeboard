@@ -1,12 +1,17 @@
-import { ttsLang, ttsSpeechMs, type TtsEvent, type TtsMention, type TtsLang, type TtsSettings, type TtsState } from '../../../shared/tts.ts';
+import { readdirSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { TTS_MAX_VOLUME, ttsLang, ttsSpeechMs, type TtsEvent, type TtsMention, type TtsLang, type TtsSettings, type TtsState } from '../../../shared/tts.ts';
 import type { Charge } from '../../core/economy.ts';
 import { defineModule } from '../../core/module.ts';
 import { HbError, clamp, num, uid } from '../../core/util.ts';
+import { serverLangs, speakToFile } from './windowsVoice.ts';
 
 interface Queued {
   event: TtsEvent;
   /** What the guest paid, refunded if the shoutout is dropped */
   charge: Charge | null;
+  /** The voice being saved as a file on the server (resolves with its name, or null: the TV speaks it) */
+  audio: Promise<string | null>;
 }
 
 const MAX_QUEUE = 20;
@@ -37,7 +42,7 @@ export default defineModule<TtsSettings>({
   name: 'Text-to-Speech',
   description: 'Guests speak text through the TV speakers and show it scrolling on screen',
   settings: {
-    volume: 0.8,
+    volume: 1.5,
     pricingMode: 'flat',
     maxLength: 150,
     cooldownSec: 4,
@@ -51,6 +56,43 @@ export default defineModule<TtsSettings>({
     let pauseTimer: NodeJS.Timeout | null = null;
     /** Languages the TV has voices for (the last TV to report wins: it is the one that plays sound) */
     let tvLangs: TtsLang[] | null = null;
+    /** Languages the server speaks itself (Windows voices) */
+    let ownLangs: TtsLang[] = [];
+    void serverLangs().then((langs) => {
+      ownLangs = langs;
+      ctx.publish();
+    });
+
+    // Voice files of the shoutouts, deleted once played
+    const speechDir = ctx.mediaDir('speech');
+    const remove = (file: string) => {
+      try {
+        unlinkSync(join(speechDir, file));
+      } catch {
+        // already gone
+      }
+    };
+    for (const f of readdirSync(speechDir)) remove(f);
+    const audioFiles = new Map<string, Promise<string | null>>();
+    /** Start saving the voice of a shoutout, while it waits in line */
+    const record = (event: TtsEvent): Promise<string | null> => {
+      if (!ownLangs.includes(event.lang)) return Promise.resolve(null);
+      const file = `${event.id}.wav`;
+      const job = speakToFile(event.text, event.lang, join(speechDir, file)).then(
+        () => file,
+        (err) => {
+          ctx.log.warn('Could not make the voice file, the TV speaks instead:', (err as Error).message);
+          return null;
+        },
+      );
+      audioFiles.set(event.id, job);
+      return job;
+    };
+    const dropAudio = (id: string) => {
+      const job = audioFiles.get(id);
+      audioFiles.delete(id);
+      void job?.then((file) => file && remove(file));
+    };
 
     // Only one of the two prices is used, depending on the pricing mode
     ctx.price({ key: 'tts.message', label: 'Shoutout', default: 200, active: () => ctx.settings.get().pricingMode === 'flat' });
@@ -67,7 +109,8 @@ export default defineModule<TtsSettings>({
         cooldownSec: s.cooldownSec,
         waiting: queue.length + (playing ? 1 : 0),
         defaultLang: s.defaultLang,
-        tvLangs,
+        // The server's own voices count too: it makes the sound for the TV
+        tvLangs: tvLangs || ownLangs.length ? [...new Set([...(tvLangs ?? []), ...ownLangs])] : null,
       };
     });
 
@@ -119,13 +162,18 @@ export default defineModule<TtsSettings>({
     });
 
     /** Play the next shoutout, unless one is playing or the pause is running */
-    const pump = () => {
+    const pump = async () => {
       if (playing || pauseTimer || !queue.length) return;
       playing = queue.shift()!;
       const id = playing.event.id;
+      ctx.publish();
+      // Usually ready long before: it was made while the shoutout waited
+      const file = await playing.audio;
+      // Cleared meanwhile
+      if (playing?.event.id !== id) return;
       // Lower the music while it speaks (same as soundboard sounds)
       ctx.bus.emit('soundboard:play', { id, source: 'tts' });
-      ctx.emit('tv-audio', 'tts', playing.event);
+      ctx.emit('tv-audio', 'tts', file ? { ...playing.event, audio: ctx.mediaUrl(`speech/${file}`) } : playing.event);
       // If no TV reports the end (closed, disconnected), move on anyway
       failsafe = setTimeout(() => finished(id), playing.event.durationMs + FAILSAFE_MS);
       ctx.publish();
@@ -136,11 +184,12 @@ export default defineModule<TtsSettings>({
       if (failsafe) clearTimeout(failsafe);
       failsafe = null;
       playing = null;
+      dropAudio(id);
       ctx.bus.emit('soundboard:ended', { id });
       // The pause between two announcements
       pauseTimer = setTimeout(() => {
         pauseTimer = null;
-        pump();
+        void pump();
       }, ctx.settings.get().cooldownSec * 1000);
       ctx.publish();
     };
@@ -149,14 +198,17 @@ export default defineModule<TtsSettings>({
     const enqueue = (item: Queued): number => {
       const ahead = queue.length + (playing ? 1 : 0);
       queue.push(item);
-      pump();
+      void pump();
       ctx.publish();
       return ahead;
     };
 
     /** Drop everything waiting (refunded) and stop listening for the current one */
     const clear = () => {
-      for (const q of queue) if (q.charge) ctx.economy.refund(q.charge);
+      for (const q of queue) {
+        if (q.charge) ctx.economy.refund(q.charge);
+        dropAudio(q.event.id);
+      }
       queue = [];
       if (playing) finished(playing.event.id);
       if (pauseTimer) clearTimeout(pauseTimer);
@@ -194,10 +246,8 @@ export default defineModule<TtsSettings>({
           ? ctx.economy.charge(guest, 'tts.char', text.length, `Shoutout (${text.length} characters)`)
           : ctx.economy.charge(guest, 'tts.message', 1, `Shoutout: "${snippet}"`);
 
-      const position = enqueue({
-        event: makeEvent(text, { id: guest.id, name: guest.name, color: guest.color, avatar: guest.avatar?.url }, anonymous, langOf(args)),
-        charge,
-      });
+      const event = makeEvent(text, { id: guest.id, name: guest.name, color: guest.color, avatar: guest.avatar?.url }, anonymous, langOf(args));
+      const position = enqueue({ event, charge, audio: record(event) });
       // The feed never repeats the message; {name} becomes "Someone" when the host hides names
       if (anonymous) ctx.activity('Someone spoke');
       else ctx.activity('{name} spoke', { guest });
@@ -208,7 +258,8 @@ export default defineModule<TtsSettings>({
 
     ctx.onAdmin('test', (args) => {
       const text = cleanText(args?.text) || 'Hello, this is a test';
-      enqueue({ event: makeEvent(text, { id: 'host', name: 'Host', color: '#ffaa00' }, !!args?.anonymous, langOf(args)), charge: null });
+      const event = makeEvent(text, { id: 'host', name: 'Host', color: '#ffaa00' }, !!args?.anonymous, langOf(args));
+      enqueue({ event, charge: null, audio: record(event) });
       return true;
     });
 
@@ -216,7 +267,7 @@ export default defineModule<TtsSettings>({
 
     ctx.onAdmin('setOptions', (args) => {
       const patch: Partial<TtsSettings> = {};
-      if (args.volume !== undefined) patch.volume = clamp(num(args.volume, 0.8), 0, 1);
+      if (args.volume !== undefined) patch.volume = clamp(num(args.volume, 1), 0, TTS_MAX_VOLUME);
       if (args.pricingMode === 'flat' || args.pricingMode === 'per_char') patch.pricingMode = args.pricingMode;
       if (args.maxLength !== undefined) patch.maxLength = clamp(Math.round(num(args.maxLength, 150)), 10, 1000);
       if (args.cooldownSec !== undefined) patch.cooldownSec = clamp(Math.round(num(args.cooldownSec, 4)), 0, 120);

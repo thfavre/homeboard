@@ -3,6 +3,7 @@
   import { TTS_LANGS, ttsLang, ttsSpeechMs, type TtsEvent, type TtsMention } from '$shared/tts.ts';
   import { hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
+  import { audioContext } from '../soundboard/player.ts';
   import { detectEggs, type EggFx } from './eggs.ts';
   import EggOverlay from './EggOverlay.svelte';
 
@@ -31,6 +32,9 @@
   let processing = false;
   let destroyed = false;
   let activeUtterance: SpeechSynthesisUtterance | null = null;
+  let activeSource: AudioBufferSourceNode | null = null;
+  /** Evens out the voice and keeps it from crackling when the volume goes above 100% */
+  let limiter: DynamicsCompressorNode | null = null;
 
   const voiceLang = (v: SpeechSynthesisVoice) => v.lang.toLowerCase().replace('_', '-');
 
@@ -48,7 +52,56 @@
     void rpc('tts', 'voices', { langs }).catch(() => {});
   }
 
-  function speak(item: TtsEvent): Promise<void> {
+  /** Play the voice file made by the server, amplified. False if it could not be played. */
+  async function playVoiceFile(item: TtsEvent): Promise<boolean> {
+    try {
+      const ac = audioContext();
+      if (ac.state !== 'running') await ac.resume().catch(() => {});
+      const res = await fetch(item.audio!);
+      if (!res.ok) return false;
+      const buffer = await ac.decodeAudioData(await res.arrayBuffer());
+      if (destroyed) return true;
+      if (!limiter) {
+        limiter = ac.createDynamicsCompressor();
+        limiter.threshold.value = -6;
+        limiter.knee.value = 3;
+        limiter.ratio.value = 20;
+        limiter.attack.value = 0.003;
+        limiter.release.value = 0.15;
+        limiter.connect(ac.destination);
+      }
+      const gain = ac.createGain();
+      // Above 1, the limiter flattens the peaks so the whole voice gets louder without clipping
+      gain.gain.value = Math.max(0, item.volume);
+      gain.connect(limiter);
+      const source = ac.createBufferSource();
+      source.buffer = buffer;
+      source.connect(gain);
+      activeSource = source;
+      await new Promise<void>((resolve) => {
+        const stall = setTimeout(resolve, buffer.duration * 1000 + 3000);
+        source.onended = () => {
+          clearTimeout(stall);
+          resolve();
+        };
+        source.start();
+      });
+      activeSource = null;
+      gain.disconnect();
+      return true;
+    } catch {
+      activeSource = null;
+      return false;
+    }
+  }
+
+  async function speak(item: TtsEvent): Promise<void> {
+    if (item.audio && (await playVoiceFile(item))) return;
+    return speakInBrowser(item);
+  }
+
+  /** The browser's own speech: used when the server could not make a voice file */
+  function speakInBrowser(item: TtsEvent): Promise<void> {
     const { text, volume } = item;
     return new Promise((resolve) => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
@@ -187,6 +240,11 @@
     return () => {
       destroyed = true;
       off();
+      try {
+        activeSource?.stop();
+      } catch {
+        // already stopped
+      }
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {

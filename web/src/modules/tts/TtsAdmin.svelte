@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Synced } from '$lib/synced.svelte.ts';
   import { Megaphone, Play, Volume2 } from '@lucide/svelte';
-  import { TTS_LANGS, ttsLang, type TtsLang, type TtsPricingMode, type TtsState } from '$shared/tts.ts';
+  import { TTS_LANGS, TTS_MAX_VOLUME, ttsLang, type TtsLang, type TtsPricingMode, type TtsState } from '$shared/tts.ts';
   import { hb, rpc, attempt, toast } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -38,7 +38,7 @@
     }
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(testText);
-    u.volume = volume.value / 100;
+    u.volume = Math.min(1, volume.value / 100);
     const lang = ttsLang(testLang || mod?.defaultLang) ?? TTS_LANGS[0];
     u.lang = lang.bcp47;
     const voices = window.speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(lang.id));
@@ -92,13 +92,14 @@
       </label>
   </Section>
 
-  <Section title="Sound" hint="The TV reads shoutouts out loud and scrolls them across the screen.">
+  <Section title="Sound" hint="The TV reads shoutouts out loud and scrolls them across the screen. Above 100%, the voice is amplified.">
     <label class="field">
       <span>Volume {volume.value}%</span>
       <input
         type="range"
         min="0"
-        max="100"
+        max={TTS_MAX_VOLUME * 100}
+        step="5"
         bind:value={volume.value}
         onpointerdown={volume.start}
         onchange={() => {

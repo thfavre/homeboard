@@ -7,6 +7,9 @@ export const TTS_LANGS: { id: TtsLang; label: string; bcp47: string }[] = [
   { id: 'fr', label: 'Français', bcp47: 'fr-FR' },
 ];
 
+/** Volume goes above 1 (100%): the TV amplifies the voice file, with a limiter so it does not crackle */
+export const TTS_MAX_VOLUME = 3;
+
 export const ttsLang = (id: unknown) => TTS_LANGS.find((l) => l.id === id);
 
 /** Rough speaking time of a text, at about 12 characters per second */
@@ -53,6 +56,8 @@ export interface TtsEvent {
   text: string;
   volume: number;
   lang: TtsLang;
+  /** The voice as a sound file, made by the server. Without it, the TV speaks the text itself. */
+  audio?: string;
   by: string;
   anonymous?: boolean;
   guest?: TtsGuestRef;
