@@ -53,7 +53,9 @@ export const lightSimon: GameFactory = (m) => {
     // Plenty of time: the challenge is the memory, not the speed
     const ms = 10000 + sequence.length * 2000;
     m.deadline(ms);
-    m.later(ms, endRound);
+    // Only this round: it may have ended early (everyone done), and the next one be on by then
+    const r = round;
+    m.later(ms, () => round === r && endRound());
     m.publish();
   };
 
