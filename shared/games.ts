@@ -590,6 +590,47 @@ export interface RhythmScore {
   last: { grade: RhythmGrade; at: number; seq: number } | null;
 }
 
+/**
+ * A song that changes tempo: from `ms` of the song (where its beat number `beat` falls) the beats come
+ * `bpm` a minute, up to the next change. The first one is the song's start tempo.
+ */
+export interface RhythmTempo {
+  ms: number;
+  beat: number;
+  bpm: number;
+}
+
+/** The tempo change on at `ms` of the song (the first one before it) */
+function tempoAt(tempo: RhythmTempo[], ms: number): RhythmTempo {
+  let t = tempo[0];
+  for (const x of tempo) {
+    if (x.ms > ms) break;
+    t = x;
+  }
+  return t;
+}
+
+/** The beat number at `ms` of the song: one tempo all along (`bpm`), or its tempo changes */
+export function songBeat(ms: number, bpm: number, tempo?: RhythmTempo[] | null): number {
+  if (!tempo?.length) return (ms * bpm) / 60_000;
+  const t = tempoAt(tempo, ms);
+  return t.beat + ((ms - t.ms) * t.bpm) / 60_000;
+}
+
+/** Where beat number `beat` falls in the song (ms): the reverse of `songBeat` */
+export function songMsAt(beat: number, bpm: number, tempo?: RhythmTempo[] | null): number {
+  if (!tempo?.length) return (beat * 60_000) / bpm;
+  let t = tempo[0];
+  for (const x of tempo) {
+    if (x.beat > beat) break;
+    t = x;
+  }
+  return t.ms + ((beat - t.beat) * 60_000) / t.bpm;
+}
+
+/** The tempo at `ms` of the song */
+export const songBpmAt = (ms: number, bpm: number, tempo?: RhythmTempo[] | null) => (tempo?.length ? tempoAt(tempo, ms).bpm : bpm);
+
 export interface RhythmView {
   /** Every note of the song, sorted (the lights show them anyway) */
   notes: RhythmNote[];
@@ -601,8 +642,10 @@ export interface RhythmView {
   /** Server time of the first beat of the count-in, and the end of the song */
   startAt: number;
   endAt: number;
-  /** Server time of one beat of the song (the beats fall every 60000 / bpm ms from it) */
+  /** Server time of one beat of the song (the beats fall every 60000 / bpm ms from it, or by `tempo`) */
   beatAt: number;
+  /** The song's tempo changes, in ms from `beatAt` (null: one tempo all along) */
+  tempo: RhythmTempo[] | null;
   /** Solo with music: the TV plays the tap sounds. Otherwise each phone plays its own. */
   tvSounds: boolean;
   scores: Record<string, RhythmScore>;

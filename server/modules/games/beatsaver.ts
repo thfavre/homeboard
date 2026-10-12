@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { songMsAt, type RhythmTempo } from '../../../shared/games.ts';
 import { unzip } from '../../core/unzip.ts';
 
 /** Beat Saber difficulties, easiest first */
@@ -31,6 +32,10 @@ export interface Song {
   upvotes?: number;
   rating?: number;
   charts: Partial<Record<BsDifficulty, BsNote[]>>;
+  /** Charts timed on tempo changes: those changes (a chart left out has one tempo, `bpm`) */
+  tempos?: Partial<Record<BsDifficulty, RhythmTempo[]>>;
+  /** Read since tempo changes are handled: an older copy may lack the charts that have them */
+  tempoAware?: boolean;
 }
 
 const API = 'https://api.beatsaver.com';
@@ -42,16 +47,35 @@ export function songKey(raw: string): string {
   return m ? m[1].toLowerCase() : '';
 }
 
-/** True when the chart changes tempo along the way (not handled: its notes would drift from the song) */
+/** True when a version 2 chart changes tempo along the way (not handled: its notes would drift from the song) */
 function changesTempo(map: any, bpm: number): boolean {
   const changes = [...(map?._BPMChanges ?? []), ...(map?._events ?? []).filter((e: any) => e._type === 100)];
-  if (changes.some((c: any) => Math.abs(Number(c._BPM ?? c._floatValue) - bpm) > 0.01)) return true;
-  return (map?.bpmEvents ?? []).some((e: any) => Math.abs(Number(e.m) - bpm) > 0.01);
+  return changes.some((c: any) => Math.abs(Number(c._BPM ?? c._floatValue) - bpm) > 0.01);
 }
 
-/** Notes of a difficulty file, any map version (2, 3 or 4). Bombs are left out. */
-function notesOf(map: any, bpm: number, offsetMs: number): BsNote[] {
-  const ms = (beat: number) => Math.round(offsetMs + (beat * 60_000) / bpm);
+/**
+ * The tempo changes of a version 3 chart (`bpmEvents`: from beat `b`, `m` beats a minute; before the first one,
+ * the song's tempo), in ms of the song. Beat Saber times the notes by them, beat after beat (checked against
+ * the music of map 3b7b0). Null when the tempo never changes.
+ */
+function tempoOf(map: any, bpm: number, offsetMs: number): RhythmTempo[] | null {
+  const events = (Array.isArray(map?.bpmEvents) ? map.bpmEvents : [])
+    .map((e: any) => ({ b: Number(e.b) || 0, m: Number(e.m) }))
+    .filter((e: { b: number; m: number }) => e.b >= 0 && e.m > 0 && Number.isFinite(e.b) && Number.isFinite(e.m))
+    .sort((x: { b: number }, y: { b: number }) => x.b - y.b);
+  if (!events.some((e: { m: number }) => Math.abs(e.m - bpm) > 0.01)) return null;
+  const tempo: RhythmTempo[] = [{ ms: offsetMs, beat: 0, bpm }];
+  for (const e of events) {
+    const last = tempo[tempo.length - 1];
+    if (e.b === last.beat) last.bpm = e.m;
+    else tempo.push({ ms: last.ms + ((e.b - last.beat) * 60_000) / last.bpm, beat: e.b, bpm: e.m });
+  }
+  return tempo;
+}
+
+/** Notes of a difficulty file, any map version (2, 3 or 4), on one tempo or on `tempo`. Bombs are left out. */
+function notesOf(map: any, bpm: number, offsetMs: number, tempo: RhythmTempo[] | null): BsNote[] {
+  const ms = (beat: number) => Math.round(tempo ? songMsAt(beat, bpm, tempo) : offsetMs + (beat * 60_000) / bpm);
   let notes: BsNote[] = [];
   if (Array.isArray(map?._notes)) {
     notes = map._notes.filter((n: any) => n._type === 0 || n._type === 1).map((n: any) => ({ ms: ms(n._time), x: n._lineIndex, c: n._type }));
@@ -85,6 +109,7 @@ function parseMap(files: Map<string, Buffer>): { info: Omit<Song, 'key' | 'hash'
         file: d._beatmapFilename,
       }));
   const charts: Song['charts'] = {};
+  const tempos: NonNullable<Song['tempos']> = {};
   let tempoChanges = false;
   for (const l of levels) {
     if (!BS_DIFFICULTIES.includes(l.difficulty as BsDifficulty)) continue;
@@ -93,8 +118,11 @@ function parseMap(files: Map<string, Buffer>): { info: Omit<Song, 'key' | 'hash'
       tempoChanges = true;
       continue;
     }
-    const notes = notesOf(map, bpm, offsetMs);
-    if (notes.length >= 20) charts[l.difficulty as BsDifficulty] = notes;
+    const tempo = tempoOf(map, bpm, offsetMs);
+    const notes = notesOf(map, bpm, offsetMs, tempo);
+    if (notes.length < 20) continue;
+    charts[l.difficulty as BsDifficulty] = notes;
+    if (tempo) tempos[l.difficulty as BsDifficulty] = tempo;
   }
   if (!Object.keys(charts).length) {
     throw new Error(tempoChanges ? 'This map changes tempo along the song: pick another one' : 'This map has no playable chart');
@@ -106,6 +134,8 @@ function parseMap(files: Map<string, Buffer>): { info: Omit<Song, 'key' | 'hash'
       bpm,
       previewMs: Math.round((Number(v4 ? info.audio.previewStartTime : info._previewStartTime) || 0) * 1000),
       charts,
+      ...(Object.keys(tempos).length ? { tempos } : {}),
+      tempoAware: true,
     },
     audio,
   };
@@ -137,9 +167,13 @@ async function download(key: string, dir: string, byKey: string): Promise<Song> 
   if (!version?.hash || !version.downloadURL) throw new Error('This map has no download');
   const hash = String(version.hash).toLowerCase();
   const cached = join(dir, `${hash}.json`);
-  if (existsSync(cached)) {
+  const old: Song | null = existsSync(cached) ? JSON.parse(readFileSync(cached, 'utf8')) : null;
+  // A copy from before tempo changes were handled, missing a difficulty BeatSaver lists: read the map again
+  const listed: string[] = (version.diffs ?? []).filter((d: any) => d.characteristic === 'Standard').map((d: any) => String(d.difficulty));
+  const stale = !!old && !old.tempoAware && listed.some((d) => BS_DIFFICULTIES.includes(d as BsDifficulty) && !old.charts?.[d as BsDifficulty]);
+  if (old && !stale) {
     const song: Song = {
-      ...JSON.parse(readFileSync(cached, 'utf8')),
+      ...old,
       key,
       cover: version.coverURL,
       preview: version.previewURL,

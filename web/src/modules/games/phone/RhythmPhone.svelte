@@ -8,6 +8,8 @@
     rhythmMultiplier,
     rhythmTapWindow,
     rhythmTarget,
+    songBeat,
+    songBpmAt,
     type RhythmColor,
     type MatchState,
     type RhythmGrade,
@@ -37,9 +39,15 @@
   const LABEL: Record<RhythmGrade, string> = { perfect: 'Perfect', good: 'Good', ok: 'Just', miss: 'Miss' };
   const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 
-  // The glow behind the keys pulses on the song's beat
-  const beatMs = $derived(60_000 / (v.bpm || 120));
-  const beatDelay = $derived(-((((serverNow() - v.beatAt) % beatMs) + beatMs) % beatMs));
+  // The glow behind the keys pulses on the song's beat. A song that changes tempo: the pulse starts
+  // again on each change (`section`), at the new tempo and on its beat.
+  const section = $derived(v.tempo ? v.tempo.filter((t) => t.ms <= now.value - v.beatAt).length : 0);
+  const beatMs = $derived(60_000 / songBpmAt(now.value - v.beatAt, v.bpm || 120, v.tempo));
+  const beatDelay = $derived.by(() => {
+    void section;
+    const beat = songBeat(serverNow() - v.beatAt, v.bpm || 120, v.tempo);
+    return -(beat - Math.floor(beat)) * beatMs;
+  });
 
   const combo = $derived(mine?.combo ?? 0);
   const mult = $derived(rhythmMultiplier(combo));
@@ -77,7 +85,7 @@
 </script>
 
 <div class="rhythm">
-  <div class="glow" style:--beat="{beatMs}ms" style:--beat-delay="{beatDelay}ms"></div>
+  {#key section}<div class="glow" style:--beat="{beatMs}ms" style:--beat-delay="{beatDelay}ms"></div>{/key}
   {#if flash}{#key flash.key}<div class="flash" style:--c={flash.hex}></div>{/key}{/if}
 
   <header class="song">

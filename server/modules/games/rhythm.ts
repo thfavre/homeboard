@@ -9,11 +9,15 @@ import {
   rhythmMultiplier,
   rhythmTapWindow,
   rhythmTarget,
+  songBeat,
+  songBpmAt,
+  songMsAt,
   type RhythmColor,
   type RhythmDifficulty,
   type RhythmGrade,
   type RhythmNote,
   type RhythmScore,
+  type RhythmTempo,
   type RhythmView,
 } from '../../../shared/games.ts';
 import { HbError, clamp, num } from '../../core/util.ts';
@@ -96,12 +100,18 @@ function compose(firstAt: number, beatMs: number, songMs: number, lanes: RhythmC
 }
 
 /** The song's chart of that difficulty, or the closest it has (easier first) */
-export function chartFor(song: Song, difficulty: RhythmDifficulty): { id: RhythmDifficulty; notes: BsNote[] } | null {
+export function chartFor(song: Song, difficulty: RhythmDifficulty): { id: RhythmDifficulty; notes: BsNote[]; tempo: RhythmTempo[] | null } | null {
   const want = BS_DIFFICULTIES.indexOf(difficulty);
   const order = [...BS_DIFFICULTIES.slice(0, want + 1).reverse(), ...BS_DIFFICULTIES.slice(want + 1)];
-  for (const d of order) if (song.charts[d]?.length) return { id: d, notes: song.charts[d]! };
+  for (const d of order) if (song.charts[d]?.length) return { id: d, notes: song.charts[d]!, tempo: song.tempos?.[d] ?? null };
   return null;
 }
+
+/**
+ * A time of the song (ms) as it would be on one tempo all along (`bpm`): its beat number times a beat.
+ * The beat grid is read there, so a song that changes tempo keeps its bars. Without changes: the same time.
+ */
+const gridMs = (ms: number, bpm: number, tempo?: RhythmTempo[] | null) => (tempo?.length ? (songBeat(ms, bpm, tempo) * 60_000) / bpm : ms);
 
 /** Two notes this much closer than the difficulty's gap still count as far enough (a 158 bpm beat is 379.7 ms) */
 const GAP_TOLERANCE = 0.9;
@@ -138,22 +148,24 @@ function strength(ms: number, beatMs: number, phase: number): number {
  * then half beats...: only for charts on a grid), each one only where it fits: what is left still follows
  * the music. Sorted by time.
  */
-export function playable(chart: BsNote[], bpm: number, minGapMs: number): BsNote[] {
+export function playable(chart: BsNote[], bpm: number, minGapMs: number, tempo?: RhythmTempo[] | null): BsNote[] {
   const beatMs = 60_000 / bpm;
   const gap = minGapMs * GAP_TOLERANCE;
-  const phase = gridPhase(chart, beatMs);
+  // Places in the bar and room are read on the beat grid (a song that changes tempo keeps its bars); the gap a thumb needs, in time
+  const grid = (ms: number) => gridMs(ms, bpm, tempo);
+  const phase = gridPhase(tempo?.length ? chart.map((n) => ({ ...n, ms: grid(n.ms) })) : chart, beatMs);
   // Charts mapped by ear (or drifting from their tempo) have no grid to go by: then only the room counts
-  const onGrid = chart.filter((n) => strength(n.ms, beatMs, phase) > 0).length / Math.max(1, chart.length);
+  const onGrid = chart.filter((n) => strength(grid(n.ms), beatMs, phase) > 0).length / Math.max(1, chart.length);
   const gridded = onGrid >= 0.8;
   // Room around each note: the smaller gap to the notes before and after (notes of a chord count as one), in eighth beats up to a beat
   const times = [...new Set(chart.map((n) => n.ms))].sort((x, y) => x - y);
   const room = new Map<number, number>();
   times.forEach((t, i) => {
-    const r = Math.min(i > 0 ? t - times[i - 1] : Infinity, i < times.length - 1 ? times[i + 1] - t : Infinity);
+    const r = Math.min(i > 0 ? grid(t) - grid(times[i - 1]) : Infinity, i < times.length - 1 ? grid(times[i + 1]) - grid(t) : Infinity);
     room.set(t, Math.min(8, Math.round((r / beatMs) * 8)));
   });
   const order = chart
-    .map((n, i) => ({ n, i, r: room.get(n.ms)!, s: gridded ? strength(n.ms, beatMs, phase) : 0 }))
+    .map((n, i) => ({ n, i, r: room.get(n.ms)!, s: gridded ? strength(grid(n.ms), beatMs, phase) : 0 }))
     .sort((x, y) => y.r - x.r || y.s - x.s || x.n.ms - y.n.ms || x.i - y.i);
   // Kept times, sorted: a note goes in when it is far enough from its neighbours there
   const kept: BsNote[] = [];
@@ -177,13 +189,13 @@ export function playable(chart: BsNote[], bpm: number, minGapMs: number): BsNote
  * common length, in quarter beats (pauses over 4 beats are left out). 1: the same gap all along, too
  * regular to be fun; under about 0.55: a varied rhythm.
  */
-export function chartSteadiness(chart: BsNote[], bpm: number, minGapMs: number): number {
+export function chartSteadiness(chart: BsNote[], bpm: number, minGapMs: number, tempo?: RhythmTempo[] | null): number {
   const beatMs = 60_000 / bpm;
-  const notes = playable(chart, bpm, minGapMs);
+  const notes = playable(chart, bpm, minGapMs, tempo);
   const counts = new Map<number, number>();
   let gaps = 0;
   for (let i = 1; i < notes.length; i++) {
-    const beats = (notes[i].ms - notes[i - 1].ms) / beatMs;
+    const beats = (gridMs(notes[i].ms, bpm, tempo) - gridMs(notes[i - 1].ms, bpm, tempo)) / beatMs;
     if (beats > 4) continue;
     const q = Math.round(beats * 4);
     counts.set(q, (counts.get(q) ?? 0) + 1);
@@ -193,9 +205,9 @@ export function chartSteadiness(chart: BsNote[], bpm: number, minGapMs: number):
 }
 
 /** Notes a second of a chart as played here, over the whole song */
-export function chartNps(chart: BsNote[], bpm: number, minGapMs: number): number {
+export function chartNps(chart: BsNote[], bpm: number, minGapMs: number, tempo?: RhythmTempo[] | null): number {
   if (chart.length < 2) return 0;
-  const kept = playable(chart, bpm, minGapMs).length;
+  const kept = playable(chart, bpm, minGapMs, tempo).length;
   return Math.round((kept / ((chart[chart.length - 1].ms - chart[0].ms) / 1000)) * 10) / 10;
 }
 
@@ -206,6 +218,36 @@ export function chartNps(chart: BsNote[], bpm: number, minGapMs: number): number
  * The whole song when it fits in `maxMs` or when `whole` is set. `toEnd`: it goes to the song's end.
  */
 export function pickSection(
+  chart: BsNote[],
+  beatMs: number,
+  audioMs: number,
+  previewMs: number,
+  minMs: number,
+  maxMs: number,
+  whole: boolean,
+  tempo?: RhythmTempo[] | null,
+): { fromMs: number; toMs: number; toEnd: boolean } {
+  if (!tempo?.length) return pickOnGrid(chart, beatMs, audioMs, previewMs, minMs, maxMs, whole);
+  // A song that changes tempo: picked on its beat grid, so it starts and ends on whole bars, then back to time
+  const bpm = 60_000 / beatMs;
+  const grid = (ms: number) => gridMs(ms, bpm, tempo);
+  const time = (g: number) => songMsAt(g / beatMs, bpm, tempo);
+  const part = pickOnGrid(chart.map((n) => ({ ...n, ms: grid(n.ms) })), beatMs, grid(audioMs), grid(previewMs), minMs, maxMs, whole);
+  const fromMs = time(part.fromMs);
+  let to = part.toMs;
+  let toEnd = part.toEnd;
+  // Slower bars last longer: end a bar earlier until it fits the longest part again
+  const bar = beatMs * 4;
+  while (!whole && time(to) - fromMs > maxMs) {
+    const earlier = (Math.ceil(to / bar - 1e-6) - 1) * bar;
+    if (earlier <= part.fromMs) break;
+    to = earlier;
+    toEnd = false;
+  }
+  return { fromMs, toMs: time(to), toEnd };
+}
+
+function pickOnGrid(
   chart: BsNote[],
   beatMs: number,
   audioMs: number,
@@ -282,9 +324,9 @@ export function pickSection(
  * The song's notes between `fromMs` and `toMs`, timed for this game. The 4 columns of Beat Saber become
  * the keys: 2 keys follow the two sabers, 3 or 4 keys share the columns from left to right.
  */
-function songNotes(chart: BsNote[], bpm: number, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
+function songNotes(chart: BsNote[], bpm: number, tempo: RhythmTempo[] | null, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
   const notes: RhythmNote[] = [];
-  for (const n of playable(chart.filter((x) => x.ms >= fromMs && x.ms < toMs), bpm, minGapMs)) {
+  for (const n of playable(chart.filter((x) => x.ms >= fromMs && x.ms < toMs), bpm, minGapMs, tempo)) {
     const k = lanes.length;
     const lane = k === 2 ? n.c : Math.min(k - 1, Math.floor((n.x * k) / 4));
     notes.push({ at: zeroAt + n.ms, color: lanes[lane] });
@@ -323,6 +365,8 @@ export const rhythmRain: GameFactory = (m) => {
   // The chart played (the closest the song has, should it miss the one asked)
   const level = rhythmDifficulty(found?.id ?? m.options.chart);
   const chart = found?.notes ?? [];
+  /** The chart's tempo changes, in ms of the song (null: one tempo all along) */
+  const tempo = found?.tempo ?? null;
   const lanes = RHYTHM_COLORS.slice(0, rhythmColors(m.options.colors)).map((c) => c.id);
   const travelMs = level.travelMs;
   const bpm = song ? Math.round(song.bpm * 100) / 100 : level.bpm[0] + Math.floor(Math.random() * (level.bpm[1] - level.bpm[0] + 1));
@@ -352,7 +396,7 @@ export const rhythmRain: GameFactory = (m) => {
     let musicEndAt = 0;
     if (song && chart.length) {
       const audioMs = song.durationSec ? song.durationSec * 1000 : chart[chart.length - 1].ms + 2000;
-      let part = pickSection(chart, beatMs, audioMs, song.previewMs, minMs, maxMs, m.settings.rhythmFullSong);
+      let part = pickSection(chart, beatMs, audioMs, song.previewMs, minMs, maxMs, m.settings.rhythmFullSong, tempo);
       if (chart.filter((n) => n.ms >= part.fromMs && n.ms < part.toMs).length < 10) {
         part = { fromMs: Math.max(0, chart[0].ms - 1000), toMs: chart[0].ms + maxMs, toEnd: false };
       }
@@ -361,7 +405,7 @@ export const rhythmRain: GameFactory = (m) => {
       beatZero = startAt + Math.max(RHYTHM.leadMs, travelMs + 1000) - part.fromMs;
       const musicFrom = Math.max(0, part.fromMs - Math.max(RHYTHM.leadMs, travelMs + 1000) + MUSIC_CUE_MS);
       const musicAt = beatZero + musicFrom;
-      notes = songNotes(chart, song.bpm, part.fromMs, part.toMs, beatZero, lanes, level.minGapMs);
+      notes = songNotes(chart, song.bpm, tempo, part.fromMs, part.toMs, beatZero, lanes, level.minGapMs);
       const lastAt = notes.length ? notes[notes.length - 1].at : musicAt + minMs;
       // Played to the song's end, or a little past the last note, fading out
       musicEndAt = part.toEnd ? beatZero + part.toMs : lastAt + RHYTHM.okMs + GRACE_MS + OUTRO_MS;
@@ -445,7 +489,9 @@ export const rhythmRain: GameFactory = (m) => {
     const u = Math.max(1, leds / 60);
     const head = Math.max(1.2, NOTE_HEAD_MS * speed);
     const tail = Math.max(4, NOTE_TAIL_MS * speed);
-    const sinceBeat = (((now - beatZero) % beatMs) + beatMs) % beatMs;
+    // Time since the last beat, on the tempo of that moment for a song that changes tempo
+    const beat = songBeat(now - beatZero, bpm, tempo);
+    const sinceBeat = ((beat - Math.floor(beat)) * 60_000) / songBpmAt(now - beatZero, bpm, tempo);
     const playing = now < finaleAt;
     const pulse = playing ? Math.exp(-sinceBeat / 140) : 0;
 
@@ -667,6 +713,7 @@ export const rhythmRain: GameFactory = (m) => {
         startAt,
         endAt,
         beatAt: beatZero,
+        tempo,
         tvSounds,
         scores: Object.fromEntries(scores),
         leds: strip?.leds ?? null,
