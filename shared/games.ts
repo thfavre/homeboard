@@ -528,7 +528,13 @@ export const RHYTHM = {
   zoneAt: 0.8,
   /** Time before the first note reaches the zone */
   leadMs: 4000,
+  /** A tap reaches the server up to this late; notes count as missed only after it */
+  graceMs: 400,
 };
+
+/** Taps count from when the first note shows on the strip to just after the last one (null: not yet) */
+export const rhythmTapWindow = (notes: { at: number }[], travelMs: number): [number, number] | null =>
+  notes.length ? [notes[0].at - travelMs, notes[notes.length - 1].at + RHYTHM.okMs + RHYTHM.graceMs] : null;
 
 export type RhythmGrade = 'perfect' | 'good' | 'ok' | 'miss';
 export const RHYTHM_POINTS: Record<RhythmGrade, number> = { perfect: 100, good: 60, ok: 30, miss: 0 };

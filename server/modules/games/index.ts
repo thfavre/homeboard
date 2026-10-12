@@ -1014,6 +1014,21 @@ export default defineModule<GamesSettings>({
       return true;
     });
 
+    /**
+     * The host tries Rhythm Rain on its light: a solo game with nobody's phone, no fee and no score kept.
+     * With autoplay, every note is hit on time (bursts, multiplier waves, the finale), else they all go by.
+     */
+    ctx.onAdmin('testRhythm', (args) => {
+      tvFree('rhythm');
+      checkLight('rhythm');
+      const song = args?.song ? readySong(args.song) : null;
+      if (args?.song && !song) throw new HbError('This song is not ready, pick another one');
+      const tester: GamePlayer = { id: 'host-test', name: 'Test', color: '#8a8f98' };
+      const m = createMatch('rhythm', 'solo', null, [tester], 0, [], { ...rhythmOptions(args, song), autoplay: args?.autoplay !== false });
+      intro(m);
+      play(m);
+    });
+
     ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake, args?.prize));
     /** The match the host acts on: the one named, else the only one */
     const hostMatch = (args: any) => (args?.id ? matches.get(String(args.id)) : matches.size === 1 ? [...matches.values()][0] : undefined);

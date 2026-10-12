@@ -1,6 +1,19 @@
 <script lang="ts">
   import { ChevronDown, Minus, Play, Plus, Square, X } from '@lucide/svelte';
-  import { GAMES, PIRATE_LENGTHS, gameInfo, isCardGame, pirateLength, type GameId, type GamesSettings } from '$shared/games.ts';
+  import {
+    GAMES,
+    PIRATE_LENGTHS,
+    RHYTHM_COLORS,
+    RHYTHM_DEFAULT_COLORS,
+    RHYTHM_DIFFICULTIES,
+    RHYTHM_MAX_COLORS,
+    gameInfo,
+    isCardGame,
+    pirateLength,
+    type GameId,
+    type GamesSettings,
+    type RhythmDifficulty,
+  } from '$shared/games.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -68,6 +81,16 @@
     await setSettings({ [key]: v });
     delete drag[key];
   }
+
+  // Rhythm Rain tried on its light by the host
+  let testColors = $state(RHYTHM_DEFAULT_COLORS);
+  let testChart = $state<RhythmDifficulty>('Normal');
+  let testSong = $state('');
+  let testAuto = $state(true);
+  const testSongs = $derived((s?.rhythmSongs ?? []).filter((x) => x.status === 'ready'));
+  const testPicked = $derived(testSongs.find((x) => x.key === testSong));
+  const rhythmMatch = $derived(s?.matches.find((m) => m.game === 'rhythm'));
+  const testRhythm = () => attempt(() => rpc('games', 'testRhythm', { colors: testColors, chart: testChart, song: testSong || undefined, autoplay: testAuto }));
 
   const lightName = (id: string) => s?.lightDevices?.find((d) => d.id === id)?.name ?? 'a light';
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -253,6 +276,46 @@
     {/if}
     {@render perk('Duel winner shoots fireworks on the light', 'rhythmPerkSec')}
     {@render slider('Music timing', 'Notes reach the zone after the beat you hear: move it to +. Before the beat: to -. Speakers in Bluetooth or a sound bar can need a lot', 'rhythmAudioOffset', -2000, 2000, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
+    <h4 class="group">Try it on the light</h4>
+    <p class="faint small">Plays a game on the strip with nobody's phone: no fee, no score kept. With music, the TV plays the song.</p>
+    <div class="line wrap">
+      <span class="label">Colors</span>
+      <div class="choices">
+        {#each Array.from({ length: RHYTHM_MAX_COLORS }, (_, i) => i + 1) as n (n)}
+          <button class="chip" class:active={testColors === n} onclick={() => (testColors = n)}>
+            <span class="keys">{#each RHYTHM_COLORS.slice(0, n) as c (c.id)}<span class="key" style:--c={c.hex}></span>{/each}</span>
+            {n}
+          </button>
+        {/each}
+      </div>
+    </div>
+    <div class="line wrap">
+      <span class="label">Difficulty{#if testPicked && !testPicked.charts?.some((c) => c.id === testChart)} <span class="faint small">This song has no {testChart}: the closest one is played</span>{/if}</span>
+      <div class="choices">
+        {#each RHYTHM_DIFFICULTIES as d (d.id)}
+          <button class="chip" class:active={testChart === d.id} onclick={() => (testChart = d.id)}>{d.name}</button>
+        {/each}
+      </div>
+    </div>
+    <label class="line wrap">
+      <span class="label">Song</span>
+      <select class="input test-song" bind:value={testSong}>
+        <option value="">No music, just the beat</option>
+        {#each testSongs as x (x.key)}<option value={x.key}>{x.title}{x.artist ? ` - ${x.artist}` : ''}</option>{/each}
+      </select>
+    </label>
+    <div class="line">
+      <span class="label">Autoplay <span class="faint small">Every note is hit on time, to see the bursts and the finale. Off: the notes go by, missed</span></span>
+      <Toggle checked={testAuto} onchange={(v) => (testAuto = v)} label="Autoplay" />
+    </div>
+    <div class="row">
+      {#if rhythmMatch}
+        <button class="btn danger" onclick={() => attempt(() => rpc('games', 'stop', { id: rhythmMatch.id }))}><Square size={16} /> Stop the game</button>
+      {:else}
+        <button class="btn primary" disabled={!s!.settings.rhythmLight} onclick={testRhythm}><Play size={18} /> Play on the light</button>
+      {/if}
+    </div>
+    {#if !s!.settings.rhythmLight}<p class="faint small">Pick the light strip above first.</p>{/if}
     <RhythmSongsAdmin songs={s!.rhythmSongs} />
   {:else if id === 'pirates'}
     <h4 class="group">Light</h4>
@@ -390,6 +453,20 @@
     background: var(--surface-2);
     font-weight: 600;
     font-size: 0.88rem;
+  }
+  .keys {
+    display: flex;
+    gap: 0.15rem;
+  }
+  .key {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: var(--c);
+  }
+  .test-song {
+    flex: 1 1 14rem;
+    min-width: 0;
   }
   .chip.active {
     border-color: var(--accent);

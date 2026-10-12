@@ -9,8 +9,13 @@ export const ANSWER_STYLES = [
 
 /** Longest a lobby waits before the quiz starts by itself */
 export const LOBBY_MAX_SEC = 60;
-/** Length of the end screen, where the podium can play */
-export const FINAL_SEC = 20;
+/** Length of the end screen, where the podium can play (the host sets it, within these) */
+export const FINAL_SEC = 30;
+export const FINAL_MIN_SEC = 10;
+export const FINAL_MAX_SEC = 180;
+/** Questions per quiz: the host sets the most, within these */
+export const MIN_QUESTIONS = 3;
+export const MAX_QUESTIONS = 50;
 /** Participative quiz: questions each guest can write, and how long they get by default */
 export const COLLECT_MAX_QUESTIONS = 3;
 export const COLLECT_DEFAULT_MIN = 5;
@@ -32,12 +37,19 @@ export interface QuizSettings {
   timeSec: number;
   category: number;
   difficulty: '' | 'easy' | 'medium' | 'hard';
+  /** Host only: the most questions a quiz can have (a longer custom quiz plays its first ones) */
+  maxQuestions: number;
+  /** Host only: seconds the end screen with the podium stays on */
+  finalSec: number;
 }
+
+/** What a guest or the host picks when starting a quiz */
+export type QuizPick = Pick<QuizSettings, 'questions' | 'timeSec' | 'category' | 'difficulty'>;
 
 /** Where the questions come from */
 export type QuizSource =
-  | { kind: 'trivia'; settings: QuizSettings }
-  | { kind: 'topic'; topic: QuizTopic; settings: QuizSettings }
+  | { kind: 'trivia'; settings: QuizPick }
+  | { kind: 'topic'; topic: QuizTopic; settings: QuizPick }
   | { kind: 'custom'; quizId: string; timeSec: number };
 
 /** A topic of The Trivia API (one label can match several spellings of the same tag) */

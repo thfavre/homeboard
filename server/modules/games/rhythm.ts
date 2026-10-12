@@ -7,6 +7,7 @@ import {
   rhythmDifficulty,
   rhythmGradeOf,
   rhythmMultiplier,
+  rhythmTapWindow,
   rhythmTarget,
   type RhythmColor,
   type RhythmDifficulty,
@@ -16,12 +17,11 @@ import {
   type RhythmView,
 } from '../../../shared/games.ts';
 import { HbError, clamp, num } from '../../core/util.ts';
-import { best, type GameFactory } from './engine.ts';
+import { best, type GameFactory, type GameRuntime } from './engine.ts';
 import { BS_DIFFICULTIES, type BsNote, type Song } from './beatsaver.ts';
 
 const FPS = 60;
-/** A tap reaches the server up to this late; notes count as missed only after it */
-const GRACE_MS = 400;
+const GRACE_MS = RHYTHM.graceMs;
 /** Time after the last note is judged before the result: the light plays the finale */
 const OUTRO_MS = 2200;
 /** A hit lights up the zone for this long */
@@ -281,7 +281,7 @@ export function pickSection(
 
 /**
  * The song's notes between `fromMs` and `toMs`, timed for this game. The 4 columns of Beat Saber become
- * the keys: 2 keys follow the two sabers, 8 keys are the 4 columns of each saber.
+ * the keys: 2 keys follow the two sabers, 3 or 4 keys share the columns from left to right.
  */
 function songNotes(chart: BsNote[], bpm: number, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
   const notes: RhythmNote[] = [];
@@ -543,6 +543,13 @@ export const rhythmRain: GameFactory = (m) => {
     if (over) return;
     const now = Date.now();
     let changed = false;
+    // Autoplay (the host trying it): every note is tapped right on time
+    if (m.options.autoplay && !loading) {
+      while (auto < notes.length && notes[auto].at <= now) {
+        for (const p of m.players) runtime.input(p.id, { color: notes[auto].color, at: notes[auto].at });
+        auto += 1;
+      }
+    }
     for (const p of m.players) {
       const s = scores.get(p.id)!;
       let i = passed.get(p.id)!;
@@ -592,8 +599,10 @@ export const rhythmRain: GameFactory = (m) => {
   };
 
   let stopTicks = () => {};
+  /** Next note autoplay taps */
+  let auto = 0;
 
-  return {
+  const runtime: GameRuntime = {
     start() {
       stopTicks = m.every(1000 / FPS, tick);
       if (loading) {
@@ -614,7 +623,8 @@ export const rhythmRain: GameFactory = (m) => {
       const now = Date.now();
       // The phone sends when it was tapped (server clock), a little before the message got here
       const at = clamp(num(args?.at, now), now - GRACE_MS, now + 50);
-      if (over || loading || at < notes[0].at - travelMs || at > finaleAt) return { grade: null };
+      const window = rhythmTapWindow(notes, travelMs);
+      if (over || loading || !window || at < window[0] || at > window[1]) return { grade: null };
       const s = scores.get(id)!;
       const player = m.players.findIndex((p) => p.id === id);
       const lane = lanes.indexOf(color);
@@ -663,4 +673,5 @@ export const rhythmRain: GameFactory = (m) => {
       };
     },
   };
+  return runtime;
 };

@@ -18,7 +18,8 @@
   let tab = $state<'trivia' | 'custom'>('trivia');
   // Start from the host's last settings
   const initial = untrack(() => q?.settings);
-  let questions = $state(initial?.questions ?? 10);
+  const maxQuestions = $derived(q?.settings.maxQuestions ?? 15);
+  let questions = $state(Math.min(initial?.questions ?? 10, initial?.maxQuestions ?? 15));
   let timeSec = $state(initial?.timeSec ?? 20);
   let difficulty = $state<string>('');
   let category = $state(0);
@@ -182,7 +183,7 @@
           </div>
           <label class="field">
             <span>Questions: {questions}</span>
-            <input type="range" min="3" max="30" bind:value={questions} />
+            <input type="range" min="3" max={maxQuestions} bind:value={questions} />
           </label>
         </div>
       {:else}
