@@ -542,6 +542,10 @@ export default defineModule<WledSettings>({
     ctx.provide<LightsApi>('lights', {
       available: () => ctx.enabled() && devices().some((d) => health.get(d.id)?.online),
       list: () => devices().map((d) => ({ id: d.id, name: d.name, online: !!health.get(d.id)?.online, leds: health.get(d.id)?.leds ?? null })),
+      // Sent as it comes: a strip shown frames faster than it can draw them queues them up and lags
+      // (Rhythm Rain fell behind its music at 64 a second), so callers stay at FRAME_MS (games/engine.ts).
+      // Idea: pace here instead, keeping only each light's newest frame and sending it at most as fast
+      // as that light can show; then no game or effect could bring the lag back.
       frame: (deviceId, rgb) => {
         const d = device(deviceId);
         if (!ctx.enabled() || !d || !health.get(d.id)?.online) return;
