@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Check, Music, Pause, Play, Plus, RotateCw, Search, Square, Star, ThumbsUp, X } from '@lucide/svelte';
-  import { RHYTHM_COLORS, RHYTHM_DEFAULT_COLORS, RHYTHM_DIFFICULTIES, RHYTHM_MAX_COLORS, rhythmDifficulty, rhythmFeel, type RhythmDifficulty, type RhythmSongInfo } from '$shared/games.ts';
+  import { RHYTHM_COLORS, RHYTHM_DEFAULT_COLORS, RHYTHM_DIFFICULTIES, RHYTHM_GOOD_STARS, RHYTHM_MAX_COLORS, rhythmDifficulty, rhythmFeel, type RhythmDifficulty, type RhythmSongInfo } from '$shared/games.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
   import Toggle from '$lib/ui/Toggle.svelte';
 
@@ -110,6 +110,7 @@
 <div class="part">
   <h4 class="group">Songs</h4>
   <p class="faint small">Guests pick one of these when they pay for a duel or a solo game with music, at one of the difficulties listed under it (with its notes per second). Rhythm: Varied is the most fun, Steady means nearly the same gap between all notes. Tap a cover to hear it, a difficulty to try it on the light.</p>
+  <p class="faint small">The song suggested to a guest is random among those in their difficulty, rated {RHYTHM_GOOD_STARS} stars or more when there are any. They can still change it: their list shows your best rated first.</p>
   <div class="test">
     <div class="test-line">
       <span class="faint small">Try with</span>

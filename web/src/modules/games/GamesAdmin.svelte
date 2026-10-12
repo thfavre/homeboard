@@ -253,7 +253,7 @@
     {/if}
     {@render perk('Duel winner shoots fireworks on the light', 'rhythmPerkSec')}
     <div class="line wrap">
-      <span class="label">Tap sounds in solo <span class="faint small">Auto: on the TV with music, in time with the song; on the phone without</span></span>
+      <span class="label">Tap sounds in solo <span class="faint small">Where a solo player hears the sound of each tap. Auto picks the TV when a song plays (it stays in time with the music), the phone otherwise.</span></span>
       <div class="choices">
         {#each [['auto', 'Auto'], ['phone', 'Phone'], ['tv', 'TV']] as const as [id, name] (id)}
           <button class="chip" class:active={(s!.settings.rhythmSoloTaps ?? 'auto') === id} onclick={() => setSettings({ rhythmSoloTaps: id })}>{name}</button>

@@ -509,6 +509,8 @@ export const RHYTHM_DIFFICULTIES = [
 ] as const;
 export type RhythmDifficulty = (typeof RHYTHM_DIFFICULTIES)[number]['id'];
 export const RHYTHM_DEFAULT_DIFFICULTY: RhythmDifficulty = 'Normal';
+/** The song a guest's phone suggests is drawn among the ones the host rated this many stars or more (any, if none is) */
+export const RHYTHM_GOOD_STARS = 3;
 /** How varied a song's rhythm is, from the steadiness of its charts (their average) */
 export function rhythmFeel(charts: { steady: number }[] | undefined): { label: 'Varied' | 'Mixed' | 'Steady'; steady: number } | null {
   if (!charts?.length) return null;

@@ -6,6 +6,7 @@
     RHYTHM_DEFAULT_COLORS,
     RHYTHM_DEFAULT_DIFFICULTY,
     RHYTHM_DIFFICULTIES,
+    RHYTHM_GOOD_STARS,
     RHYTHM_MAX_COLORS,
     bluffDeal,
     isCardGame,
@@ -47,10 +48,23 @@
     const q = songQuery.trim().toLowerCase();
     return q ? songs.filter((x) => `${x.title} ${x.artist ?? ''}`.toLowerCase().includes(q)) : songs;
   });
-  const fits = $derived(found.filter((x) => has(x, chart)));
+  const stars = (x: RhythmSongInfo) => s?.settings.rhythmRatings?.[x.key] ?? 0;
+  // The host's best rated first
+  const fits = $derived(found.filter((x) => has(x, chart)).sort((a, b) => stars(b) - stars(a)));
   const misses = $derived(found.filter((x) => !has(x, chart)));
   // The search only narrows the list: it never changes the song picked
-  const song = $derived(songs.find((x) => x.key === songPick && has(x, chart)) ?? songs.find((x) => has(x, chart)) ?? null);
+  const song = $derived(songs.find((x) => x.key === songPick && has(x, chart)) ?? null);
+  /** A random song in this difficulty, among the host's best rated if any */
+  function drawSong(): string {
+    const all = songs.filter((x) => has(x, chart));
+    const rated = all.filter((x) => stars(x) >= RHYTHM_GOOD_STARS);
+    const pool = rated.length ? rated : all;
+    return pool.length ? pool[Math.floor(Math.random() * pool.length)].key : '';
+  }
+  // No song picked yet, or the one picked lacks this difficulty: draw one
+  $effect(() => {
+    if (picked?.id === 'rhythm' && !song) songPick = drawSong();
+  });
   /** The song list is open; otherwise only the picked song shows, so the sheet stays short */
   let browsing = $state(false);
   function pickSong(x: RhythmSongInfo, d?: RhythmDifficulty) {
@@ -90,6 +104,8 @@
   function open(g: GameInfo) {
     picked = g;
     error = '';
+    // A new song drawn every time the sheet opens
+    songPick = '';
   }
 
   // Hear 5 seconds of a song before picking it: BeatSaver's preview, or the best part from the party's copy
