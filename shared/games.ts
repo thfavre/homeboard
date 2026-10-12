@@ -298,8 +298,8 @@ export interface GamesSettings {
   rhythmRatings: Record<string, number>;
   /** The music starts this many ms early, to make up for the sound delay of the TV or its speakers (-2000 to 2000) */
   rhythmAudioOffset: number;
-  /** Solo: where the taps sound. auto: on the TV with music (in time with the song), else on the phone */
-  rhythmSoloTaps: 'auto' | 'phone' | 'tv';
+  /** Solo: where the taps sound (anything but 'phone', like an old 'auto', means the TV) */
+  rhythmSoloTaps: 'phone' | 'tv';
   /** WLED light the Pirate Race ships sail on ('' = the TV only); every other light plays a sea wave */
   pirateLight: string;
   /** The pirate light's first LED is at the treasure end */
