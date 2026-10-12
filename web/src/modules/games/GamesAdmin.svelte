@@ -252,6 +252,14 @@
       {@render length('Longest', 'rhythmMaxSec')}
     {/if}
     {@render perk('Duel winner shoots fireworks on the light', 'rhythmPerkSec')}
+    <div class="line wrap">
+      <span class="label">Tap sounds in solo <span class="faint small">Auto: on the TV with music, in time with the song; on the phone without</span></span>
+      <div class="choices">
+        {#each [['auto', 'Auto'], ['phone', 'Phone'], ['tv', 'TV']] as const as [id, name] (id)}
+          <button class="chip" class:active={(s!.settings.rhythmSoloTaps ?? 'auto') === id} onclick={() => setSettings({ rhythmSoloTaps: id })}>{name}</button>
+        {/each}
+      </div>
+    </div>
     {@render slider('Music timing', 'Notes reach the zone after the beat you hear: move it to +. Before the beat: to -. Speakers in Bluetooth or a sound bar can need a lot', 'rhythmAudioOffset', -2000, 2000, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
     <RhythmSongsAdmin songs={s!.rhythmSongs} ratings={s!.settings.rhythmRatings ?? {}} light={!!s!.settings.rhythmLight} running={s!.matches.find((m) => m.game === 'rhythm')?.id ?? null} />
   {:else if id === 'pirates'}

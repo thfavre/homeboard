@@ -331,8 +331,10 @@ export const rhythmRain: GameFactory = (m) => {
   const minMs = Math.min(m.settings.rhythmMinSec, m.settings.rhythmMaxSec) * 1000;
   const maxMs = Math.max(m.settings.rhythmMinSec, m.settings.rhythmMaxSec) * 1000;
   const solo = m.mode === 'solo';
-  // Solo with music: the taps sound on the TV with the song. Otherwise each phone plays its own.
-  const tvSounds = solo && !!(song && chart.length);
+  // Solo: the taps sound where the host chose; by default on the TV with music (in time with the song),
+  // else on the phone. A duel: each phone plays its own.
+  const soloTaps = m.settings.rhythmSoloTaps ?? 'auto';
+  const tvSounds = solo && (soloTaps === 'auto' ? !!(song && chart.length) : soloTaps === 'tv');
   // The timeline is set by plan(): at once, or with music once the TV has the song ready to play
   let startAt = Date.now();
   let notes: RhythmNote[] = [];

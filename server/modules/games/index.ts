@@ -138,7 +138,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {} },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'auto', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {} },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -1088,6 +1088,7 @@ export default defineModule<GamesSettings>({
             ? args.rhythmLight
             : s.rhythmLight,
         rhythmReverse: typeof args?.rhythmReverse === 'boolean' ? args.rhythmReverse : s.rhythmReverse,
+        rhythmSoloTaps: ['auto', 'phone', 'tv'].includes(args?.rhythmSoloTaps) ? args.rhythmSoloTaps : s.rhythmSoloTaps,
         rhythmAudioOffset:
           args?.rhythmAudioOffset !== undefined ? Math.min(2000, Math.max(-2000, Math.round(num(args.rhythmAudioOffset, 0)))) : s.rhythmAudioOffset,
         rhythmMinSec: args?.rhythmMinSec !== undefined ? Math.min(600, Math.max(20, Math.round(num(args.rhythmMinSec, 60)))) : s.rhythmMinSec,
