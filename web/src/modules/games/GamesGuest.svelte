@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ChevronRight, Music, Pause, Play, Search, Swords, User, Users, VolumeX, X } from '@lucide/svelte';
+  import { Check, ChevronRight, Music, Pause, Play, Search, Swords, User, Users, VolumeX, X } from '@lucide/svelte';
   import {
     GAMES,
     RHYTHM_COLORS,
@@ -49,7 +49,16 @@
   });
   const fits = $derived(found.filter((x) => has(x, chart)));
   const misses = $derived(found.filter((x) => !has(x, chart)));
-  const song = $derived(fits.find((x) => x.key === songPick) ?? fits[0] ?? null);
+  // The search only narrows the list: it never changes the song picked
+  const song = $derived(songs.find((x) => x.key === songPick && has(x, chart)) ?? songs.find((x) => has(x, chart)) ?? null);
+  /** The song list is open; otherwise only the picked song shows, so the sheet stays short */
+  let browsing = $state(false);
+  function pickSong(x: RhythmSongInfo, d?: RhythmDifficulty) {
+    if (d) chart = d;
+    songPick = x.key;
+    browsing = false;
+    songQuery = '';
+  }
   const npsOf = (x: RhythmSongInfo) => x.charts?.find((c) => c.id === chart)?.nps;
   /** Played alone: no opponent, no bet */
   /** Played alone (games that can be, from the 1 vs 1 sheet): no opponent, no bet */
@@ -202,7 +211,8 @@
 </div>
 
 {#snippet songRow(x: RhythmSongInfo, fit: boolean)}
-  <div class="song-pick" class:active={fit && song?.key === x.key} class:miss={!fit}>
+  {@const active = fit && song?.key === x.key}
+  <div class="song-pick" class:active class:miss={!fit}>
     <button
       class="art"
       class:on={previewing === x.key}
@@ -213,27 +223,21 @@
       <span class="play">{#if previewing === x.key}<Pause size={16} />{:else}<Play size={16} />{/if}</span>
     </button>
     <span class="name">
-      <button class="title-btn" disabled={!fit} onclick={() => (songPick = x.key)}>
+      <!-- Covers the whole row: a tap anywhere but the cover or a letter picks the song -->
+      <button class="title-btn" disabled={!fit} aria-pressed={active} onclick={() => pickSong(x)}>
         <strong class="truncate">{x.title}</strong>
         {#if x.artist}<span class="faint small truncate">{x.artist}</span>{/if}
       </button>
       <span class="diffs">
         {#each RHYTHM_DIFFICULTIES as d (d.id)}
           {#if has(x, d.id)}
-            <button
-              class="diff"
-              class:on={d.id === chart}
-              title={d.name}
-              onclick={() => {
-                chart = d.id;
-                songPick = x.key;
-              }}>{d.short}</button
-            >
+            <button class="diff" class:on={fit && d.id === chart} title={d.name} onclick={() => pickSong(x, d.id)}>{d.short}</button>
           {/if}
         {/each}
         {#if fit && npsOf(x)}<span class="faint tiny">{npsOf(x)!.toFixed(1)} notes/s</span>{/if}
       </span>
     </span>
+    {#if fit}<span class="radio" aria-hidden="true">{#if active}<Check size={14} strokeWidth={3} />{/if}</span>{/if}
   </div>
 {/snippet}
 
@@ -287,30 +291,44 @@
             </div>
             {#if music}
               <div class="songs-box">
-                <div class="songs-head">
-                  <span class="label">Song <span class="faint">· {fits.length === 1 ? '1 song' : `${fits.length} songs`} in {level.name}</span></span>
-                  {#if songs.length > 6}
-                    <label class="song-search">
-                      <Search size={15} />
-                      <input placeholder="Find a song or artist" bind:value={songQuery} />
-                      {#if songQuery}<button aria-label="Clear" onclick={() => (songQuery = '')}><X size={15} /></button>{/if}
-                    </label>
+                {#if song && !browsing}
+                  <div class="songs-head row-head">
+                    <span class="label">Your song <span class="faint">· in {level.name}</span></span>
+                    <button class="btn small ghost" onclick={() => (browsing = true)}>Change <ChevronRight size={15} /></button>
+                  </div>
+                  {@render songRow(song, true)}
+                  {#if fits.length > 1}
+                    <button class="btn ghost block more" onclick={() => (browsing = true)}>See all {fits.length} songs in {level.name}</button>
                   {/if}
-                </div>
-                <div class="songs">
-                  {#each fits as x (x.key)}
-                    {@render songRow(x, true)}
-                  {:else}
-                    <p class="faint small none">{songQuery ? 'No song found.' : `No song has a ${level.name} chart. Pick one of the difficulties under a song.`}</p>
-                  {/each}
-                  {#if misses.length}
-                    <span class="eyebrow other">Not in {level.name}: tap a letter to switch</span>
-                    {#each misses as x (x.key)}
-                      {@render songRow(x, false)}
+                {:else}
+                  <div class="songs-head">
+                    <div class="row-head">
+                      <span class="label">Pick a song <span class="faint">· {fits.length === 1 ? '1 song' : `${fits.length} songs`} in {level.name}</span></span>
+                      {#if song}<button class="btn small ghost" onclick={() => (browsing = false)}>Done</button>{/if}
+                    </div>
+                    {#if songs.length > 6}
+                      <label class="song-search">
+                        <Search size={15} />
+                        <input placeholder="Find a song or artist" bind:value={songQuery} />
+                        {#if songQuery}<button aria-label="Clear" onclick={() => (songQuery = '')}><X size={15} /></button>{/if}
+                      </label>
+                    {/if}
+                  </div>
+                  <div class="songs">
+                    {#each fits as x (x.key)}
+                      {@render songRow(x, true)}
+                    {:else}
+                      <p class="faint small none">{songQuery ? 'No song found.' : `No song has a ${level.name} chart. Pick one of the difficulties under a song.`}</p>
                     {/each}
-                  {/if}
-                </div>
-                <span class="faint small hint">Tap a cover to hear 5 seconds. Letters: the difficulties a song has.</span>
+                    {#if misses.length}
+                      <span class="eyebrow other">Not in {level.name}: tap a letter to switch</span>
+                      {#each misses as x (x.key)}
+                        {@render songRow(x, false)}
+                      {/each}
+                    {/if}
+                  </div>
+                  <span class="faint small hint">Tap a song to pick it, its cover to hear 5 seconds. Letters: the difficulties it has.</span>
+                {/if}
               </div>
             {/if}
           </div>
@@ -633,7 +651,7 @@
     background: color-mix(in srgb, var(--accent) 16%, transparent);
     color: var(--text);
   }
-  /* The song list: tall enough to browse about six songs without leaving the sheet */
+  /* The song list grows with the sheet: a scroll box of its own would trap the finger scrolling the sheet */
   .songs-box {
     display: grid;
     gap: 0.5rem;
@@ -674,14 +692,20 @@
     background: none;
     color: var(--text-dim);
   }
+  .row-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .row-head .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+  }
   .songs {
     display: grid;
-    align-content: start;
     gap: 0.35rem;
-    max-height: min(31rem, 58vh);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
   }
   .hint {
     text-align: center;
@@ -736,6 +760,7 @@
     gap: 0.25rem;
   }
   .title-btn {
+    position: static;
     min-width: 0;
     display: grid;
     padding: 0;
@@ -743,6 +768,34 @@
     background: none;
     color: inherit;
     text-align: left;
+  }
+  .title-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+  .title-btn:disabled::after {
+    display: none;
+  }
+  .song-pick .art,
+  .diffs {
+    position: relative;
+    z-index: 1;
+  }
+  .radio {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 50%;
+    border: 2px solid var(--border-strong);
+    color: var(--accent-contrast);
+  }
+  .song-pick.active .radio {
+    border-color: var(--accent);
+    background: var(--accent);
   }
   .song-pick.miss .title-btn {
     opacity: 0.55;
@@ -804,6 +857,7 @@
     color: var(--text);
   }
   .song-pick {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 0.6rem;
