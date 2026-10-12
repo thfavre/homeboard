@@ -261,6 +261,12 @@ export default defineModule<WledSettings>({
     const live = new Map<string, { show: Fireworks; leds: number }>();
     /** Lights on the scene now */
     const inScene = new Set<string>();
+    /**
+     * Bumped when something starts using a light (effect, game color, live pixels, boost), before any request:
+     * a restore that was overtaken meanwhile keeps the saved state, or the light could never be put back
+     */
+    const uses = new Map<string, number>();
+    const use = (id: string) => uses.set(id, (uses.get(id) ?? 0) + 1);
 
     const devices = () => ctx.settings.get().devices;
     const device = (id: string) => devices().find((d) => d.id === id);
@@ -307,6 +313,7 @@ export default defineModule<WledSettings>({
     const apply = async (deviceId: string, effect: WledEffect, k: number, bri: number, transition: number) => {
       const d = device(deviceId);
       if (!d || boosted.has(d.id)) return false;
+      use(d.id);
       try {
         pending.delete(d.id);
         if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
@@ -354,6 +361,7 @@ export default defineModule<WledSettings>({
 
     const startLive = async (d: WledDevice) => {
       if (boosted.has(d.id)) return false;
+      use(d.id);
       try {
         pending.delete(d.id);
         if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
@@ -418,8 +426,13 @@ export default defineModule<WledSettings>({
         return;
       }
       const { before } = snap;
+      const since = uses.get(deviceId) ?? 0;
+      const overtaken = () => (uses.get(deviceId) ?? 0) !== since;
       try {
-        if (snap.sent && look(await wled(d.host, '/json/state')) !== snap.sent) {
+        const now = snap.sent ? look(await wled(d.host, '/json/state')) : undefined;
+        // Taken again while we asked: whoever has it now restores it when done
+        if (overtaken()) return;
+        if (now !== snap.sent) {
           // Someone picked something else on the light meanwhile: theirs wins
           ctx.log.info(`${d.name} was changed by hand, left as it is`);
         } else if (before.on && before.pl > 0) {
@@ -432,7 +445,7 @@ export default defineModule<WledSettings>({
           const seg = (before.seg ?? []).map((s: any) => Object.fromEntries(SEGMENT_KEYS.filter((k) => k in s).map((k) => [k, s[k]])));
           await wled(d.host, '/json/state', { on: before.on, bri: before.bri, transition: 7, seg });
         }
-        saved.drop(deviceId);
+        if (!overtaken()) saved.drop(deviceId);
       } catch (err) {
         // Kept, and tried again once the light answers
         ctx.log.warn(`Could not restore ${d.name}`, (err as Error).message);
@@ -523,6 +536,7 @@ export default defineModule<WledSettings>({
         while (wanted.has(deviceId) && held) {
           const { hex, fadeMs } = wanted.get(deviceId)!;
           wanted.delete(deviceId);
+          use(d.id);
           try {
             pending.delete(d.id);
             if (!saved.has(d.id)) saved.take(d.id, await wled(d.host, '/json/state'));
@@ -577,6 +591,7 @@ export default defineModule<WledSettings>({
         const d = device(deviceId);
         if (!d || !ctx.enabled() || !health.get(d.id)?.online) return;
         boosted.add(d.id);
+        use(d.id);
         inScene.delete(d.id);
         stopLive(d.id);
         try {
