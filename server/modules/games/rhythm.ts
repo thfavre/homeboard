@@ -17,11 +17,9 @@ import {
   type RhythmView,
 } from '../../../shared/games.ts';
 import { HbError, clamp, num } from '../../core/util.ts';
-import { best, type GameFactory, type GameRuntime } from './engine.ts';
+import { FRAME_MS, best, type GameFactory, type GameRuntime } from './engine.ts';
 import { BS_DIFFICULTIES, type BsNote, type Song } from './beatsaver.ts';
 
-/** One frame of the strip, about 64 a second. Not 1000 / 60: Windows timers tick every 15.6 ms, so 16.7 waits two ticks (30 a second) */
-const FRAME_MS = 15;
 const GRACE_MS = RHYTHM.graceMs;
 /** Time after the last note is judged before the result: the light plays the finale */
 const OUTRO_MS = 2200;

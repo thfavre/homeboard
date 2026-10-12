@@ -37,7 +37,7 @@ import type { Guest } from '../../core/session.ts';
 import { HbError, clamp, num, uid } from '../../core/util.ts';
 import type { LightsApi } from '../wled/index.ts';
 import type { MusicApi } from '../spotify/index.ts';
-import type { GameFactory, GameRuntime, MatchApi, MatchOptions, Outcome } from './engine.ts';
+import { FRAME_MS, type GameFactory, type GameRuntime, type MatchApi, type MatchOptions, type Outcome } from './engine.ts';
 import { blindTimer } from './timer.ts';
 import { lightSimon } from './simon.ts';
 import { colorReflex } from './reflex.ts';
@@ -500,7 +500,7 @@ export default defineModule<GamesSettings>({
           }
           const strips = (lights()?.list() ?? []).filter((d) => d.online).map((d) => ({ id: d.id, leds: Math.min(490, d.leds ?? 60), send: (rgb: Uint8Array) => lights()?.frame(d.id, rgb) }));
           pirateWaitingLights(m.options.crews, ctx.settings.get(), strips);
-        }, 40);
+        }, FRAME_MS);
         m.timers.add(t);
       }
       deadline(m, INTRO_MS);

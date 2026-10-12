@@ -1,6 +1,6 @@
 import { RECORD_SPEED } from '../../../shared/games.ts';
+import { FRAME_MS } from './engine.ts';
 
-const FPS = 30;
 const GOLD: [number, number, number] = [255, 170, 40];
 
 function rgbOf(hex: string): [number, number, number] {
@@ -34,11 +34,11 @@ export class Turntable {
       const dt = Math.max(0.001, (now - last) / 1000);
       last = now;
       if (!this.touching) this.angle += RECORD_SPEED * dt;
-      // Smoothed speed (radians a second, signed)
-      this.speed += ((this.angle - before) / dt - this.speed) * 0.35;
+      // Smoothed speed (radians a second, signed): 35% of the way every 30th of a second, whatever the frame rate
+      this.speed += ((this.angle - before) / dt - this.speed) * (1 - 0.65 ** (dt * 30));
       before = this.angle;
       this.send(this.render(base, own));
-    }, 1000 / FPS);
+    }, FRAME_MS);
   }
 
   /** A scratch move from the phone (its own angle: kept where it is when a hand lands on it) */

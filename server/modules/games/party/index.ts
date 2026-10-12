@@ -13,7 +13,7 @@ import {
   type PartyView,
 } from '../../../../shared/party.ts';
 import { HbError, clamp } from '../../../core/util.ts';
-import { best, shuffle, type GameFactory } from '../engine.ts';
+import { FRAME_MS, best, shuffle, type GameFactory } from '../engine.ts';
 import { Frame, ramp, rgbOf, type Host, type Mini, type MiniRegistry, type Result } from './strip.ts';
 import { colorCount } from './count.ts';
 import { stack } from './stack.ts';
@@ -22,7 +22,6 @@ import { colorMatch } from './match.ts';
 /** Every mini game, by id: add one here (and in PARTY_MINIS) */
 const MINIS: MiniRegistry = { count: colorCount, stack, match: colorMatch };
 
-const FPS = 40;
 /** The lineup of mini games is shown this long */
 const LINEUP_MS = 6000;
 /** Once everyone pressed Got it, the mini game starts this much later */
@@ -191,7 +190,7 @@ export const lightParty: GameFactory = (m) => {
 
   return {
     start() {
-      stopTicks = m.every(1000 / FPS, tick);
+      stopTicks = m.every(FRAME_MS, tick);
       m.deadline(LINEUP_MS);
       after(LINEUP_MS, rules);
       m.publish();

@@ -17,9 +17,8 @@ import {
   type PirateView,
 } from '../../../shared/games.ts';
 import { clamp, num } from '../../core/util.ts';
-import { shuffle, type GameFactory } from './engine.ts';
+import { FRAME_MS, shuffle, type GameFactory } from './engine.ts';
 
-const FPS = 40;
 /** The crews are shown this long before the drum starts */
 const CREW_MS = 6000;
 /** A tap reaches the server up to this late: a beat is judged only after it */
@@ -521,7 +520,7 @@ export const pirateRace: GameFactory = (m) => {
 
   return {
     start() {
-      stopTicks = m.every(1000 / FPS, tick);
+      stopTicks = m.every(FRAME_MS, tick);
       stopRefresh = m.every(1000, () => (over ? stopRefresh() : m.publish()));
       m.publish();
     },

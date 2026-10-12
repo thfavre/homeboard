@@ -2,6 +2,9 @@ import type { Role } from '../../../shared/protocol.ts';
 import type { Song } from './beatsaver.ts';
 import type { BluffDeal, CircleDrawing, GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine, PirateCrewDeal, RhythmDifficulty } from '../../../shared/games.ts';
 
+/** One frame of a light strip, about 64 a second. Not 1000 / 60: Windows timers tick every 15.6 ms, so 16.7 waits two ticks (30 a second) */
+export const FRAME_MS = 15;
+
 /** How a game ended. The match pays out from it. */
 export interface Outcome {
   /** Winners (several = tie, the pot is split). Empty: nobody won, stakes go back. */
