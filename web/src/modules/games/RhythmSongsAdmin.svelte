@@ -1,13 +1,24 @@
 <script lang="ts">
-  import { Check, Music, Pause, Play, Plus, RotateCw, Search, ThumbsUp, X } from '@lucide/svelte';
-  import { rhythmDifficulty, rhythmFeel, type RhythmSongInfo } from '$shared/games.ts';
+  import { Check, Music, Pause, Play, Plus, RotateCw, Search, Square, ThumbsUp, X } from '@lucide/svelte';
+  import { RHYTHM_COLORS, RHYTHM_DEFAULT_COLORS, RHYTHM_DIFFICULTIES, RHYTHM_MAX_COLORS, rhythmDifficulty, rhythmFeel, type RhythmDifficulty, type RhythmSongInfo } from '$shared/games.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
+  import Toggle from '$lib/ui/Toggle.svelte';
 
   /**
    * The host's Rhythm Rain songs: the ones guests can pick, and a BeatSaver search to add more.
    * Every song can be heard first (BeatSaver's 10 second preview).
    */
-  let { songs }: { songs: RhythmSongInfo[] } = $props();
+  /** `light`: a strip is picked for the game. `running`: the Rhythm Rain match going on, if any. */
+  let { songs, light, running }: { songs: RhythmSongInfo[]; light: boolean; running: string | null } = $props();
+
+  // A tap on a difficulty plays it on the light: nobody's phone, no fee, no score kept
+  let testColors = $state(RHYTHM_DEFAULT_COLORS);
+  let testAuto = $state(true);
+  const test = (chart: RhythmDifficulty, song?: string) => {
+    audio?.pause();
+    playing = null;
+    attempt(() => rpc('games', 'testRhythm', { colors: testColors, chart, song, autoplay: testAuto }));
+  };
 
   interface Hit {
     key: string;
@@ -84,7 +95,31 @@
 
 <div class="part">
   <h4 class="group">Songs</h4>
-  <p class="faint small">Guests pick one of these when they pay for a duel or a solo game with music, at one of the difficulties listed under it (with its notes per second). Rhythm: Varied is the most fun, Steady means nearly the same gap between all notes. Tap a cover to hear it.</p>
+  <p class="faint small">Guests pick one of these when they pay for a duel or a solo game with music, at one of the difficulties listed under it (with its notes per second). Rhythm: Varied is the most fun, Steady means nearly the same gap between all notes. Tap a cover to hear it, a difficulty to try it on the light.</p>
+  <div class="test">
+    <div class="test-line">
+      <span class="faint small">Try with</span>
+      {#each Array.from({ length: RHYTHM_MAX_COLORS }, (_, i) => i + 1) as n (n)}
+        <button class="pick" class:on={testColors === n} onclick={() => (testColors = n)} aria-label={`${n} colors`}>
+          <span class="keys">{#each RHYTHM_COLORS.slice(0, n) as c (c.id)}<span class="key" style:--c={c.hex}></span>{/each}</span>{n}
+        </button>
+      {/each}
+      <span class="auto faint small"><Toggle checked={testAuto} onchange={(v) => (testAuto = v)} label="Autoplay" /> Autoplay</span>
+    </div>
+    <div class="test-line">
+      <span class="faint small">No music</span>
+      {#each RHYTHM_DIFFICULTIES as d (d.id)}
+        <button class="diff" disabled={!light || !!running} title={`Try ${d.name} on the light`} onclick={() => test(d.id)}>{d.name}</button>
+      {/each}
+    </div>
+    {#if running}
+      <button class="btn small danger" onclick={() => attempt(() => rpc('games', 'stop', { id: running }))}><Square size={14} /> Stop the game on the light</button>
+    {:else if !light}
+      <span class="faint small">Pick the light strip above to try them.</span>
+    {:else}
+      <span class="faint small">Autoplay hits every note on time; off, the notes go by.</span>
+    {/if}
+  </div>
   <div class="list">
     {#each songs as x (x.key)}
       <div class="row">
@@ -103,7 +138,11 @@
                     <span class="feel {feel.label.toLowerCase()}" title={`${Math.round(feel.steady * 100)}% of the gaps between notes have the same length`}>Rhythm: {feel.label}</span>
                   {/if}
                 {/each}
-                {#each x.charts as c (c.id)}<span class="diff">{rhythmDifficulty(c.id).name} <span class="nps">{c.nps.toFixed(1)}/s</span></span>{/each}
+                {#each x.charts as c (c.id)}
+                  <button class="diff" disabled={!light || !!running} title={`Try ${rhythmDifficulty(c.id).name} on the light`} onclick={() => test(c.id, x.key)}>
+                    <Play size={10} />{rhythmDifficulty(c.id).name} <span class="nps">{c.nps.toFixed(1)}/s</span>
+                  </button>
+                {/each}
               </span>
             {/if}
           {:else if x.status === 'loading'}
@@ -240,12 +279,72 @@
     margin-right: 0.2rem;
   }
   .diff {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
     padding: 0 0.35rem;
+    border: 1px solid transparent;
     border-radius: 0.3rem;
     background: var(--surface-2);
     font-size: 0.7rem;
     font-weight: 700;
     color: var(--text-dim);
+  }
+  button.diff {
+    padding: 0.1rem 0.45rem;
+    cursor: pointer;
+  }
+  button.diff:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  button.diff:disabled {
+    cursor: default;
+  }
+  .test {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.6rem;
+    border-radius: var(--radius-sm);
+    border: 1px dashed var(--border-strong);
+  }
+  .test-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .pick {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-dim);
+  }
+  .pick.on {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .keys {
+    display: flex;
+    gap: 0.12rem;
+  }
+  .key {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--c);
+  }
+  .auto {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
   }
   .feel {
     padding: 0 0.4rem;
