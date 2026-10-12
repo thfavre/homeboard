@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { Check, Music, Pause, Play, Plus, RotateCw, Search, Square, Star, ThumbsUp, X } from '@lucide/svelte';
+  import { Check, Music, Pause, Play, Plus, RotateCw, Search, Square, Star, ThumbsUp, Trash2 } from '@lucide/svelte';
   import { RHYTHM_COLORS, RHYTHM_DEFAULT_COLORS, RHYTHM_DIFFICULTIES, RHYTHM_GOOD_STARS, RHYTHM_MAX_COLORS, rhythmDifficulty, rhythmFeel, type RhythmDifficulty, type RhythmSongInfo } from '$shared/games.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
   import Toggle from '$lib/ui/Toggle.svelte';
+  import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
 
   /**
    * The host's Rhythm Rain songs: the ones guests can pick, and a BeatSaver search to add more.
@@ -205,7 +206,10 @@
         {#if x.status === 'error'}
           <button class="btn small ghost" aria-label="Retry" onclick={() => attempt(() => rpc('games', 'retrySong', { key: x.key }))}><RotateCw size={16} /></button>
         {/if}
-        <button class="btn small ghost" aria-label="Remove" onclick={() => attempt(() => rpc('games', 'removeSong', { key: x.key }))}><X size={16} /></button>
+        <TwoStepButton class="small ghost" onconfirm={() => attempt(() => rpc('games', 'removeSong', { key: x.key }))}>
+          <Trash2 size={16} />
+          {#snippet armed()}Remove?{/snippet}
+        </TwoStepButton>
       </div>
     {:else}
       <p class="faint small">{songs.length ? 'Every song is rated.' : 'No song: duels are played without music. Search below to add some.'}</p>
