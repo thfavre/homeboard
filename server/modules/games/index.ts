@@ -1018,6 +1018,7 @@ export default defineModule<GamesSettings>({
       const m = createMatch('rhythm', 'solo', null, [tester], 0, [], { ...rhythmOptions(args, song), autoplay: args?.autoplay !== false });
       intro(m);
       play(m);
+      return true;
     });
 
     ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake, args?.prize));
