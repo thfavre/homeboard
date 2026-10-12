@@ -553,7 +553,17 @@ export interface RhythmNote {
   /** Server time it crosses the middle of the zone */
   at: number;
   color: RhythmColor;
+  /** A held note: keep the key down this long after `at` (no other note comes meanwhile) */
+  holdMs?: number;
 }
+
+/**
+ * Held notes. Where the music rests: the next note at least `gapBeats` away (from the first on Expert to the
+ * second on Easy) and `rest` times the usual gap of the notes just before. They last `minBeats` to `maxBeats`, ending on a
+ * half beat with time to let go before the next note (at least `letGoMs`). Holding earns `pointsPerSec`
+ * (times the multiplier); letting go up to `earlyMs` before the end counts as held to the end.
+ */
+export const RHYTHM_HOLD = { gapBeats: [1.25, 2] as const, rest: 1.75, minBeats: 1, maxBeats: 4, letGoMs: 450, pointsPerSec: 100, earlyMs: 200 };
 
 export const rhythmGradeOf = (gapMs: number): RhythmGrade => {
   const g = Math.abs(gapMs);
@@ -586,6 +596,8 @@ export interface RhythmScore {
   missed: number;
   /** Taps with no note of that color in the zone */
   wrong: number;
+  /** Held notes kept down to the end */
+  held: number;
   /** Latest judgement, for the TV pop */
   last: { grade: RhythmGrade; at: number; seq: number } | null;
 }

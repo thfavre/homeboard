@@ -2,6 +2,7 @@
   import { Music } from '@lucide/svelte';
   import {
     RHYTHM_COLORS,
+    RHYTHM_HOLD,
     rhythmDifficulty,
     RHYTHM_WRONG_PENALTY,
     rhythmGradeOf,
@@ -23,7 +24,8 @@
    * A guitar controller: one key per color picked, the notes are on the light so eyes stay on it. A tap with no note of its color in the zone costs points.
    * Each tap is judged right away on the phone (same rule as the server) so its sound and burst come
    * with no delay; the server keeps the score. The sound comes from this phone, except solo with
-   * music where the TV plays it with the song.
+   * music where the TV plays it with the song. A held note: keep the key down while its light burns into
+   * the zone; the key fills up, and letting go tells the server how long it was held.
    */
   let { m }: { m: MatchState } = $props();
   const v = $derived(m.view as RhythmView);
@@ -36,7 +38,7 @@
   const progress = $derived(v.loading ? 0 : Math.min(1, Math.max(0, (now.value - firstAt) / Math.max(1, v.endAt - firstAt))));
   const lanes = $derived(v.lanes.map((id) => RHYTHM_COLORS.find((c) => c.id === id)!));
   const columns = $derived(Math.min(4, lanes.length));
-  const LABEL: Record<RhythmGrade, string> = { perfect: 'Perfect', good: 'Good', ok: 'Just', miss: 'Miss' };
+  const LABEL: Record<RhythmGrade | 'held' | 'early', string> = { perfect: 'Perfect', good: 'Good', ok: 'Just', miss: 'Miss', held: 'Held!', early: 'Let go' };
   const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 
   // The glow behind the keys pulses on the song's beat. A song that changes tempo: the pulse starts
@@ -58,7 +60,10 @@
   // Notes this phone hit, so a second tap on the same note is a miss here too
   const hitLocal = new Set<number>();
   let pressed = $state<Record<string, boolean>>({});
-  let pop = $state<{ grade: RhythmGrade; key: number } | null>(null);
+  let pop = $state<{ grade: RhythmGrade | 'held' | 'early'; key: number } | null>(null);
+  /** The held note this phone keeps down: its key, when it ends (server time) and how long it lasts */
+  let holding = $state<{ color: RhythmColor; until: number; ms: number; key: number } | null>(null);
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
   /** The last burst of each key */
   let bursts = $state<Record<string, { grade: RhythmGrade; key: number }>>({});
   let flash = $state<{ hex: string; key: number } | null>(null);
@@ -79,7 +84,32 @@
     bursts = { ...bursts, [color]: { grade, key: seq } };
     if (grade !== 'miss') flash = { hex, key: seq };
     void rpc('games', 'play', { color, at }).catch(() => {});
+    const hold = i >= 0 ? v.notes[i].holdMs : 0;
+    if (hold) {
+      const until = v.notes[i].at + hold;
+      holding = { color, until, ms: until - at, key: seq };
+      clearTimeout(holdTimer);
+      // Still down at the end: held all the way
+      holdTimer = setTimeout(() => {
+        if (holding?.key !== seq) return;
+        holding = null;
+        navigator.vibrate?.(25);
+        pop = { grade: 'held', key: ++seq };
+      }, until - at);
+    }
   }
+
+  /** A key let go: the end of its held note, if it was one */
+  function release(color: RhythmColor) {
+    if (holding?.color !== color) return;
+    const at = serverNow();
+    clearTimeout(holdTimer);
+    if (at < holding.until - RHYTHM_HOLD.earlyMs) pop = { grade: 'early', key: ++seq };
+    else pop = { grade: 'held', key: ++seq };
+    holding = null;
+    void rpc('games', 'play', { color, at, release: true }).catch(() => {});
+  }
+  $effect(() => () => clearTimeout(holdTimer));
 
   const press = (id: string, on: boolean) => (pressed = { ...pressed, [id]: on });
 </script>
@@ -130,6 +160,8 @@
     {:else if countIn > 0}
       <span class="dim">Eyes on the light</span>
       {#key countIn}<strong class="mono count">{countIn}</strong>{/key}
+    {:else if holding}
+      <strong class="pop holding">Hold</strong>
     {:else if pop}
       {#key pop.key}<strong class="pop {pop.grade}">{LABEL[pop.grade]}{#if pop.grade === 'miss'}<span class="minus mono"> -{RHYTHM_WRONG_PENALTY}</span>{/if}</strong>{/key}
     {:else}
@@ -143,6 +175,7 @@
       <button
         class="fret"
         class:down={pressed[c.id]}
+        class:holding={holding?.color === c.id}
         style:--c={c.hex}
         aria-label={c.name}
         onpointerdown={(e) => {
@@ -150,11 +183,21 @@
           press(c.id, true);
           tap(c.id, i, c.hex);
         }}
-        onpointerup={() => press(c.id, false)}
-        onpointercancel={() => press(c.id, false)}
-        onpointerleave={() => press(c.id, false)}
+        onpointerup={() => {
+          press(c.id, false);
+          release(c.id);
+        }}
+        onpointercancel={() => {
+          press(c.id, false);
+          release(c.id);
+        }}
+        onpointerleave={() => {
+          press(c.id, false);
+          release(c.id);
+        }}
         oncontextmenu={(e) => e.preventDefault()}
       >
+        {#if holding?.color === c.id}{#key holding.key}<span class="fill" style:--hold="{holding.ms}ms"></span>{/key}{/if}
         <span class="string"></span>
         <span class="gem">
           {#if b}{#key b.key}<span class="burst {b.grade}"></span>{/key}{/if}
@@ -344,6 +387,22 @@
   .pop.miss {
     color: var(--text-faint);
   }
+  .pop.held {
+    color: var(--coin);
+    text-shadow: 0 0 1rem color-mix(in srgb, var(--coin) 50%, transparent);
+  }
+  .pop.early {
+    color: var(--text-faint);
+  }
+  .pop.holding {
+    animation: breathe 0.5s ease-in-out infinite alternate;
+  }
+  @keyframes breathe {
+    to {
+      opacity: 0.55;
+      transform: scale(0.94);
+    }
+  }
   @keyframes pop {
     from {
       transform: scale(1.4);
@@ -422,6 +481,26 @@
     box-shadow:
       0 0 0 0.3rem rgb(255 255 255 / 0.5),
       0 0 1.4rem var(--c);
+  }
+  /* A held note: the key fills up from the bottom until the end of the hold */
+  .fill {
+    position: absolute;
+    inset: auto 0 0;
+    height: 100%;
+    background: linear-gradient(to top, color-mix(in srgb, #fff 35%, var(--c)), color-mix(in srgb, var(--c) 40%, transparent));
+    transform-origin: bottom;
+    animation: fill var(--hold) linear forwards;
+    pointer-events: none;
+  }
+  @keyframes fill {
+    from {
+      transform: scaleY(0);
+    }
+  }
+  .fret.holding {
+    box-shadow:
+      inset 0 0 0 2px #fff,
+      0 0 2.4rem var(--c);
   }
   /* A ring opening from the key: white on a perfect, the key color otherwise, red on a miss */
   .burst {

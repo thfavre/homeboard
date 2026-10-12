@@ -1,6 +1,7 @@
 import {
   RHYTHM,
   RHYTHM_COLORS,
+  RHYTHM_HOLD,
   RHYTHM_POINTS,
   RHYTHM_WRONG_PENALTY,
   rhythmColors,
@@ -355,12 +356,44 @@ export function songLanes(kept: BsNote[], chart: BsNote[], k: number, minGapMs: 
   return out;
 }
 
-/** The song's notes between `fromMs` and `toMs`, timed for this game, on the keys of `songLanes` */
+/**
+ * Which notes are held, and how long (ms, 0: a tap). A note where the music rests after it (see `RHYTHM_HOLD`:
+ * a long sung note or chord ringing on, the end of a phrase) is held up to a half beat, leaving time to let go
+ * before the next note: nothing else comes while a key is held. Holds start on a half beat of the chart's own
+ * grid (often shifted from the song's start) and last `minBeats` to `maxBeats`.
+ */
+export function songHolds(kept: BsNote[], bpm: number, tempo: RhythmTempo[] | null, minGapMs: number): number[] {
+  const beatMs = 60_000 / bpm;
+  const phase = gridPhase(kept.map((n) => ({ ...n, ms: gridMs(n.ms, bpm, tempo) })), beatMs);
+  /** Beats on the chart's grid, and back to ms of the song */
+  const beat = (ms: number) => (gridMs(ms, bpm, tempo) - phase) / beatMs;
+  const msAt = (b: number) => songMsAt(b + phase / beatMs, bpm, tempo);
+  return kept.map((n, i) => {
+    const next = kept[i + 1];
+    if (!next) return 0;
+    const from = beat(n.ms);
+    const to = beat(next.ms);
+    // A rest in the music: a long gap for this difficulty, and long next to the gaps just before (in beats)
+    const before = kept.slice(Math.max(0, i - 8), i + 1).map((x) => beat(x.ms));
+    const gaps = before.slice(1).map((b, j) => b - before[j]).sort((x, y) => x - y);
+    const usual = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 0;
+    const gapBeats = clamp(minGapMs / 190, RHYTHM_HOLD.gapBeats[0], RHYTHM_HOLD.gapBeats[1]);
+    if (to - from < Math.max(gapBeats, usual * RHYTHM_HOLD.rest) || Math.abs(from * 2 - Math.round(from * 2)) > 0.06) return 0;
+    // Time to let go and find the next key: half a beat, and never less than the difficulty's gap
+    const letGo = Math.max(0.5, beat(next.ms) - beat(next.ms - Math.max(minGapMs, RHYTHM_HOLD.letGoMs)));
+    const end = Math.min(Math.floor((to - letGo) * 2) / 2, Math.round(from * 2) / 2 + RHYTHM_HOLD.maxBeats);
+    if (end - from < RHYTHM_HOLD.minBeats) return 0;
+    return Math.round(msAt(end) - n.ms);
+  });
+}
+
+/** The song's notes between `fromMs` and `toMs`, timed for this game, on the keys of `songLanes`, some held (`songHolds`) */
 function songNotes(chart: BsNote[], bpm: number, tempo: RhythmTempo[] | null, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
   const part = chart.filter((x) => x.ms >= fromMs && x.ms < toMs);
   const kept = playable(part, bpm, minGapMs, tempo);
   const keys = songLanes(kept, part, lanes.length, minGapMs);
-  return kept.map((n, i) => ({ at: zeroAt + n.ms, color: lanes[keys[i]] }));
+  const holds = songHolds(kept, bpm, tempo, minGapMs);
+  return kept.map((n, i) => ({ at: zeroAt + n.ms, color: lanes[keys[i]], ...(holds[i] ? { holdMs: holds[i] } : {}) }));
 }
 
 const rgbOf = (hex: string): [number, number, number] => {
@@ -469,8 +502,23 @@ export const rhythmRain: GameFactory = (m) => {
   };
 
   const scores = new Map<string, RhythmScore>(
-    m.players.map((p) => [p.id, { score: 0, combo: 0, bestCombo: 0, perfect: 0, good: 0, ok: 0, missed: 0, wrong: 0, last: null }]),
+    m.players.map((p) => [p.id, { score: 0, combo: 0, bestCombo: 0, perfect: 0, good: 0, ok: 0, missed: 0, wrong: 0, held: 0, last: null }]),
   );
+  /** The held note each player keeps down now: its index and when it ends (server time) */
+  const holding = new Map<string, { note: number; until: number }>();
+  /** Points for the time a held note was kept down, up to `at` (its end when held to it, give or take `earlyMs`) */
+  const letGo = (id: string, at: number) => {
+    const h = holding.get(id);
+    if (!h) return;
+    holding.delete(id);
+    const s = scores.get(id)!;
+    const start = notes[h.note].at;
+    const full = at >= h.until - RHYTHM_HOLD.earlyMs;
+    const ms = full ? h.until - start : clamp(at - start, 0, h.until - start);
+    s.score += Math.round((ms / 1000) * RHYTHM_HOLD.pointsPerSec) * rhythmMultiplier(s.combo);
+    if (full) s.held += 1;
+    m.publish();
+  };
   const hits = new Map<string, Set<number>>(m.players.map((p) => [p.id, new Set()]));
   /** Next note to check for a miss, per player */
   const passed = new Map<string, number>(m.players.map((p) => [p.id, 0]));
@@ -538,6 +586,26 @@ export const rhythmRain: GameFactory = (m) => {
       const note = notes[n];
       const pos = zone - (note.at - now) * speed;
       if (pos < -head) break;
+      if (note.holdMs) {
+        // A held note: a body as long as the hold under its head. Kept down, it burns away into the zone,
+        // which glows; let go early, what is left goes dim; missed, it fades out like the note
+        const end = zone - (note.at + note.holdMs - now) * speed;
+        const held = [...holding.values()].some((h) => h.note === n);
+        const hit = hitCount[n] > 0;
+        const late = now - note.at - RHYTHM.okMs;
+        const top = hit ? Math.min(pos, zone) : pos - head / 2;
+        const k = held ? 0.55 : hit ? 0.1 : late > 0 ? 0.25 * Math.max(0, 1 - late / 600) : 0.32;
+        const c = LED[note.color];
+        const rgb = !hit && late > 0 ? [c[0] * 0.5 + 120, c[1] * 0.3, c[2] * 0.3] : c;
+        for (let i = Math.floor(Math.max(0, end)); i < Math.min(leds, top); i++) add(i, rgb, k * Math.max(0, Math.min(i + 1, top) - Math.max(i, end)));
+        if (held && end < zone) {
+          for (let i = Math.floor(zone - u); i <= Math.ceil(zone + u); i++) {
+            const core = Math.max(0, 1 - Math.abs(i + 0.5 - zone) / (u + 0.5));
+            add(i, c, (0.45 + 0.2 * Math.sin(now / 45)) * core);
+            add(i, WHITE, 0.2 * core);
+          }
+        }
+      }
       if (pos > leds + tail) continue;
       // Hit by everyone: the burst takes over. Hit by one of two: dimmer, still there for the other.
       if (hitCount[n] >= m.players.length) continue;
@@ -639,6 +707,8 @@ export const rhythmRain: GameFactory = (m) => {
       }
       passed.set(p.id, i);
     }
+    // Held to the end (a phone letting go just before it says so a moment later, within the early margin)
+    for (const [id, h] of holding) if (now >= h.until + RHYTHM_HOLD.earlyMs) letGo(id, h.until);
     while (flashes.length && now - flashes[0].at > FLASH_MS) flashes.shift();
     while (waves.length && now - waves[0].at > WAVE_MS) waves.shift();
     if (strip) strip.send(render(now, strip.leds));
@@ -652,7 +722,10 @@ export const rhythmRain: GameFactory = (m) => {
     stopTicks();
     if (strip) strip.send(new Uint8Array(strip.leds * 3));
     const score = (id: string) => scores.get(id)!.score;
-    const detail = (s: RhythmScore) => `${s.perfect + s.good + s.ok} of ${notes.length} notes hit, ${s.perfect} perfect, best streak ${s.bestCombo}`;
+    for (const [id, h] of holding) letGo(id, Math.min(Date.now(), h.until));
+    const holds = notes.filter((n) => n.holdMs).length;
+    const detail = (s: RhythmScore) =>
+      `${s.perfect + s.good + s.ok} of ${notes.length} notes hit, ${s.perfect} perfect, ${holds ? `${s.held} of ${holds} held, ` : ''}best streak ${s.bestCombo}`;
     // Every player's score goes to the song's leaderboard, the loser's too
     const scored = Object.fromEntries(m.players.map((p) => [p.id, score(p.id)]));
     if (solo) {
@@ -698,6 +771,11 @@ export const rhythmRain: GameFactory = (m) => {
       const now = Date.now();
       // The phone sends when it was tapped (server clock), a little before the message got here
       const at = clamp(num(args?.at, now), now - GRACE_MS, now + 50);
+      // The key of a held note let go
+      if (args?.release) {
+        if (holding.get(id) && notes[holding.get(id)!.note].color === color) letGo(id, at);
+        return { released: true };
+      }
       const window = rhythmTapWindow(notes, travelMs);
       if (over || loading || !window || at < window[0] || at > window[1]) return { grade: null };
       const s = scores.get(id)!;
@@ -723,6 +801,10 @@ export const rhythmRain: GameFactory = (m) => {
       s.score += RHYTHM_POINTS[grade] * rhythmMultiplier(s.combo);
       s[grade as 'perfect' | 'good' | 'ok'] += 1;
       judge(s, grade);
+      if (notes[i].holdMs) {
+        letGo(id, at);
+        holding.set(id, { note: i, until: notes[i].at + notes[i].holdMs! });
+      }
       flashes.push({ at: now, rgb: LED[color], grade, gapMs: at - notes[i].at });
       if (rhythmMultiplier(s.combo) > before) waves.push({ at: now, rgb: rgbOf(m.players[player].color) });
       if (tvSounds) m.sound('rhythm', { player, lane, grade });
