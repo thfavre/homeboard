@@ -249,7 +249,7 @@
     {/if}
     {@render perk('Duel winner shoots fireworks on the light', 'rhythmPerkSec')}
     {@render slider('Music timing', 'Notes reach the zone after the beat you hear: move it to +. Before the beat: to -. Speakers in Bluetooth or a sound bar can need a lot', 'rhythmAudioOffset', -2000, 2000, (v) => `${v > 0 ? '+' : ''}${v} ms`)}
-    <RhythmSongsAdmin songs={s!.rhythmSongs} light={!!s!.settings.rhythmLight} running={s!.matches.find((m) => m.game === 'rhythm')?.id ?? null} />
+    <RhythmSongsAdmin songs={s!.rhythmSongs} ratings={s!.settings.rhythmRatings ?? {}} light={!!s!.settings.rhythmLight} running={s!.matches.find((m) => m.game === 'rhythm')?.id ?? null} />
   {:else if id === 'pirates'}
     <h4 class="group">Light</h4>
     {@render lightSelect('Race light', 'The WLED light the ships sail on, toward the gold treasure. Every other light plays a blue sea wave during the race', 'pirateLight')}

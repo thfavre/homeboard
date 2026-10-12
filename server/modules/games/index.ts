@@ -132,7 +132,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -843,9 +843,19 @@ export default defineModule<GamesSettings>({
       const key = String(args?.key ?? '');
       if (ctx.settings.get().rhythmSongs.includes(key)) void loadOne(key);
     });
+    /** The host's stars for a song (0: none) */
+    ctx.onAdmin('rateSong', (args) => {
+      const key = String(args?.key ?? '');
+      if (!ctx.settings.get().rhythmSongs.includes(key)) throw new HbError('Unknown song');
+      const stars = clamp(Math.round(num(args?.stars, 0)), 0, 5);
+      const { [key]: _old, ...rest } = ctx.settings.get().rhythmRatings;
+      ctx.settings.update({ rhythmRatings: stars ? { ...rest, [key]: stars } : rest });
+      ctx.publish();
+    });
     ctx.onAdmin('removeSong', (args) => {
       const key = String(args?.key ?? '');
-      ctx.settings.update({ rhythmSongs: ctx.settings.get().rhythmSongs.filter((k) => k !== key) });
+      const { [key]: _old, ...ratings } = ctx.settings.get().rhythmRatings;
+      ctx.settings.update({ rhythmSongs: ctx.settings.get().rhythmSongs.filter((k) => k !== key), rhythmRatings: ratings });
       songs.delete(key);
       ctx.publish();
     });

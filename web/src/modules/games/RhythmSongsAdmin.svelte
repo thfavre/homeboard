@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, Music, Pause, Play, Plus, RotateCw, Search, Square, ThumbsUp, X } from '@lucide/svelte';
+  import { Check, Music, Pause, Play, Plus, RotateCw, Search, Square, Star, ThumbsUp, X } from '@lucide/svelte';
   import { RHYTHM_COLORS, RHYTHM_DEFAULT_COLORS, RHYTHM_DIFFICULTIES, RHYTHM_MAX_COLORS, rhythmDifficulty, rhythmFeel, type RhythmDifficulty, type RhythmSongInfo } from '$shared/games.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -9,7 +9,11 @@
    * Every song can be heard first (BeatSaver's 10 second preview).
    */
   /** `light`: a strip is picked for the game. `running`: the Rhythm Rain match going on, if any. */
-  let { songs, light, running }: { songs: RhythmSongInfo[]; light: boolean; running: string | null } = $props();
+  let { songs, ratings, light, running }: { songs: RhythmSongInfo[]; ratings: Record<string, number>; light: boolean; running: string | null } = $props();
+
+  // The host's stars: a tap on the current rating clears it
+  let hover = $state<{ key: string; n: number } | null>(null);
+  const rate = (key: string, n: number) => attempt(() => rpc('games', 'rateSong', { key, stars: ratings[key] === n ? 0 : n }));
 
   // A tap on a difficulty plays it on the light: nobody's phone, no fee, no score kept
   let testColors = $state(RHYTHM_DEFAULT_COLORS);
@@ -126,7 +130,22 @@
         {@render cover(x.cover, x.key, x.preview)}
         <span class="info">
           {#if x.status === 'ready'}
-            <strong class="truncate">{x.title}</strong>
+            <span class="title-line">
+              <strong class="truncate">{x.title}</strong>
+              <span class="stars" role="group" aria-label="Your rating" onpointerleave={() => (hover = null)}>
+                {#each [1, 2, 3, 4, 5] as n (n)}
+                  {@const lit = n <= (hover?.key === x.key ? hover.n : (ratings[x.key] ?? 0))}
+                  <button
+                    class="star"
+                    class:lit
+                    aria-label={`${n} star${n > 1 ? 's' : ''}`}
+                    aria-pressed={ratings[x.key] === n}
+                    onpointerenter={() => (hover = { key: x.key, n })}
+                    onclick={() => rate(x.key, n)}><Star size={15} fill={lit ? 'currentColor' : 'none'} /></button
+                  >
+                {/each}
+              </span>
+            </span>
             <span class="faint small truncate">{x.artist}{x.durationSec ? ` · ${length(x.durationSec)}` : ''}</span>
             {#if x.upvotes !== undefined}
               <span class="faint small votes"><ThumbsUp size={12} /> {x.upvotes} · {Math.round((x.rating ?? 0) * 100)}%</span>
@@ -265,6 +284,30 @@
     flex: 1;
     min-width: 0;
     display: grid;
+  }
+  .title-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .stars {
+    flex: none;
+    display: inline-flex;
+  }
+  .star {
+    display: grid;
+    place-items: center;
+    padding: 0.1rem;
+    border: 0;
+    background: none;
+    color: var(--text-faint);
+    opacity: 0.5;
+    cursor: pointer;
+  }
+  .star.lit {
+    color: var(--coin);
+    opacity: 1;
   }
   .meta {
     display: flex;

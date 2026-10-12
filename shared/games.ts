@@ -282,6 +282,8 @@ export interface GamesSettings {
   rhythmFullSong: boolean;
   /** BeatSaver maps (keys) guests can play Rhythm Rain on, with their song and notes */
   rhythmSongs: string[];
+  /** The host's own stars for each song (BeatSaver key: 1 to 5), to remember the ones they like */
+  rhythmRatings: Record<string, number>;
   /** The music starts this many ms early, to make up for the sound delay of the TV or its speakers (-2000 to 2000) */
   rhythmAudioOffset: number;
   /** WLED light the Pirate Race ships sail on ('' = the TV only); every other light plays a sea wave */
