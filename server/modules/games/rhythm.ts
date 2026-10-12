@@ -17,7 +17,7 @@ import {
   type RhythmView,
 } from '../../../shared/games.ts';
 import { HbError, clamp, num } from '../../core/util.ts';
-import { best, type GameFactory } from './engine.ts';
+import { best, type GameFactory, type GameRuntime } from './engine.ts';
 import { BS_DIFFICULTIES, type BsNote, type Song } from './beatsaver.ts';
 
 const FPS = 60;
@@ -543,6 +543,13 @@ export const rhythmRain: GameFactory = (m) => {
     if (over) return;
     const now = Date.now();
     let changed = false;
+    // Autoplay (the host trying it): every note is tapped right on time
+    if (m.options.autoplay && !loading) {
+      while (auto < notes.length && notes[auto].at <= now) {
+        for (const p of m.players) runtime.input(p.id, { color: notes[auto].color, at: notes[auto].at });
+        auto += 1;
+      }
+    }
     for (const p of m.players) {
       const s = scores.get(p.id)!;
       let i = passed.get(p.id)!;
@@ -592,8 +599,10 @@ export const rhythmRain: GameFactory = (m) => {
   };
 
   let stopTicks = () => {};
+  /** Next note autoplay taps */
+  let auto = 0;
 
-  return {
+  const runtime: GameRuntime = {
     start() {
       stopTicks = m.every(1000 / FPS, tick);
       if (loading) {
@@ -664,4 +673,5 @@ export const rhythmRain: GameFactory = (m) => {
       };
     },
   };
+  return runtime;
 };
