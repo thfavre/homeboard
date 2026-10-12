@@ -615,6 +615,11 @@ export default defineModule<GamesSettings>({
       }
       const top = outcome.winners.length === 1 ? ctx.session.guests.get(outcome.winners[0]) : undefined;
       if (top) ctx.activity(`{name} won ${name}${pot ? ` and a pot of ${fmt(pot)}` : ''}`, { guest: top });
+      // The host's try on the light is done when the song is: no result to show
+      if (m.options.test) {
+        close(m);
+        return;
+      }
       deadline(m, RESULT_MS);
       later(m, RESULT_MS, () => close(m));
     };
@@ -1034,7 +1039,7 @@ export default defineModule<GamesSettings>({
       const song = args?.song ? readySong(args.song) : null;
       if (args?.song && !song) throw new HbError('This song is not ready, pick another one');
       const tester: GamePlayer = { id: 'host-test', name: 'Test', color: '#8a8f98' };
-      const m = createMatch('rhythm', 'solo', null, [tester], 0, [], { ...rhythmOptions(args, song), autoplay: args?.autoplay !== false });
+      const m = createMatch('rhythm', 'solo', null, [tester], 0, [], { ...rhythmOptions(args, song), autoplay: args?.autoplay !== false, test: true });
       intro(m);
       play(m);
       return true;

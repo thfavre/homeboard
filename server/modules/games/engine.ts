@@ -29,6 +29,8 @@ export interface MatchOptions {
   song?: string;
   /** Rhythm Rain tried by the host: every note is hit on time, so the light shows it all */
   autoplay?: boolean;
+  /** Started by the host to try it: closes as soon as it is over, with no result screen */
+  test?: boolean;
   /** Bluff: what each player can win */
   bluff?: BluffDeal;
 }
