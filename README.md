@@ -50,7 +50,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [x] add some lights effects (dark, a better fiework that uses the firework effect, some effects that are not just copied on all devices the same). and also some scene that will be stay until a new scene is selected, only chill thigs
 - [x] Writing a quiz on a phone was lost when someone started an activity; quiz drafts are now autosaved on the phone too.
 - [x] show a +x to the music queue when there is more than the screen can display in te queue.
-- [ ] buy domain name
+- [x] buy domain name
 - [ ] redo a more fair economy
 - [x] WLED on ChillGuy should only change the eye segment effect/color
 - [x] ! for the coin flip, just put the face of the participans so easier to undertand who won. And still ranomly choose who trow the coin. Also I dont think we need the whole screen to do that, like we could do everything on the 2 participant phone, just the trow the coin on the big TV, and show a small animation of the money going to the winner. (so it would be more like a duel, and not a game for the whole room), also make the coin with the head on it look a bit nicer, like 3D, and make the coin flip animation a bit more realistic, like it should be a bit more random, and not just go up and down, but also rotate a bit.
