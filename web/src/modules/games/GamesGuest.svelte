@@ -59,11 +59,19 @@
   const fitting = (key: string) => songs.find((x) => x.key === key && has(x, chart));
   const song = $derived(fitting(songPick) ?? fitting(drawn) ?? null);
   /** A random song in this difficulty, among the host's best rated if any */
-  function drawSong(): string {
+  function drawSong(avoid = ''): string {
     const all = songs.filter((x) => has(x, chart));
     const rated = all.filter((x) => stars(x) >= RHYTHM_GOOD_STARS);
-    const pool = rated.length ? rated : all;
+    const best = rated.length ? rated : all;
+    // Another song than `avoid` when there is one
+    const pool = best.length > 1 ? best.filter((x) => x.key !== avoid) : best;
     return pool.length ? pool[Math.floor(Math.random() * pool.length)].key : '';
+  }
+  /** A tap on the colors or difficulty already picked: drop the song shown and suggest another */
+  function redraw() {
+    const current = song?.key ?? '';
+    songPick = '';
+    drawn = drawSong(current);
   }
   // No song chosen, or the one chosen lacks this difficulty: draw one
   $effect(() => {
@@ -271,7 +279,7 @@
         <span class="label">Colors <span class="faint">one key each on your phone</span></span>
         <div class="seg">
           {#each Array.from({ length: RHYTHM_MAX_COLORS }, (_, i) => i + 1) as n (n)}
-            <button class="seg-btn" class:active={colors === n} onclick={() => (colors = n)} aria-label={`${n} colors`}>
+            <button class="seg-btn" class:active={colors === n} onclick={() => (colors === n ? redraw() : (colors = n))} aria-label={`${n} colors`}>
               <span class="keys">{#each RHYTHM_COLORS.slice(0, n) as c (c.id)}<span class="key" style:--c={c.hex}></span>{/each}</span>
               <strong class="mono">{n}</strong>
             </button>
@@ -284,7 +292,7 @@
         <div class="seg five">
           {#each RHYTHM_DIFFICULTIES as d (d.id)}
             {@const count = songs.filter((x) => has(x, d.id)).length}
-            <button class="seg-btn" class:active={chart === d.id} onclick={() => (chart = d.id)}>
+            <button class="seg-btn" class:active={chart === d.id} onclick={() => (chart === d.id ? redraw() : (chart = d.id))}>
               <strong>{d.name}</strong>
               {#if music && songs.length}<span class="faint tiny">{count === 1 ? '1 song' : `${count} songs`}</span>{/if}
             </button>
