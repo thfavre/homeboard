@@ -251,6 +251,10 @@
       {@render length('Shortest', 'rhythmMinSec')}
       {@render length('Longest', 'rhythmMaxSec')}
     {/if}
+    <div class="line">
+      <span class="label">Held notes <span class="faint small">Where the music rests, a note is held: keep the key down while its light burns into the zone. Off: every note is a tap.</span></span>
+      <Toggle checked={s!.settings.rhythmHolds !== false} onchange={(v) => setSettings({ rhythmHolds: v })} label="Held notes" />
+    </div>
     {@render perk('Duel winner shoots fireworks on the light', 'rhythmPerkSec')}
     <div class="line wrap">
       <span class="label">Tap sounds in solo <span class="faint small">Where a solo player hears the sound of each tap. The TV stays in time with the music, the phone reacts a bit faster.</span></span>

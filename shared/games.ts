@@ -292,6 +292,8 @@ export interface GamesSettings {
   rhythmMaxSec: number;
   /** With music, play the whole song whatever its length */
   rhythmFullSong: boolean;
+  /** Notes where the music rests are held (off: every note is a tap) */
+  rhythmHolds: boolean;
   /** BeatSaver maps (keys) guests can play Rhythm Rain on, with their song and notes */
   rhythmSongs: string[];
   /** The host's own stars for each song (BeatSaver key: 1 to 5), to remember the ones they like */

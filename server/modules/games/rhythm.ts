@@ -388,11 +388,11 @@ export function songHolds(kept: BsNote[], bpm: number, tempo: RhythmTempo[] | nu
 }
 
 /** The song's notes between `fromMs` and `toMs`, timed for this game, on the keys of `songLanes`, some held (`songHolds`) */
-function songNotes(chart: BsNote[], bpm: number, tempo: RhythmTempo[] | null, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
+function songNotes(chart: BsNote[], bpm: number, tempo: RhythmTempo[] | null, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number, held: boolean): RhythmNote[] {
   const part = chart.filter((x) => x.ms >= fromMs && x.ms < toMs);
   const kept = playable(part, bpm, minGapMs, tempo);
   const keys = songLanes(kept, part, lanes.length, minGapMs);
-  const holds = songHolds(kept, bpm, tempo, minGapMs);
+  const holds = held ? songHolds(kept, bpm, tempo, minGapMs) : [];
   return kept.map((n, i) => ({ at: zeroAt + n.ms, color: lanes[keys[i]], ...(holds[i] ? { holdMs: holds[i] } : {}) }));
 }
 
@@ -467,7 +467,7 @@ export const rhythmRain: GameFactory = (m) => {
       beatZero = startAt + Math.max(RHYTHM.leadMs, travelMs + 1000) - part.fromMs;
       const musicFrom = Math.max(0, part.fromMs - Math.max(RHYTHM.leadMs, travelMs + 1000) + MUSIC_CUE_MS);
       const musicAt = beatZero + musicFrom;
-      notes = songNotes(chart, song.bpm, tempo, part.fromMs, part.toMs, beatZero, lanes, level.minGapMs);
+      notes = songNotes(chart, song.bpm, tempo, part.fromMs, part.toMs, beatZero, lanes, level.minGapMs, m.settings.rhythmHolds !== false);
       const lastAt = notes.length ? notes[notes.length - 1].at : musicAt + minMs;
       // Played to the song's end, or a little past the last note, fading out
       musicEndAt = part.toEnd ? beatZero + part.toMs : lastAt + RHYTHM.okMs + GRACE_MS + OUTRO_MS;
