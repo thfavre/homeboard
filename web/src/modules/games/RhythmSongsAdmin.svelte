@@ -14,6 +14,10 @@
   // The host's stars: a tap on the current rating clears it
   let hover = $state<{ key: string; n: number } | null>(null);
   const rate = (key: string, n: number) => attempt(() => rpc('games', 'rateSong', { key, stars: ratings[key] === n ? 0 : n }));
+  // Only the songs without stars yet, to go through them
+  let unratedOnly = $state(false);
+  const unrated = $derived(songs.filter((x) => !ratings[x.key]));
+  const shown = $derived(unratedOnly ? unrated : songs);
 
   // A tap on a difficulty plays it on the light: nobody's phone, no fee, no score kept
   let testColors = $state(RHYTHM_DEFAULT_COLORS);
@@ -137,8 +141,14 @@
       <span class="faint small">Autoplay hits every note on time; off, the notes go by.</span>
     {/if}
   </div>
+  {#if songs.length}
+    <div class="filter">
+      <button class="chip" class:active={!unratedOnly} onclick={() => (unratedOnly = false)}>All <span class="count">{songs.length}</span></button>
+      <button class="chip" class:active={unratedOnly} onclick={() => (unratedOnly = true)}>Unrated <span class="count">{unrated.length}</span></button>
+    </div>
+  {/if}
   <div class="list">
-    {#each songs as x (x.key)}
+    {#each shown as x (x.key)}
       <div class="row">
         {@render cover(x.cover, x.key, x.preview)}
         <span class="info">
@@ -198,7 +208,7 @@
         <button class="btn small ghost" aria-label="Remove" onclick={() => attempt(() => rpc('games', 'removeSong', { key: x.key }))}><X size={16} /></button>
       </div>
     {:else}
-      <p class="faint small">No song: duels are played without music. Search below to add some.</p>
+      <p class="faint small">{songs.length ? 'Every song is rated.' : 'No song: duels are played without music. Search below to add some.'}</p>
     {/each}
   </div>
 </div>
@@ -262,6 +272,30 @@
   }
   .part > .group + .small {
     margin-top: -0.4rem;
+  }
+  .filter {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    font-weight: 600;
+    font-size: 0.88rem;
+  }
+  .chip.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent);
+  }
+  .count {
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
   }
   .list {
     display: grid;
