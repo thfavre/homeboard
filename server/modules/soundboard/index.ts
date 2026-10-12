@@ -21,7 +21,15 @@ interface CustomSound {
   name: string;
   file: string;
   myinstants?: boolean;
+  /** Length in seconds, when known */
+  duration?: number;
 }
+
+/** A length sent by a page, rounded to 0.1s (undefined when missing or silly) */
+const cleanDuration = (input: unknown) => {
+  const n = Number(input);
+  return n > 0 && n < 3600 ? Math.round(n * 10) / 10 : undefined;
+};
 
 /** Sounds a guest can keep on their own board */
 const MAX_MINE = 30;
@@ -69,7 +77,7 @@ export default defineModule<SoundboardSettings>({
     const sounds = (admin = false): Sound[] => {
       const s = ctx.settings.get();
       return [
-        ...s.custom.map((c) => ({ id: c.id, name: c.name, src: ctx.mediaUrl(c.file), ...(admin && c.myinstants ? { myinstants: true } : {}) })),
+        ...s.custom.map((c) => ({ id: c.id, name: c.name, src: ctx.mediaUrl(c.file), ...(c.duration ? { duration: c.duration } : {}), ...(admin && c.myinstants ? { myinstants: true } : {}) })),
       ];
     };
 
@@ -171,7 +179,7 @@ export default defineModule<SoundboardSettings>({
       await cached(mp3);
       const now = mine(guest);
       if (now.some((x) => x.mp3 === mp3)) return now;
-      const duration = Number(args.duration) > 0 ? Math.round(Number(args.duration) * 10) / 10 : undefined;
+      const duration = cleanDuration(args.duration);
       return setMine(guest, [...now, { id: String(args.id ?? mp3).slice(0, 120), title: cleanName(args.title, 40) || 'Sound', mp3, ...(duration ? { duration } : {}) }]);
     });
 
@@ -188,7 +196,8 @@ export default defineModule<SoundboardSettings>({
       const id = uid(6);
       const file = await downloadMp3(mp3, media, `${id}.mp3`);
       const name = cleanName(args.title, 30) || 'Sound';
-      ctx.settings.update({ custom: [...ctx.settings.get().custom, { id, name, file, myinstants: true }] });
+      const duration = cleanDuration(args.duration);
+      ctx.settings.update({ custom: [...ctx.settings.get().custom, { id, name, file, myinstants: true, ...(duration ? { duration } : {}) }] });
       ctx.publish();
       return id;
     });
@@ -207,6 +216,21 @@ export default defineModule<SoundboardSettings>({
         guestSearch: args.guestSearch !== undefined ? !!args.guestSearch : s.guestSearch,
         searchMaxSec: args.searchMaxSec !== undefined ? clamp(Math.round(num(args.searchMaxSec, 10)), 0, 60) : s.searchMaxSec,
       });
+      ctx.publish();
+    });
+
+    /** The admin page measures board sounds whose length is not known yet (uploaded before lengths were kept) */
+    ctx.onAdmin('setDurations', (args) => {
+      const lengths = (args.durations ?? {}) as Record<string, unknown>;
+      let changed = false;
+      const custom = ctx.settings.get().custom.map((c) => {
+        const duration = cleanDuration(lengths[c.id]);
+        if (!duration || c.duration) return c;
+        changed = true;
+        return { ...c, duration };
+      });
+      if (!changed) return;
+      ctx.settings.update({ custom });
       ctx.publish();
     });
 
@@ -237,7 +261,8 @@ export default defineModule<SoundboardSettings>({
       const file = `${id}.${ext}`;
       writeFileSync(join(media, file), req.body);
       const name = cleanName(req.query.name, 30) || 'Sound';
-      ctx.settings.update({ custom: [...ctx.settings.get().custom, { id, name, file }] });
+      const duration = cleanDuration(req.query.duration);
+      ctx.settings.update({ custom: [...ctx.settings.get().custom, { id, name, file, ...(duration ? { duration } : {}) }] });
       ctx.publish();
       res.json({ id });
     });

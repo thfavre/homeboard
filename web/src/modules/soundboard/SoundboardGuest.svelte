@@ -82,7 +82,7 @@
       </div>
       <MiSearch>
         {#snippet item(s, i)}
-          <SoundCard name={s.title} hue={(i * 47 + 200) % 360} active={last === `mi:${s.mp3}`} disabled={wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)} asideBelow>
+          <SoundCard name={s.title} hue={(i * 47 + 200) % 360} duration={s.duration} active={last === `mi:${s.mp3}`} disabled={wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)} asideBelow>
             {#snippet aside()}
               <ListenButton sound={s} />
               <button class:on={saved(s.mp3)} aria-label={saved(s.mp3) ? 'Remove from My sounds' : 'Save to My sounds'} onclick={() => toggleSaved(s)}>
@@ -102,7 +102,7 @@
       </div>
       <div class="grid">
         {#each mine as s, i (s.mp3)}
-          <SoundCard name={s.title} hue={(i * 47 + 200) % 360} active={last === `mi:${s.mp3}`} disabled={editing || wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)} badge={editing ? removeBadge : undefined} />
+          <SoundCard name={s.title} hue={(i * 47 + 200) % 360} duration={s.duration} active={last === `mi:${s.mp3}`} disabled={editing || wait > 0 || sending === s.mp3} onclick={() => playSearch(s.mp3, s.title)} badge={editing ? removeBadge : undefined} />
           {#snippet removeBadge()}
             <button class="remove" aria-label={`Remove ${s.title}`} onclick={() => toggleSaved(s)}><X size={14} /></button>
           {/snippet}
@@ -116,7 +116,7 @@
     {/if}
     <div class="grid">
       {#each mod.sounds as s, i (s.id)}
-        <SoundCard name={s.name} hue={(i * 47) % 360} active={last === s.id} disabled={wait > 0} onclick={() => play(s.id, s.name)} />
+        <SoundCard name={s.name} hue={(i * 47) % 360} duration={s.duration} active={last === s.id} disabled={wait > 0} onclick={() => play(s.id, s.name)} />
       {:else}
         <div class="card empty">No sounds available.</div>
       {/each}

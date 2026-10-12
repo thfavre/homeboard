@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Synced } from '$lib/synced.svelte.ts';
   import { Play, Plus, Trash2, Upload } from '@lucide/svelte';
-  import type { SoundboardState } from '$shared/soundboard.ts';
+  import { formatDuration, type MiSound, type SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -22,16 +22,51 @@
   const set = (args: Record<string, unknown>) => attempt(() => rpc('soundboard', 'setOptions', args));
   const test = (id: string) => attempt(() => rpc('soundboard', 'test', { id }));
 
-  async function add(mp3: string, title: string) {
-    adding = mp3;
-    await attempt(() => rpc('soundboard', 'addFromSearch', { mp3, title }), `${title} added to the board`);
+  async function add(s: MiSound) {
+    adding = s.mp3;
+    await attempt(() => rpc('soundboard', 'addFromSearch', { mp3: s.mp3, title: s.title, duration: s.duration }), `${s.title} added to the board`);
     adding = null;
   }
+
+  /** Length of an audio file or URL in seconds, read by the browser (0 when it can't tell) */
+  function measure(src: string): Promise<number> {
+    return new Promise((resolve) => {
+      const a = new Audio();
+      const done = (sec: number) => {
+        clearTimeout(timer);
+        a.onloadedmetadata = a.onerror = null;
+        a.removeAttribute('src');
+        resolve(Number.isFinite(sec) && sec > 0 ? sec : 0);
+      };
+      const timer = setTimeout(() => done(0), 8000);
+      a.preload = 'metadata';
+      a.onloadedmetadata = () => done(a.duration);
+      a.onerror = () => done(0);
+      a.src = src;
+    });
+  }
+
+  // Board sounds added before lengths were kept: measure them once, the server remembers
+  const measured = new Set<string>();
+  $effect(() => {
+    const missing = (mod?.sounds ?? []).filter((s) => !s.duration && !measured.has(s.id));
+    if (!missing.length) return;
+    for (const s of missing) measured.add(s.id);
+    Promise.all(missing.map(async (s) => [s.id, await measure(s.src)] as const)).then((list) => {
+      const durations = Object.fromEntries(list.filter(([, sec]) => sec > 0));
+      if (Object.keys(durations).length) rpc('soundboard', 'setDurations', { durations }).catch(() => {});
+    });
+  });
 
   async function onFile(e: Event) {
     const file = (e.currentTarget as HTMLInputElement).files?.[0];
     if (!file) return;
-    await attempt(() => upload('soundboard', 'upload', file, { name: name || file.name.replace(/\.[^.]+$/, '') }), 'Sound added');
+    const url = URL.createObjectURL(file);
+    const sec = await measure(url);
+    URL.revokeObjectURL(url);
+    const query: Record<string, string> = { name: name || file.name.replace(/\.[^.]+$/, '') };
+    if (sec) query.duration = String(sec);
+    await attempt(() => upload('soundboard', 'upload', file, query), 'Sound added');
     name = '';
     if (fileInput) fileInput.value = '';
   }
@@ -73,6 +108,7 @@
       <div class="line">
         <button class="btn ghost small" aria-label="Test" onclick={() => test(s.id)}><Play size={15} /></button>
         <span class="grow">{s.name}</span>
+        {#if s.duration}<span class="faint len">{formatDuration(s.duration)}</span>{/if}
         {@render del(() => attempt(() => rpc('soundboard', 'deleteCustom', { id: s.id })))}
       </div>
     {:else}
@@ -98,10 +134,10 @@
     {/if}
     <MiSearch>
       {#snippet item(s, i)}
-        <SoundCard name={s.title} hue={(i * 47 + 200) % 360} onclick={() => attempt(() => rpc('soundboard', 'playSearch', { mp3: s.mp3, title: s.title }))}>
+        <SoundCard name={s.title} hue={(i * 47 + 200) % 360} duration={s.duration} onclick={() => attempt(() => rpc('soundboard', 'playSearch', { mp3: s.mp3, title: s.title }))}>
           {#snippet aside()}
             <ListenButton sound={s} />
-            <button aria-label="Add to the board" disabled={adding === s.mp3} onclick={() => add(s.mp3, s.title)}><Plus size={18} /></button>
+            <button aria-label="Add to the board" disabled={adding === s.mp3} onclick={() => add(s)}><Plus size={18} /></button>
           {/snippet}
         </SoundCard>
       {/snippet}
@@ -122,6 +158,10 @@
   .line :global(.del) {
     min-width: 4.6rem;
     justify-content: center;
+  }
+  .len {
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
   }
   .sub {
     display: block;

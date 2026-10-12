@@ -1,29 +1,32 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { AudioLines } from '@lucide/svelte';
+  import { formatDuration } from '$shared/soundboard.ts';
 
   /**
    * One sound on a board: tap to play. `aside` puts small buttons on the right of the card
    * (listen, save, add to the board), on one line with the name cut with "..." if too long;
    * with `asideBelow` they go under the name on phones instead. `badge` puts one on its
-   * top-right corner (remove while editing).
+   * top-right corner (remove while editing). `duration` (seconds) shows the sound's length.
    */
   let {
     name,
     hue,
+    duration,
     active = false,
     disabled = false,
     onclick,
     aside,
     asideBelow = false,
     badge,
-  }: { name: string; hue: number; active?: boolean; disabled?: boolean; onclick: () => void; aside?: Snippet; asideBelow?: boolean; badge?: Snippet } = $props();
+  }: { name: string; hue: number; duration?: number; active?: boolean; disabled?: boolean; onclick: () => void; aside?: Snippet; asideBelow?: boolean; badge?: Snippet } = $props();
 </script>
 
 <div class="sound card" class:active class:has-aside={!!aside} class:below={asideBelow} style:--h={hue}>
   <button class="main" {disabled} {onclick}>
     <span class="icon"><AudioLines size={20} /></span>
     <span class="name">{name}</span>
+    {#if duration}<span class="len">{formatDuration(duration)}</span>{/if}
   </button>
   {#if aside}<span class="aside">{@render aside()}</span>{/if}
   {#if badge}<span class="badge">{@render badge()}</span>{/if}
@@ -77,6 +80,17 @@
     font-weight: 600;
     font-size: 0.92rem;
     line-height: 1.2;
+  }
+  /* Length: never cut, the name gives way */
+  .len {
+    flex: none;
+    margin-left: auto;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-faint);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
   }
   /* With buttons on the same line, the name stays on one line and ends with "..." */
   .has-aside .name {

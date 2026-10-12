@@ -4,6 +4,16 @@ export interface Sound {
   src: string;
   /** Added from MyInstants (admin view only) */
   myinstants?: boolean;
+  /** Length in seconds, when known */
+  duration?: number;
+}
+
+/** A sound's length for a button: "2.4s", "12s", "1:05" */
+export function formatDuration(sec: number): string {
+  if (sec < 9.95) return `${Math.max(0.1, Math.round(sec * 10) / 10)}s`;
+  if (sec < 59.5) return `${Math.round(sec)}s`;
+  const s = Math.round(sec);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 /** A sound found on MyInstants (`mp3` is its file name on myinstants.com) or on Freesound (`mp3` starts with "fs--") */
