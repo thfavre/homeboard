@@ -18,11 +18,21 @@
   // A tap on a difficulty plays it on the light: nobody's phone, no fee, no score kept
   let testColors = $state(RHYTHM_DEFAULT_COLORS);
   let testAuto = $state(true);
-  const test = (chart: RhythmDifficulty, song?: string) => {
+  /** The chip pressed for the game on the light: it turns into its Stop button */
+  let tried = $state<string | null>(null);
+  const tryKey = (chart: RhythmDifficulty, song?: string) => `${song ?? ''}:${chart}`;
+  $effect(() => {
+    if (!running) tried = null;
+  });
+  async function test(chart: RhythmDifficulty, song?: string) {
+    if (running) {
+      await attempt(() => rpc('games', 'stop', { id: running }));
+      return;
+    }
     audio?.pause();
     playing = null;
-    attempt(() => rpc('games', 'testRhythm', { colors: testColors, chart, song, autoplay: testAuto }));
-  };
+    if ((await attempt(() => rpc('games', 'testRhythm', { colors: testColors, chart, song, autoplay: testAuto }))) !== undefined) tried = tryKey(chart, song);
+  }
 
   interface Hit {
     key: string;
@@ -113,7 +123,10 @@
     <div class="test-line">
       <span class="faint small">No music</span>
       {#each RHYTHM_DIFFICULTIES as d (d.id)}
-        <button class="diff" disabled={!light || !!running} title={`Try ${d.name} on the light`} onclick={() => test(d.id)}>{d.name}</button>
+        {@const stop = !!running && tried === tryKey(d.id)}
+        <button class="diff" class:stop disabled={!light || (!!running && !stop)} title={stop ? 'Stop it' : `Try ${d.name} on the light`} onclick={() => test(d.id)}>
+          {#if stop}<Square size={10} fill="currentColor" />{:else}<Play size={10} />{/if}{d.name}
+        </button>
       {/each}
     </div>
     {#if running}
@@ -158,8 +171,15 @@
                   {/if}
                 {/each}
                 {#each x.charts as c (c.id)}
-                  <button class="diff" disabled={!light || !!running} title={`Try ${rhythmDifficulty(c.id).name} on the light`} onclick={() => test(c.id, x.key)}>
-                    <Play size={10} />{rhythmDifficulty(c.id).name} <span class="nps">{c.nps.toFixed(1)}/s</span>
+                  {@const stop = !!running && tried === tryKey(c.id, x.key)}
+                  <button
+                    class="diff"
+                    class:stop
+                    disabled={!light || (!!running && !stop)}
+                    title={stop ? 'Stop it' : `Try ${rhythmDifficulty(c.id).name} on the light`}
+                    onclick={() => test(c.id, x.key)}
+                  >
+                    {#if stop}<Square size={10} fill="currentColor" />{:else}<Play size={10} />{/if}{rhythmDifficulty(c.id).name} <span class="nps">{stop ? 'Stop' : `${c.nps.toFixed(1)}/s`}</span>
                   </button>
                 {/each}
               </span>
@@ -340,6 +360,14 @@
   button.diff:hover:not(:disabled) {
     border-color: var(--accent);
     color: var(--text);
+  }
+  button.diff.stop {
+    border-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 18%, transparent);
+    color: var(--danger);
+  }
+  button.diff.stop .nps {
+    color: inherit;
   }
   button.diff:disabled {
     cursor: default;
