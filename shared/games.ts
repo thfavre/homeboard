@@ -1,6 +1,8 @@
 // Mini games: 1 vs 1 duels with a stake, room games that anyone can join, or solo games.
 
-export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm' | 'pirates';
+import type { PartyMiniId } from './party.ts';
+
+export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm' | 'pirates' | 'party';
 export type GameMode = 'duel' | 'room' | 'solo';
 
 export interface GameInfo {
@@ -107,6 +109,16 @@ export const GAMES: GameInfo[] = [
     pausesMusic: true,
     steps: ['Find your crew: your phone shows your ship color', 'Tap ROW on every beat of the drum, all together', '5 synchronized strokes in a row: speed boost, as long as you stay in sync!'],
     colors: ['#2fb4ff', '#c98a2b'],
+  },
+  {
+    id: 'party',
+    name: 'Light Party',
+    tagline: 'A few quick mini games on the light strip',
+    rules: 'A few mini games drawn at random, played one after the other on the light strip: count the colors, remember a tower of blocks, make a color again... Each one starts with its rules: press Got it when you have read them. Every mini game gives points by place (5 for the best, 3, 2, then 1 for everyone who played). The most points at the end wins.',
+    modes: ['room', 'duel'],
+    lights: true,
+    steps: ['A few mini games on the light strip, drawn at random', 'Each one starts with its rules: press Got it', 'Points for each place. Most points at the end wins'],
+    colors: ['#ff5fc8', '#3d8bff'],
   },
 ];
 
@@ -300,6 +312,18 @@ export interface GamesSettings {
   pirateSongs: PirateSong[];
   /** Its volume on the TV, 0 to 100 */
   pirateSongVolume: number;
+  /** WLED strip Light Party is played on, hung upright ('' = none: the game cannot start) */
+  partyLight: string;
+  /** The party light's first LED is at the top */
+  partyReverse: boolean;
+  /** Mini games in one Light Party (at most the ones switched on) */
+  partyRounds: number;
+  /** Mini games Light Party draws from */
+  partyMinis: PartyMiniId[];
+  /** Seconds the Color Count dots stay on */
+  partyCountSec: number;
+  /** Blocks in the Stack tower */
+  partyStackBlocks: number;
   /** The drum's volume on the TV, 0 to 100 (100: as loud as it was made) */
   pirateDrumVolume: number;
 }

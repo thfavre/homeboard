@@ -50,6 +50,8 @@ import { Fireworks, rgbOf } from '../wled/fireworks.ts';
 import { dealPirateCrews, pirateRace, pirateWaitingLights } from './pirates.ts';
 import { cleanMp3, downloadMp3 } from '../soundboard/myinstants.ts';
 import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
+import { lightParty } from './party.ts';
+import { PARTY_MINIS } from '../../../shared/party.ts';
 
 /** Songs a new party starts with: well known, well rated maps with charts from Easy or Normal to Expert */
 const STARTER_SONGS = ['747', '217', '8553', '849a', '141', '1492', '6d63', 'bd3', '13760', '1672a', '3fc90', '8278', '38c26'];
@@ -63,7 +65,11 @@ const FACTORIES: Record<GameId, GameFactory> = {
   coin: coinFlip,
   rhythm: rhythmRain,
   pirates: pirateRace,
+  party: lightParty,
 };
+
+/** Games played on one light the host picks: the setting that names it */
+const GAME_LIGHT: Partial<Record<GameId, 'rhythmLight' | 'partyLight'>> = { rhythm: 'rhythmLight', party: 'partyLight' };
 
 const LOBBY_MS = 45_000;
 const MINUTE = 60_000;
@@ -132,7 +138,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyCountSec: 10, partyStackBlocks: 10 },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -254,10 +260,11 @@ export default defineModule<GamesSettings>({
       }
     };
 
-    /** A light-only game needs its light (Rhythm Rain: the strip the host picked) */
+    /** A game played on one light needs it (Rhythm Rain, Light Party: the strip the host picked) */
     const checkLight = (game: GameId) => {
-      if (!gameInfo(game)?.lightOnly) return;
-      const id = ctx.settings.get().rhythmLight;
+      const key = GAME_LIGHT[game];
+      if (!key) return;
+      const id = ctx.settings.get()[key];
       if (!id || !lights()?.available() || !lights()?.list().some((d) => d.id === id && d.online)) {
         throw new HbError(`${gameInfo(game)!.name} needs its light strip, and it is not reachable right now`);
       }
@@ -465,6 +472,12 @@ export default defineModule<GamesSettings>({
         m.usesLights = true;
         lights()!.claim();
         lights()!.color(null);
+      }
+      // Light Party: its strip at full brightness, the game draws its own levels
+      const party = m.game === 'party' ? ctx.settings.get().partyLight : '';
+      if (party && m.usesLights && lights()?.list().some((d) => d.id === party && d.online)) {
+        m.fullLight = party;
+        void lights()?.boost(party);
       }
       // Pirate Race: the lights already show the sea and the ships waiting at the start
       if (m.game === 'pirates' && m.usesLights && m.options.crews) {
@@ -721,6 +734,7 @@ export default defineModule<GamesSettings>({
       if (!allowed(game, 'room') && starter) throw new HbError('This game cannot be started for the room');
       if (!gameInfo(game)?.modes.includes('room')) throw new HbError('This game is for duels only');
       tvFree(game);
+      checkLight(game);
       const stake = cleanStake(rawStake);
       const charges: Charge[] = [];
       if (starter) {
@@ -1002,6 +1016,7 @@ export default defineModule<GamesSettings>({
       const m = hostMatch(args);
       if (m?.phase === 'lobby') beginRoom(m);
       else if (m?.phase === 'intro') play(m);
+      else if (m?.phase === 'play') m.runtime?.skip?.();
     });
     ctx.onAdmin('stop', (args) => {
       const m = hostMatch(args);
@@ -1058,6 +1073,13 @@ export default defineModule<GamesSettings>({
         pirateDrumVolume: args?.pirateDrumVolume !== undefined ? Math.round(clamp(num(args.pirateDrumVolume, 100), 0, 100)) : s.pirateDrumVolume,
         pirateAudioOffset:
           args?.pirateAudioOffset !== undefined ? Math.min(1000, Math.max(-1000, Math.round(num(args.pirateAudioOffset, 0)))) : s.pirateAudioOffset,
+        partyLight:
+          typeof args?.partyLight === 'string' && (args.partyLight === '' || lights()?.list().some((d) => d.id === args.partyLight)) ? args.partyLight : s.partyLight,
+        partyReverse: typeof args?.partyReverse === 'boolean' ? args.partyReverse : s.partyReverse,
+        partyRounds: args?.partyRounds !== undefined ? Math.round(clamp(num(args.partyRounds, 3), 1, PARTY_MINIS.length)) : s.partyRounds,
+        partyMinis: Array.isArray(args?.partyMinis) ? PARTY_MINIS.map((g) => g.id).filter((id) => args.partyMinis.includes(id)) : s.partyMinis,
+        partyCountSec: args?.partyCountSec !== undefined ? Math.round(clamp(num(args.partyCountSec, 10), 3, 30)) : s.partyCountSec,
+        partyStackBlocks: args?.partyStackBlocks !== undefined ? Math.round(clamp(num(args.partyStackBlocks, 10), 4, 20)) : s.partyStackBlocks,
       });
       // The shortest stays below the longest, whichever was moved
       const n = ctx.settings.get();

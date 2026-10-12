@@ -70,6 +70,8 @@ export interface GameRuntime {
   input(playerId: string, args: any): unknown;
   /** The TV answers something (Rhythm Rain: the song is ready to play) */
   tvInput?(args: any): void;
+  /** The host skips a wait inside the game (Light Party: the rules of a mini game) */
+  skip?(): void;
   /** Public game state; the TV may see more than the phones */
   view(role: Role): unknown;
 }

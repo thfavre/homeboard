@@ -8,11 +8,13 @@ import BluffPhone from './phone/BluffPhone.svelte';
 import CoinPhone from './phone/CoinPhone.svelte';
 import RhythmPhone from './phone/RhythmPhone.svelte';
 import PiratesPhone from './phone/PiratesPhone.svelte';
+import PartyPhone from './party/PartyPhone.svelte';
 import TimerTv from './tv/TimerTv.svelte';
 import SimonTv from './tv/SimonTv.svelte';
 import ReflexTv from './tv/ReflexTv.svelte';
 import CircleTv from './tv/CircleTv.svelte';
 import PiratesTv from './tv/PiratesTv.svelte';
+import PartyTv from './party/PartyTv.svelte';
 
 type View = Component<{ m: MatchState }>;
 
@@ -30,4 +32,5 @@ export const GAME_UI: Record<GameId, { phone: View; tv?: View; tvResult?: boolea
   coin: { phone: CoinPhone },
   rhythm: { phone: RhythmPhone, fill: true },
   pirates: { phone: PiratesPhone, tv: PiratesTv, tvResult: true, fill: true },
+  party: { phone: PartyPhone, tv: PartyTv },
 };

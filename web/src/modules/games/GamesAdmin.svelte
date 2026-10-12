@@ -8,7 +8,8 @@
   import Money from '$lib/ui/Money.svelte';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { formatAmount } from '$shared/money.ts';
-  import { GAME_ICONS, Now, gamesState } from './store.svelte.ts';
+  import { PARTY_MINIS, type PartyView } from '$shared/party.ts';
+  import { GAME_ICONS, Now, PARTY_ICONS, gamesState } from './store.svelte.ts';
   import RhythmSongsAdmin from './RhythmSongsAdmin.svelte';
   import PirateSoundsAdmin from './PirateSoundsAdmin.svelte';
   import PirateSongsAdmin from './PirateSongsAdmin.svelte';
@@ -89,6 +90,8 @@
           : 'needs a light';
       case 'pirates':
         return `${pirateLength(st.pirateLength).name.toLowerCase()} race, ${st.pirateLight ? `on ${lightName(st.pirateLight)}, treasure at ${st.pirateTreasure}%` : 'TV only'}`;
+      case 'party':
+        return st.partyLight ? `on ${lightName(st.partyLight)}, ${Math.min(st.partyRounds, st.partyMinis.length)} of ${plural(st.partyMinis.length, 'mini game')}` : 'needs a light';
       default:
         return '';
     }
@@ -132,7 +135,7 @@
   {@render stepper(label, 'Seconds, 0 = no prize', n, 0, 300, (dir) => setSettings({ [key]: stepIn(PERK_STEPS, n, dir) }))}
 {/snippet}
 
-{#snippet lightSelect(label: string, hint: string, key: 'scratchLight' | 'rhythmLight' | 'pirateLight')}
+{#snippet lightSelect(label: string, hint: string, key: 'scratchLight' | 'rhythmLight' | 'pirateLight' | 'partyLight')}
   <div class="line">
     <span class="label">{label} <span class="faint small">{hint}</span></span>
     <select class="input light" value={s!.settings[key]} onchange={(e) => setSettings({ [key]: e.currentTarget.value })}>
@@ -279,6 +282,35 @@
     {/if}
     <h4 class="group">Sounds</h4>
     <PirateSoundsAdmin picks={s!.settings.pirateSounds ?? {}} />
+  {:else if id === 'party'}
+    {@const st = s!.settings}
+    <h4 class="group">Light</h4>
+    {@render lightSelect('Light strip', 'The WLED strip the mini games are played on, hung upright. The game can only start when it is reachable', 'partyLight')}
+    {#if st.partyLight}
+      <div class="line">
+        <span class="label">First LED at the top <span class="faint small">Turn it on if the blocks fall upward</span></span>
+        <Toggle checked={st.partyReverse} onchange={(v) => setSettings({ partyReverse: v })} label="First LED at the top" />
+      </div>
+    {/if}
+    <h4 class="group">Mini games</h4>
+    <p class="faint small">Each party draws this many of the mini games switched on below, in a random order.</p>
+    {@render stepper('Mini games per party', `1 to ${Math.max(1, st.partyMinis.length)}`, Math.min(st.partyRounds, Math.max(1, st.partyMinis.length)), 1, Math.max(1, st.partyMinis.length), (dir) => setSettings({ partyRounds: Math.min(st.partyRounds, st.partyMinis.length) + dir }))}
+    <div class="minis">
+      {#each PARTY_MINIS as g (g.id)}
+        {@const Icon = PARTY_ICONS[g.id]}
+        {@const on = st.partyMinis.includes(g.id)}
+        <div class="line">
+          <span class="label"><span class="mini-name"><Icon size={16} /> {g.name}</span> <span class="faint small">{g.tagline}</span></span>
+          <Toggle
+            checked={on}
+            onchange={(v) => setSettings({ partyMinis: v ? [...st.partyMinis, g.id] : st.partyMinis.filter((x) => x !== g.id) })}
+            label={g.name}
+          />
+        </div>
+      {/each}
+    </div>
+    {@render stepper('Color Count: dots on for', 'Seconds, 3 to 30', st.partyCountSec, 3, 30, (dir) => setSettings({ partyCountSec: st.partyCountSec + dir }))}
+    {@render stepper('Stack: blocks in the tower', 'They fill the strip, 4 to 20. More blocks: smaller and harder', st.partyStackBlocks, 4, 20, (dir) => setSettings({ partyStackBlocks: st.partyStackBlocks + dir }))}
   {/if}
 {/snippet}
 
@@ -292,6 +324,10 @@
       <div class="row">
         {#if m.phase === 'lobby'}
           <button class="btn primary" disabled={m.players.length < 2} onclick={() => attempt(() => rpc('games', 'begin', { id: m.id }))}><Play size={18} /> Start now</button>
+        {/if}
+        {#if m.game === 'party' && m.phase === 'play' && ['lineup', 'rules'].includes((m.view as PartyView | null)?.step ?? '')}
+          <!-- Someone does not press Got it: start the mini game without waiting -->
+          <button class="btn primary" onclick={() => attempt(() => rpc('games', 'begin', { id: m.id }))}><Play size={18} /> Start the mini game now</button>
         {/if}
         <TwoStepButton class="danger" onconfirm={() => attempt(() => rpc('games', 'stop', { id: m.id }))}>
           <Square size={16} /> Stop
@@ -347,7 +383,7 @@
               <span class="label">
                 <strong>{g.name}</strong>
                 <span class="faint small truncate">
-                  {modes(g.id)}{#if expandable}<span class:warn={g.id === 'rhythm' && !s.settings.rhythmLight}> · {summary(g.id, s.settings)}</span>{/if}
+                  {modes(g.id)}{#if expandable}<span class:warn={(g.id === 'rhythm' && !s.settings.rhythmLight) || (g.id === 'party' && !s.settings.partyLight)}> · {summary(g.id, s.settings)}</span>{/if}
                 </span>
               </span>
               {#if expandable}<span class="chev"><ChevronDown size={18} /></span>{/if}
@@ -511,6 +547,16 @@
     min-width: 1.75rem;
     text-align: center;
     font-size: 1.1rem;
+  }
+  .minis {
+    display: grid;
+    gap: 0.6rem;
+  }
+  .mini-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
   }
   .range {
     flex: 1 1 10rem;

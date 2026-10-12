@@ -1,10 +1,12 @@
 <script lang="ts">
+  import type { Component } from 'svelte';
   import type { GameInfo } from '$shared/games.ts';
   import { GAME_ICONS } from '../store.svelte.ts';
 
   /** The game's poster on the TV: colors, big icon, name, and the 3 steps as cards */
-  let { game, eyebrow }: { game: GameInfo; eyebrow?: string } = $props();
-  const Icon = $derived(GAME_ICONS[game.id]);
+  /** `game`: a game, or a Light Party mini game with its `icon` */
+  let { game, eyebrow, icon }: { game: Pick<GameInfo, 'name' | 'tagline' | 'steps' | 'colors'> & { id: string }; eyebrow?: string; icon?: Component<any> } = $props();
+  const Icon = $derived(icon ?? GAME_ICONS[game.id as GameInfo['id']]);
 </script>
 
 <section class="poster" style:--g1={game.colors[0]} style:--g2={game.colors[1]}>
