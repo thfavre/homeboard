@@ -281,14 +281,13 @@ export function pickSection(
 
 /**
  * The song's notes between `fromMs` and `toMs`, timed for this game. The 4 columns of Beat Saber become
- * the keys: 2 keys follow the two sabers, 4 keys the 4 columns, 3 keys the outer columns on the sides and
- * the two inner ones in the middle (so no side gets more notes than the other).
+ * the keys: 2 keys follow the two sabers, 3 or 4 keys share the columns from left to right.
  */
 function songNotes(chart: BsNote[], bpm: number, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
   const notes: RhythmNote[] = [];
   for (const n of playable(chart.filter((x) => x.ms >= fromMs && x.ms < toMs), bpm, minGapMs)) {
     const k = lanes.length;
-    const lane = k === 2 ? n.c : Math.round((n.x * (k - 1)) / 3);
+    const lane = k === 2 ? n.c : Math.min(k - 1, Math.floor((n.x * k) / 4));
     notes.push({ at: zeroAt + n.ms, color: lanes[lane] });
   }
   return notes;
