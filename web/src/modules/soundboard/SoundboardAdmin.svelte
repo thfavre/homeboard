@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Synced } from '$lib/synced.svelte.ts';
-  import { Play, Plus, Trash2, Upload } from '@lucide/svelte';
+  import { Pencil, Play, Plus, Trash2, Upload } from '@lucide/svelte';
   import { formatDuration, type MiSound, type SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -18,6 +18,24 @@
   let adding = $state<string | null>(null);
   let name = $state('');
   let fileInput = $state<HTMLInputElement>();
+
+  // Renaming one board sound: its id and the name being typed
+  let editing = $state<string | null>(null);
+  let draft = $state('');
+  const focus = (el: HTMLInputElement) => {
+    el.focus();
+    el.select();
+  };
+  function startRename(id: string, current: string) {
+    editing = id;
+    draft = current;
+  }
+  async function saveRename(id: string, current: string) {
+    if (editing !== id) return;
+    editing = null;
+    const next = draft.trim();
+    if (next && next !== current) await attempt(() => rpc('soundboard', 'renameCustom', { id, name: next }), 'Renamed');
+  }
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('soundboard', 'setOptions', args));
   const test = (id: string) => attempt(() => rpc('soundboard', 'test', { id }));
@@ -107,8 +125,24 @@
     {#each mod.sounds as s (s.id)}
       <div class="line">
         <button class="btn ghost small" aria-label="Test" onclick={() => test(s.id)}><Play size={15} /></button>
-        <span class="grow">{s.name}</span>
-        {#if s.duration}<span class="faint len">{formatDuration(s.duration)}</span>{/if}
+        {#if editing === s.id}
+          <input
+            class="input grow"
+            bind:value={draft}
+            maxlength="30"
+            aria-label="Sound name"
+            use:focus
+            onblur={() => saveRename(s.id, s.name)}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') saveRename(s.id, s.name);
+              if (e.key === 'Escape') editing = null;
+            }}
+          />
+        {:else}
+          <span class="grow">{s.name}</span>
+          {#if s.duration}<span class="faint len">{formatDuration(s.duration)}</span>{/if}
+          <button class="btn ghost small" aria-label="Rename" onclick={() => startRename(s.id, s.name)}><Pencil size={15} /></button>
+        {/if}
         {@render del(() => attempt(() => rpc('soundboard', 'deleteCustom', { id: s.id })))}
       </div>
     {:else}

@@ -287,6 +287,15 @@ export default defineModule<SoundboardSettings>({
       ctx.publish();
     });
 
+    ctx.onAdmin('renameCustom', (args) => {
+      const name = cleanName(args.name, 30);
+      if (!name) throw new HbError('Give the sound a name');
+      const s = ctx.settings.get();
+      if (!s.custom.some((x) => x.id === args.id)) throw new HbError('Unknown sound');
+      ctx.settings.update({ custom: s.custom.map((c) => (c.id === args.id ? { ...c, name } : c)) });
+      ctx.publish();
+    });
+
     ctx.onAdmin('deleteCustom', (args) => {
       const s = ctx.settings.get();
       const c = s.custom.find((x) => x.id === args.id);
