@@ -39,7 +39,10 @@
   const s = $derived(gamesState());
   /** Rhythm Rain on one of the host's songs (its own price) */
   let music = $state(true);
+  /** The song the guest chose, kept while they switch difficulties or the song reloads */
   let songPick = $state('');
+  /** The song suggested when they have not chosen one (or it lacks this difficulty) */
+  let drawn = $state('');
   const songs = $derived((s?.rhythmSongs ?? []).filter((x) => x.status === 'ready'));
   const has = (x: RhythmSongInfo, d: RhythmDifficulty) => !!x.charts?.some((c) => c.id === d);
   // Songs whose map has this difficulty come first; the others show theirs, a tap on one switches to it
@@ -51,9 +54,10 @@
   const stars = (x: RhythmSongInfo) => s?.settings.rhythmRatings?.[x.key] ?? 0;
   // The host's best rated first
   const fits = $derived(found.filter((x) => has(x, chart)).sort((a, b) => stars(b) - stars(a)));
-  const misses = $derived(found.filter((x) => !has(x, chart)));
+  const misses = $derived(found.filter((x) => !has(x, chart)).sort((a, b) => stars(b) - stars(a)));
   // The search only narrows the list: it never changes the song picked
-  const song = $derived(songs.find((x) => x.key === songPick && has(x, chart)) ?? null);
+  const fitting = (key: string) => songs.find((x) => x.key === key && has(x, chart));
+  const song = $derived(fitting(songPick) ?? fitting(drawn) ?? null);
   /** A random song in this difficulty, among the host's best rated if any */
   function drawSong(): string {
     const all = songs.filter((x) => has(x, chart));
@@ -61,9 +65,9 @@
     const pool = rated.length ? rated : all;
     return pool.length ? pool[Math.floor(Math.random() * pool.length)].key : '';
   }
-  // No song picked yet, or the one picked lacks this difficulty: draw one
+  // No song chosen, or the one chosen lacks this difficulty: draw one
   $effect(() => {
-    if (picked?.id === 'rhythm' && !song) songPick = drawSong();
+    if (picked?.id === 'rhythm' && !song) drawn = drawSong();
   });
   /** The song list is open; otherwise only the picked song shows, so the sheet stays short */
   let browsing = $state(false);
@@ -104,8 +108,8 @@
   function open(g: GameInfo) {
     picked = g;
     error = '';
-    // A new song drawn every time the sheet opens
-    songPick = '';
+    // A new suggestion every time the sheet opens (a song the guest chose stays)
+    drawn = '';
   }
 
   // Hear 5 seconds of a song before picking it: BeatSaver's preview, or the best part from the party's copy
