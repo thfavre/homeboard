@@ -7,6 +7,7 @@ import {
   rhythmDifficulty,
   rhythmGradeOf,
   rhythmMultiplier,
+  rhythmTapWindow,
   rhythmTarget,
   type RhythmColor,
   type RhythmDifficulty,
@@ -20,8 +21,7 @@ import { best, type GameFactory } from './engine.ts';
 import { BS_DIFFICULTIES, type BsNote, type Song } from './beatsaver.ts';
 
 const FPS = 60;
-/** A tap reaches the server up to this late; notes count as missed only after it */
-const GRACE_MS = 400;
+const GRACE_MS = RHYTHM.graceMs;
 /** Time after the last note is judged before the result: the light plays the finale */
 const OUTRO_MS = 2200;
 /** A hit lights up the zone for this long */
@@ -281,13 +281,14 @@ export function pickSection(
 
 /**
  * The song's notes between `fromMs` and `toMs`, timed for this game. The 4 columns of Beat Saber become
- * the keys: 2 keys follow the two sabers, 8 keys are the 4 columns of each saber.
+ * the keys: 2 keys follow the two sabers, 4 keys the 4 columns, 3 keys the outer columns on the sides and
+ * the two inner ones in the middle (so no side gets more notes than the other).
  */
 function songNotes(chart: BsNote[], bpm: number, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
   const notes: RhythmNote[] = [];
   for (const n of playable(chart.filter((x) => x.ms >= fromMs && x.ms < toMs), bpm, minGapMs)) {
     const k = lanes.length;
-    const lane = k === 2 ? n.c : Math.min(k - 1, Math.floor((n.x * k) / 4));
+    const lane = k === 2 ? n.c : Math.round((n.x * (k - 1)) / 3);
     notes.push({ at: zeroAt + n.ms, color: lanes[lane] });
   }
   return notes;
@@ -614,7 +615,8 @@ export const rhythmRain: GameFactory = (m) => {
       const now = Date.now();
       // The phone sends when it was tapped (server clock), a little before the message got here
       const at = clamp(num(args?.at, now), now - GRACE_MS, now + 50);
-      if (over || loading || at < notes[0].at - travelMs || at > finaleAt) return { grade: null };
+      const window = rhythmTapWindow(notes, travelMs);
+      if (over || loading || !window || at < window[0] || at > window[1]) return { grade: null };
       const s = scores.get(id)!;
       const player = m.players.findIndex((p) => p.id === id);
       const lane = lanes.indexOf(color);

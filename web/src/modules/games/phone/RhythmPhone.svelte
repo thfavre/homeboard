@@ -6,6 +6,7 @@
     RHYTHM_WRONG_PENALTY,
     rhythmGradeOf,
     rhythmMultiplier,
+    rhythmTapWindow,
     rhythmTarget,
     type RhythmColor,
     type MatchState,
@@ -17,8 +18,7 @@
   import { rhythmSound } from '../ui/rhythmSound.ts';
 
   /**
-   * A guitar controller: one key per color of the level (two rows of four at level 10), the notes are
-   * on the light so eyes stay on it. A tap with no note of its color in the zone costs points.
+   * A guitar controller: one key per color picked, the notes are on the light so eyes stay on it. A tap with no note of its color in the zone costs points.
    * Each tap is judged right away on the phone (same rule as the server) so its sound and burst come
    * with no delay; the server keeps the score. The sound comes from this phone, except solo with
    * music where the TV plays it with the song.
@@ -58,6 +58,9 @@
 
   function tap(color: RhythmColor, lane: number, hex: string) {
     const at = serverNow();
+    // Before the notes show on the light or once they are over, a tap counts for nothing (as on the server)
+    const window = v.loading ? null : rhythmTapWindow(v.notes, v.travelMs);
+    if (!window || at < window[0] || at > window[1]) return;
     const i = rhythmTarget(v.notes, at, color, (n) => hitLocal.has(n));
     const grade = i < 0 ? 'miss' : rhythmGradeOf(at - v.notes[i].at);
     if (i >= 0) hitLocal.add(i);
@@ -73,7 +76,7 @@
   const press = (id: string, on: boolean) => (pressed = { ...pressed, [id]: on });
 </script>
 
-<div class="rhythm" class:eight={lanes.length > 4}>
+<div class="rhythm">
   <div class="glow" style:--beat="{beatMs}ms" style:--beat-delay="{beatDelay}ms"></div>
   {#if flash}{#key flash.key}<div class="flash" style:--c={flash.hex}></div>{/key}{/if}
 
@@ -396,12 +399,6 @@
     transition:
       transform 0.06s ease,
       box-shadow 0.06s ease;
-  }
-  .eight .fret {
-    padding-bottom: 0.7rem;
-  }
-  .eight .gem {
-    width: min(3rem, 64%);
   }
   .fret.down {
     transform: scale(0.97);
