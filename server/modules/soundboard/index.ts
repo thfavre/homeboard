@@ -1,4 +1,4 @@
-import { unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import express from 'express';
 import { type MiSound, type PlayEvent, type Sound, type SoundboardState } from '../../../shared/soundboard.ts';
@@ -14,6 +14,8 @@ interface SoundboardSettings {
   custom: CustomSound[];
   guestSearch: boolean;
   searchMaxSec: number;
+  /** Default sounds already put on the board (by file name), so one the host deletes stays deleted */
+  defaultsAdded: string[];
 }
 
 interface CustomSound {
@@ -30,6 +32,45 @@ const cleanDuration = (input: unknown) => {
   const n = Number(input);
   return n > 0 && n < 3600 ? Math.round(n * 10) / 10 : undefined;
 };
+
+/** Sounds shipped with Homeboard (in ./defaults), put on the board once like uploaded ones */
+const DEFAULTS_DIR = join(import.meta.dirname, 'defaults');
+const DEFAULT_SOUNDS: [file: string, name: string][] = [
+  ['1-billion-iq.mp3', '1,000,000,000 IQ'],
+  ['a-few-moments-later.mp3', 'A few moments later'],
+  ['ad.mp3', 'Ad'],
+  ['anime-girl.mp3', 'Anime girl'],
+  ['arabic-nokia.mp3', 'Arabic Nokia'],
+  ['audience-awww.mp3', 'Audience awww'],
+  ['bark-fart.mp3', 'Bark fart'],
+  ['branlette-collective.mp3', 'Branlette collective'],
+  ['cooler-wecker.mp3', 'Cooler Wecker'],
+  ['digi-digi-hey.mp3', 'Digi digi digi hey'],
+  ['end-credits.mp3', 'End credits'],
+  ['error.mp3', 'Error'],
+  ['gong.mp3', 'Gong'],
+  ['hee-hee.mp3', 'Hee hee'],
+  ['hello-mf.mp3', 'Hello m-f-er'],
+  ['helicopter.mp3', 'Helicopter helicopter'],
+  ['ich-muss-scheissen.mp3', 'Ich muss scheissen'],
+  ['italian-brainrot.mp3', 'Italian brainrot'],
+  ['mac-quack.mp3', 'Mac quack'],
+  ['mario-jump.mp3', 'Mario jump'],
+  ['meow.mp3', 'M-e-o-w'],
+  ['metal-pipe.mp3', 'Metal pipe'],
+  ['mystery.mp3', 'Mystery sound'],
+  ['oiia-oiia.mp3', 'OIIA OIIA'],
+  ['petit-poney.mp3', 'Petit poney'],
+  ['photo.mp3', 'Photo'],
+  ['punch.mp3', 'Punch'],
+  ['rizzbot-laugh.mp3', 'Rizzbot laugh'],
+  ['slap.mp3', 'Slap'],
+  ['social-credit-siren.mp3', 'Social credit siren'],
+  ['tu-veux-voir-ma.mp3', 'Tu veux voir ma...'],
+  ['yeah-boiii.mp3', 'Yeah boiii'],
+  ['you-are-an-idiot.mp3', 'You are an idiot'],
+  ['youtube-2017-music.mp3', 'YouTube music 2017'],
+];
 
 /** Sounds a guest can keep on their own board */
 const MAX_MINE = 30;
@@ -52,7 +93,7 @@ export default defineModule<SoundboardSettings>({
   id: 'soundboard',
   name: 'Soundboard',
   description: 'Guests play sound effects through the TV speakers',
-  settings: { volume: 0.8, cooldownSec: 4, custom: [], guestSearch: false, searchMaxSec: 10 },
+  settings: { volume: 0.8, cooldownSec: 4, custom: [], guestSearch: false, searchMaxSec: 10, defaultsAdded: [] },
 
   setup(ctx) {
     const media = ctx.mediaDir();
@@ -73,6 +114,18 @@ export default defineModule<SoundboardSettings>({
       personal.save();
     });
     let cooldownUntil = 0;
+
+    // Put new default sounds on the board (the admin page measures their length)
+    const added = ctx.settings.get().defaultsAdded;
+    const fresh = DEFAULT_SOUNDS.filter(([file]) => !added.includes(file) && existsSync(join(DEFAULTS_DIR, file)));
+    if (fresh.length) {
+      const custom = fresh.map(([file, name]) => {
+        const id = uid(6);
+        copyFileSync(join(DEFAULTS_DIR, file), join(media, `${id}.mp3`));
+        return { id, name, file: `${id}.mp3` };
+      });
+      ctx.settings.update({ custom: [...ctx.settings.get().custom, ...custom], defaultsAdded: [...added, ...fresh.map(([file]) => file)] });
+    }
 
     const sounds = (admin = false): Sound[] => {
       const s = ctx.settings.get();
