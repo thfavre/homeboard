@@ -1,4 +1,5 @@
-const FPS = 60;
+/** One frame, about 64 a second. Not 1000 / 60: Windows timers tick every 15.6 ms, so 16.7 waits two ticks (30 a second) */
+const FRAME_MS = 15;
 /** A shot climbs to its height in this long, slowing down near the top */
 const CLIMB_MS = 750;
 /** Then it bursts: a flash, and sparks that fly out and fall back, fading */
@@ -52,7 +53,7 @@ export class Fireworks {
       const now = Date.now();
       if (this.show && now >= this.next) this.fire(now);
       this.send(this.render(now));
-    }, 1000 / FPS);
+    }, FRAME_MS);
   }
 
   shoot(rgb: Rgb, rgb2 = rgb): void {

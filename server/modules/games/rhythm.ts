@@ -20,7 +20,8 @@ import { HbError, clamp, num } from '../../core/util.ts';
 import { best, type GameFactory, type GameRuntime } from './engine.ts';
 import { BS_DIFFICULTIES, type BsNote, type Song } from './beatsaver.ts';
 
-const FPS = 60;
+/** One frame of the strip, about 64 a second. Not 1000 / 60: Windows timers tick every 15.6 ms, so 16.7 waits two ticks (30 a second) */
+const FRAME_MS = 15;
 const GRACE_MS = RHYTHM.graceMs;
 /** Time after the last note is judged before the result: the light plays the finale */
 const OUTRO_MS = 2200;
@@ -606,7 +607,7 @@ export const rhythmRain: GameFactory = (m) => {
 
   const runtime: GameRuntime = {
     start() {
-      stopTicks = m.every(1000 / FPS, tick);
+      stopTicks = m.every(FRAME_MS, tick);
       if (loading) {
         // The TV loads the song (usually already done) and answers; without an answer, go anyway
         m.sound('rhythmPrepare', { url: song!.url });
