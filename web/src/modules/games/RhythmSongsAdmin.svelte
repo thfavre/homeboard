@@ -109,8 +109,7 @@
 
 <div class="part">
   <h4 class="group">Songs</h4>
-  <p class="faint small">Guests pick one of these when they pay for a duel or a solo game with music, at one of the difficulties listed under it (with its notes per second). Rhythm: Varied is the most fun, Steady means nearly the same gap between all notes. Tap a cover to hear it, a difficulty to try it on the light.</p>
-  <p class="faint small">The song suggested to a guest is random among those in their difficulty, rated {RHYTHM_GOOD_STARS} stars or more when there are any. They can still change it: their list shows your best rated first.</p>
+  <p class="faint small">Guests get a random song from their difficulty, picked among your {RHYTHM_GOOD_STARS}+ star ones. Tap a cover to hear it, a difficulty to try it on the light.</p>
   <div class="test">
     <div class="test-line">
       <span class="faint small">Try with</span>
