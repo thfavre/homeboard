@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Minus, Pause, Pencil, Play, Plus, SkipForward, Square, Trash2 } from '@lucide/svelte';
-  import type { CustomQuiz, QuizDraft, QuizState, QuizTopic } from '$shared/quiz.ts';
+  import { FINAL_MAX_SEC, FINAL_MIN_SEC, MAX_QUESTIONS, MIN_QUESTIONS, type CustomQuiz, type QuizDraft, type QuizSettings, type QuizState, type QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import { Synced } from '$lib/synced.svelte.ts';
@@ -49,6 +49,7 @@
     starting = false;
   }
 
+  const setSettings = (patch: Partial<Pick<QuizSettings, 'maxQuestions' | 'finalSec'>>) => attempt(() => rpc('quiz', 'setSettings', patch));
   const setTime = (v: number) => attempt(() => rpc('quiz', 'setTime', { timeSec: Math.min(120, Math.max(5, v)) }));
 
   async function edit(id: string) {
@@ -105,7 +106,7 @@
         <div class="grid2">
           <label class="field">
             <span>Questions</span>
-            <input class="input" type="number" min="3" max="30" bind:value={questions.value} onfocus={questions.start} />
+            <input class="input" type="number" min={MIN_QUESTIONS} max={q.settings.maxQuestions} bind:value={questions.value} onfocus={questions.start} />
           </label>
           {#if source === 'trivia'}
             <label class="field">
@@ -203,6 +204,31 @@
       </Section>
     {/if}
   {/if}
+
+  <Section title="Limits" hint="For every quiz, started by you or by a guest.">
+    <div class="line">
+      <div class="grow">
+        <strong>Most questions</strong>
+        <p class="faint small">Guests can't pick more. A longer custom quiz plays its first {q.settings.maxQuestions}.</p>
+      </div>
+      <div class="stepper">
+        <button class="btn small" disabled={q.settings.maxQuestions <= MIN_QUESTIONS} onclick={() => setSettings({ maxQuestions: q.settings.maxQuestions - 1 })} aria-label="1 question less"><Minus size={16} /></button>
+        <span class="mono value">{q.settings.maxQuestions}</span>
+        <button class="btn small" disabled={q.settings.maxQuestions >= MAX_QUESTIONS} onclick={() => setSettings({ maxQuestions: q.settings.maxQuestions + 1 })} aria-label="1 question more"><Plus size={16} /></button>
+      </div>
+    </div>
+    <div class="line">
+      <div class="grow">
+        <strong>Victory screen</strong>
+        <p class="faint small">How long the podium stays on the TV at the end. Next step on a running quiz closes it sooner.</p>
+      </div>
+      <div class="stepper">
+        <button class="btn small" disabled={q.settings.finalSec <= FINAL_MIN_SEC} onclick={() => setSettings({ finalSec: q.settings.finalSec - 5 })} aria-label="5 seconds less"><Minus size={16} /></button>
+        <span class="mono value">{q.settings.finalSec}s</span>
+        <button class="btn small" disabled={q.settings.finalSec >= FINAL_MAX_SEC} onclick={() => setSettings({ finalSec: q.settings.finalSec + 5 })} aria-label="5 seconds more"><Plus size={16} /></button>
+      </div>
+    </div>
+  </Section>
 
   <Section title="Custom quizzes" hint="Made by you or by guests. Kept from one party to the next.">
     {#snippet actions()}

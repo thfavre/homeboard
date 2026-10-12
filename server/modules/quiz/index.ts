@@ -2,13 +2,18 @@ import { unlinkSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import express from 'express';
 import {
+  FINAL_MAX_SEC,
+  FINAL_MIN_SEC,
   FINAL_SEC,
   LOBBY_MAX_SEC,
+  MAX_QUESTIONS,
+  MIN_QUESTIONS,
   type CustomQuestion,
   type CustomQuiz,
   type LibraryItem,
   type QuizFx,
   type QuizPhase,
+  type QuizPick,
   type QuizPlayer,
   type QuizSettings,
   type QuizSource,
@@ -34,7 +39,6 @@ interface Question {
 const COUNTDOWN_MS = 5_000;
 const REVEAL_MS = 6_000;
 const SCORES_MS = 6_000;
-const FINAL_MS = FINAL_SEC * 1000;
 const LOBBY_MS = LOBBY_MAX_SEC * 1000;
 /** When half the players are ready, the lobby waits at most this long */
 const HALF_READY_MS = 15_000;
@@ -69,7 +73,7 @@ export default defineModule<QuizSettings>({
   id: 'quiz',
   name: 'Quiz',
   description: 'Trivia game on the TV, guests answer from their phone',
-  settings: { questions: 10, timeSec: 20, category: 0, difficulty: '' },
+  settings: { questions: 10, timeSec: 20, category: 0, difficulty: '', maxQuestions: 15, finalSec: FINAL_SEC },
 
   setup(ctx) {
     const media = ctx.mediaDir();
@@ -119,7 +123,7 @@ export default defineModule<QuizSettings>({
       return res.json() as Promise<any>;
     };
 
-    const loadTrivia = async (s: QuizSettings): Promise<Question[]> => {
+    const loadTrivia = async (s: QuizPick): Promise<Question[]> => {
       if (!token) token = (await fetchJson('https://opentdb.com/api_token.php?command=request')).token ?? '';
       const params = new URLSearchParams({ amount: String(s.questions), type: 'multiple', encode: 'url3986' });
       if (token) params.set('token', token);
@@ -192,7 +196,7 @@ export default defineModule<QuizSettings>({
       return [...starts, ...contains].slice(0, 40);
     };
 
-    const loadTopic = async (topic: QuizTopic, s: QuizSettings): Promise<Question[]> => {
+    const loadTopic = async (topic: QuizTopic, s: QuizPick): Promise<Question[]> => {
       const ask = async (difficulty: string) => {
         const params = new URLSearchParams({ limit: String(Math.min(50, s.questions)), tags: topic.tags.join(',') });
         if (difficulty) params.set('difficulties', difficulty);
@@ -339,7 +343,7 @@ export default defineModule<QuizSettings>({
         ctx.activity(winner ? '{name} won the quiz' : `${ranked[0].name} won the quiz`, { guest: winner, sensitive: !winner });
       }
       lastFx.clear();
-      schedule(FINAL_MS, close);
+      schedule(ctx.settings.get().finalSec * 1000, close);
     };
 
     const close = () => {
@@ -387,7 +391,8 @@ export default defineModule<QuizSettings>({
         title = quiz.title;
         source = 'custom';
         timeSec = clamp(Math.round(num(src.timeSec, 20)), 5, 120);
-        load = Promise.resolve(customQuestions(quiz));
+        // A longer quiz plays its first questions
+        load = Promise.resolve(customQuestions(quiz).slice(0, ctx.settings.get().maxQuestions));
       } else if (src.kind === 'topic') {
         const s = cleanSettings(src.settings);
         title = src.topic.label;
@@ -422,10 +427,10 @@ export default defineModule<QuizSettings>({
         });
     };
 
-    const cleanSettings = (a: any): QuizSettings => {
+    const cleanSettings = (a: any): QuizPick => {
       const s = ctx.settings.get();
       return {
-        questions: clamp(Math.round(num(a?.questions, s.questions)), 3, 30),
+        questions: clamp(Math.round(num(a?.questions, s.questions)), MIN_QUESTIONS, s.maxQuestions),
         timeSec: clamp(Math.round(num(a?.timeSec, s.timeSec)), 5, 120),
         category: Math.round(num(a?.category, s.category)),
         difficulty: ['easy', 'medium', 'hard'].includes(a?.difficulty) ? a.difficulty : '',
@@ -686,6 +691,16 @@ export default defineModule<QuizSettings>({
         phaseMs = timeSec * 1000;
       }
       ctx.publish();
+    });
+
+    /** Host limits: the most questions a quiz can have, and how long the end screen stays */
+    ctx.onAdmin('setSettings', (args) => {
+      const s = ctx.settings.get();
+      const maxQuestions = clamp(Math.round(num(args?.maxQuestions, s.maxQuestions)), MIN_QUESTIONS, MAX_QUESTIONS);
+      const finalSec = clamp(Math.round(num(args?.finalSec, s.finalSec)), FINAL_MIN_SEC, FINAL_MAX_SEC);
+      ctx.settings.update({ maxQuestions, finalSec, questions: Math.min(s.questions, maxQuestions) });
+      ctx.publish();
+      return true;
     });
 
     ctx.onAdmin('stop', () => {
