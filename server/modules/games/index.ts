@@ -50,8 +50,8 @@ import { Fireworks, rgbOf } from '../wled/fireworks.ts';
 import { dealPirateCrews, pirateRace, pirateWaitingLights } from './pirates.ts';
 import { cleanMp3, downloadMp3 } from '../soundboard/myinstants.ts';
 import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
-import { lightParty } from './party.ts';
-import { PARTY_MINIS } from '../../../shared/party.ts';
+import { lightParty } from './party/index.ts';
+import { PARTY_MINIS, cleanPartyOptions } from '../../../shared/party.ts';
 
 /** Songs a new party starts with: well known, well rated maps with charts from Easy or Normal to Expert */
 const STARTER_SONGS = ['747', '217', '8553', '849a', '141', '1492', '6d63', 'bd3', '13760', '1672a', '3fc90', '8278', '38c26'];
@@ -138,7 +138,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyCountSec: 10, partyStackBlocks: 10 },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmSongs: STARTER_SONGS, rhythmAudioOffset: 0, pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {} },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -190,6 +190,11 @@ export default defineModule<GamesSettings>({
 
     // ------------------------------------------------------------ the Rhythm Rain song
 
+    // Light Party's first settings, now in partyOptions
+    {
+      const old = ctx.settings.get() as GamesSettings & { partyCountSec?: number; partyStackBlocks?: number };
+      if (old.partyCountSec !== undefined || old.partyStackBlocks !== undefined) ctx.settings.update({ partyCountSec: undefined, partyStackBlocks: undefined } as Partial<GamesSettings>);
+    }
     // Settings of an older version: one song length, and a note speed (the notes follow the music now)
     {
       const old = ctx.settings.get() as GamesSettings & { rhythmSec?: number; rhythmSpeed?: number };
@@ -1078,8 +1083,7 @@ export default defineModule<GamesSettings>({
         partyReverse: typeof args?.partyReverse === 'boolean' ? args.partyReverse : s.partyReverse,
         partyRounds: args?.partyRounds !== undefined ? Math.round(clamp(num(args.partyRounds, 3), 1, PARTY_MINIS.length)) : s.partyRounds,
         partyMinis: Array.isArray(args?.partyMinis) ? PARTY_MINIS.map((g) => g.id).filter((id) => args.partyMinis.includes(id)) : s.partyMinis,
-        partyCountSec: args?.partyCountSec !== undefined ? Math.round(clamp(num(args.partyCountSec, 10), 3, 30)) : s.partyCountSec,
-        partyStackBlocks: args?.partyStackBlocks !== undefined ? Math.round(clamp(num(args.partyStackBlocks, 10), 4, 20)) : s.partyStackBlocks,
+        partyOptions: args?.partyOptions !== undefined ? cleanPartyOptions(args.partyOptions) : s.partyOptions,
       });
       // The shortest stays below the longest, whichever was moved
       const n = ctx.settings.get();

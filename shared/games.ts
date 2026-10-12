@@ -1,6 +1,6 @@
 // Mini games: 1 vs 1 duels with a stake, room games that anyone can join, or solo games.
 
-import type { PartyMiniId } from './party.ts';
+import type { PartyMiniId, PartyOptions } from './party.ts';
 
 export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm' | 'pirates' | 'party';
 export type GameMode = 'duel' | 'room' | 'solo';
@@ -320,10 +320,8 @@ export interface GamesSettings {
   partyRounds: number;
   /** Mini games Light Party draws from */
   partyMinis: PartyMiniId[];
-  /** Seconds the Color Count dots stay on */
-  partyCountSec: number;
-  /** Blocks in the Stack tower */
-  partyStackBlocks: number;
+  /** Settings of the party and of each mini game (see PARTY_GENERAL and each mini game's options) */
+  partyOptions: PartyOptions;
   /** The drum's volume on the TV, 0 to 100 (100: as loud as it was made) */
   pirateDrumVolume: number;
 }
