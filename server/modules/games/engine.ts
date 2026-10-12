@@ -2,8 +2,12 @@ import type { Role } from '../../../shared/protocol.ts';
 import type { Song } from './beatsaver.ts';
 import type { BluffDeal, CircleDrawing, GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine, PirateCrewDeal, RhythmDifficulty } from '../../../shared/games.ts';
 
-/** One frame of a light strip, about 64 a second. Not 1000 / 60: Windows timers tick every 15.6 ms, so 16.7 waits two ticks (30 a second) */
-export const FRAME_MS = 15;
+/**
+ * One frame of a light strip: two ticks of the Windows timer (15.6 ms each), about 32 a second, steady.
+ * Not faster: a long strip cannot show more (380 RGBW pixels take 15 ms on the wire, WLED manages ~43),
+ * and frames sent faster than it shows them queue up on it: the lights fall behind the music.
+ */
+export const FRAME_MS = 30;
 
 /** How a game ended. The match pays out from it. */
 export interface Outcome {

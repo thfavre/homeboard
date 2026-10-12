@@ -1,5 +1,5 @@
-/** One frame, about 64 a second. Not 1000 / 60: Windows timers tick every 15.6 ms, so 16.7 waits two ticks (30 a second) */
-const FRAME_MS = 15;
+/** One frame, about 32 a second: a long strip cannot show more, and frames sent faster queue up on it (see FRAME_MS in games/engine.ts) */
+const FRAME_MS = 30;
 /** A shot climbs to its height in this long, slowing down near the top */
 const CLIMB_MS = 750;
 /** Then it bursts: a flash, and sparks that fly out and fall back, fading */
