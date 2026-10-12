@@ -23,20 +23,25 @@
   // A tap on a difficulty plays it on the light: nobody's phone, no fee, no score kept
   let testColors = $state(RHYTHM_DEFAULT_COLORS);
   let testAuto = $state(true);
-  /** The chip pressed for the game on the light: it turns into its Stop button */
-  let tried = $state<string | null>(null);
+  /** The host's try on the light: the chip pressed (it turns into its Stop button) and its game */
+  let tried = $state<{ key: string; id: string } | null>(null);
   const tryKey = (chart: RhythmDifficulty, song?: string) => `${song ?? ''}:${chart}`;
-  $effect(() => {
-    if (!running) tried = null;
-  });
+  /** A guest's game is on: no try meanwhile (it would stop theirs) */
+  const busy = $derived(!!running && running !== tried?.id);
+  const isTrying = (key: string) => !!running && running === tried?.id && tried.key === key;
+  /** A tap on the chip of the try stops it; on another one, the try switches to it */
   async function test(chart: RhythmDifficulty, song?: string) {
-    if (running) {
+    const key = tryKey(chart, song);
+    if (running && running === tried?.id) {
       await attempt(() => rpc('games', 'stop', { id: running }));
-      return;
+      const same = tried?.key === key;
+      tried = null;
+      if (same) return;
     }
     audio?.pause();
     playing = null;
-    if ((await attempt(() => rpc('games', 'testRhythm', { colors: testColors, chart, song, autoplay: testAuto }))) !== undefined) tried = tryKey(chart, song);
+    const id = await attempt(() => rpc<string>('games', 'testRhythm', { colors: testColors, chart, song, autoplay: testAuto }));
+    if (typeof id === 'string') tried = { key, id };
   }
 
   interface Hit {
@@ -128,8 +133,8 @@
     <div class="test-line">
       <span class="faint small">No music</span>
       {#each RHYTHM_DIFFICULTIES as d (d.id)}
-        {@const stop = !!running && tried === tryKey(d.id)}
-        <button class="diff" class:stop disabled={!light || (!!running && !stop)} title={stop ? 'Stop it' : `Try ${d.name} on the light`} onclick={() => test(d.id)}>
+        {@const stop = isTrying(tryKey(d.id))}
+        <button class="diff" class:stop disabled={!light || busy} title={stop ? 'Stop it' : `Try ${d.name} on the light`} onclick={() => test(d.id)}>
           {#if stop}<Square size={10} fill="currentColor" />{:else}<Play size={10} />{/if}{d.name}
         </button>
       {/each}
@@ -182,11 +187,11 @@
                   {/if}
                 {/each}
                 {#each x.charts as c (c.id)}
-                  {@const stop = !!running && tried === tryKey(c.id, x.key)}
+                  {@const stop = isTrying(tryKey(c.id, x.key))}
                   <button
                     class="diff"
                     class:stop
-                    disabled={!light || (!!running && !stop)}
+                    disabled={!light || busy}
                     title={stop ? 'Stop it' : `Try ${rhythmDifficulty(c.id).name} on the light`}
                     onclick={() => test(c.id, x.key)}
                   >

@@ -1042,7 +1042,8 @@ export default defineModule<GamesSettings>({
       const m = createMatch('rhythm', 'solo', null, [tester], 0, [], { ...rhythmOptions(args, song), autoplay: args?.autoplay !== false, test: true });
       intro(m);
       play(m);
-      return true;
+      // The page knows which game is its try (a guest's game can be on too)
+      return m.id;
     });
 
     ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake, args?.prize));
