@@ -320,18 +320,47 @@ function pickOnGrid(
   return { fromMs: pick.fromMs, toMs: pick.toMs, toEnd: pick.toEnd };
 }
 
+/** Within this many times the difficulty's gap, two notes count as fast: a key repeated there is hard on one thumb */
+const FAST_GAPS = 2.2;
+
 /**
- * The song's notes between `fromMs` and `toMs`, timed for this game. The 4 columns of Beat Saber become
- * the keys: 2 keys follow the two sabers, 3 or 4 keys share the columns from left to right.
+ * The key (0 to k - 1, left to right) of each note kept from a chart (`chart`: all its notes, for the chords).
+ * Where it is in Beat Saber gives the key: 2 keys follow the two sabers, 3 keys the outer columns and the
+ * middle two, 4 keys the columns. Then, measured on the host's songs to play better with thumbs:
+ * - a chord (both sabers at once, here one note) takes its note on another key than the last one;
+ * - a fast note on the same key as the last one, though the map put it elsewhere (the notes between were
+ *   thinned out), moves to the next key the way the map moved: runs alternate instead of hammering one key.
+ *   The same note again in the map stays a repeat.
  */
-function songNotes(chart: BsNote[], bpm: number, tempo: RhythmTempo[] | null, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
-  const notes: RhythmNote[] = [];
-  for (const n of playable(chart.filter((x) => x.ms >= fromMs && x.ms < toMs), bpm, minGapMs, tempo)) {
-    const k = lanes.length;
-    const lane = k === 2 ? n.c : Math.min(k - 1, Math.floor((n.x * k) / 4));
-    notes.push({ at: zeroAt + n.ms, color: lanes[lane] });
+export function songLanes(kept: BsNote[], chart: BsNote[], k: number, minGapMs: number): number[] {
+  const base = (n: BsNote) => (k === 2 ? n.c : k === 3 ? (n.x === 0 ? 0 : n.x === 3 ? 2 : 1) : Math.min(k - 1, n.x));
+  const at = new Map<number, BsNote[]>();
+  for (const n of chart) at.set(n.ms, [...(at.get(n.ms) ?? []), n]);
+  const out: number[] = [];
+  let last: BsNote | null = null;
+  let prev = -1;
+  for (const kn of kept) {
+    const n = (at.get(kn.ms) ?? [kn]).find((x) => base(x) !== prev) ?? kn;
+    let lane = base(n);
+    if (last && lane === prev && kn.ms - last.ms < FAST_GAPS * minGapMs && (n.x !== last.x || n.c !== last.c)) {
+      const pos = n.x + n.c / 2;
+      const was = last.x + last.c / 2;
+      const dir = pos > was ? 1 : pos < was ? -1 : lane < (k - 1) / 2 ? 1 : -1;
+      lane = lane + dir >= 0 && lane + dir < k ? lane + dir : lane - dir;
+    }
+    out.push(lane);
+    last = n;
+    prev = lane;
   }
-  return notes;
+  return out;
+}
+
+/** The song's notes between `fromMs` and `toMs`, timed for this game, on the keys of `songLanes` */
+function songNotes(chart: BsNote[], bpm: number, tempo: RhythmTempo[] | null, fromMs: number, toMs: number, zeroAt: number, lanes: RhythmColor[], minGapMs: number): RhythmNote[] {
+  const part = chart.filter((x) => x.ms >= fromMs && x.ms < toMs);
+  const kept = playable(part, bpm, minGapMs, tempo);
+  const keys = songLanes(kept, part, lanes.length, minGapMs);
+  return kept.map((n, i) => ({ at: zeroAt + n.ms, color: lanes[keys[i]] }));
 }
 
 const rgbOf = (hex: string): [number, number, number] => {
