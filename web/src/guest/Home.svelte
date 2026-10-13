@@ -1,12 +1,13 @@
 <script lang="ts">
   import { flip } from 'svelte/animate';
   import { fly } from 'svelte/transition';
-  import { ArrowUpRight, Crown, Sparkles, Tv, UsersRound } from '@lucide/svelte';
+  import { ArrowUpRight, Camera, Crown, Sparkles, Tv, UsersRound } from '@lucide/svelte';
   import { hb, price } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import Avatar from '$lib/ui/Avatar.svelte';
   import { ago } from '$lib/time.ts';
   import { activeModules, moduleById } from '../modules/index.ts';
+  import { avatarFlow } from './avatar.svelte.ts';
 
   let { open, earn }: { open: (id: string) => void; earn: () => void } = $props();
 
@@ -50,7 +51,17 @@
   {#if hb.me}
     <section class="hero card">
       <div class="who">
-        <Avatar name={hb.me.name} color={hb.me.color} src={hb.me.avatar} size="3.4rem" />
+        <!-- Tap the picture to edit it, or to take one -->
+        <button
+          class="pic"
+          onclick={() => (avatarFlow.mode = hb.me?.avatar ? 'edit' : 'new')}
+          aria-label={hb.me.avatar ? 'Edit your picture' : 'Take a selfie'}
+        >
+          <Avatar name={hb.me.name} color={hb.me.color} src={hb.me.avatar} size="3.4rem" />
+          <span class="pic-badge">
+            {#if hb.me.avatar}<Sparkles size={12} />{:else}<Camera size={12} />{/if}
+          </span>
+        </button>
         <div class="hi">
           <span class="faint small">{greeting},</span>
           <h1 class="truncate">{hb.me.name}</h1>
@@ -179,6 +190,31 @@
     display: flex;
     align-items: center;
     gap: 0.85rem;
+  }
+  .pic {
+    position: relative;
+    flex: none;
+    padding: 0;
+    border: 0;
+    background: none;
+    border-radius: 50%;
+    transition: transform 0.15s ease;
+  }
+  .pic:active {
+    transform: scale(0.94);
+  }
+  .pic-badge {
+    position: absolute;
+    right: -0.15rem;
+    bottom: -0.15rem;
+    display: grid;
+    place-items: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--bg);
+    border: 2px solid var(--bg);
   }
   .hi {
     min-width: 0;
