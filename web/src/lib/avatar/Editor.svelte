@@ -27,6 +27,14 @@
   const effects = [AVATAR_EFFECTS[0], ...AVATAR_EFFECTS.slice(1).sort(() => Math.random() - 0.5)];
 
   let params = $state<AvatarParams>({ ...DEFAULT_AVATAR_PARAMS, ...(untrack(() => initial) ?? {}) });
+  // A fresh pick of 20 emoji every time, keeping the one already on the picture
+  const EMOJI_SHOWN = 20;
+  const emojiPool = AVATAR_EMOJI.filter((em) => em !== params.emoji);
+  for (let i = emojiPool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [emojiPool[i], emojiPool[j]] = [emojiPool[j], emojiPool[i]];
+  }
+  const emojis = params.emoji ? [params.emoji, ...emojiPool.slice(0, EMOJI_SHOWN - 1)] : emojiPool.slice(0, EMOJI_SHOWN);
   let canvas = $state<HTMLCanvasElement>();
   let source: ImageData | null = null;
   let effected: ImageData | null = null;
@@ -157,7 +165,7 @@
     <span class="eyebrow">Emoji</span>
     <div class="emoji-grid">
       <button class="emoji none" class:active={!params.emoji} onclick={() => (params.emoji = null)} aria-label="No emoji"><X size={18} /></button>
-      {#each AVATAR_EMOJI as em}
+      {#each emojis as em}
         <button class="emoji" class:active={params.emoji === em} onclick={() => (params.emoji = em)}>{em}</button>
       {/each}
     </div>
