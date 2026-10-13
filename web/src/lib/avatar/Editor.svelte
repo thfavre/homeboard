@@ -27,8 +27,8 @@
   const effects = [AVATAR_EFFECTS[0], ...AVATAR_EFFECTS.slice(1).sort(() => Math.random() - 0.5)];
 
   let params = $state<AvatarParams>({ ...DEFAULT_AVATAR_PARAMS, ...(untrack(() => initial) ?? {}) });
-  // A fresh pick of 20 emoji every time, keeping the one already on the picture
-  const EMOJI_SHOWN = 20;
+  // A fresh pick of 27 emoji every time, keeping the one already on the picture
+  const EMOJI_SHOWN = 27;
   const emojiPool = AVATAR_EMOJI.filter((em) => em !== params.emoji);
   for (let i = emojiPool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
