@@ -328,7 +328,7 @@ export interface GamesSettings {
   partyMinis: PartyMiniId[];
   /** Settings of the party and of each mini game (see PARTY_GENERAL and each mini game's options) */
   partyOptions: PartyOptions;
-  /** The drum's volume on the TV, 0 to 100 (100: as loud as it was made) */
+  /** The drum's volume on the TV, 0 to 200 (100: as loud as it was made, more: louder, held by a limiter) */
   pirateDrumVolume: number;
 }
 

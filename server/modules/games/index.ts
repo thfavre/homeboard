@@ -1121,7 +1121,7 @@ export default defineModule<GamesSettings>({
         pirateTreasure: args?.pirateTreasure !== undefined ? Math.min(100, Math.max(10, Math.round(num(args.pirateTreasure, 100)))) : s.pirateTreasure,
         pirateLength: PIRATE_LENGTHS.some((l) => l.id === args?.pirateLength) ? args.pirateLength : s.pirateLength,
         pirateSongVolume: args?.pirateSongVolume !== undefined ? Math.round(clamp(num(args.pirateSongVolume, 70), 0, 100)) : s.pirateSongVolume,
-        pirateDrumVolume: args?.pirateDrumVolume !== undefined ? Math.round(clamp(num(args.pirateDrumVolume, 100), 0, 100)) : s.pirateDrumVolume,
+        pirateDrumVolume: args?.pirateDrumVolume !== undefined ? Math.round(clamp(num(args.pirateDrumVolume, 100), 0, 200)) : s.pirateDrumVolume,
         pirateAudioOffset:
           args?.pirateAudioOffset !== undefined ? Math.min(1000, Math.max(-1000, Math.round(num(args.pirateAudioOffset, 0)))) : s.pirateAudioOffset,
         partyLight:

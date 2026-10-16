@@ -94,8 +94,23 @@ export function pirateSound(kind: PirateSoundId, o: PirateSoundOptions = {}): vo
 function gainOut(ac: AudioContext, volume = 0.8): GainNode {
   const out = ac.createGain();
   out.gain.value = volume;
-  out.connect(ac.destination);
+  out.connect(limiter(ac));
   return out;
+}
+
+/** All the race sounds go through one limiter, so a loud drum (over 100%) does not crackle */
+let limiterNode: DynamicsCompressorNode | null = null;
+function limiter(ac: AudioContext): DynamicsCompressorNode {
+  if (!limiterNode || limiterNode.context !== ac) {
+    limiterNode = ac.createDynamicsCompressor();
+    limiterNode.threshold.value = -6;
+    limiterNode.knee.value = 4;
+    limiterNode.ratio.value = 20;
+    limiterNode.attack.value = 0.001;
+    limiterNode.release.value = 0.12;
+    limiterNode.connect(ac.destination);
+  }
+  return limiterNode;
 }
 
 function playFile(ac: AudioContext, kind: PirateSoundId, file: AudioBuffer, t: number, o: PirateSoundOptions): void {
@@ -128,6 +143,16 @@ function noise(ac: AudioContext): AudioBufferSourceNode {
   const src = ac.createBufferSource();
   src.buffer = noiseBuffer;
   return src;
+}
+
+/** A soft saturation curve (tanh), made once */
+let clipCurve: Float32Array<ArrayBuffer> | null = null;
+function softClip(): Float32Array<ArrayBuffer> {
+  if (!clipCurve) {
+    clipCurve = new Float32Array(1024);
+    for (let i = 0; i < clipCurve.length; i++) clipCurve[i] = Math.tanh((i / (clipCurve.length - 1)) * 4 - 2) / Math.tanh(2);
+  }
+  return clipCurve;
 }
 
 const env = (ac: AudioContext, t: number, attack: number, peak: number, decay: number) => {
@@ -164,13 +189,25 @@ const burst = (ac: AudioContext, out: AudioNode, t: number, filter: BiquadFilter
 };
 
 const BUILT_IN: Partial<Record<PirateSoundId, Synth>> = {
-  /** A big war drum: a deep skin that drops in pitch, the thud of the mallet, and the boom of the barrel */
+  /**
+   * A big war drum: a deep skin that drops in pitch, the thud of the mallet, and the boom of the barrel.
+   * TV speakers hardly play the deep part, so it has a body and a stick attack higher up, and goes through
+   * a soft saturation that makes it louder and adds overtones they can play.
+   */
   drum(ac, out, t, accent) {
-    tone(ac, out, 'sine', accent ? 120 : 98, t, 0.004, 1, 0.55, 46);
-    tone(ac, out, 'sine', 58, t, 0.006, 0.7, 0.75, 38);
-    tone(ac, out, 'triangle', accent ? 240 : 190, t, 0.002, 0.35, 0.09, 90);
-    burst(ac, out, t, 'lowpass', 900, 0.8, 0.002, accent ? 0.55 : 0.4, 0.08, 200);
-    burst(ac, out, t, 'bandpass', 160, 1.5, 0.01, 0.35, 0.4);
+    const drive = ac.createGain();
+    drive.gain.value = 1.6;
+    const shaper = ac.createWaveShaper();
+    shaper.curve = softClip();
+    shaper.oversample = '2x';
+    drive.connect(shaper).connect(out);
+    tone(ac, drive, 'sine', accent ? 120 : 98, t, 0.004, 1, 0.55, 46);
+    tone(ac, drive, 'sine', 58, t, 0.006, 0.7, 0.75, 38);
+    tone(ac, drive, 'sine', accent ? 196 : 165, t, 0.003, 0.6, 0.22, 100);
+    tone(ac, drive, 'triangle', accent ? 240 : 190, t, 0.002, 0.45, 0.09, 90);
+    burst(ac, drive, t, 'lowpass', 900, 0.8, 0.002, accent ? 0.65 : 0.5, 0.08, 200);
+    burst(ac, drive, t, 'bandpass', 2200, 1.2, 0.001, accent ? 0.45 : 0.35, 0.035);
+    burst(ac, drive, t, 'bandpass', 160, 1.5, 0.01, 0.35, 0.4);
   },
   /** The drum on every 4th beat: the same drum, hit harder and a little higher */
   drumAccent(ac, out, t) {
