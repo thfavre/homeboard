@@ -16,8 +16,17 @@
   let { onsaved, onclose }: { onsaved: (list: GuestSticker[]) => void; onclose: () => void } = $props();
 
   type Mode = 'pick' | 'import' | 'photo' | 'draw';
-  /** Sent untouched below this size (keeps animated WhatsApp stickers and GIFs moving) */
-  const KEEP_MAX = 2.5 * 1024 * 1024;
+  /** Sent untouched below this size (keeps animated WhatsApp stickers and GIFs moving). Matches the server limit. */
+  const KEEP_MAX = 8 * 1024 * 1024;
+
+  /** An animated PNG (APNG) has an acTL chunk before its first image data */
+  async function isAnimatedPng(file: Blob): Promise<boolean> {
+    if (file.type !== 'image/png') return false;
+    const head = new Uint8Array(await file.slice(0, 4096).arrayBuffer());
+    const text = String.fromCharCode(...head);
+    const at = text.indexOf('acTL');
+    return at > 0 && at < text.indexOf('IDAT');
+  }
 
   let mode = $state<Mode>('pick');
   let name = $state('');
@@ -81,8 +90,8 @@
         mode = 'photo';
         return;
       }
-      // WhatsApp stickers are WebP, often animated: keep them exactly as they are
-      if ((file.type === 'image/webp' || file.type === 'image/gif') && file.size <= KEEP_MAX) {
+      // WhatsApp stickers are WebP, often animated, and GIFs move: keep them exactly as they are
+      if ((file.type === 'image/webp' || file.type === 'image/gif' || (await isAnimatedPng(file))) && file.size <= KEEP_MAX) {
         original = file;
         imported = null;
         preview = URL.createObjectURL(file);

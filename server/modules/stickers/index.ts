@@ -1,7 +1,7 @@
-import { copyFileSync, existsSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { extname, join } from 'node:path';
 import express from 'express';
-import { MAX_GUEST_STICKERS, type ActiveSticker, type GuestSticker, type StickerDef, type StickersState } from '../../../shared/stickers.ts';
+import { MAX_GUEST_STICKERS, stickerLabel, type ActiveSticker, type GuestSticker, type StickerDef, type StickersState } from '../../../shared/stickers.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
@@ -9,8 +9,10 @@ import { HbError, clamp, cleanName, num, uid } from '../../core/util.ts';
 
 interface CustomSticker {
   id: string;
+  /** Empty for most default stickers: they go by their category */
   name: string;
   file: string;
+  category?: string;
 }
 
 interface StickerSettings {
@@ -20,43 +22,83 @@ interface StickerSettings {
   allowText: boolean;
   allowCustom: boolean;
   custom: CustomSticker[];
-  /** Default stickers already put in the collection (by file name), so one the host deletes stays deleted */
+  /** Default stickers already put in the collection ("folder/file"), so one the host deletes stays deleted */
   defaultsAdded: string[];
+  /** Categories guests do not see */
+  hiddenCategories: string[];
 }
 
-/** Stickers shipped with Homeboard (in ./defaults), put in the collection once like uploaded ones */
+/**
+ * Stickers shipped with Homeboard, one folder per category in ./defaults, put in the
+ * collection once like uploaded ones. Folders not listed here are not added.
+ */
 const DEFAULTS_DIR = join(import.meta.dirname, 'defaults');
-const DEFAULT_STICKERS: [file: string, name: string][] = [
-  ['arrow.png', 'Arrow'],
-  ['bagel.png', 'Bagel'],
-  ['belt.png', 'Belt'],
-  ['butter.png', 'Butter'],
-  ['crying-meme.png', 'Crying meme'],
-  ['dvd-drive.png', 'DVD drive'],
-  ['dvd-logo.png', 'DVD logo'],
-  ['egg.png', 'Egg'],
-  ['eggplant.png', 'Eggplant'],
-  ['fish.png', 'Fish'],
-  ['goofy-smiley.png', 'Goofy smiley'],
-  ['gumball.png', 'Gumball'],
-  ['oil-lamp.png', 'Oil lamp'],
-  ['party-cups.png', 'Party cups'],
-  ['pawns.png', 'Pawns'],
-  ['rainbow.png', 'Rainbow'],
-  ['roast-chicken.png', 'Roast chicken'],
-  ['rubber-band-ball.png', 'Rubber band ball'],
-  ['sphynx-cat.png', 'Sphynx cat'],
-  ['stew.png', 'Stew'],
-  ['strainer.png', 'Strainer'],
-  ['tartan-beret.png', 'Tartan beret'],
-  ['tennis-ball.png', 'Tennis ball'],
-  ['thinking.png', 'Thinking'],
-  ['thumbs-up.png', 'Thumbs up'],
-  ['tire.png', 'Tire'],
-  ['vanilla.png', 'Vanilla'],
-  ['wig.png', 'Wig'],
-  ['zucchini.png', 'Zucchini'],
+const DEFAULT_CATEGORIES: [folder: string, category: string][] = [
+  ['random', 'Random'],
+  ['emoji', 'Emoji'],
+  ['kitties', 'Kitties'],
+  ['gatos', 'Gatos'],
+  ['pokemon', 'Pokemon'],
+  ['peppe', 'Peppe'],
+  ['stickthing', 'Stickthing'],
 ];
+/** The only default stickers with their own name */
+const DEFAULT_NAMES: Record<string, string> = {
+  'random/arrow.png': 'Arrow',
+  'random/bagel.png': 'Bagel',
+  'random/belt.png': 'Belt',
+  'random/butter.png': 'Butter',
+  'random/crying-meme.png': 'Crying meme',
+  'random/dvd-drive.png': 'DVD drive',
+  'random/dvd-logo.png': 'DVD logo',
+  'random/egg.png': 'Egg',
+  'random/eggplant.png': 'Eggplant',
+  'random/fish.png': 'Fish',
+  'random/goofy-smiley.png': 'Goofy smiley',
+  'random/gumball.png': 'Gumball',
+  'random/oil-lamp.png': 'Oil lamp',
+  'random/party-cups.png': 'Party cups',
+  'random/pawns.png': 'Pawns',
+  'random/rainbow.png': 'Rainbow',
+  'random/roast-chicken.png': 'Roast chicken',
+  'random/rubber-band-ball.png': 'Rubber band ball',
+  'random/sphynx-cat.png': 'Sphynx cat',
+  'random/stew.png': 'Stew',
+  'random/strainer.png': 'Strainer',
+  'random/tartan-beret.png': 'Tartan beret',
+  'random/tennis-ball.png': 'Tennis ball',
+  'random/thinking.png': 'Thinking',
+  'random/thumbs-up.png': 'Thumbs up',
+  'random/tire.png': 'Tire',
+  'random/vanilla.png': 'Vanilla',
+  'random/wig.png': 'Wig',
+  'random/zucchini.png': 'Zucchini',
+};
+
+/** Category of the host's uploads made before categories */
+const OTHER = 'Other';
+
+/** "a bagel sticker", "an emoji sticker" */
+function aSticker(s: StickerDef): string {
+  const what = s.name ? s.name.toLowerCase() : (s.category ?? '');
+  return `${/^[aeiou]/i.test(what) ? 'an' : 'a'} ${what ? `${what} ` : ''}sticker`;
+}
+
+/** Every default sticker as "folder/file", in category order then file number order */
+function defaultStickers(): { key: string; category: string }[] {
+  const out: { key: string; category: string }[] = [];
+  for (const [folder, category] of DEFAULT_CATEGORIES) {
+    let files: string[];
+    try {
+      files = readdirSync(join(DEFAULTS_DIR, folder));
+    } catch {
+      continue;
+    }
+    files = files.filter((f) => /\.(png|webp|gif|jpe?g)$/i.test(f)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    for (const f of files) out.push({ key: `${folder}/${f}`, category });
+  }
+  return out;
+}
 
 interface StoredGuestSticker {
   id: string;
@@ -94,7 +136,7 @@ export default defineModule<StickerSettings>({
   id: 'stickers',
   name: 'Stickers',
   description: 'Guests send stickers or short texts that bounce around the TV',
-  settings: { durationSec: 120, maxActive: 10, allowText: true, allowCustom: true, custom: [], defaultsAdded: [] },
+  settings: { durationSec: 120, maxActive: 10, allowText: true, allowCustom: true, custom: [], defaultsAdded: [], hiddenCategories: [] },
 
   setup(ctx) {
     let active: ActiveSticker[] = [];
@@ -124,19 +166,30 @@ export default defineModule<StickerSettings>({
     };
 
     // Put new default stickers in the collection
-    const added = ctx.settings.get().defaultsAdded;
-    const fresh = DEFAULT_STICKERS.filter(([file]) => !added.includes(file) && existsSync(join(DEFAULTS_DIR, file)));
-    if (fresh.length) {
-      const custom = fresh.map(([file, name]) => {
-        const id = uid(6);
-        copyFileSync(join(DEFAULTS_DIR, file), join(media, `${id}.png`));
-        return { id, name, file: `${id}.png` };
-      });
-      ctx.settings.update({ custom: [...ctx.settings.get().custom, ...custom], defaultsAdded: [...added, ...fresh.map(([file]) => file)] });
+    {
+      const st = ctx.settings.get();
+      let custom = st.custom;
+      // Before categories, the random stickers were added by bare file name and had no category
+      const legacy = new Set(st.defaultsAdded.filter((k) => !k.includes('/')).map((k) => `random/${k}`));
+      if (legacy.size) {
+        const legacyNames = new Set([...legacy].map((k) => DEFAULT_NAMES[k]).filter(Boolean));
+        custom = custom.map((c) => (!c.category && legacyNames.has(c.name) ? { ...c, category: 'Random' } : c));
+      }
+      const added = new Set([...st.defaultsAdded.filter((k) => k.includes('/')), ...legacy]);
+      const fresh = defaultStickers().filter((d) => !added.has(d.key));
+      if (fresh.length || legacy.size) {
+        const copies = fresh.map((d) => {
+          const id = uid(6);
+          const file = `${id}${extname(d.key).toLowerCase()}`;
+          copyFileSync(join(DEFAULTS_DIR, d.key), join(media, file));
+          return { id, name: DEFAULT_NAMES[d.key] ?? '', file, category: d.category };
+        });
+        ctx.settings.update({ custom: [...custom, ...copies], defaultsAdded: [...added, ...fresh.map((d) => d.key)] });
+      }
     }
 
     const catalog = (): StickerDef[] =>
-      ctx.settings.get().custom.map((c) => ({ id: c.id, name: c.name, kind: 'image' as const, src: ctx.mediaUrl(c.file) }));
+      ctx.settings.get().custom.map((c) => ({ id: c.id, name: c.name, kind: 'image' as const, src: ctx.mediaUrl(c.file), category: c.category || OTHER }));
 
     const remove = (id: string) => {
       clearTimeout(timers.get(id));
@@ -149,7 +202,15 @@ export default defineModule<StickerSettings>({
 
     ctx.state((): StickersState => {
       const s = ctx.settings.get();
-      return { catalog: catalog(), active, durationSec: s.durationSec, maxActive: s.maxActive, allowText: s.allowText, allowCustom: s.allowCustom };
+      return {
+        catalog: catalog(),
+        hiddenCategories: s.hiddenCategories,
+        active,
+        durationSec: s.durationSec,
+        maxActive: s.maxActive,
+        allowText: s.allowText,
+        allowCustom: s.allowCustom,
+      };
     });
 
     ctx.onGuest('place', (args, guest) => {
@@ -172,10 +233,10 @@ export default defineModule<StickerSettings>({
         if (!own) throw new HbError('This sticker is gone');
         sticker = { id: own.id, name: own.name, kind: 'image', src: own.src, guestMade: true };
       } else {
-        sticker = catalog().find((c) => c.id === args.id) ?? null;
-        if (!sticker) throw new HbError('Unknown sticker');
+        sticker = catalog().find((c) => c.id === args.id && !s.hiddenCategories.includes(c.category!)) ?? null;
+        if (!sticker) throw new HbError('This sticker is not available anymore');
       }
-      ctx.economy.charge(guest, 'stickers.sticker', 1, text ? `Text sticker "${text}"` : `Sticker: ${sticker!.name}`);
+      ctx.economy.charge(guest, 'stickers.sticker', 1, text ? `Text sticker "${text}"` : `Sticker: ${stickerLabel(sticker!)}`);
       ctx.session.count(guest, 'stickers');
       const item: ActiveSticker = {
         id: uid(6),
@@ -193,7 +254,7 @@ export default defineModule<StickerSettings>({
             ? '{name} sent their face bouncing'
             : args.mine !== undefined
               ? '{name} sent a sticker they made'
-              : `{name} dropped ${/^[aeiou]/i.test(sticker!.name) ? 'an' : 'a'} ${sticker!.name.toLowerCase()} sticker`,
+              : `{name} dropped ${aSticker(sticker!)}`,
         { guest },
       );
       ctx.publish();
@@ -231,6 +292,14 @@ export default defineModule<StickerSettings>({
       ctx.publish();
     });
 
+    // A category guests do not see (its stickers stay in the collection)
+    ctx.onAdmin('setCategoryHidden', (args) => {
+      const category = String(args.category);
+      const hidden = ctx.settings.get().hiddenCategories.filter((c) => c !== category);
+      ctx.settings.update({ hiddenCategories: args.hidden ? [...hidden, category] : hidden });
+      ctx.publish();
+    });
+
     ctx.onAdmin('deleteCustom', (args) => {
       const s = ctx.settings.get();
       const c = s.custom.find((x) => x.id === args.id);
@@ -244,7 +313,7 @@ export default defineModule<StickerSettings>({
       ctx.publish();
     });
 
-    ctx.http.post('/upload', express.raw({ type: Object.keys(IMAGE_TYPES), limit: '4mb' }), (req, res) => {
+    ctx.http.post('/upload', express.raw({ type: Object.keys(IMAGE_TYPES), limit: '10mb' }), (req, res) => {
       if (!ctx.isAdminRequest(req)) {
         res.status(403).json({ error: 'Host only' });
         return;
@@ -257,8 +326,9 @@ export default defineModule<StickerSettings>({
       const id = uid(6);
       const file = `${id}.${ext}`;
       writeFileSync(join(media, file), req.body);
-      const name = cleanName(req.query.name, 30) || 'Custom';
-      ctx.settings.update({ custom: [...ctx.settings.get().custom, { id, name, file }] });
+      const name = cleanName(req.query.name, 30);
+      const category = cleanName(req.query.category, 24) || OTHER;
+      ctx.settings.update({ custom: [...ctx.settings.get().custom, { id, name, file, category }] });
       ctx.publish();
       res.json({ id });
     });
@@ -273,7 +343,7 @@ export default defineModule<StickerSettings>({
     });
 
     // A guest saves a sticker they made (the phone already cut it out and added the white border)
-    ctx.http.post('/mine', express.raw({ type: Object.keys(GUEST_TYPES), limit: '3mb' }), (req, res) => {
+    ctx.http.post('/mine', express.raw({ type: Object.keys(GUEST_TYPES), limit: '8mb' }), (req, res) => {
       const guest = ctx.guestFromRequest(req);
       try {
         if (!guest) throw new HbError('Please join the session first');

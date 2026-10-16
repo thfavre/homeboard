@@ -1,13 +1,14 @@
 <script lang="ts">
-  import type { StickerDef } from '$shared/stickers.ts';
+  import { stickerLabel, type StickerDef } from '$shared/stickers.ts';
 
-  let { sticker, text }: { sticker: StickerDef | null; text?: string } = $props();
+  /** lazy: only load the picture when it scrolls into view (long sticker grids) */
+  let { sticker, text, lazy = false }: { sticker: StickerDef | null | undefined; text?: string; lazy?: boolean } = $props();
 </script>
 
 {#if sticker?.kind === 'face'}
   <img class="face" src={sticker.src} alt={sticker.name} draggable="false" />
 {:else if sticker?.kind === 'image'}
-  <img src={sticker.src} alt={sticker.name} draggable="false" />
+  <img src={sticker.src} alt={stickerLabel(sticker)} draggable="false" loading={lazy ? 'lazy' : undefined} />
 {:else if text}
   <span class="text">{text}</span>
 {/if}
