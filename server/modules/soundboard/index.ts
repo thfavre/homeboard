@@ -38,7 +38,7 @@ const DEFAULTS_DIR = join(import.meta.dirname, 'defaults');
 const DEFAULT_SOUNDS: [file: string, name: string][] = [
   ['1-billion-iq.mp3', '1,000,000,000 IQ'],
   ['a-few-moments-later.mp3', 'A few moments later'],
-  ['ad.mp3', 'Ad'],
+  ['ad.mp3', 'This is the end'],
   ['anime-girl.mp3', 'Anime girl'],
   ['arabic-nokia.mp3', 'Arabic Nokia'],
   ['audience-awww.mp3', 'Audience awww'],
