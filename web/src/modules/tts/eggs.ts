@@ -66,7 +66,7 @@ const EGGS: Egg[] = [
     overlay: 'embers',
     words: [
       'fire', 'on fire', "/feu(?!x?\\s+d'?\\s*artifice)", 'en feu', 'hot', 'flame*', 'flamme*', 'burn*', 'brule*', 'caliente', 'fuego',
-      'spicy', 'incendie', 'lit af', 'blaze', 'inferno',
+      'spicy', 'piment*', 'incendie', 'lit af', 'blaze', 'inferno',
     ],
   },
   {
