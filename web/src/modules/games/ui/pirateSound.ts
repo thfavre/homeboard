@@ -76,16 +76,23 @@ export function pirateSound(kind: PirateSoundId, o: PirateSoundOptions = {}): vo
   const fileUrl = o.url || BUILT_IN_FILES[kind];
   const file = fileUrl ? bufferNow(fileUrl) : null;
   if (file) return playFile(ac, kind, file, t, o);
-  const synth = BUILT_IN[kind];
-  if (!synth) {
-    // A sound that is only a file, still loading: it plays once loaded, unless that is too late
-    if (fileUrl) {
-      void loadPirateSound(fileUrl).then((b) => {
-        if (b && ac.currentTime < t + 1.5) playFile(ac, kind, b, Math.max(ac.currentTime + 0.005, t), o);
-      });
-    }
+  // A file still loading: the drum and the oar keep to the beat with the built-in sound, the others
+  // play the file once loaded (unless that is too late), and the built-in sound only if it cannot be
+  if (fileUrl && ready.get(fileUrl) !== null && kind !== 'drum' && kind !== 'drumAccent' && kind !== 'oar') {
+    void loadPirateSound(fileUrl).then((b) => {
+      if (ac.currentTime > t + 1.5) return;
+      const at = Math.max(ac.currentTime + 0.005, t);
+      if (b) playFile(ac, kind, b, at, o);
+      else playSynth(ac, kind, at, o);
+    });
     return;
   }
+  playSynth(ac, kind, t, o);
+}
+
+function playSynth(ac: AudioContext, kind: PirateSoundId, t: number, o: PirateSoundOptions): void {
+  const synth = BUILT_IN[kind];
+  if (!synth) return;
   const out = gainOut(ac, o.volume);
   synth(ac, out, t, !!o.accent);
   setTimeout(() => out.disconnect(), (t - ac.currentTime + 3) * 1000);
