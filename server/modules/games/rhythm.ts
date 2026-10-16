@@ -437,7 +437,7 @@ export const rhythmRain: GameFactory = (m) => {
   const maxMs = Math.max(m.settings.rhythmMinSec, m.settings.rhythmMaxSec) * 1000;
   const solo = m.mode === 'solo';
   // Solo: the taps sound where the host chose (the TV unless set to the phone; an old 'auto' counts as the TV).
-  // A duel: each phone plays its own.
+  // A duel or a game for everyone: each phone plays its own.
   const tvSounds = solo && m.settings.rhythmSoloTaps !== 'phone';
   // The timeline is set by plan(): at once, or with music once the TV has the song ready to play
   let startAt = Date.now();
@@ -449,8 +449,8 @@ export const rhythmRain: GameFactory = (m) => {
   /** Server time of the song's beat 0 (the zone pulses on its beats) */
   let beatZero = startAt;
   let loading = !!(song && chart.length);
-  /** How many players hit each note (it goes out once everyone did) */
-  let hitCount = new Uint8Array(0);
+  /** How many players hit each note (it goes out once everyone did): a room game takes any number */
+  let hitCount = new Uint16Array(0);
 
   const plan = () => {
     startAt = Date.now();
@@ -487,7 +487,7 @@ export const rhythmRain: GameFactory = (m) => {
       beatZero = firstAt;
     }
     if (!notes.length) notes = compose(startAt + RHYTHM.leadMs, beatMs, minMs, lanes, level.busy, level.densest);
-    hitCount = new Uint8Array(notes.length);
+    hitCount = new Uint16Array(notes.length);
     finaleAt = notes[notes.length - 1].at + RHYTHM.okMs + GRACE_MS;
     endAt = Math.max(finaleAt + OUTRO_MS, musicEndAt);
   };
@@ -607,7 +607,7 @@ export const rhythmRain: GameFactory = (m) => {
         }
       }
       if (pos > leds + tail) continue;
-      // Hit by everyone: the burst takes over. Hit by one of two: dimmer, still there for the other.
+      // Hit by everyone: the burst takes over. Hit by some: dimmer, still there for the others.
       if (hitCount[n] >= m.players.length) continue;
       let k = hitCount[n] ? 0.4 : 1;
       let rgb: readonly number[] = LED[note.color];
@@ -736,7 +736,7 @@ export const rhythmRain: GameFactory = (m) => {
       return;
     }
     m.finish({
-      // A duel's winner shoots fireworks on the light for a while
+      // The winner shoots fireworks on the light for a while
       perk: { kind: 'fireworks' },
       winners: best(m.players, score),
       scores: scored,
@@ -806,7 +806,8 @@ export const rhythmRain: GameFactory = (m) => {
         holding.set(id, { note: i, until: notes[i].at + notes[i].holdMs! });
       }
       flashes.push({ at: now, rgb: LED[color], grade, gapMs: at - notes[i].at });
-      if (rhythmMultiplier(s.combo) > before) waves.push({ at: now, rgb: rgbOf(m.players[player].color) });
+      // A few waves at once at most: a room full of players would light the whole strip
+      if (rhythmMultiplier(s.combo) > before && waves.length < 3) waves.push({ at: now, rgb: rgbOf(m.players[player].color) });
       if (tvSounds) m.sound('rhythm', { player, lane, grade });
       m.publish();
       return { grade, note: i };

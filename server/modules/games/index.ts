@@ -7,6 +7,7 @@ import {
   GAME_COLORS,
   RHYTHM_COLORS,
   RHYTHM_DIFFICULTIES,
+  RHYTHM_GOOD_STARS,
   rhythmColors,
   rhythmDifficulty,
   gameInfo,
@@ -185,7 +186,7 @@ export default defineModule<GamesSettings>({
 
     ctx.price({ key: 'games.duel', label: 'Challenge someone to a duel', default: 5000 });
     ctx.price({ key: 'games.room', label: 'Start a game for the room', default: 5000 });
-    ctx.price({ key: 'games.rhythmMusic', label: 'Rhythm Rain with music (duel or solo)', default: 10000 });
+    ctx.price({ key: 'games.rhythmMusic', label: 'Rhythm Rain with music', default: 10000 });
     ctx.price({ key: 'games.solo', label: 'Play a solo game', default: 3000 });
 
     // ------------------------------------------------------------ the Rhythm Rain song
@@ -235,6 +236,14 @@ export default defineModule<GamesSettings>({
     const rhythmOptions = (args: any, song: Song | null): MatchOptions => {
       const chart = rhythmDifficulty(args?.chart).id;
       return { colors: rhythmColors(args?.colors), chart: song ? (chartFor(song, chart)?.id ?? chart) : chart, song: song?.key };
+    };
+    /** A random song ready to play, among the host's best rated if any (null: none) */
+    const drawSong = () => {
+      const ready = [...songs.keys()].map(readySong).filter((x) => !!x);
+      const ratings = ctx.settings.get().rhythmRatings;
+      const rated = ready.filter((x) => (ratings[x.key] ?? 0) >= RHYTHM_GOOD_STARS);
+      const pool = rated.length ? rated : ready;
+      return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
     };
     ctx.earn({ key: 'games.win', label: 'Games: win a room game', default: 2000, describe: (a) => `${a} for winning a game started for the room` });
     ctx.earn({ key: 'games.bluff', label: 'Bluff: both share', default: 2000, describe: (a) => `${a} each when both players share in Bluff` });
@@ -740,16 +749,19 @@ export default defineModule<GamesSettings>({
 
     // ------------------------------------------------------------ room games
 
-    const startRoom = (game: GameId, starter: Guest | null, rawStake: unknown, rawPrize?: unknown) => {
+    const startRoom = (game: GameId, starter: Guest | null, rawStake: unknown, rawPrize?: unknown, args?: any) => {
       if (!allowed(game, 'room') && starter) throw new HbError('This game cannot be started for the room');
       if (!gameInfo(game)?.modes.includes('room')) throw new HbError('This game is for duels only');
       tvFree(game);
       checkLight(game);
+      // Rhythm Rain: the song the guest picked; the host's start draws one (no music when no song is ready)
+      const song = game !== 'rhythm' ? null : args?.song ? readySong(args.song) : starter ? null : drawSong();
+      if (game === 'rhythm' && args?.song && !song) throw new HbError('This song is not available, pick another one');
       const stake = cleanStake(rawStake);
       const charges: Charge[] = [];
       if (starter) {
         checkFree(starter.id, null);
-        charges.push(ctx.economy.charge(starter, 'games.room', 1, `Started ${gameInfo(game)!.name}`));
+        charges.push(ctx.economy.charge(starter, song ? 'games.rhythmMusic' : 'games.room', 1, `Started ${gameInfo(game)!.name}${song ? ' with music' : ''}`));
         try {
           charges.push(ctx.economy.pay(starter, stake, `${gameInfo(game)!.name}: entry`));
         } catch (err) {
@@ -758,7 +770,7 @@ export default defineModule<GamesSettings>({
         }
       }
       try {
-        const m = createMatch(game, 'room', starter ? player(starter) : null, starter ? [player(starter)] : [], stake, charges);
+        const m = createMatch(game, 'room', starter ? player(starter) : null, starter ? [player(starter)] : [], stake, charges, game === 'rhythm' ? rhythmOptions(args, song) : {});
         // Only the host chooses the prize
         if (!starter && rawPrize !== undefined && rawPrize !== null) m.prize = Math.max(0, Math.round(num(rawPrize, 0)));
         deadline(m, LOBBY_MS);
@@ -780,7 +792,7 @@ export default defineModule<GamesSettings>({
     };
 
     ctx.onGuest('startRoom', (args, guest) => {
-      startRoom(String(args?.game ?? '') as GameId, guest, args?.stake);
+      startRoom(String(args?.game ?? '') as GameId, guest, args?.stake, undefined, args);
       return true;
     });
 
@@ -1046,7 +1058,7 @@ export default defineModule<GamesSettings>({
       return m.id;
     });
 
-    ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake, args?.prize));
+    ctx.onAdmin('startRoom', (args) => startRoom(String(args?.game ?? '') as GameId, null, args?.stake, args?.prize, args));
     /** The match the host acts on: the one named, else the only one */
     const hostMatch = (args: any) => (args?.id ? matches.get(String(args.id)) : matches.size === 1 ? [...matches.values()][0] : undefined);
     ctx.onAdmin('begin', (args) => {

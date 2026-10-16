@@ -91,14 +91,14 @@
   let solo = $state(false);
   const canSolo = $derived(mode === 'duel' && !!picked?.modes.includes('solo'));
   const isSolo = $derived(canSolo && solo);
-  const withMusic = $derived(picked?.id === 'rhythm' && mode === 'duel' && music && !!song);
+  const withMusic = $derived(picked?.id === 'rhythm' && music && !!song);
   const economy = $derived(!!hb.core?.economyEnabled);
   const list = $derived(GAMES.filter((g) => g.modes.includes(mode) && s?.settings.enabled.includes(g.id)));
   // Richest first: the ones who can match a big bet
   const others = $derived((s?.online ?? []).filter((p) => p.id !== hb.me?.id).sort((a, b) => b.balance - a.balance));
   const opponentName = $derived(others.find((p) => p.id === opponent)?.name);
   const stake = $derived(economy ? Math.max(0, parseAmount(stakeText || '0')) : 0);
-  const fee = $derived(price(mode === 'room' ? 'games.room' : withMusic ? 'games.rhythmMusic' : isSolo ? 'games.solo' : 'games.duel'));
+  const fee = $derived(price(withMusic ? 'games.rhythmMusic' : mode === 'room' ? 'games.room' : isSolo ? 'games.solo' : 'games.duel'));
   const maxStake = $derived(s?.settings.maxStake ?? 0);
   /** A game on the whole TV blocks every other one; card games (Bluff, Coin Flip, Rhythm Rain) only block another of their kind */
   const tvBusy = $derived.by(() => {
@@ -198,10 +198,11 @@
       return;
     }
     busy = true;
+    const rhythm = picked.id === 'rhythm' ? { colors, chart, ...(withMusic ? { song: song!.key } : {}) } : {};
     const ok =
       mode === 'duel'
-        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake, ...(picked!.id === 'rhythm' ? { colors, chart, ...(withMusic ? { song: song!.key } : {}) } : {}) }))
-        : await attempt(() => rpc('games', 'startRoom', { game: picked!.id, stake }));
+        ? await attempt(() => rpc('games', 'invite', { game: picked!.id, to: opponent, stake, ...rhythm }))
+        : await attempt(() => rpc('games', 'startRoom', { game: picked!.id, stake, ...rhythm }));
     busy = false;
     if (ok) picked = null;
   }
@@ -314,7 +315,7 @@
               <button class="choice" class:active={!music} onclick={() => (music = false)}>
                 <span class="top"><VolumeX size={18} /><strong>No music</strong></span>
                 <span class="faint small truncate">Just the lights</span>
-                {#if economy}<Money amount={price(isSolo ? 'games.solo' : 'games.duel')} free />{/if}
+                {#if economy}<Money amount={price(mode === 'room' ? 'games.room' : isSolo ? 'games.solo' : 'games.duel')} free />{/if}
               </button>
             </div>
             {#if music}

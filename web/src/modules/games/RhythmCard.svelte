@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Check, Crown, Guitar } from '@lucide/svelte';
   import { scale } from 'svelte/transition';
-  import { rhythmDifficulty, rhythmMultiplier, type RhythmGrade, type RhythmView } from '$shared/games.ts';
+  import { rhythmDifficulty, rhythmMultiplier, type GamePlayer, type RhythmGrade, type RhythmView } from '$shared/games.ts';
   import { hb, onEvent } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
@@ -23,6 +23,11 @@
 
   $effect(() => onEvent<{ player: number; lane: number; grade: RhythmGrade }>('games', 'rhythm', (d) => rhythmSound(d.grade, d.lane, 0, 0.4)));
   const solo = $derived(m?.mode === 'solo');
+  /** A game for everyone: any number of players, the best few show, ranked */
+  const room = $derived(m?.mode === 'room');
+  const ROOM_SHOWN = 4;
+  const ranked = $derived(room && m ? [...m.players].sort((a, b) => (v?.scores[b.id]?.score ?? 0) - (v?.scores[a.id]?.score ?? 0)) : (m?.players ?? []));
+  const shown = $derived(room ? ranked.slice(0, ROOM_SHOWN) : ranked);
 
   // Play the song on cue (RhythmPreload got it ready), stop it when the game goes away
   $effect(() => {
@@ -40,6 +45,7 @@
   const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
   const status = $derived.by(() => {
     if (!m) return '';
+    if (m.phase === 'lobby') return 'Join from your phone';
     if (m.phase === 'intro') return 'Reading the rules';
     if (m.phase === 'result') return m.result?.headline ?? 'Over';
     if (v?.loading) return 'Loading the song';
@@ -49,7 +55,7 @@
 </script>
 
 {#if m}
-  <div class="card rhythm" class:solo in:scale={{ start: 0.95 }}>
+  <div class="card rhythm" class:solo class:room in:scale={{ start: 0.95 }}>
     <div class="title">
       <span class="icon"><Guitar size="1.1rem" /></span>
       <span class="what">
@@ -58,19 +64,41 @@
       </span>
     </div>
 
-    {#each m.players as p, i (p.id)}
+    {#if room}<div class="board">
+      {#each shown as p, i (p.id)}{@render player(p, i)}{/each}
+      {#if ranked.length > shown.length}<span class="more faint">+{ranked.length - shown.length}</span>{/if}
+      {#if m.phase === 'lobby' && !m.players.length}<span class="faint">Nobody yet</span>{/if}
+    </div>{:else}
+      {#each shown as p, i (p.id)}{@render player(p, i)}{#if i === 0 && !solo}<span class="vs">VS</span>{/if}{/each}
+    {/if}
+
+    <div class="time">
+      {#if v && m.phase === 'play' && !v.loading}
+        <span class="mono clock">{countIn > 0 ? clock(Math.ceil((v.endAt - firstAt) / 1000)) : clock(left)}</span>
+        <span class="eyebrow">left</span>
+      {:else if m.phase === 'lobby' && m.endsAt}
+        <span class="mono clock">{clock(Math.max(0, Math.ceil((m.endsAt - now.value) / 1000)))}</span>
+        <span class="eyebrow">to join</span>
+      {/if}
+    </div>
+    {#if v && m.phase === 'play' && !v.loading}<span class="bar" style:width="{progress * 100}%"></span>{/if}
+  </div>
+{/if}
+
+{#snippet player(p: GamePlayer, i: number)}
       {@const sc = v?.scores[p.id]}
-      {@const won = m.result?.winners.includes(p.id)}
+      {@const won = m?.result?.winners.includes(p.id)}
       <div class="player" class:won>
         <span class="face">
+          {#if room && m?.phase !== 'lobby'}<span class="rank mono">{i + 1}</span>{/if}
           <Avatar name={p.name} color={p.color} id={p.id} size="2rem" />
-          {#if won}<span class="badge crown"><Crown size="0.7rem" /></span>{:else if m.phase === 'intro' && m.ready.includes(p.id)}<span class="badge ready"><Check size="0.7rem" strokeWidth={3} /></span>{/if}
+          {#if won}<span class="badge crown"><Crown size="0.7rem" /></span>{:else if m?.phase === 'intro' && m.ready.includes(p.id)}<span class="badge ready"><Check size="0.7rem" strokeWidth={3} /></span>{/if}
         </span>
         <span class="who">
-          <span class="name truncate">{p.name}{#if solo && sc && m.phase === 'play'}<span class="faint">{` · ${sc.perfect + sc.good + sc.ok} hit`}</span>{/if}</span>
+          <span class="name truncate">{p.name}{#if solo && sc && m?.phase === 'play'}<span class="faint">{` · ${sc.perfect + sc.good + sc.ok} hit`}</span>{/if}</span>
           <span class="line">
             <strong class="mono score">{sc?.score ?? 0}</strong>
-            {#if sc && m.phase === 'play'}
+            {#if sc && m?.phase === 'play'}
               <span class="mult mono" class:max={rhythmMultiplier(sc.combo) >= 4}>x{rhythmMultiplier(sc.combo)}</span>
               {#if sc.last && countIn <= 0}
                 {#key sc.last.seq}<span class="pop {sc.last.grade}">{LABEL[sc.last.grade]}</span>{/key}
@@ -79,18 +107,7 @@
           </span>
         </span>
       </div>
-      {#if i === 0 && !solo}<span class="vs">VS</span>{/if}
-    {/each}
-
-    <div class="time">
-      {#if v && m.phase === 'play' && !v.loading}
-        <span class="mono clock">{countIn > 0 ? clock(Math.ceil((v.endAt - firstAt) / 1000)) : clock(left)}</span>
-        <span class="eyebrow">left</span>
-      {/if}
-    </div>
-    {#if v && m.phase === 'play' && !v.loading}<span class="bar" style:width="{progress * 100}%"></span>{/if}
-  </div>
-{/if}
+{/snippet}
 
 <style>
   .rhythm {
@@ -102,6 +119,39 @@
     gap: 1rem;
     padding: 0.45rem 1rem;
     overflow: hidden;
+  }
+  .rhythm.room {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) auto;
+  }
+  .board {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .board .player {
+    flex: 0 1 auto;
+  }
+  .rank {
+    position: absolute;
+    left: -0.35rem;
+    top: -0.35rem;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    min-width: 1.05rem;
+    height: 1.05rem;
+    padding: 0 0.2rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    font-size: 0.65rem;
+    font-weight: 800;
+  }
+  .more {
+    flex: none;
+    font-weight: 700;
   }
   .rhythm.solo {
     grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
