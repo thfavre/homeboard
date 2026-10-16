@@ -3,14 +3,14 @@
   import { onEvent, serverNow } from '$lib/client.svelte.ts';
   import { audioContext } from '../soundboard/player.ts';
   import { gameMatch, gamesState } from './store.svelte.ts';
-  import { loadPirateSound, pirateSound } from './ui/pirateSound.ts';
+  import { BUILT_IN_FILES, loadPirateSound, pirateSound } from './ui/pirateSound.ts';
   import { FADE_OUT_SEC, SongOnBeats } from './ui/pirateSong.ts';
 
   /**
    * The sound of Pirate Race on the TV, with nothing on screen: the drum on every beat (scheduled on the
-   * audio clock from the server's beat times, a little early for the speaker delay), the crew's roar when
-   * the race starts, the boosts and the finish, and the race songs in step with the drum (each from its
-   * start, fading in). Also plays a sound or a song the host tries from the admin.
+   * audio clock from the server's beat times, a little early for the speaker delay), the war cry over the
+   * count-in, the crew's roar when the race starts, the boosts and the finish, and the race songs in step
+   * with the drum (each from its start, fading in). Also plays a sound or a song the host tries from the admin.
    */
   const s = $derived(gamesState());
   const raceMatch = $derived(gameMatch('pirates'));
@@ -22,6 +22,7 @@
   // The picked files are decoded as soon as they are known, so the first beat is not late
   $effect(() => {
     for (const pick of Object.values(s?.settings.pirateSounds ?? {})) if (pick?.url) void loadPirateSound(pick.url);
+    for (const [kind, file] of Object.entries(BUILT_IN_FILES)) if (!url(kind as PirateSoundId)) void loadPirateSound(file);
     // The songs too, once a race is on its way (each is a few MB once decoded)
     if (raceMatch) for (const song of s?.settings.pirateSongs ?? []) void loadPirateSound(song.url);
   });
@@ -43,8 +44,9 @@
     test?.song.setVolume(volume);
   });
 
-  /** Beats already scheduled (index), and whether the roar is */
+  /** Beats already scheduled (index), and whether the war cry and the roar are */
   let lastBeat = -1;
+  let cried = false;
   let roared = false;
   let race = '';
   $effect(() => {
@@ -52,6 +54,7 @@
     if (id !== race) {
       race = id;
       lastBeat = -1;
+      cried = false;
       roared = false;
     }
   });
@@ -101,6 +104,11 @@
       const ahead = b.at - early - now;
       if (ahead > 1200) break;
       lastBeat = b.i;
+      // The war cry from the first beat of the count-in (the 4)
+      if (b.i === 0 && !cried) {
+        cried = true;
+        if (ahead > -300) pirateSound('countdown', { url: url('countdown'), when: at(b.at), volume: 0.85 });
+      }
       if (ahead < -40) continue;
       // The accent on every 4th beat: counted from the song's beat 0 while one plays (its bars), else from the race's first beat
       const song = (v.songs ?? []).findLast((p) => p.beat <= b.i);

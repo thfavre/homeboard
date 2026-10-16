@@ -4,9 +4,13 @@ import { audioContext } from '../../soundboard/player.ts';
 /**
  * Pirate Race sounds. Each one is made on the fly (no file to load, timed to the millisecond with the
  * audio clock), unless the host picked a MyInstants sound for it: then that file is decoded once and
- * played the same way. `when`: audio clock time to play it at (default: now).
+ * played the same way. `when`: audio clock time to play it at (default: now). A few are files that come
+ * with the app instead of being made (`BUILT_IN_FILES`).
  */
 const buffers = new Map<string, Promise<AudioBuffer | null>>();
+
+/** The built-in sounds that are a file shipped with the app */
+export const BUILT_IN_FILES: Partial<Record<PirateSoundId, string>> = { countdown: '/pirates/war-cry.mp3' };
 
 export function loadPirateSound(url: string): Promise<AudioBuffer | null> {
   let job = buffers.get(url);
@@ -71,14 +75,15 @@ export function pirateSound(kind: PirateSoundId, o: PirateSoundOptions = {}): vo
   const out = ac.createGain();
   out.gain.value = o.volume ?? 0.8;
   out.connect(ac.destination);
-  const file = o.url ? bufferNow(o.url) : null;
+  const fileUrl = o.url || BUILT_IN_FILES[kind];
+  const file = fileUrl ? bufferNow(fileUrl) : null;
   if (file) {
     const src = ac.createBufferSource();
     src.buffer = file;
     src.connect(out);
     const lead = leadOf(file);
     src.start(t, lead);
-    const max = o.maxSec ?? (kind === 'drum' || kind === 'oar' ? 1.2 : 6);
+    const max = o.maxSec ?? (kind === 'drum' || kind === 'oar' ? 1.2 : kind === 'countdown' ? 8 : 6);
     if (file.duration - lead > max) {
       out.gain.setValueAtTime(out.gain.value, t + max - 0.15);
       out.gain.linearRampToValueAtTime(0.0001, t + max);
@@ -87,7 +92,12 @@ export function pirateSound(kind: PirateSoundId, o: PirateSoundOptions = {}): vo
     src.onended = () => out.disconnect();
     return;
   }
-  BUILT_IN[kind](ac, out, t, !!o.accent);
+  const synth = BUILT_IN[kind];
+  if (!synth) {
+    out.disconnect();
+    return;
+  }
+  synth(ac, out, t, !!o.accent);
   setTimeout(() => out.disconnect(), (t - ac.currentTime + 3) * 1000);
 }
 
@@ -140,7 +150,7 @@ const burst = (ac: AudioContext, out: AudioNode, t: number, filter: BiquadFilter
   src.stop(t + attack + decay + 0.05);
 };
 
-const BUILT_IN: Record<PirateSoundId, Synth> = {
+const BUILT_IN: Partial<Record<PirateSoundId, Synth>> = {
   /** A big war drum: a deep skin that drops in pitch, the thud of the mallet, and the boom of the barrel */
   drum(ac, out, t, accent) {
     tone(ac, out, 'sine', accent ? 120 : 98, t, 0.004, 1, 0.55, 46);
@@ -151,7 +161,7 @@ const BUILT_IN: Record<PirateSoundId, Synth> = {
   },
   /** The drum on every 4th beat: the same drum, hit harder and a little higher */
   drumAccent(ac, out, t) {
-    BUILT_IN.drum(ac, out, t, true);
+    BUILT_IN.drum!(ac, out, t, true);
   },
   /** The oar going in: a wooden knock, then water splashing off the blade */
   oar(ac, out, t) {
