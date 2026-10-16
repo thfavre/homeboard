@@ -4,11 +4,38 @@
   import { hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import { audioContext } from '../soundboard/player.ts';
-  import { detectEggs, type EggFx } from './eggs.ts';
+  import { detectEggs, detectFood, type EggFx } from './eggs.ts';
   import EggOverlay from './EggOverlay.svelte';
 
-  type Part = { text: string; who?: TtsMention };
+  type Crumb = { x: number; delay: number; dur: number; drift: number; spin: number; size: number };
+  type Part = { text: string; who?: TtsMention; food?: { emoji: string; crumbs: Crumb[] } };
   let current = $state<(TtsEvent & { key: number; durationMs: number; fx: EggFx; parts: Part[] }) | null>(null);
+
+  const rnd = (min: number, max: number) => min + Math.random() * (max - min);
+
+  /** Food words get their emoji falling from them in a cascade, drawn once per shoutout */
+  function splitFood(parts: Part[]): Part[] {
+    return parts.flatMap((part) => {
+      if (part.who) return [part];
+      const out: Part[] = [];
+      let at = 0;
+      for (const f of detectFood(part.text)) {
+        if (f.start > at) out.push({ text: part.text.slice(at, f.start) });
+        const crumbs = Array.from({ length: 8 }, (_, i) => ({
+          x: rnd(15, 85),
+          delay: i * 0.28 + rnd(0, 0.15),
+          dur: rnd(1.7, 2.4),
+          drift: rnd(-6, 6),
+          spin: rnd(-260, 260),
+          size: rnd(2.2, 3.2),
+        }));
+        out.push({ text: part.text.slice(f.start, f.end), food: { emoji: f.emoji, crumbs } });
+        at = f.end;
+      }
+      if (at < part.text.length) out.push({ text: part.text.slice(at) });
+      return out;
+    });
+  }
 
   /** The text cut around the guests' names, so their pictures can hop above them */
   function splitNames(text: string, mentions: TtsMention[] = []): Part[] {
@@ -178,7 +205,7 @@
           key,
           durationMs,
           fx: detectEggs(item.text),
-          parts: splitNames(item.text, item.mentions),
+          parts: splitFood(splitNames(item.text, item.mentions)),
         };
 
         // Play audio and wait for both speech & scroll
@@ -288,6 +315,17 @@
                     ><span class="name-pic" style:--i={i}
                       ><Avatar name={part.who.name} color={part.who.color} id={part.who.id} src={part.who.avatar} size="4.6rem" /></span
                     >{part.text}</span
+                  >{:else if part.food}<span class="food"
+                    >{#each part.food.crumbs as c}<span
+                        class="crumb"
+                        aria-hidden="true"
+                        style:left="{c.x}%"
+                        style:--d="{c.dur}s"
+                        style:--delay="{c.delay}s"
+                        style:--drift="{c.drift}rem"
+                        style:--spin="{c.spin}deg"
+                        style:font-size="{c.size}rem">{part.food.emoji}</span
+                      >{/each}{part.text}</span
                   >{:else}{part.text}{/if}{/each}</span
             >
 
@@ -338,6 +376,9 @@
     /* Room above the banner for the pictures of named guests, without making the banner taller */
     padding-top: 8rem;
     margin-top: -8rem;
+    /* And room below it for the food falling from the words */
+    padding-bottom: 60vh;
+    margin-bottom: -60vh;
     position: relative;
     mask-image: linear-gradient(90deg, transparent 0%, black 4%, black 96%, transparent 100%);
     -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 4%, black 96%, transparent 100%);
@@ -438,6 +479,46 @@
     }
     55% {
       transform: translateY(0) scale(1.12, 0.88);
+    }
+  }
+
+  /* Food: its emoji pours out of the word and falls down the screen, all along the scroll */
+  .food {
+    position: relative;
+    display: inline-block;
+    white-space: pre;
+  }
+  .crumb {
+    position: absolute;
+    top: 0.3em;
+    line-height: 1;
+    font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+    font-weight: 400;
+    /* Text effects can make the text transparent, which would hide the emoji too */
+    color: #fff;
+    -webkit-text-fill-color: #fff;
+    text-shadow: none;
+    opacity: 0;
+    translate: -50% 0;
+    animation: crumb-fall var(--d) cubic-bezier(0.5, 0, 0.9, 0.55) var(--delay) infinite;
+  }
+  @keyframes crumb-fall {
+    0% {
+      transform: translate(0, 0) rotate(0) scale(0.3);
+      opacity: 0;
+    }
+    12% {
+      opacity: 1;
+    }
+    20% {
+      transform: translate(calc(var(--drift) * 0.2), 2vh) rotate(calc(var(--spin) * 0.2)) scale(1);
+    }
+    85% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(var(--drift), 55vh) rotate(var(--spin)) scale(1);
+      opacity: 0;
     }
   }
 
