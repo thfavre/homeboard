@@ -750,7 +750,7 @@ export const PIRATE_SOUNDS = [
   { id: 'drum', name: 'Drum', help: 'Every beat, on the TV', search: 'war drum' },
   { id: 'drumAccent', name: 'Drum accent', help: 'Every 4th beat instead (and the count-in), on the TV', search: 'war drum' },
   { id: 'oar', name: 'Oar stroke', help: 'Each tap, on the rower’s phone', search: 'water splash' },
-  { id: 'roar', name: 'Pirate roar', help: 'When the race starts, on the TV', search: 'pirate arr' },
+  { id: 'roar', name: 'Start horn', help: 'When the race starts, on the TV', search: 'war horn' },
   { id: 'boost', name: 'Speed boost', help: 'A crew gets a boost, on the TV', search: 'speed boost' },
   { id: 'finish', name: 'Finish', help: 'A ship reaches the treasure, on the TV', search: 'victory fanfare' },
 ] as const;
