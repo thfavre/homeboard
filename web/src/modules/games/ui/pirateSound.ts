@@ -11,7 +11,7 @@ const buffers = new Map<string, Promise<AudioBuffer | null>>();
 const ready = new Map<string, AudioBuffer | null>();
 
 /** The built-in sounds that are a file shipped with the app */
-export const BUILT_IN_FILES: Partial<Record<PirateSoundId, string>> = { countdown: '/pirates/war-cry.mp3' };
+export const BUILT_IN_FILES: Partial<Record<PirateSoundId, string>> = { finish: '/pirates/war-cry.mp3' };
 
 export function loadPirateSound(url: string): Promise<AudioBuffer | null> {
   let job = buffers.get(url);
@@ -120,7 +120,7 @@ function playFile(ac: AudioContext, kind: PirateSoundId, file: AudioBuffer, t: n
   src.connect(out);
   const lead = leadOf(file);
   src.start(t, lead);
-  const max = o.maxSec ?? (kind === 'drum' || kind === 'oar' ? 1.2 : kind === 'countdown' ? 8 : 6);
+  const max = o.maxSec ?? (kind === 'drum' || kind === 'oar' ? 1.2 : kind === 'finish' ? 8 : 6);
   if (file.duration - lead > max) {
     out.gain.setValueAtTime(out.gain.value, t + max - 0.15);
     out.gain.linearRampToValueAtTime(0.0001, t + max);

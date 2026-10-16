@@ -8,9 +8,9 @@
 
   /**
    * The sound of Pirate Race on the TV, with nothing on screen: the drum on every beat (scheduled on the
-   * audio clock from the server's beat times, a little early for the speaker delay), the war cry over the
-   * count-in, the crew's roar when the race starts, the boosts and the finish, and the race songs in step
-   * with the drum (each from its start, fading in). Also plays a sound or a song the host tries from the admin.
+   * audio clock from the server's beat times, a little early for the speaker delay), the crew's roar
+   * when the race starts, the boosts and the finish, and the race songs in step with the drum (each from
+   * its start, fading in). Also plays a sound or a song the host tries from the admin.
    */
   const s = $derived(gamesState());
   const raceMatch = $derived(gameMatch('pirates'));
@@ -44,9 +44,8 @@
     test?.song.setVolume(volume);
   });
 
-  /** Beats already scheduled (index), and whether the war cry and the roar are */
+  /** Beats already scheduled (index), and whether the roar is */
   let lastBeat = -1;
-  let cried = false;
   let roared = false;
   let race = '';
   $effect(() => {
@@ -54,7 +53,6 @@
     if (id !== race) {
       race = id;
       lastBeat = -1;
-      cried = false;
       roared = false;
     }
   });
@@ -104,11 +102,6 @@
       const ahead = b.at - early - now;
       if (ahead > 1200) break;
       lastBeat = b.i;
-      // The war cry from the first beat of the count-in (the 4)
-      if (b.i === 0 && !cried) {
-        cried = true;
-        if (ahead > -300) pirateSound('countdown', { url: url('countdown'), when: at(b.at), volume: 0.85 });
-      }
       if (ahead < -40) continue;
       // The accent on every 4th beat: counted from the song's beat 0 while one plays (its bars), else from the race's first beat
       const song = (v.songs ?? []).findLast((p) => p.beat <= b.i);
