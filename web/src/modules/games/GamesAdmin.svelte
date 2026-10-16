@@ -295,7 +295,7 @@
     <h4 class="group">Sounds</h4>
     <PirateSoundsAdmin picks={s!.settings.pirateSounds ?? {}} drumVolume={drag.pirateDrumVolume ?? s!.settings.pirateDrumVolume ?? 100}>
       {#snippet afterDrums()}
-        {@render slider('Drum volume', 'On the TV, during the race and when trying a drum or a song, here too', 'pirateDrumVolume', 0, 200, (v) => `${v}%`, 2)}
+        {@render slider('Drum volume', 'On the TV, during the race and when trying a drum or a song, here too', 'pirateDrumVolume', 0, 100, (v) => `${v}%`, 2)}
       {/snippet}
     </PirateSoundsAdmin>
   {:else if id === 'party'}

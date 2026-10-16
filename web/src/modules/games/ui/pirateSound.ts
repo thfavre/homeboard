@@ -105,7 +105,7 @@ function gainOut(ac: AudioContext, volume = 0.8): GainNode {
   return out;
 }
 
-/** All the race sounds go through one limiter, so a loud drum (over 100%) does not crackle */
+/** All the race sounds go through one limiter, so sounds on top of each other do not crackle */
 let limiterNode: DynamicsCompressorNode | null = null;
 function limiter(ac: AudioContext): DynamicsCompressorNode {
   if (!limiterNode || limiterNode.context !== ac) {
@@ -198,19 +198,20 @@ const burst = (ac: AudioContext, out: AudioNode, t: number, filter: BiquadFilter
 const BUILT_IN: Partial<Record<PirateSoundId, Synth>> = {
   /**
    * A big war drum: a deep skin that drops in pitch, the thud of the mallet, and the boom of the barrel.
-   * TV speakers hardly play the deep part, so it has a body and a stick attack higher up, and goes through
-   * a soft saturation that makes it louder and adds overtones they can play.
+   * TV speakers hardly play the deep part, so it has a long body and a stick attack higher up, and is
+   * driven hard into a soft saturation: as loud as a sound can be, with overtones they can play.
    */
   drum(ac, out, t, accent) {
     const drive = ac.createGain();
-    drive.gain.value = 1.6;
+    drive.gain.value = 3;
     const shaper = ac.createWaveShaper();
     shaper.curve = softClip();
     shaper.oversample = '2x';
     drive.connect(shaper).connect(out);
-    tone(ac, drive, 'sine', accent ? 120 : 98, t, 0.004, 1, 0.55, 46);
+    tone(ac, drive, 'sine', accent ? 120 : 98, t, 0.004, 1, 0.7, 46);
     tone(ac, drive, 'sine', 58, t, 0.006, 0.7, 0.75, 38);
-    tone(ac, drive, 'sine', accent ? 196 : 165, t, 0.003, 0.6, 0.22, 100);
+    tone(ac, drive, 'sine', accent ? 196 : 165, t, 0.003, 1, 0.35, 100);
+    tone(ac, drive, 'sine', accent ? 392 : 330, t, 0.002, 0.4, 0.15, 200);
     tone(ac, drive, 'triangle', accent ? 240 : 190, t, 0.002, 0.45, 0.09, 90);
     burst(ac, drive, t, 'lowpass', 900, 0.8, 0.002, accent ? 0.65 : 0.5, 0.08, 200);
     burst(ac, drive, t, 'bandpass', 2200, 1.2, 0.001, accent ? 0.45 : 0.35, 0.035);

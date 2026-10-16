@@ -106,7 +106,7 @@
       // The accent on every 4th beat: counted from the song's beat 0 while one plays (its bars), else from the race's first beat
       const song = (v.songs ?? []).findLast((p) => p.beat <= b.i);
       const accent = b.i < PIRATE.countIn || (b.i - (song?.beat ?? PIRATE.countIn)) % 4 === 0;
-      pirateSound(accent ? 'drumAccent' : 'drum', { url: url(accent ? 'drumAccent' : 'drum'), when: at(b.at), accent, volume: drum(accent ? 0.95 : 0.85) });
+      pirateSound(accent ? 'drumAccent' : 'drum', { url: url(accent ? 'drumAccent' : 'drum'), when: at(b.at), accent, volume: drum(accent ? 1 : 0.95) });
     }
     if (!roared && v.raceAt - early - now < 1200) {
       roared = true;
@@ -125,7 +125,7 @@
     const offs = [
       onEvent('games', 'pirateBoost', () => pirateSound('boost', { url: url('boost'), volume: 0.75 })),
       onEvent('games', 'pirateFinish', () => pirateSound('finish', { url: url('finish'), volume: 0.85 })),
-      onEvent<{ kind: PirateSoundId; url: string | null }>('games', 'pirateTest', (d) => pirateSound(d.kind, { url: d.url, volume: d.kind === 'drum' || d.kind === 'drumAccent' ? drum(0.85) : 0.85, accent: d.kind === 'drumAccent' })),
+      onEvent<{ kind: PirateSoundId; url: string | null }>('games', 'pirateTest', (d) => pirateSound(d.kind, { url: d.url, volume: d.kind === 'drum' || d.kind === 'drumAccent' ? drum(1) : 0.85, accent: d.kind === 'drumAccent' })),
       onEvent<SongTest | null>('games', 'pirateSongTest', (d) => void testSong(d)),
     ];
     return () => {
@@ -164,7 +164,7 @@
     const drums = () => {
       while (next < count && beats[next].time < ac.currentTime + 1.2) {
         const accent = next % 4 === 0;
-        pirateSound(accent ? 'drumAccent' : 'drum', { url: accent ? (d.accent ?? null) : d.drum, when: beats[next].time, volume: drum(accent ? 0.95 : 0.85), accent });
+        pirateSound(accent ? 'drumAccent' : 'drum', { url: accent ? (d.accent ?? null) : d.drum, when: beats[next].time, volume: drum(accent ? 1 : 0.95), accent });
         next++;
       }
     };

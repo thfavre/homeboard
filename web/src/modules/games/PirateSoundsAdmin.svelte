@@ -15,7 +15,7 @@
 
   const isDrum = (kind: PirateSoundId) => kind === 'drum' || kind === 'drumAccent';
   function hear(kind: PirateSoundId, url: string | undefined) {
-    pirateSound(kind, { url, volume: isDrum(kind) ? (0.85 * drumVolume) / 100 : 0.85, accent: kind === 'drumAccent' });
+    pirateSound(kind, { url, volume: isDrum(kind) ? drumVolume / 100 : 0.85, accent: kind === 'drumAccent' });
   }
 
   let open = $state<PirateSoundId | null>(null);
