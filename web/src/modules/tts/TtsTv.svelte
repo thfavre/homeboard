@@ -52,6 +52,16 @@
     });
   }
 
+  /**
+   * Marks a word .live only while it is on the screen (or about to enter it), so the TV animates
+   * the visible words only, however long the shoutout is. Off screen, their emoji and flames don't exist.
+   */
+  function onScreen(node: HTMLElement) {
+    const io = new IntersectionObserver(([e]) => node.classList.toggle('live', e.isIntersecting), { rootMargin: '0px 15%' });
+    io.observe(node);
+    return { destroy: () => io.disconnect() };
+  }
+
   /** The text cut around the guests' names, so their pictures can hop above them */
   function splitNames(text: string, mentions: TtsMention[] = []): Part[] {
     const spots = mentions
@@ -330,7 +340,7 @@
                     ><span class="name-pic" style:--i={i}
                       ><Avatar name={part.who.name} color={part.who.color} id={part.who.id} src={part.who.avatar} size="4.6rem" /></span
                     >{part.text}</span
-                  >{:else if part.food}<span class="food" class:burn={part.burn} data-text={part.text}
+                  >{:else if part.food}<span class="food" class:burn={part.burn} data-text={part.text} use:onScreen
                     >{#each part.food.crumbs as c}<span
                         class="crumb"
                         aria-hidden="true"
@@ -341,7 +351,7 @@
                         style:--spin="{c.spin}deg"
                         style:font-size="{c.size}rem">{part.food.emoji}</span
                       >{/each}{part.text}</span
-                  >{:else if part.burn}<span class="burn" data-text={part.text}>{part.text}</span
+                  >{:else if part.burn}<span class="burn" data-text={part.text} use:onScreen>{part.text}</span
                   >{:else}{part.text}{/if}{/each}</span
             >
 
@@ -519,6 +529,11 @@
     text-shadow: none;
     opacity: 0;
     translate: -50% 0;
+    /* Off screen: not there at all, so nothing to animate. On screen, the cascade starts over. */
+    display: none;
+  }
+  .food:global(.live) .crumb {
+    display: block;
     will-change: transform, opacity;
     animation: crumb-fall var(--d) cubic-bezier(0.5, 0, 0.9, 0.55) var(--delay) infinite;
   }
@@ -592,11 +607,14 @@
       -3px -35px 24px #e01800,
       0 0 55px rgba(255, 90, 0, 0.5);
     transform-origin: 50% 100%;
+  }
+  /* Off screen, the word keeps its still flames: the flickering copies and the shimmer only run while it is visible */
+  .burn:global(.live) {
     will-change: transform;
     animation: heat 2.6s ease-in-out infinite;
   }
-  .burn::before,
-  .burn::after {
+  .burn:global(.live)::before,
+  .burn:global(.live)::after {
     content: attr(data-text);
     position: absolute;
     inset: 0;
@@ -605,7 +623,7 @@
     opacity: 0;
     will-change: opacity;
   }
-  .burn::before {
+  .burn:global(.live)::before {
     text-shadow:
       1px -5px 6px #ffef5a,
       -2px -12px 10px #ffc21a,
@@ -614,7 +632,7 @@
       2px -46px 30px #e01800;
     animation: flare 0.47s ease-in-out infinite alternate;
   }
-  .burn::after {
+  .burn:global(.live)::after {
     text-shadow:
       0 -6px 7px #ffef5a,
       3px -13px 11px #ffc21a,
