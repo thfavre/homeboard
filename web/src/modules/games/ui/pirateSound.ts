@@ -93,19 +93,20 @@ export function pirateSound(kind: PirateSoundId, o: PirateSoundOptions = {}): vo
 function playSynth(ac: AudioContext, kind: PirateSoundId, t: number, o: PirateSoundOptions): void {
   const synth = BUILT_IN[kind];
   if (!synth) return;
-  const out = gainOut(ac, o.volume);
+  const out = gainOut(ac, kind, o.volume);
   synth(ac, out, t, !!o.accent);
   setTimeout(() => out.disconnect(), (t - ac.currentTime + 3) * 1000);
 }
 
-function gainOut(ac: AudioContext, volume = 0.8): GainNode {
+/** The drum goes straight out (the limiter would turn it down while the horn or the finish plays) */
+function gainOut(ac: AudioContext, kind: PirateSoundId, volume = 0.8): GainNode {
   const out = ac.createGain();
   out.gain.value = volume;
-  out.connect(limiter(ac));
+  out.connect(kind === 'drum' || kind === 'drumAccent' ? ac.destination : limiter(ac));
   return out;
 }
 
-/** All the race sounds go through one limiter, so sounds on top of each other do not crackle */
+/** The other race sounds go through one limiter, so sounds on top of each other do not crackle */
 let limiterNode: DynamicsCompressorNode | null = null;
 function limiter(ac: AudioContext): DynamicsCompressorNode {
   if (!limiterNode || limiterNode.context !== ac) {
@@ -121,7 +122,7 @@ function limiter(ac: AudioContext): DynamicsCompressorNode {
 }
 
 function playFile(ac: AudioContext, kind: PirateSoundId, file: AudioBuffer, t: number, o: PirateSoundOptions): void {
-  const out = gainOut(ac, o.volume);
+  const out = gainOut(ac, kind, o.volume);
   const src = ac.createBufferSource();
   src.buffer = file;
   src.connect(out);
