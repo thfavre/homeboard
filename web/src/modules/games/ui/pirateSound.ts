@@ -8,6 +8,7 @@ import { audioContext } from '../../soundboard/player.ts';
  * with the app instead of being made (`BUILT_IN_FILES`).
  */
 const buffers = new Map<string, Promise<AudioBuffer | null>>();
+const ready = new Map<string, AudioBuffer | null>();
 
 /** The built-in sounds that are a file shipped with the app */
 export const BUILT_IN_FILES: Partial<Record<PirateSoundId, string>> = { countdown: '/pirates/war-cry.mp3' };
@@ -18,7 +19,11 @@ export function loadPirateSound(url: string): Promise<AudioBuffer | null> {
     job = fetch(url)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
       .then((data) => audioContext().decodeAudioData(data))
-      .catch(() => null);
+      .catch(() => null)
+      .then((b) => {
+        ready.set(url, b);
+        return b;
+      });
     buffers.set(url, job);
   }
   return job;
@@ -47,13 +52,9 @@ function leadOf(buffer: AudioBuffer): number {
   return lead;
 }
 
-/** A decoded file, or null while it loads (or when it cannot be) */
-const ready = new Map<string, AudioBuffer | null>();
+/** A decoded file (set when its load ends), or null while it loads (or when it cannot be) */
 function bufferNow(url: string): AudioBuffer | null {
-  if (!ready.has(url)) {
-    ready.set(url, null);
-    void loadPirateSound(url).then((b) => ready.set(url, b));
-  }
+  if (!ready.has(url)) void loadPirateSound(url);
   return ready.get(url) ?? null;
 }
 
@@ -72,33 +73,45 @@ export function pirateSound(kind: PirateSoundId, o: PirateSoundOptions = {}): vo
   const ac = audioContext();
   if (ac.state !== 'running') void ac.resume().catch(() => {});
   const t = Math.max(ac.currentTime + 0.005, o.when ?? 0);
-  const out = ac.createGain();
-  out.gain.value = o.volume ?? 0.8;
-  out.connect(ac.destination);
   const fileUrl = o.url || BUILT_IN_FILES[kind];
   const file = fileUrl ? bufferNow(fileUrl) : null;
-  if (file) {
-    const src = ac.createBufferSource();
-    src.buffer = file;
-    src.connect(out);
-    const lead = leadOf(file);
-    src.start(t, lead);
-    const max = o.maxSec ?? (kind === 'drum' || kind === 'oar' ? 1.2 : kind === 'countdown' ? 8 : 6);
-    if (file.duration - lead > max) {
-      out.gain.setValueAtTime(out.gain.value, t + max - 0.15);
-      out.gain.linearRampToValueAtTime(0.0001, t + max);
-      src.stop(t + max + 0.02);
-    }
-    src.onended = () => out.disconnect();
-    return;
-  }
+  if (file) return playFile(ac, kind, file, t, o);
   const synth = BUILT_IN[kind];
   if (!synth) {
-    out.disconnect();
+    // A sound that is only a file, still loading: it plays once loaded, unless that is too late
+    if (fileUrl) {
+      void loadPirateSound(fileUrl).then((b) => {
+        if (b && ac.currentTime < t + 1.5) playFile(ac, kind, b, Math.max(ac.currentTime + 0.005, t), o);
+      });
+    }
     return;
   }
+  const out = gainOut(ac, o.volume);
   synth(ac, out, t, !!o.accent);
   setTimeout(() => out.disconnect(), (t - ac.currentTime + 3) * 1000);
+}
+
+function gainOut(ac: AudioContext, volume = 0.8): GainNode {
+  const out = ac.createGain();
+  out.gain.value = volume;
+  out.connect(ac.destination);
+  return out;
+}
+
+function playFile(ac: AudioContext, kind: PirateSoundId, file: AudioBuffer, t: number, o: PirateSoundOptions): void {
+  const out = gainOut(ac, o.volume);
+  const src = ac.createBufferSource();
+  src.buffer = file;
+  src.connect(out);
+  const lead = leadOf(file);
+  src.start(t, lead);
+  const max = o.maxSec ?? (kind === 'drum' || kind === 'oar' ? 1.2 : kind === 'countdown' ? 8 : 6);
+  if (file.duration - lead > max) {
+    out.gain.setValueAtTime(out.gain.value, t + max - 0.15);
+    out.gain.linearRampToValueAtTime(0.0001, t + max);
+    src.stop(t + max + 0.02);
+  }
+  src.onended = () => out.disconnect();
 }
 
 // ------------------------------------------------------------ built-in sounds
