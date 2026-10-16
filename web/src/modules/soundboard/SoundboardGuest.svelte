@@ -2,6 +2,7 @@
   import { BookmarkCheck, BookmarkPlus, X } from '@lucide/svelte';
   import type { MiSound, SoundboardState } from '$shared/soundboard.ts';
   import { hb, rpc, attempt, onEvent, price, serverNow } from '$lib/client.svelte.ts';
+  import { guestOrder } from '$lib/guestOrder.ts';
   import Money from '$lib/ui/Money.svelte';
   import MiSearch from './MiSearch.svelte';
   import SoundCard from './SoundCard.svelte';
@@ -13,20 +14,8 @@
   const partyCost = $derived(price('soundboard.sound'));
   const searchCost = $derived(price('soundboard.search'));
 
-  // Each guest sees the party sounds in their own order, the same every time: each sound is
-  // ranked by a hash of the guest's name and the sound, so adding a sound keeps the rest in place
-  function hash(s: string): number {
-    let h = 0x811c9dc5;
-    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
-    return h >>> 0;
-  }
-  const guestKey = $derived((hb.me?.name ?? '').trim().toLowerCase());
-  const sounds = $derived(
-    (mod?.sounds ?? [])
-      .map((s) => ({ s, rank: hash(`${guestKey}|${s.id}`) }))
-      .sort((a, b) => a.rank - b.rank)
-      .map((r) => r.s)
-  );
+  // Each guest sees the party sounds in their own order, the same every time
+  const sounds = $derived(guestOrder(mod?.sounds ?? [], hb.me?.name));
   let now = $state(serverNow());
   let last = $state<string | null>(null);
   let tab = $state<'board' | 'search'>('board');

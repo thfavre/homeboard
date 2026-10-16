@@ -1,13 +1,10 @@
 <script lang="ts">
   import type { StickerDef } from '$shared/stickers.ts';
-  import BuiltinSticker from './BuiltinSticker.svelte';
 
   let { sticker, text }: { sticker: StickerDef | null; text?: string } = $props();
 </script>
 
-{#if sticker?.kind === 'builtin'}
-  <BuiltinSticker id={sticker.id} />
-{:else if sticker?.kind === 'face'}
+{#if sticker?.kind === 'face'}
   <img class="face" src={sticker.src} alt={sticker.name} draggable="false" />
 {:else if sticker?.kind === 'image'}
   <img src={sticker.src} alt={sticker.name} draggable="false" />

@@ -93,7 +93,7 @@ Environment variables: `PORT` (default 4300), `HB_TUNNEL=0` (no public tunnel),
 | --- | --- | --- |
 | **Music** (Spotify) | Search and queue songs, skip | Connect account, playback controls, explicit filter |
 | **Pixel canvas** | Paint pixel by pixel (r/place style), pinch to zoom and two fingers to move | Clear, resize |
-| **Stickers** | Built-in vector stickers, text, their own face, or stickers they make (cut out of a photo, drawn with a finger, or imported like a WhatsApp sticker, animated ones stay animated), bouncing for X minutes | Duration, limit, upload your own, turn guest-made stickers on or off, delete one from a guest's collection |
+| **Stickers** | Built-in random stickers (in each guest's own order), text, their own face, or stickers they make (cut out of a photo, drawn with a finger, or imported like a WhatsApp sticker, animated ones stay animated), bouncing for X minutes | Duration, limit, upload your own, turn guest-made stickers on or off, delete one from a guest's collection |
 | **Photos** | Photo with caption shown big on the TV | Remove (with refund), replay, duration |
 | **Lights** (WLED) | Pick an effect, on all lights or one | Devices, effect editor, test, stop |
 | **Soundboard** | Play a sound on the TV speakers, or search MyInstants | Volume, cooldown, upload sounds, add sounds from MyInstants, let guests search MyInstants and keep their own "My sounds" (with a length limit) |

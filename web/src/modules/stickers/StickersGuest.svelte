@@ -1,13 +1,16 @@
 <script lang="ts">
   import { Plus, Send, X } from '@lucide/svelte';
-  import { MAX_GUEST_STICKERS, type GuestSticker, type StickerDef, type StickersState } from '$shared/stickers.ts';
+  import { MAX_GUEST_STICKERS, type GuestSticker, type StickersState } from '$shared/stickers.ts';
   import { hb, rpc, attempt, onEvent, price } from '$lib/client.svelte.ts';
+  import { guestOrder } from '$lib/guestOrder.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import StickerMaker from './StickerMaker.svelte';
   import StickerView from './StickerView.svelte';
 
   const mod = $derived(hb.modules.stickers as StickersState | undefined);
+  // Each guest sees the stickers in their own order, the same every time
+  const catalog = $derived(guestOrder(mod?.catalog ?? [], hb.me?.name));
   const cost = $derived(price('stickers.sticker'));
   const full = $derived(!!mod && mod.maxActive > 0 && mod.active.length >= mod.maxActive);
   let text = $state('');
@@ -82,7 +85,6 @@
           </div>
         {/each}
       </div>
-      <div class="head"><h4>Party stickers</h4></div>
     {/if}
 
     <div class="grid">
@@ -93,10 +95,9 @@
           <span class="name">Your face</span>
         </button>
       {/if}
-      {#each mod.catalog as s (s.id)}
-        <button class="item card" disabled={busy || full} onclick={() => send({ id: s.id }, s.name)}>
-          <div class="art"><StickerView sticker={s as StickerDef} /></div>
-          <span class="name">{s.name}</span>
+      {#each catalog as s (s.id)}
+        <button class="item card" disabled={busy || full} aria-label={s.name} onclick={() => send({ id: s.id }, 'Your sticker')}>
+          <div class="art"><StickerView sticker={s} /></div>
         </button>
       {/each}
     </div>

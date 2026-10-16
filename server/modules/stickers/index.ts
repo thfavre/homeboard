@@ -1,14 +1,7 @@
-import { unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import express from 'express';
-import {
-  BUILTIN_STICKERS,
-  MAX_GUEST_STICKERS,
-  type ActiveSticker,
-  type GuestSticker,
-  type StickerDef,
-  type StickersState,
-} from '../../../shared/stickers.ts';
+import { MAX_GUEST_STICKERS, type ActiveSticker, type GuestSticker, type StickerDef, type StickersState } from '../../../shared/stickers.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
@@ -27,7 +20,43 @@ interface StickerSettings {
   allowText: boolean;
   allowCustom: boolean;
   custom: CustomSticker[];
+  /** Default stickers already put in the collection (by file name), so one the host deletes stays deleted */
+  defaultsAdded: string[];
 }
+
+/** Stickers shipped with Homeboard (in ./defaults), put in the collection once like uploaded ones */
+const DEFAULTS_DIR = join(import.meta.dirname, 'defaults');
+const DEFAULT_STICKERS: [file: string, name: string][] = [
+  ['arrow.png', 'Arrow'],
+  ['bagel.png', 'Bagel'],
+  ['belt.png', 'Belt'],
+  ['butter.png', 'Butter'],
+  ['crying-meme.png', 'Crying meme'],
+  ['dvd-drive.png', 'DVD drive'],
+  ['dvd-logo.png', 'DVD logo'],
+  ['egg.png', 'Egg'],
+  ['eggplant.png', 'Eggplant'],
+  ['fish.png', 'Fish'],
+  ['goofy-smiley.png', 'Goofy smiley'],
+  ['gumball.png', 'Gumball'],
+  ['oil-lamp.png', 'Oil lamp'],
+  ['party-cups.png', 'Party cups'],
+  ['pawns.png', 'Pawns'],
+  ['rainbow.png', 'Rainbow'],
+  ['roast-chicken.png', 'Roast chicken'],
+  ['rubber-band-ball.png', 'Rubber band ball'],
+  ['sphynx-cat.png', 'Sphynx cat'],
+  ['stew.png', 'Stew'],
+  ['strainer.png', 'Strainer'],
+  ['tartan-beret.png', 'Tartan beret'],
+  ['tennis-ball.png', 'Tennis ball'],
+  ['thinking.png', 'Thinking'],
+  ['thumbs-up.png', 'Thumbs up'],
+  ['tire.png', 'Tire'],
+  ['vanilla.png', 'Vanilla'],
+  ['wig.png', 'Wig'],
+  ['zucchini.png', 'Zucchini'],
+];
 
 interface StoredGuestSticker {
   id: string;
@@ -65,7 +94,7 @@ export default defineModule<StickerSettings>({
   id: 'stickers',
   name: 'Stickers',
   description: 'Guests send stickers or short texts that bounce around the TV',
-  settings: { durationSec: 120, maxActive: 10, allowText: true, allowCustom: true, custom: [] },
+  settings: { durationSec: 120, maxActive: 10, allowText: true, allowCustom: true, custom: [], defaultsAdded: [] },
 
   setup(ctx) {
     let active: ActiveSticker[] = [];
@@ -94,10 +123,20 @@ export default defineModule<StickerSettings>({
       }
     };
 
-    const catalog = (): StickerDef[] => [
-      ...BUILTIN_STICKERS.map((s) => ({ id: s.id, name: s.name, kind: 'builtin' as const })),
-      ...ctx.settings.get().custom.map((c) => ({ id: c.id, name: c.name, kind: 'image' as const, src: ctx.mediaUrl(c.file) })),
-    ];
+    // Put new default stickers in the collection
+    const added = ctx.settings.get().defaultsAdded;
+    const fresh = DEFAULT_STICKERS.filter(([file]) => !added.includes(file) && existsSync(join(DEFAULTS_DIR, file)));
+    if (fresh.length) {
+      const custom = fresh.map(([file, name]) => {
+        const id = uid(6);
+        copyFileSync(join(DEFAULTS_DIR, file), join(media, `${id}.png`));
+        return { id, name, file: `${id}.png` };
+      });
+      ctx.settings.update({ custom: [...ctx.settings.get().custom, ...custom], defaultsAdded: [...added, ...fresh.map(([file]) => file)] });
+    }
+
+    const catalog = (): StickerDef[] =>
+      ctx.settings.get().custom.map((c) => ({ id: c.id, name: c.name, kind: 'image' as const, src: ctx.mediaUrl(c.file) }));
 
     const remove = (id: string) => {
       clearTimeout(timers.get(id));
@@ -154,7 +193,7 @@ export default defineModule<StickerSettings>({
             ? '{name} sent their face bouncing'
             : args.mine !== undefined
               ? '{name} sent a sticker they made'
-              : `{name} dropped a ${sticker!.name.toLowerCase()} sticker`,
+              : `{name} dropped ${/^[aeiou]/i.test(sticker!.name) ? 'an' : 'a'} ${sticker!.name.toLowerCase()} sticker`,
         { guest },
       );
       ctx.publish();
