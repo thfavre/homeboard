@@ -524,7 +524,6 @@
 
   /* Gradient-filled text: shared by several effects */
   .fx-rainbow,
-  .fx-fire,
   .fx-gold,
   .fx-disco {
     color: transparent;
@@ -537,12 +536,6 @@
   .fx-rainbow {
     background-image: linear-gradient(90deg, #e40303, #ff8c00, #ffed00, #008026, #24408e, #732982, #e40303);
     filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.25));
-  }
-  .fx-fire {
-    background-image: linear-gradient(0deg, #ff2a00, #ff7b00 35%, #ffd000 70%, #fff3a0);
-    background-size: 100% 200%;
-    filter: drop-shadow(0 0 14px rgba(255, 90, 0, 0.8));
-    animation: flicker-up 0.6s ease-in-out infinite alternate;
   }
   .fx-gold {
     background-image: linear-gradient(100deg, #a66d00 0%, #ffd700 30%, #fff8d0 45%, #ffd700 60%, #a66d00 100%);
@@ -559,14 +552,69 @@
       background-position: -200% 0;
     }
   }
-  @keyframes flicker-up {
-    from {
-      background-position: 0 0;
-      transform: scaleY(1);
+
+  /* Fire: white-hot letters with flames licking up from them (stacked shadows, each higher, redder and wider) */
+  .fx-fire {
+    color: #fff4d6;
+    transform-origin: 50% 100%;
+    animation:
+      flames 0.9s linear infinite,
+      heat 2.6s ease-in-out infinite;
+  }
+  @keyframes flames {
+    0%,
+    100% {
+      text-shadow:
+        0 0 4px #fff,
+        0 -4px 6px #ffef5a,
+        2px -10px 10px #ffc21a,
+        -3px -18px 14px #ff8a00,
+        3px -28px 20px #ff4d00,
+        -2px -40px 28px #e01800,
+        0 0 60px rgba(255, 90, 0, 0.55);
     }
-    to {
-      background-position: 0 -40%;
-      transform: scaleY(1.04);
+    25% {
+      text-shadow:
+        0 0 4px #fff,
+        1px -5px 6px #ffef5a,
+        -2px -12px 10px #ffc21a,
+        3px -21px 15px #ff8a00,
+        -3px -32px 22px #ff4d00,
+        2px -46px 30px #e01800,
+        0 0 70px rgba(255, 90, 0, 0.65);
+    }
+    50% {
+      text-shadow:
+        0 0 4px #fff,
+        -1px -4px 5px #ffef5a,
+        1px -9px 9px #ffc21a,
+        -2px -16px 13px #ff8a00,
+        2px -25px 18px #ff4d00,
+        -3px -35px 24px #e01800,
+        0 0 55px rgba(255, 90, 0, 0.5);
+    }
+    75% {
+      text-shadow:
+        0 0 4px #fff,
+        0 -6px 7px #ffef5a,
+        3px -13px 11px #ffc21a,
+        -1px -22px 16px #ff8a00,
+        -2px -34px 24px #ff4d00,
+        3px -48px 32px #e01800,
+        0 0 75px rgba(255, 90, 0, 0.7);
+    }
+  }
+  /* The air above the fire shimmers */
+  @keyframes heat {
+    0%,
+    100% {
+      transform: skewX(0) scaleY(1);
+    }
+    30% {
+      transform: skewX(-1.5deg) scaleY(1.02);
+    }
+    70% {
+      transform: skewX(1.5deg) scaleY(0.99);
     }
   }
 

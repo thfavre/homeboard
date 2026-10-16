@@ -62,6 +62,16 @@
     color: pick(SPOTS),
   }));
 
+  const embers = range(k === 'embers' ? 55 : 0).map(() => ({
+    x: rnd(0, 100),
+    delay: rnd(-6, 0),
+    dur: rnd(3, 6.5),
+    size: rnd(0.15, 0.45),
+    sway: rnd(2, 7),
+    rise: rnd(55, 95),
+    color: pick(['#ffd23f', '#ff9a1f', '#ff6a00', '#ffb347']),
+  }));
+
   const stars = range(k === 'stars' ? 120 : 0).map(() => ({
     angle: rnd(0, 360),
     delay: rnd(-4, 0),
@@ -114,6 +124,11 @@
     {#each spots as s}
       <span class="spot" style:left="{s.x}%" style:top="{s.y}%" style:--dx="{s.dx}vw" style:--dy="{s.dy}vh" style:--d="{s.dur}s" style:--c={s.color}></span>
     {/each}
+  {:else if k === 'embers'}
+    <span class="glow"></span>
+    {#each embers as e}
+      <span class="ember" style:left="{e.x}%" style:--s="{e.size}rem" style:--d="{e.dur}s" style:--delay="{e.delay}s" style:--sway="{e.sway}vw" style:--rise="{e.rise}vh" style:--c={e.color}></span>
+    {/each}
   {:else if k === 'stars'}
     {#each stars as s}
       <span class="star" style:--a="{s.angle}deg" style:--d="{s.dur}s" style:--delay="{s.delay}s" style:--s="{s.size}rem"></span>
@@ -134,6 +149,7 @@
   .egg.confetti,
   .egg.hearts,
   .egg.coins,
+  .egg.embers,
   .egg.rain {
     z-index: 48;
   }
@@ -345,6 +361,60 @@
   @keyframes spot-move {
     to {
       transform: translate(var(--dx), var(--dy));
+    }
+  }
+
+  /* ------------------------------------------------ embers */
+  .glow {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 45vh;
+    background:
+      radial-gradient(ellipse 60% 100% at 30% 100%, rgba(255, 90, 0, 0.45), transparent 70%),
+      radial-gradient(ellipse 60% 100% at 75% 100%, rgba(255, 50, 0, 0.4), transparent 70%),
+      linear-gradient(to top, rgba(255, 70, 0, 0.3), transparent);
+    transform-origin: 50% 100%;
+    animation: glow 1.3s ease-in-out infinite alternate;
+  }
+  @keyframes glow {
+    from {
+      opacity: 0.7;
+      transform: scaleY(0.92);
+    }
+    to {
+      opacity: 1;
+      transform: scaleY(1.08);
+    }
+  }
+  .ember {
+    position: absolute;
+    bottom: -2vh;
+    width: var(--s);
+    height: var(--s);
+    border-radius: 50%;
+    background: var(--c);
+    box-shadow:
+      0 0 6px var(--c),
+      0 0 14px #ff4d00;
+    animation:
+      ember-rise var(--d) ease-out var(--delay) infinite,
+      sway 1.6s ease-in-out var(--delay) infinite alternate;
+  }
+  @keyframes ember-rise {
+    0% {
+      translate: 0 0;
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    70% {
+      opacity: 0.9;
+    }
+    100% {
+      translate: 0 calc(var(--rise) * -1);
+      opacity: 0;
+      scale: 0.3;
     }
   }
 

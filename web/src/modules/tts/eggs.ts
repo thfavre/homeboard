@@ -17,7 +17,8 @@ export type OverlayFx =
   | 'disco'
   | 'coins'
   | 'rain'
-  | 'stars';
+  | 'stars'
+  | 'embers';
 
 interface Egg {
   id: string;
@@ -62,6 +63,7 @@ const EGGS: Egg[] = [
   {
     id: 'fire',
     text: 'fire',
+    overlay: 'embers',
     words: [
       'fire', 'on fire', "/feu(?!x?\\s+d'?\\s*artifice)", 'en feu', 'hot', 'flame*', 'flamme*', 'burn*', 'brule*', 'caliente', 'fuego',
       'spicy', 'incendie', 'lit af', 'blaze', 'inferno',
