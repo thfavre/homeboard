@@ -42,6 +42,8 @@ export interface CanvasState {
   width: number;
   height: number;
   palette: string[];
+  /** Faint guide dots behind the canvas on the TV */
+  dots: boolean;
   /** Changes when the canvas is cleared or resized: clients reload the snapshot */
   version: number;
 }

@@ -45,6 +45,7 @@
     {#if mod}
       <div
         class="paper"
+        class:dots={mod.dots !== false}
         style:width="{mod.width * scale}px"
         style:height="{mod.height * scale}px"
         style:background-size="{scale * 8}px {scale * 8}px"
@@ -80,10 +81,12 @@
     position: relative;
     border-radius: 6px;
     background-color: var(--surface-2);
-    background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1.2px);
     background-position: center;
     box-shadow: 0 0 0 1px var(--border);
     overflow: hidden;
+  }
+  .paper.dots {
+    background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1.2px);
   }
   canvas {
     display: block;

@@ -9,6 +9,7 @@ interface CanvasSettings {
   width: number;
   height: number;
   clearOnNewSession: boolean;
+  dots: boolean;
 }
 
 const MAX_PIXELS_PER_CALL = 400;
@@ -23,7 +24,7 @@ export default defineModule<CanvasSettings>({
   id: 'canvas',
   name: 'Pixel canvas',
   description: 'A shared pixel canvas on the TV that guests paint from their phone',
-  settings: { width: 160, height: 90, clearOnNewSession: true },
+  settings: { width: 160, height: 90, clearOnNewSession: true, dots: true },
 
   setup(ctx) {
     const file = join(ctx.dataDir, 'pixels.bin');
@@ -88,6 +89,7 @@ export default defineModule<CanvasSettings>({
       width,
       height,
       palette: CANVAS_PALETTE,
+      dots: ctx.settings.get().dots,
       version,
       ...(role === 'admin' ? { clearOnNewSession: ctx.settings.get().clearOnNewSession } : {}),
     }));
@@ -136,7 +138,11 @@ export default defineModule<CanvasSettings>({
     });
 
     ctx.onAdmin('setOptions', (args) => {
-      ctx.settings.update({ clearOnNewSession: !!args.clearOnNewSession });
+      const { clearOnNewSession, dots } = ctx.settings.get();
+      ctx.settings.update({
+        clearOnNewSession: args.clearOnNewSession === undefined ? clearOnNewSession : !!args.clearOnNewSession,
+        dots: args.dots === undefined ? dots : !!args.dots,
+      });
       ctx.publish();
     });
 

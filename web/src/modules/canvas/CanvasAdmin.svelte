@@ -72,6 +72,13 @@
         onchange={(v) => attempt(() => rpc('canvas', 'setOptions', { clearOnNewSession: v }))}
       />
     </div>
+    <div class="line">
+      <div>
+        <strong>Show dots</strong>
+        <p class="faint small">Faint guide dots behind the canvas on the TV.</p>
+      </div>
+      <Toggle checked={mod.dots} label="Show dots" onchange={(v) => attempt(() => rpc('canvas', 'setOptions', { dots: v }))} />
+    </div>
   </Section>
 {/if}
 
