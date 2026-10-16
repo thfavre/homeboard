@@ -4,7 +4,7 @@
   import { hb, rpc, serverNow } from '$lib/client.svelte.ts';
   import PirateCrewCard from './PirateCrewCard.svelte';
   import { gamesState } from '../store.svelte.ts';
-  import { pirateSound } from '../ui/pirateSound.ts';
+  import { BUILT_IN_FILES, loadPirateSound, pirateSound } from '../ui/pirateSound.ts';
 
   /**
    * The oar: this player's ship and crew, how the last stroke went, and one big ROW button in the ship's
@@ -17,6 +17,8 @@
   const crew = $derived(v.crews.find((c) => c.members.includes(me)));
   const ship = $derived(PIRATE_SHIPS.find((s) => s.id === crew?.ship) ?? PIRATE_SHIPS[0]);
   const oarUrl = $derived(gamesState()?.settings.pirateSounds?.oar?.url ?? null);
+  // The oar's file is decoded ahead, so the first stroke is not the made-up sound
+  $effect(() => void loadPirateSound(oarUrl ?? BUILT_IN_FILES.oar!));
 
   const step = $derived(v.step);
   const raceAt = $derived(v.raceAt);

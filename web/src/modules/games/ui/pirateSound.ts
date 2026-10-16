@@ -11,7 +11,7 @@ const buffers = new Map<string, Promise<AudioBuffer | null>>();
 const ready = new Map<string, AudioBuffer | null>();
 
 /** The built-in sounds that are a file shipped with the app */
-export const BUILT_IN_FILES: Partial<Record<PirateSoundId, string>> = { roar: '/pirates/war-horn.mp3', finish: '/pirates/war-cry.mp3' };
+export const BUILT_IN_FILES: Partial<Record<PirateSoundId, string>> = { oar: '/pirates/oar-splash.flac', roar: '/pirates/war-horn.mp3', finish: '/pirates/war-cry.mp3' };
 
 export function loadPirateSound(url: string): Promise<AudioBuffer | null> {
   let job = buffers.get(url);
