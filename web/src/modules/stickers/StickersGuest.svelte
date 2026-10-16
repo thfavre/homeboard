@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Plus, Send, Type, User, X } from '@lucide/svelte';
   import {
-    MAX_GUEST_STICKERS,
     TEXT_COLORS,
     TEXT_EFFECTS,
     TEXT_FONTS,
@@ -128,7 +127,7 @@
     {#if tab === MINE}
       {#if mod.allowCustom && mine.length}
         <div class="head">
-          <span class="faint count">{mine.length}/{MAX_GUEST_STICKERS} made</span>
+          <span class="faint count">{mine.length}/{mod.maxPerGuest} made</span>
           <span class="spacer"></span>
           <button class="btn ghost small" onclick={() => (editing = !editing)}>{editing ? 'Done' : 'Edit'}</button>
         </div>
@@ -141,7 +140,7 @@
           </button>
         {/if}
         {#if mod.allowCustom}
-          {#if mine.length < MAX_GUEST_STICKERS}
+          {#if mine.length < mod.maxPerGuest}
             <button class="item card make" disabled={editing} onclick={() => (making = true)}>
               <div class="art plus"><Plus size={26} /></div>
               <span class="name">Make one</span>
@@ -149,7 +148,7 @@
           {:else}
             <!-- Full: say why there is no new sticker, and how to make room -->
             <button class="item card make full" onclick={() => (editing = true)}>
-              <span class="name">{MAX_GUEST_STICKERS} max. Delete one to make another.</span>
+              <span class="name">{mod.maxPerGuest} max. Delete one to make another.</span>
             </button>
           {/if}
           {#each mine as s (s.id)}

@@ -2,7 +2,7 @@
   import { Synced } from '$lib/synced.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import { ChevronRight, Trash2, Upload, X } from '@lucide/svelte';
-  import { MAX_GUEST_STICKERS, stickerCategories, stickerLabel, type StickerDef, type StickersState } from '$shared/stickers.ts';
+  import { stickerCategories, stickerLabel, type StickerDef, type StickersState } from '$shared/stickers.ts';
   import { hb, rpc, attempt, upload } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -11,6 +11,7 @@
   const mod = $derived(hb.modules.stickers as StickersState | undefined);
   const minutes = new Synced(() => (hb.modules.stickers ? Math.round((hb.modules.stickers.durationSec / 60) * 100) / 100 : undefined), 2);
   const max = new Synced(() => (hb.modules.stickers?.maxActive ? hb.modules.stickers.maxActive : undefined), 10);
+  const perGuest = new Synced(() => hb.modules.stickers?.maxPerGuest, 24);
   let uploadName = $state('');
   let uploadCategory = $state('');
   let fileInput = $state<HTMLInputElement>();
@@ -108,10 +109,27 @@
     <div class="line">
       <div>
         <strong>Guests make their own stickers</strong>
-        <p class="faint small">From a photo, a drawing or a picture they import (like a WhatsApp sticker). Each guest keeps up to {MAX_GUEST_STICKERS}.</p>
+        <p class="faint small">From a photo, a drawing or a picture they import (like a WhatsApp sticker). Each guest keeps up to {mod.maxPerGuest}.</p>
       </div>
       <Toggle checked={mod.allowCustom} label="Guests make their own stickers" onchange={(v) => set({ allowCustom: v })} />
     </div>
+    {#if mod.allowCustom}
+      <label class="field per-guest">
+        <span>Stickers each guest can keep</span>
+        <input
+          class="input"
+          type="number"
+          min="1"
+          max="200"
+          bind:value={perGuest.value}
+          onfocus={perGuest.start}
+          onblur={() => {
+            set({ maxPerGuest: Math.max(1, Number(perGuest.value) || 24) });
+            perGuest.end();
+          }}
+        />
+      </label>
+    {/if}
   </Section>
 
   <Section title="Sticker collection" hint="Guests see one tab per category, in a random order of their own. Hide a category to keep it off their phones.">
@@ -191,6 +209,9 @@
   }
   .small {
     font-size: 0.82rem;
+  }
+  .per-guest {
+    max-width: 16rem;
   }
   .groups {
     display: grid;

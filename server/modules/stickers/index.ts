@@ -1,7 +1,7 @@
 import { copyFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import express from 'express';
-import { MAX_GUEST_STICKERS, cleanTextStyle, stickerLabel, type ActiveSticker, type GuestSticker, type StickerDef, type StickersState } from '../../../shared/stickers.ts';
+import { DEFAULT_GUEST_STICKERS, cleanTextStyle, stickerLabel, type ActiveSticker, type GuestSticker, type StickerDef, type StickersState } from '../../../shared/stickers.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
@@ -21,6 +21,8 @@ interface StickerSettings {
   maxActive: number;
   allowText: boolean;
   allowCustom: boolean;
+  /** How many stickers each guest can keep */
+  maxPerGuest: number;
   custom: CustomSticker[];
   /** Default stickers already put in the collection ("folder/file"), so one the host deletes stays deleted */
   defaultsAdded: string[];
@@ -136,7 +138,7 @@ export default defineModule<StickerSettings>({
   id: 'stickers',
   name: 'Stickers',
   description: 'Guests send stickers or short texts that bounce around the TV',
-  settings: { durationSec: 120, maxActive: 10, allowText: true, allowCustom: true, custom: [], defaultsAdded: [], hiddenCategories: [] },
+  settings: { durationSec: 120, maxActive: 10, allowText: true, allowCustom: true, maxPerGuest: DEFAULT_GUEST_STICKERS, custom: [], defaultsAdded: [], hiddenCategories: [] },
 
   setup(ctx) {
     let active: ActiveSticker[] = [];
@@ -210,6 +212,7 @@ export default defineModule<StickerSettings>({
         maxActive: s.maxActive,
         allowText: s.allowText,
         allowCustom: s.allowCustom,
+        maxPerGuest: s.maxPerGuest,
       };
     });
 
@@ -289,6 +292,7 @@ export default defineModule<StickerSettings>({
         maxActive: args.maxActive !== undefined ? clamp(Math.round(num(args.maxActive, 10)), 0, 100) : s.maxActive,
         allowText: args.allowText !== undefined ? !!args.allowText : s.allowText,
         allowCustom: args.allowCustom !== undefined ? !!args.allowCustom : s.allowCustom,
+        maxPerGuest: args.maxPerGuest !== undefined ? clamp(Math.round(num(args.maxPerGuest, DEFAULT_GUEST_STICKERS)), 1, 200) : s.maxPerGuest,
       });
       ctx.publish();
     });
@@ -352,7 +356,8 @@ export default defineModule<StickerSettings>({
         const ext = GUEST_TYPES[req.get('content-type') ?? ''];
         if (!ext || !Buffer.isBuffer(req.body) || !looksLike(ext, req.body)) throw new HbError('Send a PNG, WebP, GIF or JPG image');
         const list = mineStored(guest);
-        if (list.length >= MAX_GUEST_STICKERS) throw new HbError(`You can keep ${MAX_GUEST_STICKERS} stickers. Delete one first.`);
+        const max = ctx.settings.get().maxPerGuest;
+        if (list.length >= max) throw new HbError(`You can keep ${max} sticker${max === 1 ? '' : 's'}. Delete one first.`);
         const id = `g${uid(7)}`;
         const file = `${id}.${ext}`;
         writeFileSync(join(guestMedia, file), req.body);

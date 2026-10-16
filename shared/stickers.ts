@@ -33,6 +33,8 @@ export interface StickersState {
   allowText: boolean;
   /** Guests can make their own stickers (from an image, a photo or a drawing) */
   allowCustom: boolean;
+  /** How many stickers each guest can keep */
+  maxPerGuest: number;
 }
 
 /** A sticker a guest made, kept in their own collection ("My stickers") */
@@ -42,8 +44,8 @@ export interface GuestSticker {
   src: string;
 }
 
-/** How many stickers a guest can keep */
-export const MAX_GUEST_STICKERS = 24;
+/** How many stickers a guest can keep, unless the host changes it */
+export const DEFAULT_GUEST_STICKERS = 24;
 
 /** What to call a sticker when it has no name of its own: "Pokemon sticker" */
 export function stickerLabel(s: StickerDef): string {
