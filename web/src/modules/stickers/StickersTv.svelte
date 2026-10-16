@@ -72,6 +72,7 @@
           <StickerView
             sticker={a.sticker?.kind === 'face' ? { ...a.sticker, src: (a.guest.id && hb.core?.avatars?.[a.guest.id]) || a.sticker.src } : a.sticker}
             text={a.text}
+            textStyle={a.textStyle}
           />
         </div>
         {#if showNames('stickerNames')}<span class="by" style:--c={a.guest.color}>{a.guest.name}</span>{/if}

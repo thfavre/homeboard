@@ -1,7 +1,7 @@
 import { copyFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import express from 'express';
-import { MAX_GUEST_STICKERS, stickerLabel, type ActiveSticker, type GuestSticker, type StickerDef, type StickersState } from '../../../shared/stickers.ts';
+import { MAX_GUEST_STICKERS, cleanTextStyle, stickerLabel, type ActiveSticker, type GuestSticker, type StickerDef, type StickersState } from '../../../shared/stickers.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
@@ -242,6 +242,7 @@ export default defineModule<StickerSettings>({
         id: uid(6),
         sticker,
         text,
+        ...(text ? { textStyle: cleanTextStyle(args.style) } : {}),
         guest: { id: guest.id, name: guest.name, color: guest.color },
         until: Date.now() + s.durationSec * 1000,
       };

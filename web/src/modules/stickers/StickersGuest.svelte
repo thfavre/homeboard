@@ -1,6 +1,17 @@
 <script lang="ts">
   import { Plus, Send, Type, User, X } from '@lucide/svelte';
-  import { MAX_GUEST_STICKERS, stickerCategories, stickerLabel, type GuestSticker, type StickersState } from '$shared/stickers.ts';
+  import {
+    MAX_GUEST_STICKERS,
+    TEXT_COLORS,
+    TEXT_EFFECTS,
+    TEXT_FONTS,
+    cleanTextStyle,
+    stickerCategories,
+    stickerLabel,
+    type GuestSticker,
+    type StickersState,
+    type TextStyle,
+  } from '$shared/stickers.ts';
   import { hb, rpc, attempt, onEvent, price, storageGet, storageSet } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import { guestOrder } from '$lib/guestOrder.ts';
@@ -11,12 +22,26 @@
   const MINE = 'mine';
   const WRITE = 'write';
   const TAB_KEY = 'hb.stickerTab';
+  const STYLE_KEY = 'hb.textStyle';
 
   const mod = $derived(hb.modules.stickers as StickersState | undefined);
   const cost = $derived(price('stickers.sticker'));
   const full = $derived(!!mod && mod.maxActive > 0 && mod.active.length >= mod.maxActive);
   let text = $state('');
   let busy = $state(false);
+  // The look of text stickers, remembered on this phone for the next message
+  const savedStyle = () => {
+    try {
+      return JSON.parse(storageGet(STYLE_KEY) ?? 'null');
+    } catch {
+      return null;
+    }
+  };
+  let textStyle = $state<TextStyle>(cleanTextStyle(savedStyle()));
+  function setStyle(patch: Partial<TextStyle>) {
+    textStyle = { ...textStyle, ...patch };
+    storageSet(STYLE_KEY, JSON.stringify(textStyle));
+  }
 
   // Each guest sees the stickers of a category in their own order, the same every time
   const visible = $derived((mod?.catalog ?? []).filter((s) => !mod?.hiddenCategories.includes(s.category ?? '')));
@@ -58,7 +83,7 @@
     if (list) mine = list;
   }
 
-  async function send(args: { id?: string; text?: string; face?: boolean; mine?: string }, label: string) {
+  async function send(args: { id?: string; text?: string; style?: TextStyle; face?: boolean; mine?: string }, label: string) {
     busy = true;
     const ok = await attempt(() => rpc('stickers', 'place', args), `${label} is on the TV`);
     busy = false;
@@ -147,11 +172,11 @@
         class="card write"
         onsubmit={(e) => {
           e.preventDefault();
-          send({ text }, 'Your message');
+          send({ text, style: textStyle }, 'Your message');
         }}
       >
         <!-- What it will look like on the TV -->
-        <div class="preview" aria-hidden="true"><StickerView sticker={null} text={text.trim() || 'Happy birthday!'} /></div>
+        <div class="preview" aria-hidden="true"><StickerView sticker={null} text={text.trim() || 'Happy birthday!'} {textStyle} /></div>
         <label class="field">
           <span>Your message (24 characters)</span>
           <div class="row">
@@ -159,6 +184,58 @@
             <button class="btn primary" disabled={busy || full || !text.trim()} aria-label="Send"><Send size={18} /></button>
           </div>
         </label>
+        <div class="pickers">
+          <div class="picker" role="radiogroup" aria-label="Color">
+            <span class="picker-label">Color</span>
+            <div class="options">
+              {#each TEXT_COLORS as c (c.id)}
+                <button
+                  type="button"
+                  class="swatch"
+                  class:on={textStyle.color === c.id}
+                  role="radio"
+                  aria-checked={textStyle.color === c.id}
+                  aria-label={c.label}
+                  title={c.label}
+                  style:--bg={c.bg}
+                  style:--fg={c.fg}
+                  onclick={() => setStyle({ color: c.id })}
+                >Aa</button>
+              {/each}
+            </div>
+          </div>
+          <div class="picker" role="radiogroup" aria-label="Font">
+            <span class="picker-label">Font</span>
+            <div class="options">
+              {#each TEXT_FONTS as f (f.id)}
+                <button
+                  type="button"
+                  class="opt font"
+                  class:on={textStyle.font === f.id}
+                  role="radio"
+                  aria-checked={textStyle.font === f.id}
+                  style:font-family={f.family}
+                  onclick={() => setStyle({ font: f.id })}
+                >{f.label}</button>
+              {/each}
+            </div>
+          </div>
+          <div class="picker" role="radiogroup" aria-label="Effect">
+            <span class="picker-label">Effect</span>
+            <div class="options">
+              {#each TEXT_EFFECTS as e (e.id)}
+                <button
+                  type="button"
+                  class="opt"
+                  class:on={textStyle.effect === e.id}
+                  role="radio"
+                  aria-checked={textStyle.effect === e.id}
+                  onclick={() => setStyle({ effect: e.id })}
+                >{e.label}</button>
+              {/each}
+            </div>
+          </div>
+        </div>
       </form>
     {:else if current}
       <div class="grid">
@@ -279,12 +356,63 @@
     gap: 1rem;
     padding: 1rem;
   }
-  /* The TV text sticker, scaled down to fit the phone */
+  /* The TV text sticker, scaled down to fit the phone. Tall enough for a spinning one. */
   .preview {
     display: grid;
     place-items: center;
-    min-height: 5.5rem;
+    min-height: 8rem;
     overflow: hidden;
+  }
+  .pickers {
+    display: grid;
+    gap: 0.8rem;
+  }
+  .picker {
+    display: grid;
+    gap: 0.4rem;
+  }
+  .picker-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-dim);
+  }
+  .options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .swatch {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--bg);
+    color: var(--fg);
+    font-weight: 800;
+    font-size: 0.8rem;
+    transition: transform 0.12s ease;
+  }
+  .swatch.on {
+    border-color: var(--text);
+    box-shadow: 0 0 0 2px var(--accent);
+    transform: scale(1.08);
+  }
+  .opt {
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 0.84rem;
+  }
+  .opt.font {
+    font-weight: 400;
+  }
+  .opt.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
   }
   .preview :global(.text) {
     font-size: 1.5rem;
