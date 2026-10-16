@@ -12,6 +12,21 @@
   // Party sounds (the host's board) and searched ones (incl. My sounds) are priced separately
   const partyCost = $derived(price('soundboard.sound'));
   const searchCost = $derived(price('soundboard.search'));
+
+  // Each guest sees the party sounds in their own order, the same every time: each sound is
+  // ranked by a hash of the guest's name and the sound, so adding a sound keeps the rest in place
+  function hash(s: string): number {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+    return h >>> 0;
+  }
+  const guestKey = $derived((hb.me?.name ?? '').trim().toLowerCase());
+  const sounds = $derived(
+    (mod?.sounds ?? [])
+      .map((s) => ({ s, rank: hash(`${guestKey}|${s.id}`) }))
+      .sort((a, b) => a.rank - b.rank)
+      .map((r) => r.s)
+  );
   let now = $state(serverNow());
   let last = $state<string | null>(null);
   let tab = $state<'board' | 'search'>('board');
@@ -115,7 +130,7 @@
       <div class="divider"><span>Party sounds</span>{@render tag(partyCost)}</div>
     {/if}
     <div class="grid">
-      {#each mod.sounds as s, i (s.id)}
+      {#each sounds as s, i (s.id)}
         <SoundCard name={s.name} hue={(i * 47) % 360} duration={s.duration} active={last === s.id} disabled={wait > 0} onclick={() => play(s.id, s.name)} />
       {:else}
         <div class="card empty">No sounds available.</div>
