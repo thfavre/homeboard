@@ -3,9 +3,10 @@
  * Words are matched case- and accent-insensitive, as whole words. A trailing * matches any ending,
  * and a word starting with / is a raw regular expression (written without accents, in lowercase).
  * A shoutout gets at most one text style, any number of overlays (the first two are kept) and the shout shake.
+ * Two effects only touch the words that trigger them: fire words burn, food words pour their emoji.
  */
 
-export type TextFx = 'rainbow' | 'fire' | 'matrix' | 'glitch' | 'spooky' | 'gold' | 'sad' | 'disco' | 'love';
+export type TextFx = 'rainbow' | 'matrix' | 'glitch' | 'spooky' | 'gold' | 'sad' | 'disco' | 'love';
 export type OverlayFx =
   | 'confetti'
   | 'bubbles'
@@ -62,10 +63,9 @@ const EGGS: Egg[] = [
   },
   {
     id: 'fire',
-    text: 'fire',
     overlay: 'embers',
     words: [
-      'fire', 'on fire', "/feu(?!x?\\s+d'?\\s*artifice)", 'en feu', 'hot', 'flame*', 'flamme*', 'burn*', 'brule*', 'caliente', 'fuego',
+      'fire', 'on fire', "/feu(?!x?\\s+d'?\\s*artifice)", 'en feu', 'hot', 'flame*', 'flamme*', 'burn*', 'brule*', 'brulant*', 'caliente', 'fuego',
       'spicy', 'piment*', 'incendie', 'lit af', 'blaze', 'inferno',
     ],
   },
@@ -332,8 +332,8 @@ const foodRe = new RegExp(
   'gu',
 );
 
-/** The food words of a text, as ranges of the original text (accents and emoji variation selectors are ignored) */
-export function detectFood(text: string, max = 6): FoodSpan[] {
+/** Matches of a global regular expression in the normalized text, as ranges of the original text (accents and emoji variation selectors are ignored) */
+function findSpans(text: string, re: RegExp): { start: number; end: number; match: string }[] {
   let norm = '';
   /** Index in the original text of each character of the normalized one */
   const at: number[] = [];
@@ -345,12 +345,23 @@ export function detectFood(text: string, max = 6): FoodSpan[] {
     i += ch.length;
   }
   at.push(i);
+  return [...norm.matchAll(re)].map((m) => ({ start: at[m.index], end: at[m.index + m[0].length], match: m[0] }));
+}
+
+/** The food words of a text, with their emoji */
+export function detectFood(text: string, max = 10): FoodSpan[] {
   const spans: FoodSpan[] = [];
-  for (const m of norm.matchAll(foodRe)) {
-    const entry = foodEntries.find((e) => e.re.test(m[0]));
-    if (!entry) continue;
-    spans.push({ start: at[m.index], end: at[m.index + m[0].length], emoji: entry.emoji });
+  for (const m of findSpans(text, foodRe)) {
     if (spans.length >= max) break;
+    const entry = foodEntries.find((e) => e.re.test(m.match));
+    if (entry) spans.push({ start: m.start, end: m.end, emoji: entry.emoji });
   }
   return spans;
+}
+
+const fireRe = new RegExp(matchers.find((m) => m.egg.id === 'fire')!.re.source, 'gu');
+
+/** The words that set the banner on fire: only they burn */
+export function detectBurning(text: string): { start: number; end: number }[] {
+  return findSpans(text, fireRe);
 }

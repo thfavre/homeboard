@@ -4,25 +4,39 @@
   import { hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import { audioContext } from '../soundboard/player.ts';
-  import { detectEggs, detectFood, type EggFx } from './eggs.ts';
+  import { detectBurning, detectEggs, detectFood, type EggFx } from './eggs.ts';
   import EggOverlay from './EggOverlay.svelte';
 
   type Crumb = { x: number; delay: number; dur: number; drift: number; spin: number; size: number };
-  type Part = { text: string; who?: TtsMention; food?: { emoji: string; crumbs: Crumb[] } };
+  type Part = { text: string; who?: TtsMention; food?: { emoji: string; crumbs: Crumb[] }; burn?: boolean };
   let current = $state<(TtsEvent & { key: number; durationMs: number; fx: EggFx; parts: Part[] }) | null>(null);
 
   const rnd = (min: number, max: number) => min + Math.random() * (max - min);
 
-  /** Food words get their emoji falling from them in a cascade, drawn once per shoutout. At most 4, to keep the scroll smooth. */
-  function splitFood(parts: Part[]): Part[] {
-    let left = 4;
+  const overlaps = (a: { start: number; end: number }, b: { start: number; end: number }) => a.start < b.end && b.start < a.end;
+
+  /**
+   * Food words get their emoji falling from them in a cascade (drawn once per shoutout, the first 10 only),
+   * and fire words burn. A word can be both, like "piment".
+   */
+  function splitWords(parts: Part[]): Part[] {
+    let foodLeft = 10;
     return parts.flatMap((part) => {
-      if (part.who || left <= 0) return [part];
+      if (part.who) return [part];
+      const food = detectFood(part.text, foodLeft);
+      foodLeft -= food.length;
+      const fire = detectBurning(part.text);
+      const spans: { start: number; end: number; emoji?: string }[] = [...food, ...fire.filter((f) => !food.some((d) => overlaps(d, f)))].sort((a, b) => a.start - b.start);
       const out: Part[] = [];
       let at = 0;
-      for (const f of detectFood(part.text, left)) {
-        left--;
+      for (const f of spans) {
         if (f.start > at) out.push({ text: part.text.slice(at, f.start) });
+        const text = part.text.slice(f.start, f.end);
+        at = f.end;
+        if (!f.emoji) {
+          out.push({ text, burn: true });
+          continue;
+        }
         const crumbs = Array.from({ length: 5 }, (_, i) => ({
           x: rnd(15, 85),
           delay: i * 0.42 + rnd(0, 0.2),
@@ -31,8 +45,7 @@
           spin: rnd(-260, 260),
           size: rnd(2.2, 3.2),
         }));
-        out.push({ text: part.text.slice(f.start, f.end), food: { emoji: f.emoji, crumbs } });
-        at = f.end;
+        out.push({ text, food: { emoji: f.emoji, crumbs }, burn: fire.some((w) => overlaps(w, f)) });
       }
       if (at < part.text.length) out.push({ text: part.text.slice(at) });
       return out;
@@ -207,7 +220,7 @@
           key,
           durationMs,
           fx: detectEggs(item.text),
-          parts: splitFood(splitNames(item.text, item.mentions)),
+          parts: splitWords(splitNames(item.text, item.mentions)),
         };
 
         // Play audio and wait for both speech & scroll
@@ -317,7 +330,7 @@
                     ><span class="name-pic" style:--i={i}
                       ><Avatar name={part.who.name} color={part.who.color} id={part.who.id} src={part.who.avatar} size="4.6rem" /></span
                     >{part.text}</span
-                  >{:else if part.food}<span class="food"
+                  >{:else if part.food}<span class="food" class:burn={part.burn} data-text={part.text}
                     >{#each part.food.crumbs as c}<span
                         class="crumb"
                         aria-hidden="true"
@@ -328,6 +341,7 @@
                         style:--spin="{c.spin}deg"
                         style:font-size="{c.size}rem">{part.food.emoji}</span
                       >{/each}{part.text}</span
+                  >{:else if part.burn}<span class="burn" data-text={part.text}>{part.text}</span
                   >{:else}{part.text}{/if}{/each}</span
             >
 
@@ -564,8 +578,10 @@
    * The shadows never change: two taller copies of the flames fade in and out over them, which only costs
    * the graphics card an opacity change instead of repainting the blurred text on every frame.
    */
-  .fx-fire {
+  .burn {
     position: relative;
+    display: inline-block;
+    white-space: pre;
     color: #fff4d6;
     text-shadow:
       0 0 4px #fff,
@@ -579,8 +595,8 @@
     will-change: transform;
     animation: heat 2.6s ease-in-out infinite;
   }
-  .fx-fire::before,
-  .fx-fire::after {
+  .burn::before,
+  .burn::after {
     content: attr(data-text);
     position: absolute;
     inset: 0;
@@ -589,7 +605,7 @@
     opacity: 0;
     will-change: opacity;
   }
-  .fx-fire::before {
+  .burn::before {
     text-shadow:
       1px -5px 6px #ffef5a,
       -2px -12px 10px #ffc21a,
@@ -598,7 +614,7 @@
       2px -46px 30px #e01800;
     animation: flare 0.47s ease-in-out infinite alternate;
   }
-  .fx-fire::after {
+  .burn::after {
     text-shadow:
       0 -6px 7px #ffef5a,
       3px -13px 11px #ffc21a,
