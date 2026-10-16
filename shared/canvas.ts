@@ -31,6 +31,11 @@ export const CANVAS_SIZES = [
   { width: 128, height: 72, label: 'Medium (128 x 72)' },
   { width: 160, height: 90, label: 'Large (160 x 90)' },
   { width: 192, height: 108, label: 'Huge (192 x 108)' },
+  { width: 256, height: 144, label: 'Giant (256 x 144)' },
+  { width: 320, height: 180, label: 'Massive (320 x 180)' },
+  { width: 384, height: 216, label: 'Enormous (384 x 216)' },
+  { width: 480, height: 270, label: 'Colossal (480 x 270)' },
+  { width: 640, height: 360, label: 'Gigantic (640 x 360)' },
 ];
 
 export interface CanvasState {
