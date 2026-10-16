@@ -26,8 +26,10 @@
       const W = layer!.clientWidth;
       const H = layer!.clientHeight;
       const speed = H * 0.16;
+      const seen = new Set<string>();
       for (const el of layer!.querySelectorAll<HTMLElement>('[data-sticker]')) {
         const id = el.dataset.sticker!;
+        seen.add(id);
         const w = el.offsetWidth;
         const h = el.offsetHeight;
         let b = bodies.get(id);
@@ -51,16 +53,13 @@
         if (b.y > H - h) (b.y = Math.max(0, H - h)), (b.vy = -Math.abs(b.vy));
         el.style.transform = `translate(${b.x}px, ${b.y}px)`;
       }
+      // A sticker that left keeps its body until its exit animation is over and it leaves the page,
+      // so it shrinks where it was instead of jumping somewhere else
+      for (const id of bodies.keys()) if (!seen.has(id)) bodies.delete(id);
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  });
-
-  // Forget bodies of stickers that are gone
-  $effect(() => {
-    const ids = new Set(active.map((a) => a.id));
-    for (const id of bodies.keys()) if (!ids.has(id)) bodies.delete(id);
   });
 </script>
 
