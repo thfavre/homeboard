@@ -104,7 +104,7 @@ export const GAMES: GameInfo[] = [
     name: 'Pirate Race',
     tagline: 'Row in time with the drum, first ship to the treasure wins',
     rules: 'The players are split into pirate crews, one ship each: your phone shows your ship color. A drum beats the rhythm on the TV, sometimes speeding up or slowing down little by little. Tap ROW exactly on each beat: the closer to the beat, the stronger the stroke. A ship moves with the average stroke of its crew, so a small crew is as fast as a big one. When the whole crew (or nearly) rows on the beat, the stroke is synchronized and goes further; 5 synchronized strokes in a row start a speed boost, which lasts as long as the crew stays in sync. Tapping off the beat splashes and wastes the stroke. The first ship to reach the treasure wins, and its crew shares the pot.',
-    modes: ['room', 'duel'],
+    modes: ['room'],
     lights: true,
     pausesMusic: true,
     steps: ['Find your crew: your phone shows your ship color', 'Tap ROW on every beat of the drum, all together', '5 synchronized strokes in a row: speed boost, as long as you stay in sync!'],
