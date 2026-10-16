@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Plus, Send, User, X } from '@lucide/svelte';
+  import { Plus, Send, Type, User, X } from '@lucide/svelte';
   import { MAX_GUEST_STICKERS, stickerCategories, stickerLabel, type GuestSticker, type StickersState } from '$shared/stickers.ts';
   import { hb, rpc, attempt, onEvent, price, storageGet, storageSet } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
@@ -9,6 +9,7 @@
   import StickerView from './StickerView.svelte';
 
   const MINE = 'mine';
+  const WRITE = 'write';
   const TAB_KEY = 'hb.stickerTab';
 
   const mod = $derived(hb.modules.stickers as StickersState | undefined);
@@ -39,9 +40,10 @@
   let picked = $state(storageGet(TAB_KEY));
   const tab = $derived.by(() => {
     if (picked === MINE && hasMine) return MINE;
+    if (picked === WRITE && mod?.allowText) return WRITE;
     if (picked && categories.some((c) => c.name === picked)) return picked;
     if (hasMine && mine.length) return MINE;
-    return categories[0]?.name ?? (hasMine ? MINE : '');
+    return categories[0]?.name ?? (hasMine ? MINE : mod?.allowText ? WRITE : '');
   });
   const current = $derived(categories.find((c) => c.name === tab));
   function pick(name: string) {
@@ -82,6 +84,12 @@
         <button class="chip" class:active={tab === MINE} role="tab" aria-selected={tab === MINE} onclick={() => pick(MINE)}>
           <span class="thumb icon"><User size={15} /></span>
           Mine
+        </button>
+      {/if}
+      {#if mod.allowText}
+        <button class="chip" class:active={tab === WRITE} role="tab" aria-selected={tab === WRITE} onclick={() => pick(WRITE)}>
+          <span class="thumb icon"><Type size={15} /></span>
+          Write
         </button>
       {/if}
       {#each categories as c (c.name)}
@@ -134,6 +142,24 @@
       {#if mod.allowCustom && !mine.length}
         <p class="faint hint">Make your own from a photo, a drawing or a WhatsApp sticker. Only you see them.</p>
       {/if}
+    {:else if tab === WRITE}
+      <form novalidate
+        class="card write"
+        onsubmit={(e) => {
+          e.preventDefault();
+          send({ text }, 'Your message');
+        }}
+      >
+        <!-- What it will look like on the TV -->
+        <div class="preview" aria-hidden="true"><StickerView sticker={null} text={text.trim() || 'Happy birthday!'} /></div>
+        <label class="field">
+          <span>Your message (24 characters)</span>
+          <div class="row">
+            <input class="input" bind:value={text} maxlength="24" placeholder="Happy birthday!" />
+            <button class="btn primary" disabled={busy || full || !text.trim()} aria-label="Send"><Send size={18} /></button>
+          </div>
+        </label>
+      </form>
     {:else if current}
       <div class="grid">
         {#each current.stickers as s (s.id)}
@@ -146,23 +172,6 @@
       <p class="faint hint">No stickers right now.</p>
     {/if}
 
-    {#if mod.allowText}
-      <form novalidate
-        class="card write"
-        onsubmit={(e) => {
-          e.preventDefault();
-          send({ text }, 'Your message');
-        }}
-      >
-        <label class="field">
-          <span>Or write something (24 characters)</span>
-          <div class="row">
-            <input class="input" bind:value={text} maxlength="24" placeholder="Happy birthday!" />
-            <button class="btn primary" disabled={busy || full || !text.trim()} aria-label="Send"><Send size={18} /></button>
-          </div>
-        </label>
-      </form>
-    {/if}
   </div>
 
   {#if making}
@@ -266,7 +275,22 @@
     margin-top: -0.3rem;
   }
   .write {
+    display: grid;
+    gap: 1rem;
     padding: 1rem;
+  }
+  /* The TV text sticker, scaled down to fit the phone */
+  .preview {
+    display: grid;
+    place-items: center;
+    min-height: 5.5rem;
+    overflow: hidden;
+  }
+  .preview :global(.text) {
+    font-size: 1.5rem;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .head {
     display: flex;
