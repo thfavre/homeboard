@@ -62,7 +62,7 @@
     color: pick(SPOTS),
   }));
 
-  const embers = range(k === 'embers' ? 55 : 0).map(() => ({
+  const embers = range(k === 'embers' ? 36 : 0).map(() => ({
     x: rnd(0, 100),
     delay: rnd(-6, 0),
     dur: rnd(3, 6.5),
@@ -396,6 +396,7 @@
     box-shadow:
       0 0 6px var(--c),
       0 0 14px #ff4d00;
+    will-change: translate, opacity;
     animation:
       ember-rise var(--d) ease-out var(--delay) infinite,
       sway 1.6s ease-in-out var(--delay) infinite alternate;

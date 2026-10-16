@@ -13,17 +13,19 @@
 
   const rnd = (min: number, max: number) => min + Math.random() * (max - min);
 
-  /** Food words get their emoji falling from them in a cascade, drawn once per shoutout */
+  /** Food words get their emoji falling from them in a cascade, drawn once per shoutout. At most 4, to keep the scroll smooth. */
   function splitFood(parts: Part[]): Part[] {
+    let left = 4;
     return parts.flatMap((part) => {
-      if (part.who) return [part];
+      if (part.who || left <= 0) return [part];
       const out: Part[] = [];
       let at = 0;
-      for (const f of detectFood(part.text)) {
+      for (const f of detectFood(part.text, left)) {
+        left--;
         if (f.start > at) out.push({ text: part.text.slice(at, f.start) });
-        const crumbs = Array.from({ length: 8 }, (_, i) => ({
+        const crumbs = Array.from({ length: 5 }, (_, i) => ({
           x: rnd(15, 85),
-          delay: i * 0.28 + rnd(0, 0.15),
+          delay: i * 0.42 + rnd(0, 0.2),
           dur: rnd(1.7, 2.4),
           drift: rnd(-6, 6),
           spin: rnd(-260, 260),
@@ -294,7 +296,7 @@
       class="tts-strip"
       transition:fade={{ duration: 350 }}
     >
-      <div class="marquee-viewport" class:shout={current.fx.shout}>
+      <div class="marquee-viewport" class:shout={current.fx.shout} class:food={current.parts.some((p) => p.food)}>
         <div
           class="marquee-track"
           style:--dur="{current.durationMs}ms"
@@ -376,12 +378,15 @@
     /* Room above the banner for the pictures of named guests, without making the banner taller */
     padding-top: 8rem;
     margin-top: -8rem;
-    /* And room below it for the food falling from the words */
-    padding-bottom: 60vh;
-    margin-bottom: -60vh;
     position: relative;
     mask-image: linear-gradient(90deg, transparent 0%, black 4%, black 96%, transparent 100%);
     -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 4%, black 96%, transparent 100%);
+  }
+
+  /* Room below the banner for the food falling from the words, only when there is some: a bigger masked area costs more */
+  .marquee-viewport.food {
+    padding-bottom: 60vh;
+    margin-bottom: -60vh;
   }
 
   .marquee-track {
@@ -500,6 +505,7 @@
     text-shadow: none;
     opacity: 0;
     translate: -50% 0;
+    will-change: transform, opacity;
     animation: crumb-fall var(--d) cubic-bezier(0.5, 0, 0.9, 0.55) var(--delay) infinite;
   }
   @keyframes crumb-fall {
@@ -553,55 +559,57 @@
     }
   }
 
-  /* Fire: white-hot letters with flames licking up from them (stacked shadows, each higher, redder and wider) */
+  /*
+   * Fire: white-hot letters with flames licking up from them (stacked shadows, each higher, redder and wider).
+   * The shadows never change: two taller copies of the flames fade in and out over them, which only costs
+   * the graphics card an opacity change instead of repainting the blurred text on every frame.
+   */
   .fx-fire {
+    position: relative;
     color: #fff4d6;
+    text-shadow:
+      0 0 4px #fff,
+      -1px -4px 5px #ffef5a,
+      1px -9px 9px #ffc21a,
+      -2px -16px 13px #ff8a00,
+      2px -25px 18px #ff4d00,
+      -3px -35px 24px #e01800,
+      0 0 55px rgba(255, 90, 0, 0.5);
     transform-origin: 50% 100%;
-    animation:
-      flames 0.9s linear infinite,
-      heat 2.6s ease-in-out infinite;
+    will-change: transform;
+    animation: heat 2.6s ease-in-out infinite;
   }
-  @keyframes flames {
-    0%,
-    100% {
-      text-shadow:
-        0 0 4px #fff,
-        0 -4px 6px #ffef5a,
-        2px -10px 10px #ffc21a,
-        -3px -18px 14px #ff8a00,
-        3px -28px 20px #ff4d00,
-        -2px -40px 28px #e01800,
-        0 0 60px rgba(255, 90, 0, 0.55);
-    }
-    25% {
-      text-shadow:
-        0 0 4px #fff,
-        1px -5px 6px #ffef5a,
-        -2px -12px 10px #ffc21a,
-        3px -21px 15px #ff8a00,
-        -3px -32px 22px #ff4d00,
-        2px -46px 30px #e01800,
-        0 0 70px rgba(255, 90, 0, 0.65);
-    }
-    50% {
-      text-shadow:
-        0 0 4px #fff,
-        -1px -4px 5px #ffef5a,
-        1px -9px 9px #ffc21a,
-        -2px -16px 13px #ff8a00,
-        2px -25px 18px #ff4d00,
-        -3px -35px 24px #e01800,
-        0 0 55px rgba(255, 90, 0, 0.5);
-    }
-    75% {
-      text-shadow:
-        0 0 4px #fff,
-        0 -6px 7px #ffef5a,
-        3px -13px 11px #ffc21a,
-        -1px -22px 16px #ff8a00,
-        -2px -34px 24px #ff4d00,
-        3px -48px 32px #e01800,
-        0 0 75px rgba(255, 90, 0, 0.7);
+  .fx-fire::before,
+  .fx-fire::after {
+    content: attr(data-text);
+    position: absolute;
+    inset: 0;
+    color: transparent;
+    pointer-events: none;
+    opacity: 0;
+    will-change: opacity;
+  }
+  .fx-fire::before {
+    text-shadow:
+      1px -5px 6px #ffef5a,
+      -2px -12px 10px #ffc21a,
+      3px -21px 15px #ff8a00,
+      -3px -32px 22px #ff4d00,
+      2px -46px 30px #e01800;
+    animation: flare 0.47s ease-in-out infinite alternate;
+  }
+  .fx-fire::after {
+    text-shadow:
+      0 -6px 7px #ffef5a,
+      3px -13px 11px #ffc21a,
+      -1px -22px 16px #ff8a00,
+      -2px -34px 24px #ff4d00,
+      3px -50px 32px #e01800;
+    animation: flare 0.71s ease-in-out -0.3s infinite alternate;
+  }
+  @keyframes flare {
+    to {
+      opacity: 1;
     }
   }
   /* The air above the fire shimmers */
