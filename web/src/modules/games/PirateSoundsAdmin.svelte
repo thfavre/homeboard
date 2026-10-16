@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import { LoaderCircle, Play, RotateCcw, Search, Tv, Upload, X } from '@lucide/svelte';
   import { PIRATE_SOUNDS, type PirateSoundId, type PirateSoundPick } from '$shared/games.ts';
   import type { MiPage, MiSound } from '$shared/soundboard.ts';
@@ -7,9 +8,15 @@
 
   /**
    * The Pirate Race sounds: each one is built in (made on the fly), a MyInstants sound picked here
-   * (downloaded once and kept for later parties), or a file from this computer. Try them here or on the TV.
+   * (downloaded once and kept for later parties), or a file from this computer. Try them here or on the TV
+   * (the drums at the drum volume, the one being dragged too). `afterDrums`: shown under the two drums.
    */
-  let { picks }: { picks: Partial<Record<PirateSoundId, PirateSoundPick>> } = $props();
+  let { picks, drumVolume, afterDrums }: { picks: Partial<Record<PirateSoundId, PirateSoundPick>>; drumVolume: number; afterDrums?: Snippet } = $props();
+
+  const isDrum = (kind: PirateSoundId) => kind === 'drum' || kind === 'drumAccent';
+  function hear(kind: PirateSoundId, url: string | undefined) {
+    pirateSound(kind, { url, volume: isDrum(kind) ? (0.85 * drumVolume) / 100 : 0.85, accent: kind === 'drumAccent' });
+  }
 
   let open = $state<PirateSoundId | null>(null);
   let query = $state('');
@@ -104,7 +111,7 @@
           <strong>{k.name}</strong>
           <span class="faint small">{k.help} · {pick ? pick.title : 'Built-in'}</span>
         </span>
-        <button class="btn small ghost" aria-label="Hear it here" title="Hear it here" onclick={() => pirateSound(k.id, { url: pick?.url })}><Play size={16} /></button>
+        <button class="btn small ghost" aria-label="Hear it here" title="Hear it here" onclick={() => hear(k.id, pick?.url)}><Play size={16} /></button>
         <button class="btn small ghost" aria-label="Play it on the TV" title="Play it on the TV" onclick={() => attempt(() => rpc('games', 'testPirateSound', { kind: k.id }))}><Tv size={16} /></button>
         {#if pick}
           <button class="btn small ghost" aria-label="Back to the built-in sound" title="Back to the built-in sound" disabled={!!saving} onclick={() => use(k.id, null)}><RotateCcw size={16} /></button>
@@ -138,6 +145,7 @@
         </div>
       {/if}
     </div>
+  {#if k.id === 'drumAccent' && afterDrums}{@render afterDrums()}{/if}
   {/each}
 </div>
 
