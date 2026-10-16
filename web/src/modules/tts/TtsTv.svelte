@@ -16,11 +16,11 @@
   const overlaps = (a: { start: number; end: number }, b: { start: number; end: number }) => a.start < b.end && b.start < a.end;
 
   /**
-   * Food words get their emoji falling from them in a cascade (drawn once per shoutout, the first 10 only),
+   * Food words get their emoji falling from them in a cascade (drawn once per shoutout, the first 50 only: only the words on screen animate),
    * and fire words burn. A word can be both, like "piment".
    */
   function splitWords(parts: Part[]): Part[] {
-    let foodLeft = 10;
+    let foodLeft = 50;
     return parts.flatMap((part) => {
       if (part.who) return [part];
       const food = detectFood(part.text, foodLeft);

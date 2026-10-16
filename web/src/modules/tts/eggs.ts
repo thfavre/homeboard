@@ -349,7 +349,7 @@ function findSpans(text: string, re: RegExp): { start: number; end: number; matc
 }
 
 /** The food words of a text, with their emoji */
-export function detectFood(text: string, max = 10): FoodSpan[] {
+export function detectFood(text: string, max = 50): FoodSpan[] {
   const spans: FoodSpan[] = [];
   for (const m of findSpans(text, foodRe)) {
     if (spans.length >= max) break;
