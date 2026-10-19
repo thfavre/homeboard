@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Flag, Minus, Pause, PenLine, Pencil, Play, UserPlus, Plus, SkipForward, Square, Trash2, Users, X } from '@lucide/svelte';
+  import { AlarmClockPlus, Flag, Minus, Pause, PenLine, Pencil, Play, UserPlus, Plus, SkipForward, Square, Trash2, Users, X } from '@lucide/svelte';
   import { COLLECT_DEFAULT_MIN, COLLECT_LIMIT_MAX, COLLECT_MAX_QUESTIONS, FINAL_MAX_SEC, FINAL_MIN_SEC, MAX_QUESTIONS, MIN_QUESTIONS, type CustomQuiz, type QuizDraft, type QuizSettings, type QuizState, type QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt, serverNow } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
@@ -489,7 +489,7 @@
       <button class="btn ghost small" onclick={() => guestTime(id, 1)} aria-label="1 minute more"><Plus size={15} /></button>
     {:else}
       {#if state}<span class="faint small">{state}</span>{/if}
-      <button class="btn ghost small" disabled={busyElsewhere} onclick={() => (giving = { id, name, minutes: 3 })} title="Give time to write" aria-label="Give {name} time to write"><PenLine size={15} /></button>
+      <button class="btn ghost small" disabled={busyElsewhere} onclick={() => (giving = { id, name, minutes: 3 })} aria-label="Give {name} time to write"><AlarmClockPlus size={15} /> Give time</button>
     {/if}
   {/snippet}
 
