@@ -168,7 +168,7 @@
       {/if}
 
       <header>
-        <span class="eyebrow">{c.extend ? 'Adding to the participative quiz' : `Participative quiz${c.by ? ` · asked by ${c.by.name}` : ''}`}</span>
+        <span class="eyebrow">{c.extend ? 'Adding questions to' : `Participative quiz${c.by ? ` · asked by ${c.by.name}` : ''}`}</span>
         <h1>{c.title}</h1>
         {#if !c.extend}
           <p class="dim">{c.done.length} sent{c.waiting.length ? ` · ${c.waiting.length} still writing` : ''}</p>

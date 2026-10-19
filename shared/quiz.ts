@@ -99,7 +99,7 @@ export interface LibraryItem {
   count: number;
   hasImages: boolean;
   collective?: boolean;
-  /** Participative quiz: who wrote how many questions */
+  /** Guests who wrote questions in it (participative quiz, or added later), and how many */
   authors?: { id: string; name: string; count: number }[];
 }
 

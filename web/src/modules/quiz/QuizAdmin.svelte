@@ -103,6 +103,8 @@
   let details = $state<string | null>(null);
   const detailItem = $derived(details ? (q?.library.find((x) => x.id === details) ?? null) : null);
   let giving = $state<{ id: string; name: string; minutes: number } | null>(null);
+  // Questions in it no guest added (the quiz's own author, or the host)
+  const ownQuestions = $derived(detailItem ? detailItem.count - (detailItem.authors ?? []).reduce((n, a) => n + a.count, 0) : 0);
   const extending = $derived(collect?.phase === 'writing' && collect.extend ? collect.extend : null);
   const busyElsewhere = $derived(collect?.phase === 'writing' && (!extending || extending.quizId !== details));
   const late = $derived(
@@ -382,16 +384,14 @@
     {#each q.library as item (item.id)}
       <div class="line">
         <div class="grow">
-          {#if item.collective}
-            <button class="link truncate block" onclick={() => (details = item.id)}><strong>{item.title}</strong></button>
-          {:else}
-            <strong class="truncate block">{item.title}</strong>
-          {/if}
-          <p class="faint small">{item.count} {item.count === 1 ? 'question' : 'questions'} &middot; {item.collective ? 'written by' : 'by'} {item.author}{item.hasImages ? ' · with pictures' : ''}</p>
+          <button class="link truncate block" onclick={() => (details = item.id)}><strong>{item.title}</strong></button>
+          <p class="faint small">
+            {item.count} {item.count === 1 ? 'question' : 'questions'} &middot; {item.collective ? 'written by' : 'by'} {item.author}{!item.collective && item.authors?.length
+              ? ` and ${item.authors.map((a) => a.name).join(', ')}`
+              : ''}{item.hasImages ? ' · with pictures' : ''}
+          </p>
         </div>
-        {#if item.collective}
-          <button class="btn ghost small" aria-label="Add questions" title="Give someone time to add questions" onclick={() => (details = item.id)}><UserPlus size={15} /></button>
-        {/if}
+        <button class="btn ghost small" aria-label="Add questions" title="Give someone time to add questions" onclick={() => (details = item.id)}><UserPlus size={15} /></button>
         <button class="btn ghost small" aria-label="Play" title="Play it" disabled={q.phase !== 'idle'} onclick={() => (playing = { id: item.id, title: item.title, count: item.count, sec: timeSec.value })}><Play size={15} /></button>
         <button class="btn ghost small" aria-label="Edit" onclick={() => edit(item.id)}><Pencil size={15} /></button>
         <button class="btn ghost small" aria-label="Delete" onclick={() => remove(item.id, item.title)}><Trash2 size={15} /></button>
@@ -417,6 +417,12 @@
 
         <div>
           <h3 class="eyebrow">Written by</h3>
+          {#if ownQuestions > 0}
+            <div class="line">
+              <span class="grow truncate">{detailItem.collective ? 'Host' : detailItem.author}</span>
+              <span class="faint small">{ownQuestions} {ownQuestions === 1 ? 'question' : 'questions'}</span>
+            </div>
+          {/if}
           {#each detailItem.authors ?? [] as a (a.id)}
             {@const state = invitedState(a.id)}
             <div class="line">
@@ -424,8 +430,6 @@
               <span class="faint small">{a.count} {a.count === 1 ? 'question' : 'questions'}</span>
               {@render timeFor(a.id, a.name, state)}
             </div>
-          {:else}
-            <p class="faint small">Nobody yet.</p>
           {/each}
           {#if extending?.quizId === details}
             {#each Object.keys(extending.until).filter((id) => !detailItem.authors?.some((a) => a.id === id)) as id (id)}
@@ -441,7 +445,7 @@
 
         {#if late.length}
           <label class="field">
-            <span>Someone who did not take part</span>
+            <span>Someone else</span>
             <select
               class="input"
               value=""

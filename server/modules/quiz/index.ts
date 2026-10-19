@@ -538,7 +538,7 @@ export default defineModule<QuizSettings>({
       count: q.questions.length,
       hasImages: q.questions.some((x) => x.image),
       collective: q.collective,
-      ...(q.collective ? { authors: authorsOf(q) } : {}),
+      ...(q.collective || q.questions.some((x) => x.authorId) ? { authors: authorsOf(q) } : {}),
     });
 
     const authorsOf = (q: CustomQuiz) => {
@@ -782,7 +782,8 @@ export default defineModule<QuizSettings>({
       const added = [...c.entries].flatMap(([id, e]) => e.questions.map((q) => ({ ...q, authorId: id, authorName: e.name })));
       quiz.questions = spreadByAuthor([...before.filter((q) => !q.authorId || !writers.has(q.authorId)), ...added]);
       const names = authorsOf(quiz).map((a) => a.name);
-      quiz.author = names.length <= 3 ? names.join(', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+      // A quiz someone made keeps its author; the guests who added to it show next to it
+      if (quiz.collective) quiz.author = names.length <= 3 ? names.join(', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
       removeImages({ questions: before }, new Set(quiz.questions.map((q) => q.image ?? '')));
       library.save();
       c.phase = 'ready';
@@ -793,10 +794,10 @@ export default defineModule<QuizSettings>({
       ctx.publish();
     };
 
-    /** The host gives one guest time to change or add questions to a saved participative quiz (late, or more to say) */
+    /** The host gives one guest time to change or add questions to a saved quiz (late, or more to say) */
     const inviteToQuiz = (quizId: string, guestId: string, minutes: number) => {
       const quiz = library.data.quizzes.find((q) => q.id === quizId);
-      if (!quiz?.collective) throw new HbError('Quiz not found');
+      if (!quiz) throw new HbError('Quiz not found');
       const guest = ctx.session.guests.get(guestId);
       if (!guest) throw new HbError('This guest is not here anymore');
       if (phase !== 'idle') throw new HbError('A quiz is running, wait for it to end');
