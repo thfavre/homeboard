@@ -32,7 +32,7 @@
   const close = () => (news = null);
 </script>
 
-{#if news && !paused && hb.me && hb.core}
+{#if news && !paused && hb.me && hb.core?.economyEnabled}
   <div class="wrap" transition:fade={{ duration: 180 }} onclick={(e) => e.target === e.currentTarget && close()} role="presentation">
     <div class="card welcome" in:scale={{ start: 0.85, duration: 380, easing: backOut }} role="dialog" aria-modal="true" aria-labelledby="welcome-title" tabindex="-1">
       <span class="coin-badge"><Coin size="2.6rem" /></span>

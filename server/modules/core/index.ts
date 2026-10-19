@@ -67,7 +67,7 @@ export default defineModule({
     /** Counts seconds of hanging out and pays every full interval reached. Returns the amount paid. */
     const accrue = (g: Guest, seconds: number, reason?: string): number => {
       const interval = core().passiveMinutes * 60;
-      if (interval <= 0) return 0;
+      if (interval <= 0 || !economy.enabled) return 0;
       g.onlineAccum += seconds;
       const payouts = Math.floor(g.onlineAccum / interval);
       if (!payouts) return 0;
