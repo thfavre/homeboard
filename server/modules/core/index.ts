@@ -89,12 +89,13 @@ export default defineModule({
     // Coming back: the time away counts too, up to the host's limit.
     // A quick reload just carries on; a real absence gets a welcome back card.
     session.on('guest-online', (g: Guest, awayMs: number) => {
-      const paidMs = Math.min(awayMs, core().passiveAwayMinutes * 60_000, Date.now() - economyOnSince);
+      const limitMs = core().passiveAwayMinutes * 60_000;
+      const paidMs = Math.min(awayMs, limitMs, Date.now() - economyOnSince);
       if (paidMs <= 0) return;
       const longAway = awayMs >= AWAY_CARD_MS;
       const amount = accrue(g, paidMs / 1000, longAway ? 'Hanging out (while away)' : undefined);
       if (!amount) return;
-      if (longAway) ctx.emit({ guest: g.id }, 'welcomeBack', { awayMs, paidMs, amount } satisfies WelcomeBack);
+      if (longAway) ctx.emit({ guest: g.id }, 'welcomeBack', { awayMs, paidMs, amount, capped: awayMs - limitMs >= 60_000 && paidMs === limitMs } satisfies WelcomeBack);
       else paid(g, amount);
     });
 

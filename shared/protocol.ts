@@ -250,6 +250,8 @@ export interface WelcomeBack {
   /** Part of the time away that was paid (capped by the host) */
   paidMs: number;
   amount: number;
+  /** The host's limit cut the paid time (not the economy being off) */
+  capped: boolean;
 }
 
 /** Sent to a guest when passive income pays them */

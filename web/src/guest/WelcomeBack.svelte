@@ -14,7 +14,7 @@
   $effect(() =>
     onEvent<WelcomeBack>('core', 'welcomeBack', (msg) => {
       // Two absences before the guest looked: add them up
-      news = news ? { awayMs: msg.awayMs, paidMs: news.paidMs + msg.paidMs, amount: news.amount + msg.amount } : msg;
+      news = news ? { awayMs: msg.awayMs, paidMs: news.paidMs + msg.paidMs, amount: news.amount + msg.amount, capped: news.capped || msg.capped } : msg;
     }),
   );
 
@@ -28,8 +28,6 @@
     return `${d} ${d === 1 ? 'day' : 'days'}${h % 24 ? ` ${h % 24} h` : ''}`;
   }
 
-  // Only the host's limit: away time cut because the economy was off needs no hint
-  const capped = $derived(news && hb.core ? news.awayMs - news.paidMs >= 60_000 && news.paidMs >= hb.core.passiveAwayMinutes * 60_000 : false);
   const close = () => (news = null);
 </script>
 
@@ -40,7 +38,7 @@
       <h2 id="welcome-title">Welcome back, {hb.me.name}</h2>
       <p class="dim">You were away for <strong>{duration(news.awayMs)}</strong>. You earned this while you were gone:</p>
       <p class="amount mono">+{formatAmount(news.amount)} <span>{hb.core.currency.name}</span></p>
-      {#if capped}
+      {#if news.capped}
         <p class="faint small">Being away pays for up to {duration(news.paidMs)}. Keep this page open to keep earning.</p>
       {/if}
       <button class="btn primary block" onclick={close}>Nice</button>
