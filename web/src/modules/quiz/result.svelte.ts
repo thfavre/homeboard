@@ -12,6 +12,10 @@ export const quizResult = $state({
   closed: '',
   /** Participative quiz screens this phone closed: `${id}:writing` or `${id}:ready` */
   collectClosed: [] as string[],
+  /** Participative quiz this phone opened on purpose (shown even after skipping) */
+  collectOpened: '',
+  /** Opened to change the questions sent: the editor opens straight away */
+  collectEdit: false,
 });
 
 /** Which screen of the participative quiz this phone shows, if any */
@@ -19,10 +23,10 @@ export function collectScreen(): 'writing' | 'ready' | null {
   const c = (hb.modules.quiz as QuizState | undefined)?.collect;
   const me = hb.me?.id;
   if (!c || !me) return null;
-  // Writing again (the host let them, or a reload while changing their questions)
+  // Changing their questions (and reloaded meanwhile)
   if (c.phase === 'writing' && c.editing.includes(me)) return 'writing';
   if (quizResult.collectClosed.includes(`${c.id}:${c.phase}`)) return null;
-  if (c.phase === 'writing') return c.skipped.includes(me) ? null : 'writing';
+  if (c.phase === 'writing') return c.skipped.includes(me) && quizResult.collectOpened !== c.id ? null : 'writing';
   // Once written, only the guest who asked for it is offered to play it (the host plays it from the admin)
   return c.by?.id === me ? 'ready' : null;
 }
@@ -30,11 +34,16 @@ export function collectScreen(): 'writing' | 'ready' | null {
 export function closeCollectScreen(): void {
   const c = (hb.modules.quiz as QuizState | undefined)?.collect;
   if (c) quizResult.collectClosed.push(`${c.id}:${c.phase}`);
+  quizResult.collectOpened = '';
 }
 
-export function openCollectScreen(): void {
+/** edit: go straight to changing the questions already sent */
+export function openCollectScreen(edit = false): void {
   const c = (hb.modules.quiz as QuizState | undefined)?.collect;
-  if (c) quizResult.collectClosed = quizResult.collectClosed.filter((k) => k !== `${c.id}:${c.phase}`);
+  if (!c) return;
+  quizResult.collectClosed = quizResult.collectClosed.filter((k) => k !== `${c.id}:${c.phase}`);
+  quizResult.collectOpened = c.id;
+  quizResult.collectEdit = edit;
 }
 
 export function showQuizScreen(live: boolean): boolean {

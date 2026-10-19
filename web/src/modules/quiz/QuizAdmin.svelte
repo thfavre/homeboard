@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Flag, Minus, Pause, PenLine, Pencil, Play, Plus, SkipForward, Square, Trash2, Users, X } from '@lucide/svelte';
-  import { COLLECT_DEFAULT_MIN, COLLECT_LIMIT_MAX, COLLECT_MAX_QUESTIONS, FINAL_MAX_SEC, FINAL_MIN_SEC, MAX_QUESTIONS, MIN_QUESTIONS, type CustomQuiz, type QuizDraft, type QuizSettings, type QuizState, type QuizTopic } from '$shared/quiz.ts';
+  import { Flag, Minus, Pause, Pencil, Play, Plus, SkipForward, Square, Trash2, Users, X } from '@lucide/svelte';
+  import { COLLECT_DEFAULT_MIN, COLLECT_MAX_QUESTIONS, FINAL_MAX_SEC, FINAL_MIN_SEC, MAX_QUESTIONS, MIN_QUESTIONS, type CustomQuiz, type QuizDraft, type QuizSettings, type QuizState, type QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt, serverNow } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import { Synced } from '$lib/synced.svelte.ts';
@@ -95,17 +95,6 @@
     starting = true;
     await attempt(() => rpc('quiz', 'start', { source: 'custom', quizId: collect.quizId, timeSec: timeSec.value }));
     starting = false;
-  }
-
-  // One guest writing again, with their own question limit
-  let reopen = $state<{ id: string; name: string; max: number } | null>(null);
-  const limitOf = (id: string) => collect?.limits[id] ?? COLLECT_MAX_QUESTIONS;
-  const skippedGuests = $derived((collect?.skipped ?? []).map((id) => ({ id, name: hb.core?.admin?.guests.find((g) => g.id === id)?.name ?? 'A guest' })));
-
-  async function reopenGuest() {
-    if (!reopen) return;
-    const { id, max } = reopen;
-    if (await attempt(() => rpc('quiz', 'collectReopen', { guestId: id, max }))) reopen = null;
   }
 
   async function cancelCollect() {
@@ -282,44 +271,16 @@
         <span class="dim truncate">{collect.title}{collect.by ? `, asked by ${collect.by.name}` : ''}</span>
         <span class="mono faint">{Math.floor(collectLeft / 60)}:{String(collectLeft % 60).padStart(2, '0')}</span>
       </div>
-      {#snippet person(p: { id: string; name: string }, state: string, faint: boolean)}
-        <div class="line">
-          <span class="grow truncate" class:faint>{p.name}</span>
-          <span class="faint small">{state}{limitOf(p.id) !== COLLECT_MAX_QUESTIONS ? ` · up to ${limitOf(p.id)}` : ''}</span>
-          <button class="btn ghost small" aria-label="Let {p.name} change or add questions" title="Let them change or add questions" onclick={() => (reopen = { id: p.id, name: p.name, max: limitOf(p.id) })}><PenLine size={15} /></button>
-        </div>
-      {/snippet}
       {#each collect.done as p (p.id)}
-        {@render person(p, `${p.count} ${p.count === 1 ? 'question' : 'questions'}`, false)}
+        <div class="line"><span class="grow">{p.name}</span><span class="faint small">{p.count} {p.count === 1 ? 'question' : 'questions'}</span></div>
       {/each}
       {#each collect.waiting as p (p.id)}
-        {@render person(p, collect.editing.includes(p.id) ? 'changing...' : 'writing...', true)}
+        <div class="line"><span class="grow faint">{p.name}</span><span class="faint small">{collect.editing.includes(p.id) ? 'changing...' : 'writing...'}</span></div>
       {/each}
-      {#each skippedGuests as p (p.id)}
-        {@render person(p, 'skipped', true)}
-      {/each}
-      {#if reopen}
-        <div class="reopen card">
-          <strong>Let {reopen.name} change or add questions</strong>
-          <div class="line">
-            <div class="grow">
-              <span>Questions they can write</span>
-              <p class="faint small">Everyone else: {COLLECT_MAX_QUESTIONS}</p>
-            </div>
-            <div class="stepper">
-              <button class="btn small" disabled={reopen.max <= 1} onclick={() => reopen && reopen.max--} aria-label="1 question less"><Minus size={16} /></button>
-              <span class="mono value">{reopen.max}</span>
-              <button class="btn small" disabled={reopen.max >= COLLECT_LIMIT_MAX} onclick={() => reopen && reopen.max++} aria-label="1 question more"><Plus size={16} /></button>
-            </div>
-          </div>
-          <div class="row wrap">
-            <button class="btn primary" onclick={reopenGuest}><PenLine size={18} /> Let them write</button>
-            <button class="btn ghost" onclick={() => (reopen = null)}>Cancel</button>
-          </div>
-        </div>
-      {/if}
+      {#if collect.skipped.length}<p class="faint small">{collect.skipped.length} skipped</p>{/if}
       <div class="row wrap">
         <button class="btn primary" disabled={!collect.done.length} onclick={() => attempt(() => rpc('quiz', 'collectEnd'))}><Flag size={18} /> Make the quiz now</button>
+        <button class="btn" disabled={collectLeft <= 70} onclick={() => attempt(() => rpc('quiz', 'collectAddTime', { minutes: -1 }))}><Minus size={18} /> 1 min</button>
         <button class="btn" onclick={() => attempt(() => rpc('quiz', 'collectAddTime', { minutes: 1 }))}><Plus size={18} /> 1 min</button>
         <button class="btn" onclick={() => attempt(() => rpc('quiz', 'collectAddTime', { minutes: 5 }))}><Plus size={18} /> 5 min</button>
         <button class="btn danger" onclick={cancelCollect}><X size={18} /> Cancel</button>
@@ -451,11 +412,6 @@
   }
   .block {
     display: block;
-  }
-  .reopen {
-    display: grid;
-    gap: 0.7rem;
-    padding: 1rem;
   }
   .stepper {
     display: flex;

@@ -8,14 +8,13 @@
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
   import QuizEditor from './QuizEditor.svelte';
-  import { closeCollectScreen } from './result.svelte.ts';
+  import { closeCollectScreen, quizResult } from './result.svelte.ts';
   import { clearDraft, draftKey } from './drafts.svelte.ts';
 
   /** Participative quiz on the phone: write 1 to 3 questions (or skip), then play the result */
   const c = $derived((hb.modules.quiz as QuizState | undefined)?.collect ?? null);
   const meId = $derived(hb.me?.id);
   const mine = $derived(c?.done.find((d) => d.id === meId));
-  const max = $derived((meId && c?.limits[meId]) || COLLECT_MAX_QUESTIONS);
   const isBy = $derived(!!meId && c?.by?.id === meId);
   const cost = $derived(price('quiz.start'));
   const running = $derived((hb.modules.quiz as QuizState | undefined)?.phase !== 'idle');
@@ -34,7 +33,14 @@
     if (untrack(() => editing)) stopEditing();
   });
 
-  // The server lists us as writing again (the host let us, or we reloaded while changing): open the editor
+  // Opened from the home card to change the questions sent
+  $effect(() => {
+    if (!quizResult.collectEdit) return;
+    quizResult.collectEdit = false;
+    if (untrack(() => mine && !editing)) untrack(change);
+  });
+
+  // The server lists us as changing our questions (we reloaded meanwhile): open the editor again
   let asked = false;
   let changing = false;
   $effect(() => {
@@ -118,14 +124,14 @@
 
       {#if editing || !sent}
         <p class="dim intro">
-          Write 1 to {max} questions for everyone. Nobody sees your answers, and you will not score on your own questions.
+          Write 1 to {COLLECT_MAX_QUESTIONS} questions for everyone. Nobody sees your answers, and you will not score on your own questions.
         </p>
         {#key initial}
           <QuizEditor
             initial={editing ? initial : null}
             draft={draftKey(`collect.${c.id}`)}
             withTitle={false}
-            maxQuestions={max}
+            maxQuestions={COLLECT_MAX_QUESTIONS}
             saveLabel={sent ? 'Update' : 'Send my questions'}
             cancelLabel={editing ? 'Back' : 'Skip'}
             {busy}

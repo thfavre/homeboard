@@ -3,7 +3,6 @@ import { basename, join } from 'node:path';
 import express from 'express';
 import {
   COLLECT_DEFAULT_MIN,
-  COLLECT_LIMIT_MAX,
   COLLECT_MAX_QUESTIONS,
   FINAL_MAX_SEC,
   FINAL_MIN_SEC,
@@ -146,10 +145,8 @@ export default defineModule<QuizSettings>({
       endsAt: number;
       entries: Map<string, { name: string; color: string; questions: CustomQuestion[] }>;
       skipped: Set<string>;
-      /** Sent questions but are changing them (or the host let them write again): the quiz waits for them too */
+      /** Sent questions but are changing them: the quiz waits for them too */
       editing: Set<string>;
-      /** Question limit the host gave one guest */
-      limits: Map<string, number>;
       quizId: string | null;
       total: number;
       timer: NodeJS.Timeout | null;
@@ -632,7 +629,6 @@ export default defineModule<QuizSettings>({
         skipped: [...c.skipped],
         waiting: c.phase === 'writing' ? stillWriting(c).map((g) => ({ id: g.id, name: g.name, color: g.color })) : [],
         editing: [...c.editing],
-        limits: Object.fromEntries(c.limits),
         quizId: c.quizId,
         total: c.total,
       };
@@ -663,7 +659,6 @@ export default defineModule<QuizSettings>({
         entries: new Map(),
         skipped: new Set(),
         editing: new Set(),
-        limits: new Map(),
         quizId: null,
         total: 0,
         timer: null,
@@ -729,7 +724,7 @@ export default defineModule<QuizSettings>({
 
     const submitCollect = (raw: unknown, guest: Guest) => {
       const c = collecting();
-      const qs = cleanQuestions(raw, c.limits.get(guest.id) ?? COLLECT_MAX_QUESTIONS);
+      const qs = cleanQuestions(raw, COLLECT_MAX_QUESTIONS);
       const before = c.entries.get(guest.id);
       if (before) removeImages(before, new Set(qs.map((q) => q.image ?? '')));
       c.entries.set(guest.id, { name: guest.name, color: guest.color, questions: qs });
@@ -1002,23 +997,11 @@ export default defineModule<QuizSettings>({
       endCollect();
       return true;
     });
-    /** Let one guest change or add questions (even after sending or skipping), with their own limit */
-    ctx.onAdmin('collectReopen', (args) => {
-      const c = collecting();
-      const guest = ctx.session.guests.get(String(args.guestId));
-      if (!guest) throw new HbError('This guest is not here anymore');
-      const max = clamp(Math.round(num(args.max, COLLECT_MAX_QUESTIONS)), 1, COLLECT_LIMIT_MAX);
-      if (max === COLLECT_MAX_QUESTIONS) c.limits.delete(guest.id);
-      else c.limits.set(guest.id, max);
-      c.skipped.delete(guest.id);
-      c.editing.add(guest.id);
-      ctx.toast(guest, { text: `The host lets you change or add questions (up to ${max})`, kind: 'info' });
-      ctx.publish();
-      return true;
-    });
+    /** More (or less) time to write; taking time away always leaves at least 10 seconds */
     ctx.onAdmin('collectAddTime', (args) => {
       const c = collecting();
-      const minutes = clamp(Math.round(num(args.minutes, 1)), 1, 30);
+      const minutes = clamp(Math.round(num(args.minutes, 1)), -30, 30);
+      if (minutes < 0 && c.endsAt + minutes * 60_000 < Date.now() + 10_000) throw new HbError('Not enough time left to take a minute away');
       c.endsAt = Math.min(c.endsAt + minutes * 60_000, Date.now() + 60 * 60_000);
       ctx.publish();
       return true;

@@ -5,6 +5,7 @@ import QuizGuest from './QuizGuest.svelte';
 import QuizStart from './QuizStart.svelte';
 import QuizAdmin from './QuizAdmin.svelte';
 import QuizCollectTv from './QuizCollectTv.svelte';
+import QuizCollectMini from './QuizCollectMini.svelte';
 import type { QuizState } from '$shared/quiz.ts';
 import { hb } from '$lib/client.svelte.ts';
 import { showQuizScreen } from './result.svelte.ts';
@@ -17,6 +18,8 @@ export default {
   tvTakeover: QuizTv,
   guestTakeover: QuizGuest,
   showGuestTakeover: showQuizScreen,
+  // Participative quiz being written: a way back in from the home screen
+  guestHome: { order: 5, component: QuizCollectMini },
   guest: { title: 'Quiz', tagline: 'Start a quiz on the TV, make your own, or have everyone write one', icon: Trophy, order: 70, component: QuizStart, priceKey: 'quiz.start', stayAfterTakeover: () => openEditors.count > 0 },
   admin: { title: 'Quiz', icon: Trophy, order: 20, group: 'play', keywords: 'trivia questions custom scores', component: QuizAdmin },
 } satisfies ClientModule;

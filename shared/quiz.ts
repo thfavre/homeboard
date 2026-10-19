@@ -18,8 +18,6 @@ export const MIN_QUESTIONS = 3;
 export const MAX_QUESTIONS = 50;
 /** Participative quiz: questions each guest can write, and how long they get by default */
 export const COLLECT_MAX_QUESTIONS = 3;
-/** Most questions the host can let one guest write */
-export const COLLECT_LIMIT_MAX = 10;
 export const COLLECT_DEFAULT_MIN = 5;
 
 export interface QuizPlayer {
@@ -115,10 +113,8 @@ export interface QuizCollect {
   skipped: string[];
   /** Guests online who have not answered yet, or are changing the questions they sent */
   waiting: { id: string; name: string; color: string }[];
-  /** Guests writing again after sending: they changed their mind, or the host let them */
+  /** Guests changing the questions they sent */
   editing: string[];
-  /** Guests the host gave their own question limit (everyone else: COLLECT_MAX_QUESTIONS) */
-  limits: Record<string, number>;
   /** Once ready: the saved quiz */
   quizId: string | null;
   total: number;

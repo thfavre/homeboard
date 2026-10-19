@@ -199,7 +199,7 @@
             <p class="small">
               <strong>{collect.title}</strong> is being written: {collect.done.length} sent, {collect.waiting.length} still writing.
             </p>
-            <button class="btn block" onclick={openCollectScreen}><PenLine size={16} /> {collect.done.some((d) => d.id === hb.me?.id) ? 'See or change my questions' : 'Write my questions'}</button>
+            <button class="btn block" onclick={() => openCollectScreen()}><PenLine size={16} /> {collect.done.some((d) => d.id === hb.me?.id) ? 'See or change my questions' : 'Write my questions'}</button>
           {:else}
             <input class="input" bind:value={collectTitle} maxlength="60" placeholder="Title (optional)" />
             <label class="field">
