@@ -3,6 +3,7 @@
   import { History, ImagePlus, Plus, Trash2, X } from '@lucide/svelte';
   import { ANSWER_STYLES, type CustomQuiz, type QuizDraft } from '$shared/quiz.ts';
   import { toast, upload } from '$lib/client.svelte.ts';
+  import { choose } from '$lib/dialog.svelte.ts';
   import { shrinkImage } from '$lib/image.ts';
   import Shape from './Shape.svelte';
   import { clearDraft, loadDraft, openEditors, saveDraft } from './drafts.svelte.ts';
@@ -18,6 +19,9 @@
     saveLabel = 'Save quiz',
     cancelLabel = 'Cancel',
     draft,
+    showIssues = false,
+    count = $bindable(0),
+    issues = $bindable([]),
   }: {
     initial?: (Pick<CustomQuiz, 'title' | 'questions'> & { id?: string }) | null;
     busy?: boolean;
@@ -30,6 +34,12 @@
     cancelLabel?: string;
     /** Key the draft is autosaved under on this phone (see drafts.svelte.ts); the parent clears it once saved */
     draft?: string;
+    /** Highlight the questions that cannot be sent yet (also done after a save with mistakes) */
+    showIssues?: boolean;
+    /** Out: number of questions */
+    count?: number;
+    /** Out: what stops each question from being sent */
+    issues?: { index: number; text: string }[];
   } = $props();
 
   interface Draft {
@@ -109,20 +119,60 @@
     }
   }
 
+  /** What stops each question from being sent ('' when it is fine) */
+  const problems = $derived(
+    questions.map((q) => {
+      if (!q.text.trim()) return 'Type the question';
+      if (q.answers.filter((a) => a.trim()).length < 2) return 'Write at least 2 answers';
+      if (q.correct < 0) return 'Tap the circle next to the right answer';
+      if (!q.answers[q.correct]?.trim()) return 'The answer marked as right is empty';
+      return '';
+    }),
+  );
+  let tried = $state(false);
+  const reveal = $derived(showIssues || tried);
+
+  $effect(() => {
+    count = questions.length;
+    issues = problems.flatMap((text, index) => (text ? [{ index, text }] : []));
+  });
+
   function save(e: SubmitEvent) {
     e.preventDefault();
     if (withTitle && !title.trim()) return toast({ text: 'Give your quiz a title', kind: 'error' });
-    for (const [i, q] of questions.entries()) {
-      if (!q.text.trim()) return toast({ text: `Question ${i + 1} has no text`, kind: 'error' });
-      if (q.answers.filter((a) => a.trim()).length < 2) return toast({ text: `Question ${i + 1} needs at least 2 answers`, kind: 'error' });
-      if (q.correct < 0) return toast({ text: `Question ${i + 1}: tap the circle next to the right answer`, kind: 'error' });
-      if (!q.answers[q.correct]?.trim()) return toast({ text: `Question ${i + 1}: the answer marked as right is empty`, kind: 'error' });
+    const first = problems.findIndex(Boolean);
+    if (first >= 0) {
+      tried = true;
+      scrollToQuestion(first);
+      return toast({ text: `Question ${first + 1}: ${problems[first].toLowerCase()}`, kind: 'error' });
     }
     onsave({ id: start?.id, title, questions: $state.snapshot(questions) });
   }
+
+  /** A new question only once every question has its right answer ticked: easy to forget, so it is explained */
+  async function addQuestion() {
+    const i = questions.findIndex((q) => q.correct < 0 || !q.answers[q.correct]?.trim());
+    if (i < 0) {
+      questions.push(blank());
+      return;
+    }
+    tried = true;
+    scrollToQuestion(i);
+    await choose({
+      title: 'Pick the right answer first',
+      message: `In question ${i + 1}, tap the circle next to the right answer. Then you can add another question.`,
+      options: [],
+      cancelLabel: 'OK',
+    });
+  }
+
+  let form = $state<HTMLFormElement>();
+  export function scrollToQuestion(i: number) {
+    form?.querySelector(`[data-question="${i}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 </script>
 
-<form novalidate class="editor" onsubmit={save}>
+<form novalidate class="editor" onsubmit={save} bind:this={form}>
   {#if restored}
     <div class="restored">
       <History size={16} />
@@ -138,9 +188,10 @@
   {/if}
 
   {#each questions as q, i}
-    <div class="question" onpaste={(e) => onPaste(e, i)}>
+    <div class="question" class:bad={reveal && problems[i]} data-question={i} onpaste={(e) => onPaste(e, i)}>
       <div class="qhead">
         <span class="eyebrow">Question {i + 1}</span>
+        {#if reveal && problems[i]}<span class="issue">{problems[i]}</span>{/if}
         <span class="spacer"></span>
         <button type="button" class="btn ghost small" disabled={questions.length === 1} onclick={() => questions.splice(i, 1)} aria-label="Delete question">
           <Trash2 size={16} />
@@ -157,7 +208,6 @@
             <ImagePlus size={16} />
             {uploading === i ? 'Uploading...' : 'Add a picture (optional)'}
           </button>
-          <span class="faint small paste-hint">or paste one in the question</span>
         {/if}
       </div>
 
@@ -174,7 +224,7 @@
     </div>
   {/each}
 
-  <button type="button" class="btn" disabled={questions.length >= maxQuestions} onclick={() => questions.push(blank())}><Plus size={18} /> Add a question{maxQuestions < 50 ? ` (${questions.length}/${maxQuestions})` : ''}</button>
+  <button type="button" class="btn" disabled={questions.length >= maxQuestions} onclick={addQuestion}><Plus size={18} /> Add a question{maxQuestions < 50 ? ` (${questions.length}/${maxQuestions})` : ''}</button>
 
   <div class="actions">
     <button type="button" class="btn ghost" onclick={oncancel}>{cancelLabel}</button>
@@ -208,20 +258,25 @@
     background: var(--surface-2);
     border: 1px solid var(--border);
   }
+  .question.bad {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 1px var(--danger);
+  }
   .qhead {
     display: flex;
     align-items: center;
+    gap: 0.6rem;
+  }
+  .issue {
+    min-width: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--danger);
   }
   .image-row {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-  }
-  /* Pasting is for a keyboard, not a phone */
-  @media (pointer: coarse) {
-    .paste-hint {
-      display: none;
-    }
   }
   .image-row img {
     width: 5rem;
