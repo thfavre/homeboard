@@ -69,6 +69,18 @@
     }
   }
 
+  // Play a custom quiz from the list: asks the time per question first
+  let playing = $state<{ id: string; title: string; count: number; sec: number } | null>(null);
+
+  async function playCustom() {
+    if (!playing) return;
+    const { id, sec } = playing;
+    starting = true;
+    const ok = await attempt(() => rpc('quiz', 'start', { source: 'custom', quizId: id, timeSec: Math.min(120, Math.max(5, Math.round(sec) || 20)) }));
+    starting = false;
+    if (ok) playing = null;
+  }
+
   async function remove(id: string, title: string) {
     if (await ask({ title: `Delete "${title}"?`, message: 'Its pictures are deleted too.', confirm: 'Delete', danger: true })) {
       attempt(() => rpc('quiz', 'deleteCustom', { id }), 'Quiz deleted');
@@ -322,6 +334,7 @@
           <strong class="truncate block">{item.title}</strong>
           <p class="faint small">{item.count} {item.count === 1 ? 'question' : 'questions'} &middot; {item.collective ? 'written by' : 'by'} {item.author}{item.hasImages ? ' · with pictures' : ''}</p>
         </div>
+        <button class="btn ghost small" aria-label="Play" title="Play it" disabled={q.phase !== 'idle'} onclick={() => (playing = { id: item.id, title: item.title, count: item.count, sec: timeSec.value })}><Play size={15} /></button>
         <button class="btn ghost small" aria-label="Edit" onclick={() => edit(item.id)}><Pencil size={15} /></button>
         <button class="btn ghost small" aria-label="Delete" onclick={() => remove(item.id, item.title)}><Trash2 size={15} /></button>
       </div>
@@ -329,6 +342,32 @@
       <p class="faint">No custom quiz yet.</p>
     {/each}
   </Section>
+
+  {#if playing}
+    <Sheet title={`Play ${playing.title}`} onclose={() => (playing = null)}>
+      <form
+        class="play"
+        onsubmit={(e) => {
+          e.preventDefault();
+          playCustom();
+        }}
+      >
+        <p class="dim">
+          {playing.count > q.settings.maxQuestions
+            ? `Plays the first ${q.settings.maxQuestions} of its ${playing.count} questions (the "Most questions" limit).`
+            : `${playing.count} ${playing.count === 1 ? 'question' : 'questions'}.`}
+        </p>
+        <label class="field">
+          <span>Seconds per question</span>
+          <input class="input" type="number" min="5" max="120" bind:value={playing.sec} />
+        </label>
+        <div class="row wrap">
+          <button class="btn primary" disabled={starting || q.phase !== 'idle'}><Play size={18} /> Start quiz</button>
+          <button type="button" class="btn ghost" onclick={() => (playing = null)}>Cancel</button>
+        </div>
+      </form>
+    </Sheet>
+  {/if}
 
   {#if editing}
     <Sheet title={editing === 'new' ? 'New quiz' : `Edit ${editing.title}`} onclose={() => (editing = null)}>
@@ -412,6 +451,10 @@
   }
   .block {
     display: block;
+  }
+  .play {
+    display: grid;
+    gap: 1rem;
   }
   .stepper {
     display: flex;
