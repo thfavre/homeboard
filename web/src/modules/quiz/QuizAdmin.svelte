@@ -327,7 +327,7 @@
         {:else}
           <button class="btn primary" disabled={!collect.done.length} onclick={() => attempt(() => rpc('quiz', 'collectEnd'))}><Flag size={18} /> Make the quiz now</button>
         {/if}
-        <button class="btn" disabled={collectLeft <= 70} onclick={() => attempt(() => rpc('quiz', 'collectAddTime', { minutes: -1 }))}><Minus size={18} /> 1 min</button>
+        <button class="btn" disabled={collectLeft < 90} onclick={() => attempt(() => rpc('quiz', 'collectAddTime', { minutes: -1 }))}><Minus size={18} /> 1 min</button>
         <button class="btn" onclick={() => attempt(() => rpc('quiz', 'collectAddTime', { minutes: 1 }))}><Plus size={18} /> 1 min</button>
         <button class="btn" onclick={() => attempt(() => rpc('quiz', 'collectAddTime', { minutes: 5 }))}><Plus size={18} /> 5 min</button>
         <button class="btn danger" onclick={cancelCollect}><X size={18} /> Cancel</button>
@@ -477,7 +477,7 @@
   {#snippet timeFor(id: string, name: string, state: string | null)}
     {#if state === 'writing'}
       <span class="mono small">{clockOf(leftFor(id))}</span>
-      <button class="btn ghost small" disabled={leftFor(id) <= 70} onclick={() => guestTime(id, -1)} aria-label="1 minute less"><Minus size={15} /></button>
+      <button class="btn ghost small" disabled={leftFor(id) < 90} onclick={() => guestTime(id, -1)} aria-label="1 minute less"><Minus size={15} /></button>
       <button class="btn ghost small" onclick={() => guestTime(id, 1)} aria-label="1 minute more"><Plus size={15} /></button>
     {:else}
       {#if state}<span class="faint small">{state}</span>{/if}

@@ -55,6 +55,8 @@ const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 
 const COLLECT_READY_MS = 10 * 60_000;
 /** Phones send what is complete a moment before the time is up: the writing waits this long for it */
 const SEND_GRACE_MS = 3000;
+/** Taking a minute away needs 1:30 left, so at least 30 seconds stay (minus a second for rounding) */
+const CUT_KEEPS_MS = 29_000;
 const FX_COOLDOWN: Record<QuizFx['kind'], number> = { spin: 1200, hop: 900, wiggle: 900, peek: 2500 };
 
 const decode = (s: string) => {
@@ -843,7 +845,7 @@ export default defineModule<QuizSettings>({
       const t = until?.get(guestId);
       if (!until || t === undefined) throw new HbError('This guest is not writing');
       const next = t + minutes * 60_000;
-      if (minutes < 0 && next < Date.now() + 10_000) throw new HbError('Not enough time left to take a minute away');
+      if (minutes < 0 && next < Date.now() + CUT_KEEPS_MS) throw new HbError('Not enough time left to take a minute away');
       until.set(guestId, Math.min(next, Date.now() + 60 * 60_000));
       c.endsAt = Math.max(...until.values());
       ctx.publish();
@@ -1127,16 +1129,16 @@ export default defineModule<QuizSettings>({
       endCollect();
       return true;
     });
-    /** More (or less) time to write; taking time away always leaves at least 10 seconds */
+    /** More (or less) time to write; taking a minute away needs 1:30 left */
     ctx.onAdmin('collectAddTime', (args) => {
       const c = collecting();
       const minutes = clamp(Math.round(num(args.minutes, 1)), -30, 30);
       if (c.extend) {
         // Everyone given time gets it too (taking a minute away skips who has too little left)
-        for (const [id, t] of [...c.extend.until]) if (t + Math.min(0, minutes) * 60_000 >= Date.now() + 10_000) guestTime(id, minutes);
+        for (const [id, t] of [...c.extend.until]) if (t + Math.min(0, minutes) * 60_000 >= Date.now() + CUT_KEEPS_MS) guestTime(id, minutes);
         return true;
       }
-      if (minutes < 0 && c.endsAt + minutes * 60_000 < Date.now() + 10_000) throw new HbError('Not enough time left to take a minute away');
+      if (minutes < 0 && c.endsAt + minutes * 60_000 < Date.now() + CUT_KEEPS_MS) throw new HbError('Not enough time left to take a minute away');
       c.endsAt = Math.min(c.endsAt + minutes * 60_000, Date.now() + 60 * 60_000);
       ctx.publish();
       return true;
