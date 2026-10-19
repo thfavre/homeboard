@@ -122,8 +122,8 @@ export interface QuizCollect {
   /** Guests changing the questions they sent */
   editing: string[];
   /**
-   * The host gave a few guests time to add to a saved participative quiz: only they write,
-   * each until their own deadline. null: everyone writes a new quiz.
+   * The host gave a few guests time to add to a saved quiz: only they write, each until their own
+   * deadline. Key '*': every guest can (even one coming back later), until then. null: everyone writes a new quiz.
    */
   extend: { quizId: string; until: Record<string, number> } | null;
   /** Once ready: the saved quiz */

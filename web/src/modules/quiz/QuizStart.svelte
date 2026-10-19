@@ -195,7 +195,7 @@
               <p class="faint small">Everyone writes 1 to {COLLECT_MAX_QUESTIONS} questions on their phone, then you all play them. Nobody sees the answers.</p>
             </div>
           </div>
-          {#if collect?.phase === 'writing' && collect.extend && !(hb.me && hb.me.id in collect.extend.until)}
+          {#if collect?.phase === 'writing' && collect.extend && !('*' in collect.extend.until) && !(hb.me && hb.me.id in collect.extend.until)}
             <p class="small">The host gave a few guests time to add questions to <strong>{collect.title}</strong>.</p>
           {:else if collect?.phase === 'writing'}
             <p class="small">

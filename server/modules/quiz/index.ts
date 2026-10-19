@@ -153,7 +153,7 @@ export default defineModule<QuizSettings>({
       skipped: Set<string>;
       /** Sent questions but are changing them: the quiz waits for them too */
       editing: Set<string>;
-      /** Adding to a saved participative quiz: only these guests write, each until their deadline */
+      /** Adding to a saved quiz: only these guests write, each until their deadline ('*': every guest) */
       extend: { quizId: string; until: Map<string, number> } | null;
       quizId: string | null;
       total: number;
@@ -640,7 +640,13 @@ export default defineModule<QuizSettings>({
     const stillWriting = (c: Collect) => {
       const writing = (g: Guest) => (!c.entries.has(g.id) && !c.skipped.has(g.id)) || c.editing.has(g.id);
       const now = Date.now();
-      if (c.extend) return [...c.extend.until].filter(([, t]) => t > now).flatMap(([id]) => ctx.session.guests.get(id) ?? []).filter(writing);
+      if (c.extend) {
+        const until = c.extend.until;
+        const invited = [...until].filter(([id, t]) => id !== '*' && t > now).flatMap(([id]) => ctx.session.guests.get(id) ?? []);
+        // Open to every guest: those online who have not sent yet
+        const all = (until.get('*') ?? 0) > now ? [...ctx.session.guests.values()].filter((g) => g.sockets > 0 && !until.has(g.id)) : [];
+        return [...invited, ...all].filter(writing);
+      }
       return [...ctx.session.guests.values()].filter((g) => g.sockets > 0 && writing(g));
     };
 
@@ -654,7 +660,7 @@ export default defineModule<QuizSettings>({
 
     /** Throws when this guest is not one the writing is for */
     const canWrite = (c: Collect, guest: Guest) => {
-      const until = c.extend?.until.get(guest.id);
+      const until = c.extend ? (c.extend.until.get(guest.id) ?? c.extend.until.get('*')) : undefined;
       if (c.extend && until === undefined) throw new HbError('The host asked someone else for these questions');
       if (until !== undefined && until + SEND_GRACE_MS <= Date.now()) throw new HbError('Your time to write is up');
     };
@@ -730,7 +736,8 @@ export default defineModule<QuizSettings>({
       const c = collect;
       if (!c || c.phase !== 'writing') return;
       const waiting = stillWriting(c);
-      if (!waiting.length && (c.extend || (onlineCount() && (c.entries.size || c.skipped.size)))) return endCollect();
+      // Open to every guest: it stays open until the time is up, for those coming back
+      if (!waiting.length && !c.extend?.until.has('*') && (c.extend || (onlineCount() && (c.entries.size || c.skipped.size)))) return endCollect();
       const key = waiting.map((g) => g.id).join();
       if (key === c.waitingKey) return;
       c.waitingKey = key;
@@ -801,8 +808,9 @@ export default defineModule<QuizSettings>({
     const inviteToQuiz = (quizId: string, guestId: string, minutes: number, max: number) => {
       const quiz = library.data.quizzes.find((q) => q.id === quizId);
       if (!quiz) throw new HbError('Quiz not found');
-      const guests = guestId === '*' ? [...ctx.session.guests.values()].filter((g) => g.sockets > 0) : [ctx.session.guests.get(guestId)].filter((g) => !!g);
-      if (!guests.length) throw new HbError(guestId === '*' ? 'Nobody is online' : 'This guest is not here anymore');
+      // Everyone: every guest, also those away right now (their phone opens it when they come back)
+      const guests = guestId === '*' ? [...ctx.session.guests.values()] : [ctx.session.guests.get(guestId)].filter((g) => !!g);
+      if (!guests.length) throw new HbError(guestId === '*' ? 'Nobody has joined yet' : 'This guest is not here anymore');
       if (phase !== 'idle') throw new HbError('A quiz is running, wait for it to end');
       if (collect?.phase === 'writing' && collect.extend?.quizId !== quizId) throw new HbError('Questions are already being written, wait for it to end');
       const mins = clamp(Math.round(minutes), 1, 30);
@@ -833,8 +841,11 @@ export default defineModule<QuizSettings>({
       // Nobody invited ends up over the limit
       const counts = authorsOf(quiz).filter((a) => guests.some((g) => g.id === a.id)).map((a) => a.count);
       c.max = Math.max(c.max, clamp(Math.round(max), 1, COLLECT_LIMIT_MAX), ...counts);
+      const deadline = Date.now() + mins * 60_000;
+      if (guestId === '*') until.set('*', deadline);
       for (const guest of guests) {
-        until.set(guest.id, Date.now() + mins * 60_000);
+        // Everyone shares the '*' deadline; a guest given their own time keeps it
+        if (guestId !== '*') until.set(guest.id, deadline);
         // Their questions already in the quiz come back to change
         const theirs = quiz.questions.filter((q) => q.authorId === guest.id).map(({ authorId: _id, authorName: _name, ...q }) => q);
         if (theirs.length && !c.entries.has(guest.id)) c.entries.set(guest.id, { name: guest.name, color: guest.color, questions: theirs });

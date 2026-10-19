@@ -108,12 +108,11 @@
     // Never below what the round already allows, or what they already wrote
     const round = extending?.quizId === details && collect ? collect.max : 1;
     const authors = detailItem?.authors ?? [];
-    const own = id === '*' ? authors.filter((a) => isOnline(a.id)).map((a) => a.count) : authors.filter((a) => a.id === id).map((a) => a.count);
+    const own = authors.filter((a) => id === '*' || a.id === id).map((a) => a.count);
     const min = Math.max(1, round, ...own);
     giving = { id, name, minutes: 3, max: Math.max(min, COLLECT_MAX_QUESTIONS), min };
   }
-  const isOnline = (id: string) => !!hb.core?.admin?.guests.some((g) => g.id === id && g.online);
-  const onlineCount = $derived((hb.core?.admin?.guests ?? []).filter((g) => g.online).length);
+  const guestCount = $derived(hb.core?.admin?.guests.length ?? 0);
   // Questions in it no guest added (the quiz's own author, or the host)
   const ownQuestions = $derived(detailItem ? detailItem.count - (detailItem.authors ?? []).reduce((n, a) => n + a.count, 0) : 0);
   const extending = $derived(collect?.phase === 'writing' && collect.extend ? collect.extend : null);
@@ -443,7 +442,7 @@
             </div>
           {/each}
           {#if extending?.quizId === details}
-            {#each Object.keys(extending.until).filter((id) => !detailItem.authors?.some((a) => a.id === id)) as id (id)}
+            {#each Object.keys(extending.until).filter((id) => id !== '*' && !detailItem.authors?.some((a) => a.id === id)) as id (id)}
               {@const name = hb.core?.admin?.guests.find((g) => g.id === id)?.name ?? 'A guest'}
               <div class="line">
                 <span class="grow truncate">{name}</span>
@@ -456,10 +455,10 @@
 
         <div class="line">
           <div class="grow">
-            <strong>Everyone online</strong>
-            <p class="faint small">They all see it again: they change their questions or add some.</p>
+            <strong>Everyone</strong>
+            <p class="faint small">Every guest sees it again, also those coming back meanwhile: they change their questions or add some. It stays open until the time is up.</p>
           </div>
-          <button class="btn small" disabled={busyElsewhere || !onlineCount} onclick={() => give('*', 'everyone online')}><AlarmClockPlus size={15} /> Give time</button>
+          <button class="btn small" disabled={busyElsewhere || !guestCount} onclick={() => give('*', 'everyone')}><AlarmClockPlus size={15} /> Give time</button>
         </div>
 
         {#if late.length}
@@ -482,7 +481,7 @@
 
         {#if giving}
           <div class="give card">
-            <strong>{giving.id === '*' ? 'Everyone online writes again' : `Time for ${giving.name} to write`}</strong>
+            <strong>{giving.id === '*' ? 'Everyone writes again' : `Time for ${giving.name} to write`}</strong>
             <div class="line">
               <span class="grow">Questions each</span>
               <div class="stepper">

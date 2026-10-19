@@ -17,8 +17,8 @@
     const t = setInterval(() => (now = serverNow()), 1000);
     return () => clearInterval(t);
   });
-  const invited = $derived(!c?.extend || (!!meId && meId in c.extend.until));
-  const endsAt = $derived((meId && c?.extend?.until[meId]) || c?.endsAt || 0);
+  const invited = $derived(!c?.extend || '*' in c.extend.until || (!!meId && meId in c.extend.until));
+  const endsAt = $derived((meId && c?.extend?.until[meId]) || c?.extend?.until['*'] || c?.endsAt || 0);
   const left = $derived(Math.max(0, Math.ceil((endsAt - now) / 1000)));
   const clock = $derived(`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`);
 
