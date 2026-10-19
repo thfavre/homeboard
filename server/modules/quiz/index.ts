@@ -3,6 +3,7 @@ import { basename, join } from 'node:path';
 import express from 'express';
 import {
   COLLECT_DEFAULT_MIN,
+  COLLECT_LIMIT_MAX,
   COLLECT_MAX_QUESTIONS,
   FINAL_MAX_SEC,
   FINAL_MIN_SEC,
@@ -143,6 +144,7 @@ export default defineModule<QuizSettings>({
       by: { id: string; name: string } | null;
       phase: 'writing' | 'ready';
       endsAt: number;
+      max: number;
       entries: Map<string, { name: string; color: string; questions: CustomQuestion[] }>;
       skipped: Set<string>;
       /** Sent questions but are changing them: the quiz waits for them too */
@@ -660,6 +662,7 @@ export default defineModule<QuizSettings>({
         by: c.by,
         phase: c.phase,
         endsAt: c.endsAt,
+        max: c.max,
         done: [...c.entries].filter(([id]) => !c.editing.has(id)).map(([id, e]) => ({ id, name: e.name, color: e.color, count: e.questions.length })),
         skipped: [...c.skipped],
         waiting: c.phase === 'writing' ? stillWriting(c).map((g) => ({ id: g.id, name: g.name, color: g.color })) : [],
@@ -686,12 +689,15 @@ export default defineModule<QuizSettings>({
       if (library.data.quizzes.length >= 200) throw new HbError('The quiz library is full, delete some quizzes first');
       if (collect) closeCollect(false);
       const minutes = clamp(Math.round(num(args?.minutes, COLLECT_DEFAULT_MIN)), 1, 30);
+      // Guests asking get the usual number; the host chooses
+      const max = by ? COLLECT_MAX_QUESTIONS : clamp(Math.round(num(args?.max, COLLECT_MAX_QUESTIONS)), 1, COLLECT_LIMIT_MAX);
       const c: Collect = {
         id: uid(6),
         title: cleanName(args?.title, 60) || (by ? `${by.name}'s party quiz` : 'Party quiz'),
         by: by ? { id: by.id, name: by.name } : null,
         phase: 'writing',
         endsAt: Date.now() + minutes * 60_000,
+        max,
         entries: new Map(),
         skipped: new Set(),
         editing: new Set(),
@@ -801,6 +807,8 @@ export default defineModule<QuizSettings>({
           by: null,
           phase: 'writing',
           endsAt: 0,
+          // Nobody already in the quiz ends up over the limit
+          max: Math.max(COLLECT_MAX_QUESTIONS, ...authorsOf(quiz).map((a) => a.count)),
           entries: new Map(),
           skipped: new Set(),
           editing: new Set(),
@@ -842,7 +850,7 @@ export default defineModule<QuizSettings>({
     const submitCollect = (raw: unknown, guest: Guest) => {
       const c = collecting();
       canWrite(c, guest);
-      const qs = cleanQuestions(raw, COLLECT_MAX_QUESTIONS);
+      const qs = cleanQuestions(raw, c.max);
       const before = c.entries.get(guest.id);
       if (before) dropImages(c, before, new Set(qs.map((q) => q.image ?? '')));
       c.entries.set(guest.id, { name: guest.name, color: guest.color, questions: qs });
@@ -1128,6 +1136,15 @@ export default defineModule<QuizSettings>({
       }
       if (minutes < 0 && c.endsAt + minutes * 60_000 < Date.now() + 10_000) throw new HbError('Not enough time left to take a minute away');
       c.endsAt = Math.min(c.endsAt + minutes * 60_000, Date.now() + 60 * 60_000);
+      ctx.publish();
+      return true;
+    });
+    /** One more question for everyone writing (never fewer: some may have written them already) */
+    ctx.onAdmin('collectMoreQuestions', () => {
+      const c = collecting();
+      if (c.max >= COLLECT_LIMIT_MAX) throw new HbError(`${COLLECT_LIMIT_MAX} questions each at most`);
+      c.max += 1;
+      for (const g of stillWriting(c)) ctx.toast(g, { text: `You can now write up to ${c.max} questions`, kind: 'info' });
       ctx.publish();
       return true;
     });

@@ -2,7 +2,7 @@
   import { CircleCheck, Flag, PenLine, Play, Timer, X } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { COLLECT_MAX_QUESTIONS, type CustomQuestion, type QuizDraft, type QuizState } from '$shared/quiz.ts';
+  import { type CustomQuestion, type QuizDraft, type QuizState } from '$shared/quiz.ts';
   import { hb, rpc, attempt, price, serverNow } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
@@ -149,7 +149,7 @@
         <Timer size={18} />
         <span><span class="mono strong">{clock}</span> left</span>
         <span class="spacer"></span>
-        <span><span class="mono strong">{written}/{COLLECT_MAX_QUESTIONS}</span> questions</span>
+        <span><span class="mono strong">{written}/{c.max}</span> questions</span>
       </div>
       {#if warning}
         <button class="warning" transition:fade={{ duration: 150 }} onclick={() => issues[0] && editor?.scrollToQuestion(issues[0].index)}>{warning}</button>
@@ -164,7 +164,7 @@
       </header>
 
       {#if editing || !sent}
-        <p class="dim intro">Write up to {COLLECT_MAX_QUESTIONS} questions.</p>
+        <p class="dim intro">Write up to {c.max} {c.max === 1 ? 'question' : 'questions'}.</p>
         {#key initial}
           <QuizEditor
             bind:this={editor}
@@ -174,7 +174,7 @@
             initial={editing ? initial : null}
             draft={draftKey(`collect.${c.id}`)}
             withTitle={false}
-            maxQuestions={COLLECT_MAX_QUESTIONS}
+            maxQuestions={c.max}
             saveLabel={editing && initial ? 'Update' : 'Send my questions'}
             cancelLabel={editing ? 'Back' : 'Skip'}
             {busy}

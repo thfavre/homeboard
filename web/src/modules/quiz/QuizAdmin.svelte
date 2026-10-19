@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Flag, Minus, Pause, PenLine, Pencil, Play, Plus, SkipForward, Square, Trash2, Users, X } from '@lucide/svelte';
-  import { COLLECT_DEFAULT_MIN, COLLECT_MAX_QUESTIONS, FINAL_MAX_SEC, FINAL_MIN_SEC, MAX_QUESTIONS, MIN_QUESTIONS, type CustomQuiz, type QuizDraft, type QuizSettings, type QuizState, type QuizTopic } from '$shared/quiz.ts';
+  import { COLLECT_DEFAULT_MIN, COLLECT_LIMIT_MAX, COLLECT_MAX_QUESTIONS, FINAL_MAX_SEC, FINAL_MIN_SEC, MAX_QUESTIONS, MIN_QUESTIONS, type CustomQuiz, type QuizDraft, type QuizSettings, type QuizState, type QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt, serverNow } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
   import { Synced } from '$lib/synced.svelte.ts';
@@ -90,6 +90,7 @@
   // Participative quiz
   let collectTitle = $state('');
   let collectMinutes = $state(COLLECT_DEFAULT_MIN);
+  let collectMax = $state(COLLECT_MAX_QUESTIONS);
   const collect = $derived(q?.collect ?? null);
   let now = $state(serverNow());
   $effect(() => {
@@ -124,7 +125,7 @@
   const guestTime = (id: string, minutes: number) => attempt(() => rpc('quiz', 'collectGuestTime', { guestId: id, minutes }));
 
   async function askEveryone() {
-    if (await attempt(() => rpc('quiz', 'collectStart', { title: collectTitle, minutes: collectMinutes }))) collectTitle = '';
+    if (await attempt(() => rpc('quiz', 'collectStart', { title: collectTitle, minutes: collectMinutes, max: collectMax }))) collectTitle = '';
   }
 
   async function playCollected() {
@@ -301,7 +302,7 @@
     </div>
   </Section>
 
-  <Section title="Participative quiz" hint={`Every guest writes 1 to ${COLLECT_MAX_QUESTIONS} questions on their phone (or skips). Then the host or anyone can start it; guests never see the answers and nobody scores on their own question.`}>
+  <Section title="Participative quiz" hint="Every guest writes a few questions on their phone, then you all play them. Nobody scores on their own question.">
     {#if collect?.phase === 'writing'}
       <div class="status">
         <span class="pill accent">Writing</span>
@@ -315,6 +316,10 @@
         <div class="line"><span class="grow faint">{p.name}</span><span class="faint small">{collect.editing.includes(p.id) ? 'changing...' : 'writing...'}</span></div>
       {/each}
       {#if collect.skipped.length}<p class="faint small">{collect.skipped.length} skipped</p>{/if}
+      <div class="line">
+        <span class="grow">Up to <strong>{collect.max}</strong> questions each</span>
+        <button class="btn small" disabled={collect.max >= COLLECT_LIMIT_MAX} onclick={() => attempt(() => rpc('quiz', 'collectMoreQuestions'))}><Plus size={16} /> 1 question</button>
+      </div>
       <div class="row wrap">
         {#if collect.extend}
           <button class="btn primary" onclick={() => attempt(() => rpc('quiz', 'collectEnd'))}><Flag size={18} /> Finish now</button>
@@ -351,6 +356,17 @@
           <span>Minutes to write</span>
           <input class="input" type="number" min="1" max="30" bind:value={collectMinutes} />
         </label>
+      </div>
+      <div class="line">
+        <div class="grow">
+          <strong>Questions per guest</strong>
+          <p class="faint small">You can add more while they write, not take some away.</p>
+        </div>
+        <div class="stepper">
+          <button class="btn small" disabled={collectMax <= 1} onclick={() => collectMax--} aria-label="1 question less"><Minus size={16} /></button>
+          <span class="mono value">{collectMax}</span>
+          <button class="btn small" disabled={collectMax >= COLLECT_LIMIT_MAX} onclick={() => collectMax++} aria-label="1 question more"><Plus size={16} /></button>
+        </div>
       </div>
       <div>
         <button class="btn" disabled={q.phase !== 'idle'} onclick={askEveryone}><Users size={18} /> Ask everyone for questions</button>
@@ -441,7 +457,7 @@
           <div class="give card">
             <strong>Time for {giving.name} to write</strong>
             <div class="line">
-              <span class="grow faint small">Up to {COLLECT_MAX_QUESTIONS} questions</span>
+              <span class="grow faint small">Up to {extending?.quizId === details && collect ? collect.max : Math.max(COLLECT_MAX_QUESTIONS, ...(detailItem.authors ?? []).map((a) => a.count))} questions</span>
               <div class="stepper">
                 <button class="btn small" disabled={giving.minutes <= 1} onclick={() => giving && giving.minutes--} aria-label="1 minute less"><Minus size={16} /></button>
                 <span class="mono value">{giving.minutes} min</span>

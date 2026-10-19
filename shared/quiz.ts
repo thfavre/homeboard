@@ -17,7 +17,9 @@ export const FINAL_MAX_SEC = 180;
 export const MIN_QUESTIONS = 3;
 export const MAX_QUESTIONS = 50;
 /** Participative quiz: questions each guest can write, and how long they get by default */
+/** Questions each guest can write by default; the host can choose up to COLLECT_LIMIT_MAX */
 export const COLLECT_MAX_QUESTIONS = 3;
+export const COLLECT_LIMIT_MAX = 10;
 export const COLLECT_DEFAULT_MIN = 5;
 
 export interface QuizPlayer {
@@ -110,6 +112,8 @@ export interface QuizCollect {
   phase: 'writing' | 'ready';
   /** When writing ends by itself (ms timestamp) */
   endsAt: number;
+  /** Most questions each guest can write (the host can raise it while they write, never lower it) */
+  max: number;
   /** Guests who sent questions, and how many */
   done: { id: string; name: string; color: string; count: number }[];
   skipped: string[];
