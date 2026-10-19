@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CircleCheck, Flag, PenLine, Play, X } from '@lucide/svelte';
+  import { CircleCheck, Flag, PenLine, Play, Timer, X } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import { COLLECT_MAX_QUESTIONS, type CustomQuestion, type QuizDraft, type QuizState } from '$shared/quiz.ts';
@@ -54,8 +54,38 @@
     const t = setInterval(() => (now = serverNow()), 1000);
     return () => clearInterval(t);
   });
-  const left = $derived(c ? Math.max(0, Math.ceil((c.endsAt - now) / 1000)) : 0);
+  // Adding to a saved quiz: each guest given time has their own deadline
+  const endsAt = $derived((meId && c?.extend?.until[meId]) || c?.endsAt || 0);
+  const left = $derived(Math.max(0, Math.ceil((endsAt - now) / 1000)));
   const clock = $derived(`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`);
+
+  // The editor tells how many questions it has and what stops them from being sent
+  let editor = $state<QuizEditor>();
+  let count = $state(0);
+  let issues = $state<{ index: number; text: string }[]>([]);
+  const writing = $derived(editing || !sent);
+  const written = $derived(writing ? count : (mine?.count ?? 0));
+
+  // The banner flashes once at 30, 20 and 10 seconds left, then on 3, 2, 1
+  const FLASH_AT = [30, 20, 10, 3, 2, 1];
+  let flashes = $state(0);
+  let lastFlash = -1;
+  $effect(() => {
+    if (c?.phase !== 'writing' || !FLASH_AT.includes(left) || left === lastFlash) return;
+    lastFlash = left;
+    flashes++;
+  });
+
+  // From 30 seconds left: what is wrong in the questions not sent yet, highlighted in the editor
+  const late = $derived(c?.phase === 'writing' && left <= 30);
+  const warning = $derived.by(() => {
+    if (!late || !writing) return '';
+    if (issues.length) {
+      const [first] = issues;
+      return `Question ${first.index + 1}: ${first.text.toLowerCase()}${issues.length > 1 ? ` (and ${issues.length - 1} more)` : ''}`;
+    }
+    return editing ? 'Tap Update to keep your changes' : 'Tap Send before the time is up';
+  });
 
   async function send(draft: QuizDraft) {
     busy = true;
@@ -112,27 +142,40 @@
 </script>
 
 {#if c}
-  <div class="collect" in:fade>
+  <div class="collect" class:top={c.phase === 'writing'} in:fade>
     {#if c.phase === 'writing'}
+      <div class="timer" class:low={left <= 30}>
+        {#key flashes}<span class="flash" class:on={flashes > 0}></span>{/key}
+        <Timer size={18} />
+        <span><span class="mono strong">{clock}</span> left</span>
+        <span class="spacer"></span>
+        <span><span class="mono strong">{written}/{COLLECT_MAX_QUESTIONS}</span> questions</span>
+      </div>
+      {#if warning}
+        <button class="warning" transition:fade={{ duration: 150 }} onclick={() => issues[0] && editor?.scrollToQuestion(issues[0].index)}>{warning}</button>
+      {/if}
+
       <header>
-        <span class="eyebrow">Participative quiz{c.by ? ` · asked by ${c.by.name}` : ''}</span>
+        <span class="eyebrow">{c.extend ? 'Adding to the participative quiz' : `Participative quiz${c.by ? ` · asked by ${c.by.name}` : ''}`}</span>
         <h1>{c.title}</h1>
-        <p class="dim">
-          {c.done.length} sent{c.waiting.length ? ` · ${c.waiting.length} still writing` : ''} · <span class="mono">{clock}</span> left
-        </p>
+        {#if !c.extend}
+          <p class="dim">{c.done.length} sent{c.waiting.length ? ` · ${c.waiting.length} still writing` : ''}</p>
+        {/if}
       </header>
 
       {#if editing || !sent}
-        <p class="dim intro">
-          Write 1 to {COLLECT_MAX_QUESTIONS} questions for everyone. Nobody sees your answers, and you will not score on your own questions.
-        </p>
+        <p class="dim intro">Write up to {COLLECT_MAX_QUESTIONS} questions.</p>
         {#key initial}
           <QuizEditor
+            bind:this={editor}
+            bind:count
+            bind:issues
+            showIssues={late}
             initial={editing ? initial : null}
             draft={draftKey(`collect.${c.id}`)}
             withTitle={false}
             maxQuestions={COLLECT_MAX_QUESTIONS}
-            saveLabel={sent ? 'Update' : 'Send my questions'}
+            saveLabel={editing && initial ? 'Update' : 'Send my questions'}
             cancelLabel={editing ? 'Back' : 'Skip'}
             {busy}
             onsave={send}
@@ -140,7 +183,7 @@
           />
         {/key}
         {#if !sent}
-          <button class="btn ghost block" onclick={closeCollectScreen}><X size={16} /> Later (open it again from the Quiz tile)</button>
+          <button class="btn ghost block" onclick={closeCollectScreen}><X size={16} /> Later (open it again from the home screen)</button>
         {/if}
       {:else}
         <div class="thanks card">
@@ -193,6 +236,9 @@
     align-content: center;
     gap: 1rem;
   }
+  .collect.top {
+    align-content: start;
+  }
   header {
     display: grid;
     gap: 0.3rem;
@@ -203,6 +249,60 @@
   }
   .intro {
     font-size: 0.9rem;
+  }
+  /* Always in sight while writing: sticks right under the app header */
+  .timer {
+    position: sticky;
+    top: var(--header-h, 0px);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    font-size: 0.9rem;
+  }
+  .timer.low {
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+  }
+  .timer .strong {
+    font-weight: 700;
+  }
+  .flash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: var(--danger);
+    opacity: 0;
+  }
+  .flash.on {
+    animation: flash 0.7s ease-out;
+  }
+  @keyframes flash {
+    15% {
+      opacity: 0.55;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  .warning {
+    padding: 0.6rem 0.9rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--danger) 16%, transparent);
+    color: var(--danger);
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
   }
   .thanks {
     display: grid;

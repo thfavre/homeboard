@@ -17,7 +17,9 @@
     const t = setInterval(() => (now = serverNow()), 1000);
     return () => clearInterval(t);
   });
-  const left = $derived(c ? Math.max(0, Math.ceil((c.endsAt - now) / 1000)) : 0);
+  const invited = $derived(!c?.extend || (!!meId && meId in c.extend.until));
+  const endsAt = $derived((meId && c?.extend?.until[meId]) || c?.endsAt || 0);
+  const left = $derived(Math.max(0, Math.ceil((endsAt - now) / 1000)));
   const clock = $derived(`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`);
 
   const status = $derived(
@@ -25,7 +27,7 @@
   );
 </script>
 
-{#if c?.phase === 'writing' && meId}
+{#if c?.phase === 'writing' && meId && invited && left > 0}
   <div class="card mini">
     <span class="icon"><PenLine size={20} /></span>
     <div class="text">

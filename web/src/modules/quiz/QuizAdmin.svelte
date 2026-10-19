@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Flag, Minus, Pause, Pencil, Play, Plus, SkipForward, Square, Trash2, Users, X } from '@lucide/svelte';
+  import { Flag, Minus, Pause, PenLine, Pencil, Play, Plus, SkipForward, Square, Trash2, Users, X } from '@lucide/svelte';
   import { COLLECT_DEFAULT_MIN, COLLECT_MAX_QUESTIONS, FINAL_MAX_SEC, FINAL_MIN_SEC, MAX_QUESTIONS, MIN_QUESTIONS, type CustomQuiz, type QuizDraft, type QuizSettings, type QuizState, type QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt, serverNow } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
@@ -97,6 +97,31 @@
     return () => clearInterval(t);
   });
   const collectLeft = $derived(collect ? Math.max(0, Math.ceil((collect.endsAt - now) / 1000)) : 0);
+
+  // A saved participative quiz: who wrote it, and giving someone time to add questions
+  let details = $state<string | null>(null);
+  const detailItem = $derived(details ? (q?.library.find((x) => x.id === details) ?? null) : null);
+  let giving = $state<{ id: string; name: string; minutes: number } | null>(null);
+  const extending = $derived(collect?.phase === 'writing' && collect.extend ? collect.extend : null);
+  const busyElsewhere = $derived(collect?.phase === 'writing' && (!extending || extending.quizId !== details));
+  const late = $derived(
+    (hb.core?.admin?.guests ?? []).filter((g) => !detailItem?.authors?.some((a) => a.id === g.id) && !(extending?.quizId === details && g.id in extending.until)),
+  );
+  const leftFor = (id: string) => Math.max(0, Math.ceil(((extending?.until[id] ?? 0) - now) / 1000));
+  const clockOf = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  // Invited to add to the quiz shown: still writing, or done
+  const invitedState = (id: string) => {
+    if (!extending || extending.quizId !== details || !(id in extending.until)) return null;
+    if (leftFor(id) <= 0) return 'time up';
+    return collect?.waiting.some((w) => w.id === id) ? 'writing' : 'sent';
+  };
+
+  async function giveTime() {
+    if (!giving || !details) return;
+    const { id, minutes } = giving;
+    if (await attempt(() => rpc('quiz', 'collectInvite', { quizId: details, guestId: id, minutes }))) giving = null;
+  }
+  const guestTime = (id: string, minutes: number) => attempt(() => rpc('quiz', 'collectGuestTime', { guestId: id, minutes }));
 
   async function askEveryone() {
     if (await attempt(() => rpc('quiz', 'collectStart', { title: collectTitle, minutes: collectMinutes }))) collectTitle = '';
@@ -280,8 +305,8 @@
     {#if collect?.phase === 'writing'}
       <div class="status">
         <span class="pill accent">Writing</span>
-        <span class="dim truncate">{collect.title}{collect.by ? `, asked by ${collect.by.name}` : ''}</span>
-        <span class="mono faint">{Math.floor(collectLeft / 60)}:{String(collectLeft % 60).padStart(2, '0')}</span>
+        <span class="dim truncate">{collect.extend ? `Adding to ${collect.title}` : collect.title}{collect.by ? `, asked by ${collect.by.name}` : ''}</span>
+        <span class="mono faint">{clockOf(collectLeft)}</span>
       </div>
       {#each collect.done as p (p.id)}
         <div class="line"><span class="grow">{p.name}</span><span class="faint small">{p.count} {p.count === 1 ? 'question' : 'questions'}</span></div>
@@ -291,7 +316,12 @@
       {/each}
       {#if collect.skipped.length}<p class="faint small">{collect.skipped.length} skipped</p>{/if}
       <div class="row wrap">
-        <button class="btn primary" disabled={!collect.done.length} onclick={() => attempt(() => rpc('quiz', 'collectEnd'))}><Flag size={18} /> Make the quiz now</button>
+        {#if collect.extend}
+          <button class="btn primary" onclick={() => attempt(() => rpc('quiz', 'collectEnd'))}><Flag size={18} /> Finish now</button>
+          <button class="btn" onclick={() => (details = collect.extend?.quizId ?? null)}>Details</button>
+        {:else}
+          <button class="btn primary" disabled={!collect.done.length} onclick={() => attempt(() => rpc('quiz', 'collectEnd'))}><Flag size={18} /> Make the quiz now</button>
+        {/if}
         <button class="btn" disabled={collectLeft <= 70} onclick={() => attempt(() => rpc('quiz', 'collectAddTime', { minutes: -1 }))}><Minus size={18} /> 1 min</button>
         <button class="btn" onclick={() => attempt(() => rpc('quiz', 'collectAddTime', { minutes: 1 }))}><Plus size={18} /> 1 min</button>
         <button class="btn" onclick={() => attempt(() => rpc('quiz', 'collectAddTime', { minutes: 5 }))}><Plus size={18} /> 5 min</button>
@@ -300,7 +330,11 @@
     {:else if collect?.phase === 'ready'}
       <div class="status">
         <span class="pill accent">Ready</span>
-        <span class="dim truncate">{collect.title}: {collect.total} questions from {collect.done.length} {collect.done.length === 1 ? 'player' : 'players'}</span>
+        <span class="dim truncate">
+          {collect.extend
+            ? `${collect.title} is updated: ${collect.total} questions`
+            : `${collect.title}: ${collect.total} questions from ${collect.done.length} ${collect.done.length === 1 ? 'player' : 'players'}`}
+        </span>
       </div>
       <div class="row wrap">
         <button class="btn primary" disabled={starting || q.phase !== 'idle'} onclick={playCollected}><Play size={18} /> Play it now</button>
@@ -331,7 +365,11 @@
     {#each q.library as item (item.id)}
       <div class="line">
         <div class="grow">
-          <strong class="truncate block">{item.title}</strong>
+          {#if item.collective}
+            <button class="link truncate block" onclick={() => (details = item.id)}><strong>{item.title}</strong></button>
+          {:else}
+            <strong class="truncate block">{item.title}</strong>
+          {/if}
           <p class="faint small">{item.count} {item.count === 1 ? 'question' : 'questions'} &middot; {item.collective ? 'written by' : 'by'} {item.author}{item.hasImages ? ' · with pictures' : ''}</p>
         </div>
         <button class="btn ghost small" aria-label="Play" title="Play it" disabled={q.phase !== 'idle'} onclick={() => (playing = { id: item.id, title: item.title, count: item.count, sec: timeSec.value })}><Play size={15} /></button>
@@ -342,6 +380,94 @@
       <p class="faint">No custom quiz yet.</p>
     {/each}
   </Section>
+
+  {#if detailItem}
+    <Sheet
+      title={detailItem.title}
+      onclose={() => {
+        details = null;
+        giving = null;
+      }}
+    >
+      <div class="details">
+        <p class="dim">{detailItem.count} {detailItem.count === 1 ? 'question' : 'questions'}. Give someone a few minutes to change or add their questions: their phone opens the editor.</p>
+        {#if busyElsewhere}
+          <p class="error">Questions are being written right now: wait for it to end.</p>
+        {/if}
+
+        <div>
+          <h3 class="eyebrow">Written by</h3>
+          {#each detailItem.authors ?? [] as a (a.id)}
+            {@const state = invitedState(a.id)}
+            <div class="line">
+              <span class="grow truncate">{a.name}</span>
+              <span class="faint small">{a.count} {a.count === 1 ? 'question' : 'questions'}</span>
+              {@render timeFor(a.id, a.name, state)}
+            </div>
+          {:else}
+            <p class="faint small">Nobody yet.</p>
+          {/each}
+          {#if extending?.quizId === details}
+            {#each Object.keys(extending.until).filter((id) => !detailItem.authors?.some((a) => a.id === id)) as id (id)}
+              {@const name = hb.core?.admin?.guests.find((g) => g.id === id)?.name ?? 'A guest'}
+              <div class="line">
+                <span class="grow truncate">{name}</span>
+                <span class="faint small">new</span>
+                {@render timeFor(id, name, invitedState(id))}
+              </div>
+            {/each}
+          {/if}
+        </div>
+
+        {#if late.length}
+          <label class="field">
+            <span>Someone who did not take part</span>
+            <select
+              class="input"
+              value=""
+              onchange={(e) => {
+                const g = late.find((x) => x.id === e.currentTarget.value);
+                if (g) giving = { id: g.id, name: g.name, minutes: 3 };
+                e.currentTarget.value = '';
+              }}
+            >
+              <option value="" disabled>Choose a guest</option>
+              {#each late as g (g.id)}<option value={g.id}>{g.name}{g.online ? '' : ' (away)'}</option>{/each}
+            </select>
+          </label>
+        {/if}
+
+        {#if giving}
+          <div class="give card">
+            <strong>Time for {giving.name} to write</strong>
+            <div class="line">
+              <span class="grow faint small">Up to {COLLECT_MAX_QUESTIONS} questions</span>
+              <div class="stepper">
+                <button class="btn small" disabled={giving.minutes <= 1} onclick={() => giving && giving.minutes--} aria-label="1 minute less"><Minus size={16} /></button>
+                <span class="mono value">{giving.minutes} min</span>
+                <button class="btn small" disabled={giving.minutes >= 30} onclick={() => giving && giving.minutes++} aria-label="1 minute more"><Plus size={16} /></button>
+              </div>
+            </div>
+            <div class="row wrap">
+              <button class="btn primary" disabled={busyElsewhere || q.phase !== 'idle'} onclick={giveTime}><PenLine size={18} /> Let them write</button>
+              <button class="btn ghost" onclick={() => (giving = null)}>Cancel</button>
+            </div>
+          </div>
+        {/if}
+      </div>
+    </Sheet>
+  {/if}
+
+  {#snippet timeFor(id: string, name: string, state: string | null)}
+    {#if state === 'writing'}
+      <span class="mono small">{clockOf(leftFor(id))}</span>
+      <button class="btn ghost small" disabled={leftFor(id) <= 70} onclick={() => guestTime(id, -1)} aria-label="1 minute less"><Minus size={15} /></button>
+      <button class="btn ghost small" onclick={() => guestTime(id, 1)} aria-label="1 minute more"><Plus size={15} /></button>
+    {:else}
+      {#if state}<span class="faint small">{state}</span>{/if}
+      <button class="btn ghost small" disabled={busyElsewhere} onclick={() => (giving = { id, name, minutes: 3 })} title="Give time to write" aria-label="Give {name} time to write"><PenLine size={15} /></button>
+    {/if}
+  {/snippet}
 
   {#if playing}
     <Sheet title={`Play ${playing.title}`} onclose={() => (playing = null)}>
@@ -451,6 +577,31 @@
   }
   .block {
     display: block;
+  }
+  .details {
+    display: grid;
+    gap: 1.1rem;
+  }
+  .details h3 {
+    margin-bottom: 0.4rem;
+  }
+  .give {
+    display: grid;
+    gap: 0.7rem;
+    padding: 1rem;
+  }
+  .link {
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .link:hover strong {
+    text-decoration: underline;
   }
   .play {
     display: grid;

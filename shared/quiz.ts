@@ -97,6 +97,8 @@ export interface LibraryItem {
   count: number;
   hasImages: boolean;
   collective?: boolean;
+  /** Participative quiz: who wrote how many questions */
+  authors?: { id: string; name: string; count: number }[];
 }
 
 /** A participative quiz being written: every guest writes 1 to 3 questions, or skips */
@@ -115,6 +117,11 @@ export interface QuizCollect {
   waiting: { id: string; name: string; color: string }[];
   /** Guests changing the questions they sent */
   editing: string[];
+  /**
+   * The host gave a few guests time to add to a saved participative quiz: only they write,
+   * each until their own deadline. null: everyone writes a new quiz.
+   */
+  extend: { quizId: string; until: Record<string, number> } | null;
   /** Once ready: the saved quiz */
   quizId: string | null;
   total: number;

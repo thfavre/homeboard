@@ -96,7 +96,7 @@
 {:else if !hb.me || !hb.core}
   <div class="splash"><p class="dim">Connecting...</p></div>
 {:else}
-  <div class="app">
+  <div class="app" style:--header-h="{headerHeight}px">
     <header bind:offsetHeight={headerHeight}>
       {#if featureModule && !takeover}
         <button class="btn ghost back" onclick={() => (feature = null)} aria-label="Back"><ChevronLeft size={22} /></button>

@@ -23,6 +23,8 @@ export function collectScreen(): 'writing' | 'ready' | null {
   const c = (hb.modules.quiz as QuizState | undefined)?.collect;
   const me = hb.me?.id;
   if (!c || !me) return null;
+  // Adding to a saved quiz: only for the guests the host gave time to
+  if (c.phase === 'writing' && c.extend && !(me in c.extend.until)) return null;
   // Changing their questions (and reloaded meanwhile)
   if (c.phase === 'writing' && c.editing.includes(me)) return 'writing';
   if (quizResult.collectClosed.includes(`${c.id}:${c.phase}`)) return null;

@@ -147,6 +147,8 @@ export default defineModule<QuizSettings>({
       skipped: Set<string>;
       /** Sent questions but are changing them: the quiz waits for them too */
       editing: Set<string>;
+      /** Adding to a saved participative quiz: only these guests write, each until their deadline */
+      extend: { quizId: string; until: Map<string, number> } | null;
       quizId: string | null;
       total: number;
       timer: NodeJS.Timeout | null;
@@ -530,7 +532,19 @@ export default defineModule<QuizSettings>({
       count: q.questions.length,
       hasImages: q.questions.some((x) => x.image),
       collective: q.collective,
+      ...(q.collective ? { authors: authorsOf(q) } : {}),
     });
+
+    const authorsOf = (q: CustomQuiz) => {
+      const by = new Map<string, { id: string; name: string; count: number }>();
+      for (const x of q.questions) {
+        if (!x.authorId) continue;
+        const a = by.get(x.authorId) ?? { id: x.authorId, name: x.authorName ?? '', count: 0 };
+        a.count += 1;
+        by.set(x.authorId, a);
+      }
+      return [...by.values()];
+    };
 
     /** keepAuthors: the host editing a participative quiz keeps who wrote each question */
     const cleanQuestions = (raw: unknown, max: number, keepAuthors = false): CustomQuestion[] => {
@@ -595,6 +609,8 @@ export default defineModule<QuizSettings>({
       const quiz = library.data.quizzes.find((q) => q.id === id);
       if (!quiz) return;
       if (author && quiz.authorId !== author.id) throw new HbError('You can only delete your own quizzes');
+      // Guests adding to it stop (their new pictures go with it)
+      if (collect?.extend?.quizId === id) closeCollect(true);
       removeImages(quiz);
       library.data.quizzes = library.data.quizzes.filter((q) => q.id !== id);
       library.save();
@@ -614,9 +630,28 @@ export default defineModule<QuizSettings>({
     // the time is up or whoever asked for it ends it, the questions become one custom quiz
     // that only the host can edit. Nobody scores on their own question.
 
-    /** Online guests the writing still waits for */
-    const stillWriting = (c: Collect) =>
-      [...ctx.session.guests.values()].filter((g) => g.sockets > 0 && ((!c.entries.has(g.id) && !c.skipped.has(g.id)) || c.editing.has(g.id)));
+    /** Guests the writing still waits for: everyone online, or the guests the host gave time to (online or not) */
+    const stillWriting = (c: Collect) => {
+      const writing = (g: Guest) => (!c.entries.has(g.id) && !c.skipped.has(g.id)) || c.editing.has(g.id);
+      const now = Date.now();
+      if (c.extend) return [...c.extend.until].filter(([, t]) => t > now).flatMap(([id]) => ctx.session.guests.get(id) ?? []).filter(writing);
+      return [...ctx.session.guests.values()].filter((g) => g.sockets > 0 && writing(g));
+    };
+
+    const savedQuiz = (c: Collect) => (c.extend ? library.data.quizzes.find((q) => q.id === c.extend!.quizId) : undefined);
+
+    /** Pictures of questions dropped while writing; those of the saved quiz stay until it changes */
+    const dropImages = (c: Collect, e: Pick<CustomQuiz, 'questions'>, keep: Set<string> = new Set()) => {
+      for (const q of savedQuiz(c)?.questions ?? []) if (q.image) keep.add(q.image);
+      removeImages(e, keep);
+    };
+
+    /** Throws when this guest is not one the writing is for */
+    const canWrite = (c: Collect, guest: Guest) => {
+      const until = c.extend?.until.get(guest.id);
+      if (c.extend && until === undefined) throw new HbError('The host asked someone else for these questions');
+      if (until !== undefined && until <= Date.now()) throw new HbError('Your time to write is up');
+    };
 
     const collectView = (c: Collect): QuizCollect => {
       return {
@@ -629,16 +664,17 @@ export default defineModule<QuizSettings>({
         skipped: [...c.skipped],
         waiting: c.phase === 'writing' ? stillWriting(c).map((g) => ({ id: g.id, name: g.name, color: g.color })) : [],
         editing: [...c.editing],
+        extend: c.extend ? { quizId: c.extend.quizId, until: Object.fromEntries(c.extend.until) } : null,
         quizId: c.quizId,
         total: c.total,
       };
     };
 
     /** dropImages: the questions were not saved, so their pictures can go */
-    const closeCollect = (dropImages: boolean) => {
+    const closeCollect = (drop: boolean) => {
       if (!collect) return;
       if (collect.timer) clearInterval(collect.timer);
-      if (dropImages) for (const e of collect.entries.values()) removeImages(e);
+      if (drop) for (const e of collect.entries.values()) dropImages(collect, e);
       collect = null;
       ctx.publish();
     };
@@ -659,6 +695,7 @@ export default defineModule<QuizSettings>({
         entries: new Map(),
         skipped: new Set(),
         editing: new Set(),
+        extend: null,
         quizId: null,
         total: 0,
         timer: null,
@@ -683,7 +720,7 @@ export default defineModule<QuizSettings>({
       const c = collect;
       if (!c || c.phase !== 'writing') return;
       const waiting = stillWriting(c);
-      if (onlineCount() && !waiting.length && (c.entries.size || c.skipped.size)) return endCollect();
+      if (!waiting.length && (c.extend || (onlineCount() && (c.entries.size || c.skipped.size)))) return endCollect();
       const key = waiting.map((g) => g.id).join();
       if (key === c.waitingKey) return;
       c.waitingKey = key;
@@ -696,6 +733,7 @@ export default defineModule<QuizSettings>({
       if (c.timer) clearInterval(c.timer);
       c.timer = null;
       c.editing.clear();
+      if (c.extend) return endExtend(c);
       const all = spreadByAuthor([...c.entries].flatMap(([id, e]) => e.questions.map((q) => ({ ...q, authorId: id, authorName: e.name }))));
       if (!all.length) {
         closeCollect(false);
@@ -722,11 +760,91 @@ export default defineModule<QuizSettings>({
       ctx.publish();
     };
 
+    /** The guests given time are done: their questions replace the ones they had in the saved quiz */
+    const endExtend = (c: Collect) => {
+      const quiz = savedQuiz(c);
+      if (!quiz) {
+        closeCollect(true);
+        return;
+      }
+      const writers = new Set(c.entries.keys());
+      const before = quiz.questions;
+      const added = [...c.entries].flatMap(([id, e]) => e.questions.map((q) => ({ ...q, authorId: id, authorName: e.name })));
+      quiz.questions = spreadByAuthor([...before.filter((q) => !q.authorId || !writers.has(q.authorId)), ...added]);
+      const names = authorsOf(quiz).map((a) => a.name);
+      quiz.author = names.length <= 3 ? names.join(', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+      removeImages({ questions: before }, new Set(quiz.questions.map((q) => q.image ?? '')));
+      library.save();
+      c.phase = 'ready';
+      c.quizId = quiz.id;
+      c.total = quiz.questions.length;
+      c.endsAt = Date.now() + COLLECT_READY_MS;
+      c.timer = setInterval(() => Date.now() >= c.endsAt && closeCollect(false), 10_000);
+      ctx.publish();
+    };
+
+    /** The host gives one guest time to change or add questions to a saved participative quiz (late, or more to say) */
+    const inviteToQuiz = (quizId: string, guestId: string, minutes: number) => {
+      const quiz = library.data.quizzes.find((q) => q.id === quizId);
+      if (!quiz?.collective) throw new HbError('Quiz not found');
+      const guest = ctx.session.guests.get(guestId);
+      if (!guest) throw new HbError('This guest is not here anymore');
+      if (phase !== 'idle') throw new HbError('A quiz is running, wait for it to end');
+      if (collect?.phase === 'writing' && collect.extend?.quizId !== quizId) throw new HbError('Questions are already being written, wait for it to end');
+      const mins = clamp(Math.round(minutes), 1, 30);
+      let c = collect?.phase === 'writing' ? collect : null;
+      if (!c) {
+        if (collect) closeCollect(false);
+        const fresh: Collect = {
+          id: uid(6),
+          title: quiz.title,
+          by: null,
+          phase: 'writing',
+          endsAt: 0,
+          entries: new Map(),
+          skipped: new Set(),
+          editing: new Set(),
+          extend: { quizId, until: new Map() },
+          quizId: null,
+          total: 0,
+          timer: null,
+          waitingKey: '',
+        };
+        fresh.timer = setInterval(() => (Date.now() >= fresh.endsAt ? endCollect() : checkCollectDone()), 3000);
+        collect = c = fresh;
+        error = null;
+      }
+      const until = c.extend!.until;
+      until.set(guest.id, Date.now() + mins * 60_000);
+      c.endsAt = Math.max(...until.values());
+      // Their questions already in the quiz come back to change
+      const theirs = quiz.questions.filter((q) => q.authorId === guest.id).map(({ authorId: _id, authorName: _name, ...q }) => q);
+      if (theirs.length && !c.entries.has(guest.id)) c.entries.set(guest.id, { name: guest.name, color: guest.color, questions: theirs });
+      c.skipped.delete(guest.id);
+      c.editing.add(guest.id);
+      ctx.toast(guest, { text: `The host gives you ${mins} min to write questions for "${quiz.title}"`, kind: 'info' });
+      ctx.publish();
+    };
+
+    /** One more or one less minute for one guest the host gave time to */
+    const guestTime = (guestId: string, minutes: number) => {
+      const c = collecting();
+      const until = c.extend?.until;
+      const t = until?.get(guestId);
+      if (!until || t === undefined) throw new HbError('This guest is not writing');
+      const next = t + minutes * 60_000;
+      if (minutes < 0 && next < Date.now() + 10_000) throw new HbError('Not enough time left to take a minute away');
+      until.set(guestId, Math.min(next, Date.now() + 60 * 60_000));
+      c.endsAt = Math.max(...until.values());
+      ctx.publish();
+    };
+
     const submitCollect = (raw: unknown, guest: Guest) => {
       const c = collecting();
+      canWrite(c, guest);
       const qs = cleanQuestions(raw, COLLECT_MAX_QUESTIONS);
       const before = c.entries.get(guest.id);
-      if (before) removeImages(before, new Set(qs.map((q) => q.image ?? '')));
+      if (before) dropImages(c, before, new Set(qs.map((q) => q.image ?? '')));
       c.entries.set(guest.id, { name: guest.name, color: guest.color, questions: qs });
       c.skipped.delete(guest.id);
       c.editing.delete(guest.id);
@@ -737,8 +855,9 @@ export default defineModule<QuizSettings>({
 
     const skipCollect = (guest: Guest) => {
       const c = collecting();
+      canWrite(c, guest);
       const before = c.entries.get(guest.id);
-      if (before) removeImages(before);
+      if (before) dropImages(c, before);
       c.entries.delete(guest.id);
       c.editing.delete(guest.id);
       c.skipped.add(guest.id);
@@ -888,6 +1007,7 @@ export default defineModule<QuizSettings>({
     /** The questions this guest sent, to change them (nobody else ever gets them). Until they send again or go back, the quiz waits for them. */
     ctx.onGuest('collectMine', (_args, guest) => {
       const c = collecting();
+      canWrite(c, guest);
       const entry = c.entries.get(guest.id);
       if (!entry) return [];
       c.editing.add(guest.id);
@@ -1001,9 +1121,22 @@ export default defineModule<QuizSettings>({
     ctx.onAdmin('collectAddTime', (args) => {
       const c = collecting();
       const minutes = clamp(Math.round(num(args.minutes, 1)), -30, 30);
+      if (c.extend) {
+        // Everyone given time gets it too (taking a minute away skips who has too little left)
+        for (const [id, t] of [...c.extend.until]) if (t + Math.min(0, minutes) * 60_000 >= Date.now() + 10_000) guestTime(id, minutes);
+        return true;
+      }
       if (minutes < 0 && c.endsAt + minutes * 60_000 < Date.now() + 10_000) throw new HbError('Not enough time left to take a minute away');
       c.endsAt = Math.min(c.endsAt + minutes * 60_000, Date.now() + 60 * 60_000);
       ctx.publish();
+      return true;
+    });
+    ctx.onAdmin('collectInvite', (args) => {
+      inviteToQuiz(String(args.quizId), String(args.guestId), num(args.minutes, 3));
+      return true;
+    });
+    ctx.onAdmin('collectGuestTime', (args) => {
+      guestTime(String(args.guestId), clamp(Math.round(num(args.minutes, 1)), -30, 30));
       return true;
     });
     ctx.onAdmin('collectCancel', () => {
