@@ -57,7 +57,7 @@ Everything runs on your PC. A free Cloudflare quick tunnel makes it reachable fr
 - [x] change the passive incom, makes that he doesnt need to be always online, if not online, it will increase what he would gain when he comes back online. up to X hours (admin can change it, 1h by deauflt) and user get a nice message when he comes back online, like "you were offline for 2h, you earned +20 coins while you were away"
 - [ ] idea, think if its good, amin desactivable of course: make prices degressives when the feature is not used.. until its 1 or even free
 - improve the game settings admin side
-
+- [ ] add a button to hear on his phone the sound of soundboard?
 
 ## Quick start
 
