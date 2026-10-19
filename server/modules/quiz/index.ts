@@ -73,6 +73,36 @@ function shuffle<T>(list: T[]): T[] {
 }
 
 /**
+ * Random order where the same author never asks twice in a row (unless only their questions are left).
+ * Each step picks an author at random, weighted by what they have left, except the one who just asked;
+ * an author holding more than half of what is left goes first so the rest can still be spread.
+ */
+function spreadByAuthor<T extends { authorId?: string }>(list: T[]): T[] {
+  const groups = new Map<string, T[]>();
+  for (const q of shuffle(list)) {
+    const id = q.authorId ?? '';
+    groups.set(id, [...(groups.get(id) ?? []), q]);
+  }
+  const out: T[] = [];
+  let last = '';
+  while (out.length < list.length) {
+    const left = list.length - out.length;
+    const open = [...groups].filter(([id, qs]) => qs.length && id !== last);
+    const crowded = open.find(([, qs]) => qs.length * 2 > left);
+    let pick = crowded ?? open[0];
+    if (!crowded && open.length > 1) {
+      let r = Math.random() * open.reduce((n, [, qs]) => n + qs.length, 0);
+      pick = open.find(([, qs]) => (r -= qs.length) < 0) ?? open[0];
+    }
+    // Only the last author has questions left
+    if (!pick) pick = [last, groups.get(last)!];
+    out.push(pick[1].pop()!);
+    last = pick[0];
+  }
+  return out;
+}
+
+/**
  * Quiz game: questions from Open Trivia DB or from custom quizzes, shown on the TV,
  * answered on phones. The host or a guest (for a fee) starts it. Faster right answers
  * score more; the podium wins money and can play on the TV at the end.
@@ -671,7 +701,7 @@ export default defineModule<QuizSettings>({
       if (c.timer) clearInterval(c.timer);
       c.timer = null;
       c.editing.clear();
-      const all = shuffle([...c.entries].flatMap(([id, e]) => e.questions.map((q) => ({ ...q, authorId: id, authorName: e.name }))));
+      const all = spreadByAuthor([...c.entries].flatMap(([id, e]) => e.questions.map((q) => ({ ...q, authorId: id, authorName: e.name }))));
       if (!all.length) {
         closeCollect(false);
         ctx.activity('Nobody wrote a quiz question this time');
