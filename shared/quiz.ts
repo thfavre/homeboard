@@ -111,7 +111,7 @@ export interface QuizCollect {
   /** Guests who sent questions, and how many */
   done: { id: string; name: string; color: string; count: number }[];
   skipped: string[];
-  /** Guests online who have not answered yet */
+  /** Guests online who have not answered yet, or are changing the questions they sent */
   waiting: { id: string; name: string; color: string }[];
   /** Once ready: the saved quiz */
   quizId: string | null;

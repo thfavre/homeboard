@@ -1,5 +1,6 @@
 <script lang="ts">
   import { CircleCheck, Flag, PenLine, Play, X } from '@lucide/svelte';
+  import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import { COLLECT_MAX_QUESTIONS, type CustomQuestion, type QuizDraft, type QuizState } from '$shared/quiz.ts';
   import { hb, rpc, attempt, price, serverNow } from '$lib/client.svelte.ts';
@@ -18,9 +19,19 @@
   const cost = $derived(price('quiz.start'));
   const running = $derived((hb.modules.quiz as QuizState | undefined)?.phase !== 'idle');
 
+  // Changing sent questions: the server lists us as still writing, so the quiz waits
   let editing = $state(false);
   let initial = $state<{ title: string; questions: CustomQuestion[] } | null>(null);
   let busy = $state(false);
+  /** This writing round we sent questions in (the state can lag a moment behind) */
+  let sentIn = $state<string | null>(null);
+  const sent = $derived(!!mine || editing || (!!c && sentIn === c.id));
+
+  // Left the screen while changing them: the questions sent stay, nobody waits for us (a reload is handled by the server)
+  const stopEditing = () => rpc('quiz', 'collectBack').catch(() => {});
+  $effect(() => () => {
+    if (untrack(() => editing)) stopEditing();
+  });
 
   let now = $state(serverNow());
   $effect(() => {
@@ -35,7 +46,10 @@
     const ok = await attempt(() => rpc('quiz', 'collectSubmit', { questions: draft.questions }), 'Questions sent');
     busy = false;
     if (ok) {
-      if (c) clearDraft(draftKey(`collect.${c.id}`));
+      if (c) {
+        clearDraft(draftKey(`collect.${c.id}`));
+        sentIn = c.id;
+      }
       editing = false;
     }
   }
@@ -47,13 +61,23 @@
     editing = true;
   }
 
+  function back() {
+    if (c) sentIn = c.id;
+    editing = false;
+    stopEditing();
+  }
+
   async function skip() {
-    if (mine && !(await ask({ title: 'Take back your questions?', message: 'They will not be in the quiz.', confirm: 'Take back', danger: true }))) return;
-    if (await attempt(() => rpc('quiz', 'collectSkip'))) closeCollectScreen();
+    if (sent && !(await ask({ title: 'Take back your questions?', message: 'They will not be in the quiz.', confirm: 'Take back', danger: true }))) return;
+    if (await attempt(() => rpc('quiz', 'collectSkip'))) {
+      sentIn = null;
+      closeCollectScreen();
+    }
   }
 
   async function end() {
-    if (await ask({ title: 'Stop the writing now?', message: 'The questions sent so far make the quiz.', confirm: 'Make the quiz' })) attempt(() => rpc('quiz', 'collectEnd'));
+    const writing = c?.waiting.length ? `${c.waiting.map((p) => p.name).join(', ')} ${c.waiting.length === 1 ? 'is' : 'are'} still writing. ` : '';
+    if (await ask({ title: 'Stop the writing now?', message: `${writing}The questions sent so far make the quiz.`, confirm: 'Make the quiz' })) attempt(() => rpc('quiz', 'collectEnd'));
   }
 
   async function cancel() {
@@ -79,7 +103,7 @@
         </p>
       </header>
 
-      {#if editing || !mine}
+      {#if editing || !sent}
         <p class="dim intro">
           Write 1 to {COLLECT_MAX_QUESTIONS} questions for everyone. Nobody sees your answers, and you will not score on your own questions.
         </p>
@@ -89,26 +113,26 @@
             draft={draftKey(`collect.${c.id}`)}
             withTitle={false}
             maxQuestions={COLLECT_MAX_QUESTIONS}
-            saveLabel={mine ? 'Update' : 'Send my questions'}
+            saveLabel={sent ? 'Update' : 'Send my questions'}
             cancelLabel={editing ? 'Back' : 'Skip'}
             {busy}
             onsave={send}
-            oncancel={() => (editing ? (editing = false) : skip())}
+            oncancel={() => (editing ? back() : skip())}
           />
         {/key}
-        {#if !mine}
+        {#if !sent}
           <button class="btn ghost block" onclick={closeCollectScreen}><X size={16} /> Later (open it again from the Quiz tile)</button>
         {/if}
       {:else}
         <div class="thanks card">
           <span class="ok"><CircleCheck size={44} /></span>
           <h2>Thanks, {hb.me?.name}!</h2>
-          <p class="dim">Your {mine.count === 1 ? 'question is' : `${mine.count} questions are`} in. The quiz is made when everyone is done.</p>
+          <p class="dim">Your {mine?.count === 1 ? 'question is' : mine ? `${mine.count} questions are` : 'questions are'} in. The quiz is made when everyone is done.</p>
           <button class="btn" onclick={change}><PenLine size={16} /> Change my questions</button>
         </div>
       {/if}
 
-      {#if !editing && mine}
+      {#if !editing && sent}
         <div class="people">
           {#each c.done as p (p.id)}
             <span class="person done"><Avatar name={p.name} color={p.color} id={p.id} size="1.6rem" />{p.name}</span>
@@ -125,7 +149,7 @@
           <button class="btn ghost" onclick={cancel}>Cancel it</button>
         </div>
       {/if}
-      {#if mine && !editing}
+      {#if sent && !editing}
         <button class="btn block" onclick={closeCollectScreen}>Close</button>
       {/if}
     {:else}

@@ -115,6 +115,8 @@ export default defineModule<QuizSettings>({
       endsAt: number;
       entries: Map<string, { name: string; color: string; questions: CustomQuestion[] }>;
       skipped: Set<string>;
+      /** Sent questions but are changing them: the quiz waits for them too */
+      editing: Set<string>;
       quizId: string | null;
       total: number;
       timer: NodeJS.Timeout | null;
@@ -582,17 +584,20 @@ export default defineModule<QuizSettings>({
     // the time is up or whoever asked for it ends it, the questions become one custom quiz
     // that only the host can edit. Nobody scores on their own question.
 
+    /** Online guests the writing still waits for */
+    const stillWriting = (c: Collect) =>
+      [...ctx.session.guests.values()].filter((g) => g.sockets > 0 && ((!c.entries.has(g.id) && !c.skipped.has(g.id)) || c.editing.has(g.id)));
+
     const collectView = (c: Collect): QuizCollect => {
-      const online = [...ctx.session.guests.values()].filter((g) => g.sockets > 0);
       return {
         id: c.id,
         title: c.title,
         by: c.by,
         phase: c.phase,
         endsAt: c.endsAt,
-        done: [...c.entries].map(([id, e]) => ({ id, name: e.name, color: e.color, count: e.questions.length })),
+        done: [...c.entries].filter(([id]) => !c.editing.has(id)).map(([id, e]) => ({ id, name: e.name, color: e.color, count: e.questions.length })),
         skipped: [...c.skipped],
-        waiting: c.phase === 'writing' ? online.filter((g) => !c.entries.has(g.id) && !c.skipped.has(g.id)).map((g) => ({ id: g.id, name: g.name, color: g.color })) : [],
+        waiting: c.phase === 'writing' ? stillWriting(c).map((g) => ({ id: g.id, name: g.name, color: g.color })) : [],
         quizId: c.quizId,
         total: c.total,
       };
@@ -622,6 +627,7 @@ export default defineModule<QuizSettings>({
         endsAt: Date.now() + minutes * 60_000,
         entries: new Map(),
         skipped: new Set(),
+        editing: new Set(),
         quizId: null,
         total: 0,
         timer: null,
@@ -645,9 +651,8 @@ export default defineModule<QuizSettings>({
     const checkCollectDone = () => {
       const c = collect;
       if (!c || c.phase !== 'writing') return;
-      const online = [...ctx.session.guests.values()].filter((g) => g.sockets > 0);
-      const waiting = online.filter((g) => !c.entries.has(g.id) && !c.skipped.has(g.id));
-      if (online.length && !waiting.length && (c.entries.size || c.skipped.size)) return endCollect();
+      const waiting = stillWriting(c);
+      if (onlineCount() && !waiting.length && (c.entries.size || c.skipped.size)) return endCollect();
       const key = waiting.map((g) => g.id).join();
       if (key === c.waitingKey) return;
       c.waitingKey = key;
@@ -659,6 +664,7 @@ export default defineModule<QuizSettings>({
       if (!c || c.phase !== 'writing') return;
       if (c.timer) clearInterval(c.timer);
       c.timer = null;
+      c.editing.clear();
       const all = shuffle([...c.entries].flatMap(([id, e]) => e.questions.map((q) => ({ ...q, authorId: id, authorName: e.name }))));
       if (!all.length) {
         closeCollect(false);
@@ -692,6 +698,7 @@ export default defineModule<QuizSettings>({
       if (before) removeImages(before, new Set(qs.map((q) => q.image ?? '')));
       c.entries.set(guest.id, { name: guest.name, color: guest.color, questions: qs });
       c.skipped.delete(guest.id);
+      c.editing.delete(guest.id);
       ctx.publish();
       checkCollectDone();
       return true;
@@ -702,6 +709,7 @@ export default defineModule<QuizSettings>({
       const before = c.entries.get(guest.id);
       if (before) removeImages(before);
       c.entries.delete(guest.id);
+      c.editing.delete(guest.id);
       c.skipped.add(guest.id);
       ctx.publish();
       checkCollectDone();
@@ -846,8 +854,28 @@ export default defineModule<QuizSettings>({
     ctx.onGuest('collectStart', (args, guest) => startCollect(args, guest));
     ctx.onGuest('collectSubmit', (args, guest) => submitCollect(args.questions, guest));
     ctx.onGuest('collectSkip', (_args, guest) => skipCollect(guest));
-    /** The questions this guest sent, to change them (nobody else ever gets them) */
-    ctx.onGuest('collectMine', (_args, guest) => collect?.entries.get(guest.id)?.questions ?? []);
+    /** The questions this guest sent, to change them (nobody else ever gets them). Until they send again or go back, the quiz waits for them. */
+    ctx.onGuest('collectMine', (_args, guest) => {
+      const c = collecting();
+      const entry = c.entries.get(guest.id);
+      if (!entry) return [];
+      c.editing.add(guest.id);
+      ctx.publish();
+      return entry.questions;
+    });
+    /** Changed their mind: the questions they sent stay as they were */
+    const stopEditing = (guest: Guest) => {
+      const c = collect;
+      if (c?.phase !== 'writing' || !c.editing.delete(guest.id)) return;
+      ctx.publish();
+      checkCollectDone();
+    };
+    ctx.onGuest('collectBack', (_args, guest) => {
+      stopEditing(guest);
+      return true;
+    });
+    // A phone coming back (a reload) is not editing anymore
+    ctx.session.on('guest-online', stopEditing);
     /** Whoever asked for the questions can stop the writing early */
     ctx.onGuest('collectEnd', (_args, guest) => {
       const c = collecting();
