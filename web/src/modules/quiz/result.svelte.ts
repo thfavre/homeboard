@@ -19,6 +19,8 @@ export function collectScreen(): 'writing' | 'ready' | null {
   const c = (hb.modules.quiz as QuizState | undefined)?.collect;
   const me = hb.me?.id;
   if (!c || !me) return null;
+  // Writing again (the host let them, or a reload while changing their questions)
+  if (c.phase === 'writing' && c.editing.includes(me)) return 'writing';
   if (quizResult.collectClosed.includes(`${c.id}:${c.phase}`)) return null;
   if (c.phase === 'writing') return c.skipped.includes(me) ? null : 'writing';
   // Once written, only the guest who asked for it is offered to play it (the host plays it from the admin)

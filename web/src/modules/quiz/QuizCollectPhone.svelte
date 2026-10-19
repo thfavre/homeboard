@@ -15,6 +15,7 @@
   const c = $derived((hb.modules.quiz as QuizState | undefined)?.collect ?? null);
   const meId = $derived(hb.me?.id);
   const mine = $derived(c?.done.find((d) => d.id === meId));
+  const max = $derived((meId && c?.limits[meId]) || COLLECT_MAX_QUESTIONS);
   const isBy = $derived(!!meId && c?.by?.id === meId);
   const cost = $derived(price('quiz.start'));
   const running = $derived((hb.modules.quiz as QuizState | undefined)?.phase !== 'idle');
@@ -27,10 +28,19 @@
   let sentIn = $state<string | null>(null);
   const sent = $derived(!!mine || editing || (!!c && sentIn === c.id));
 
-  // Left the screen while changing them: the questions sent stay, nobody waits for us (a reload is handled by the server)
+  // Left the screen while changing them: the questions sent stay, nobody waits for us
   const stopEditing = () => rpc('quiz', 'collectBack').catch(() => {});
   $effect(() => () => {
     if (untrack(() => editing)) stopEditing();
+  });
+
+  // The server lists us as writing again (the host let us, or we reloaded while changing): open the editor
+  let asked = false;
+  let changing = false;
+  $effect(() => {
+    const again = !!meId && c?.phase === 'writing' && c.editing.includes(meId);
+    if (again && !asked && !untrack(() => editing)) untrack(change);
+    asked = again;
   });
 
   let now = $state(serverNow());
@@ -55,9 +65,12 @@
   }
 
   async function change() {
+    if (changing) return;
+    changing = true;
     const qs = await attempt(() => rpc<CustomQuestion[]>('quiz', 'collectMine'));
+    changing = false;
     if (!qs) return;
-    initial = { title: '', questions: qs };
+    initial = qs.length ? { title: '', questions: qs } : null;
     editing = true;
   }
 
@@ -105,14 +118,14 @@
 
       {#if editing || !sent}
         <p class="dim intro">
-          Write 1 to {COLLECT_MAX_QUESTIONS} questions for everyone. Nobody sees your answers, and you will not score on your own questions.
+          Write 1 to {max} questions for everyone. Nobody sees your answers, and you will not score on your own questions.
         </p>
         {#key initial}
           <QuizEditor
             initial={editing ? initial : null}
             draft={draftKey(`collect.${c.id}`)}
             withTitle={false}
-            maxQuestions={COLLECT_MAX_QUESTIONS}
+            maxQuestions={max}
             saveLabel={sent ? 'Update' : 'Send my questions'}
             cancelLabel={editing ? 'Back' : 'Skip'}
             {busy}
