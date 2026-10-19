@@ -98,6 +98,7 @@ export interface LibraryItem {
   authorId: string;
   count: number;
   hasImages: boolean;
+  createdAt: number;
   collective?: boolean;
   /** Guests who wrote questions in it (participative quiz, or added later), and how many */
   authors?: { id: string; name: string; count: number }[];

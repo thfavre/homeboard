@@ -6,6 +6,7 @@
   import { Synced } from '$lib/synced.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Sheet from '$lib/ui/Sheet.svelte';
+  import { day } from '$lib/time.ts';
   import QuizEditor from './QuizEditor.svelte';
   import { clearDraft, draftKey } from './drafts.svelte.ts';
 
@@ -398,7 +399,7 @@
           <p class="faint small">
             {item.count} {item.count === 1 ? 'question' : 'questions'} &middot; {item.collective ? 'written by' : 'by'} {item.author}{!item.collective && item.authors?.length
               ? ` and ${item.authors.map((a) => a.name).join(', ')}`
-              : ''}{item.hasImages ? ' · with pictures' : ''}
+              : ''}{item.hasImages ? ' · with pictures' : ''}{item.createdAt ? ` · ${day(item.createdAt)}` : ''}
           </p>
         </div>
         <button class="btn ghost small" aria-label="Add questions" title="Give someone time to add questions" onclick={() => (details = item.id)}><UserPlus size={15} /></button>

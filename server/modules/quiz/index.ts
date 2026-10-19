@@ -537,6 +537,7 @@ export default defineModule<QuizSettings>({
       authorId: q.authorId,
       count: q.questions.length,
       hasImages: q.questions.some((x) => x.image),
+      createdAt: q.createdAt ?? 0,
       collective: q.collective,
       ...(q.collective || q.questions.some((x) => x.authorId) ? { authors: authorsOf(q) } : {}),
     });
