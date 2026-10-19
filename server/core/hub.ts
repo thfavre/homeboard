@@ -32,6 +32,8 @@ export interface CoreSettings {
   theme: string;
   currency: Currency;
   economyEnabled: boolean;
+  /** When the economy was last switched on: time away before that does not pay */
+  economyOnSince: number;
   features: Record<string, boolean>;
   prices: Record<string, number>;
   earn: Record<string, number>;
@@ -62,6 +64,7 @@ const CORE_DEFAULTS: CoreSettings = {
   theme: 'midnight',
   currency: { name: 'Sparks', symbol: 'SP' },
   economyEnabled: true,
+  economyOnSince: 0,
   features: {},
   prices: {},
   earn: {},

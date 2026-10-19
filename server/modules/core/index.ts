@@ -45,8 +45,6 @@ export default defineModule({
 
     // ------------------------------------------------------------ earning
 
-    /** When the economy was last switched on: time away before that, while it was off, does not pay */
-    let economyOnSince = 0;
 
     ctx.earn({
       key: 'core.join',
@@ -99,7 +97,7 @@ export default defineModule({
     session.on('guest-online', (g: Guest, awayMs: number) => {
       pendingJoinBonus(g);
       const limitMs = core().passiveAwayMinutes * 60_000;
-      const paidMs = Math.min(awayMs, limitMs, Date.now() - economyOnSince);
+      const paidMs = Math.min(awayMs, limitMs, Date.now() - (core().economyOnSince ?? 0));
       if (paidMs <= 0) return;
       const longAway = awayMs >= AWAY_CARD_MS;
       const amount = accrue(g, paidMs / 1000, longAway ? 'Hanging out (while away)' : undefined);
@@ -443,8 +441,8 @@ export default defineModule({
       }
       if (args.economyEnabled !== undefined) {
         patch.economyEnabled = !!args.economyEnabled;
-        if (patch.economyEnabled && !c.economyEnabled) economyOnSince = Date.now();
         turnedOn = !!patch.economyEnabled && !c.economyEnabled;
+        if (turnedOn) patch.economyOnSince = Date.now();
       }
       if (args.passiveMinutes !== undefined) patch.passiveMinutes = clamp(num(args.passiveMinutes, 5), 0, 120);
       if (args.passiveAwayMinutes !== undefined) patch.passiveAwayMinutes = Math.round(clamp(num(args.passiveAwayMinutes, 60), 0, 1440));
