@@ -31,6 +31,8 @@ export interface Guest {
   lastSeen: number;
   /** Seconds online since the last passive payout */
   onlineAccum: number;
+  /** Joined while the economy was off: the welcome bonus comes when it is turned on */
+  joinBonusPending?: boolean;
   /** Number of open sockets (not persisted) */
   sockets: number;
 }

@@ -86,9 +86,18 @@ export default defineModule({
       }
     }, TICK_SECONDS * 1000);
 
+    /** Joined while the economy was off: the welcome bonus once it is on */
+    const pendingJoinBonus = (g: Guest) => {
+      if (!g.joinBonusPending || !economy.enabled) return;
+      delete g.joinBonusPending;
+      const amount = economy.reward(g, 'core.join');
+      if (amount) ctx.toast(g, { text: 'Welcome bonus', amount, kind: 'success' });
+    };
+
     // Coming back: the time away counts too, up to the host's limit.
     // A quick reload just carries on; a real absence gets a welcome back card.
     session.on('guest-online', (g: Guest, awayMs: number) => {
+      pendingJoinBonus(g);
       const limitMs = core().passiveAwayMinutes * 60_000;
       const paidMs = Math.min(awayMs, limitMs, Date.now() - economyOnSince);
       if (paidMs <= 0) return;
@@ -271,7 +280,8 @@ export default defineModule({
       const { guest, returning } = session.join(args.name, args.pin);
       bind(guest);
       if (!returning) {
-        economy.reward(guest, 'core.join');
+        if (economy.enabled) economy.reward(guest, 'core.join');
+        else guest.joinBonusPending = true;
         hub.bus.emit('guest-joined', guest);
         ctx.activity('{name} joined the party', { guest });
       }
@@ -418,6 +428,7 @@ export default defineModule({
     ctx.onAdmin('setGeneral', (args) => {
       const c = core();
       const patch: Partial<CoreSettings> = {};
+      let turnedOn = false;
       if (args.appName !== undefined) patch.appName = cleanName(args.appName, 40) || 'Homeboard';
       if (args.theme !== undefined) {
         if (!THEMES.some((t) => t.id === args.theme)) throw new HbError('Unknown theme');
@@ -433,6 +444,7 @@ export default defineModule({
       if (args.economyEnabled !== undefined) {
         patch.economyEnabled = !!args.economyEnabled;
         if (patch.economyEnabled && !c.economyEnabled) economyOnSince = Date.now();
+        turnedOn = !!patch.economyEnabled && !c.economyEnabled;
       }
       if (args.passiveMinutes !== undefined) patch.passiveMinutes = clamp(num(args.passiveMinutes, 5), 0, 120);
       if (args.passiveAwayMinutes !== undefined) patch.passiveAwayMinutes = Math.round(clamp(num(args.passiveAwayMinutes, 60), 0, 1440));
@@ -453,6 +465,8 @@ export default defineModule({
       if (args.qrIncludesCode !== undefined) patch.qrIncludesCode = !!args.qrIncludesCode;
       if (args.requireCode !== undefined) patch.requireCode = !!args.requireCode;
       updateCore(patch);
+      // Guests away get theirs when they come back
+      if (turnedOn) for (const g of session.guests.values()) if (g.sockets > 0) pendingJoinBonus(g);
     });
 
     /** The hidden menu on the TV (its name tapped 5 times): stop and start the whole project again */

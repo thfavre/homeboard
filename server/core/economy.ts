@@ -161,8 +161,9 @@ export class Economy {
     this.session.applyAmount(guest, amount, reason, countStats);
   }
 
-  /** Credit using an earn rule. Returns the amount credited. */
+  /** Credit using an earn rule (nothing while the economy is off). Returns the amount credited. */
   reward(guest: Guest, key: string, multiplier = 1, reason?: string): number {
+    if (!this.enabled) return 0;
     const amount = Math.round(this.earnAmount(key) * multiplier);
     if (amount > 0) this.credit(guest, amount, reason ?? this.earnRules.get(key)?.label ?? key);
     return amount;
