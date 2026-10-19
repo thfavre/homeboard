@@ -45,6 +45,9 @@ export default defineModule({
 
     // ------------------------------------------------------------ earning
 
+    /** When the economy was last switched on: time away before that, while it was off, does not pay */
+    let economyOnSince = 0;
+
     ctx.earn({
       key: 'core.join',
       label: 'Welcome bonus',
@@ -86,7 +89,7 @@ export default defineModule({
     // Coming back: the time away counts too, up to the host's limit.
     // A quick reload just carries on; a real absence gets a welcome back card.
     session.on('guest-online', (g: Guest, awayMs: number) => {
-      const paidMs = Math.min(awayMs, core().passiveAwayMinutes * 60_000);
+      const paidMs = Math.min(awayMs, core().passiveAwayMinutes * 60_000, Date.now() - economyOnSince);
       if (paidMs <= 0) return;
       const longAway = awayMs >= AWAY_CARD_MS;
       const amount = accrue(g, paidMs / 1000, longAway ? 'Hanging out (while away)' : undefined);
@@ -426,7 +429,10 @@ export default defineModule({
           symbol: cleanName(cur.symbol ?? c.currency.symbol, 4) || 'SP',
         };
       }
-      if (args.economyEnabled !== undefined) patch.economyEnabled = !!args.economyEnabled;
+      if (args.economyEnabled !== undefined) {
+        patch.economyEnabled = !!args.economyEnabled;
+        if (patch.economyEnabled && !c.economyEnabled) economyOnSince = Date.now();
+      }
       if (args.passiveMinutes !== undefined) patch.passiveMinutes = clamp(num(args.passiveMinutes, 5), 0, 120);
       if (args.passiveAwayMinutes !== undefined) patch.passiveAwayMinutes = Math.round(clamp(num(args.passiveAwayMinutes, 60), 0, 1440));
       const isKind = (k: unknown): k is BoardKind => BOARD_KINDS.some((b) => b.kind === k);

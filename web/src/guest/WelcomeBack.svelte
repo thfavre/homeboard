@@ -28,7 +28,8 @@
     return `${d} ${d === 1 ? 'day' : 'days'}${h % 24 ? ` ${h % 24} h` : ''}`;
   }
 
-  const capped = $derived(news ? news.awayMs - news.paidMs >= 60_000 : false);
+  // Only the host's limit: away time cut because the economy was off needs no hint
+  const capped = $derived(news && hb.core ? news.awayMs - news.paidMs >= 60_000 && news.paidMs >= hb.core.passiveAwayMinutes * 60_000 : false);
   const close = () => (news = null);
 </script>
 
