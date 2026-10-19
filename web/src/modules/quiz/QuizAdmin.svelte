@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Flag, Minus, Pause, PenLine, Pencil, Play, Plus, SkipForward, Square, Trash2, Users, X } from '@lucide/svelte';
+  import { Flag, Minus, Pause, PenLine, Pencil, Play, UserPlus, Plus, SkipForward, Square, Trash2, Users, X } from '@lucide/svelte';
   import { COLLECT_DEFAULT_MIN, COLLECT_LIMIT_MAX, COLLECT_MAX_QUESTIONS, FINAL_MAX_SEC, FINAL_MIN_SEC, MAX_QUESTIONS, MIN_QUESTIONS, type CustomQuiz, type QuizDraft, type QuizSettings, type QuizState, type QuizTopic } from '$shared/quiz.ts';
   import { hb, rpc, attempt, serverNow } from '$lib/client.svelte.ts';
   import { ask } from '$lib/dialog.svelte.ts';
@@ -338,14 +338,15 @@
         <span class="dim truncate">
           {collect.extend
             ? `${collect.title} is updated: ${collect.total} questions`
-            : `${collect.title}: ${collect.total} questions from ${collect.done.length} ${collect.done.length === 1 ? 'player' : 'players'}`}
+            : `${collect.title}: ${collect.total} ${collect.total === 1 ? 'question' : 'questions'} from ${collect.done.length} ${collect.done.length === 1 ? 'player' : 'players'}`}
         </span>
       </div>
       <div class="row wrap">
         <button class="btn primary" disabled={starting || q.phase !== 'idle'} onclick={playCollected}><Play size={18} /> Play it now</button>
+        <button class="btn" onclick={() => (details = collect.quizId)}><UserPlus size={18} /> Add questions</button>
         <button class="btn" onclick={cancelCollect}>Later</button>
       </div>
-      <p class="faint small">It is saved with the custom quizzes below.</p>
+      <p class="faint small">It is saved with the custom quizzes below. Add questions gives someone (a writer or a late guest) a few minutes to write more.</p>
     {:else}
       <div class="grid2">
         <label class="field">
@@ -388,6 +389,9 @@
           {/if}
           <p class="faint small">{item.count} {item.count === 1 ? 'question' : 'questions'} &middot; {item.collective ? 'written by' : 'by'} {item.author}{item.hasImages ? ' · with pictures' : ''}</p>
         </div>
+        {#if item.collective}
+          <button class="btn ghost small" aria-label="Add questions" title="Give someone time to add questions" onclick={() => (details = item.id)}><UserPlus size={15} /></button>
+        {/if}
         <button class="btn ghost small" aria-label="Play" title="Play it" disabled={q.phase !== 'idle'} onclick={() => (playing = { id: item.id, title: item.title, count: item.count, sec: timeSec.value })}><Play size={15} /></button>
         <button class="btn ghost small" aria-label="Edit" onclick={() => edit(item.id)}><Pencil size={15} /></button>
         <button class="btn ghost small" aria-label="Delete" onclick={() => remove(item.id, item.title)}><Trash2 size={15} /></button>
