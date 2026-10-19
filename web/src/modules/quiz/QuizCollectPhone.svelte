@@ -12,7 +12,8 @@
   import { clearDraft, draftKey } from './drafts.svelte.ts';
 
   /** Participative quiz on the phone: write 1 to 3 questions (or skip), then play the result */
-  const c = $derived((hb.modules.quiz as QuizState | undefined)?.collect ?? null);
+  const quizState = $derived(hb.modules.quiz as QuizState | undefined);
+  const c = $derived(quizState?.collect ?? null);
   const meId = $derived(hb.me?.id);
   const mine = $derived(c?.done.find((d) => d.id === meId));
   const isBy = $derived(!!meId && c?.by?.id === meId);
@@ -74,6 +75,17 @@
     if (c?.phase !== 'writing' || !FLASH_AT.includes(left) || left === lastFlash) return;
     lastFlash = left;
     flashes++;
+    if (left === 30 || left === 10) navigator.vibrate?.([120, 80, 120]);
+  });
+
+  // 2 seconds before the end, whatever is complete in the editor is sent (the rest would be lost anyway)
+  let autoSent = '';
+  $effect(() => {
+    if (c?.phase !== 'writing' || left > 2 || left === 0 || !writing || busy || autoSent === c.id) return;
+    const draft = untrack(() => editor?.complete());
+    if (!draft) return;
+    autoSent = c.id;
+    untrack(() => send(draft));
   });
 
   // From 30 seconds left: what is wrong in the questions not sent yet, highlighted in the editor
@@ -136,7 +148,7 @@
   async function play() {
     if (!c?.quizId) return;
     busy = true;
-    await attempt(() => rpc('quiz', 'start', { source: 'custom', quizId: c.quizId, timeSec: 20 }));
+    await attempt(() => rpc('quiz', 'start', { source: 'custom', quizId: c.quizId, timeSec: quizState?.settings.timeSec ?? 20 }));
     busy = false;
   }
 </script>

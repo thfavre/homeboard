@@ -11,6 +11,11 @@
     if (!c) return '';
     if (c.phase === 'ready') return `${c.title} is ready: ${c.total} questions`;
     const total = c.done.length + c.waiting.length;
+    if (c.extend) {
+      const names = [...c.done, ...c.waiting].map((p) => p.name);
+      const who = names.length <= 2 ? names.join(' and ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+      return `${who || 'Someone'} ${names.length === 1 ? 'is' : 'are'} adding questions to ${c.title}`;
+    }
     return `Write your questions on your phone · ${c.done.length} of ${total} done`;
   });
 </script>

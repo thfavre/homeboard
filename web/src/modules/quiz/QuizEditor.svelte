@@ -166,6 +166,12 @@
     });
   }
 
+  /** The questions that could be sent as they are (time running out), or null when none can */
+  export function complete(): QuizDraft | null {
+    const ok = $state.snapshot(questions).filter((_, i) => !problems[i]);
+    return ok.length ? { id: start?.id, title, questions: ok } : null;
+  }
+
   let form = $state<HTMLFormElement>();
   export function scrollToQuestion(i: number) {
     form?.querySelector(`[data-question="${i}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });

@@ -53,6 +53,8 @@ const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 
 /** Minimum time between two celebrations of the same guest */
 /** How long a finished participative quiz stays offered on the phones */
 const COLLECT_READY_MS = 10 * 60_000;
+/** Phones send what is complete a moment before the time is up: the writing waits this long for it */
+const SEND_GRACE_MS = 3000;
 const FX_COOLDOWN: Record<QuizFx['kind'], number> = { spin: 1200, hop: 900, wiggle: 900, peek: 2500 };
 
 const decode = (s: string) => {
@@ -652,7 +654,7 @@ export default defineModule<QuizSettings>({
     const canWrite = (c: Collect, guest: Guest) => {
       const until = c.extend?.until.get(guest.id);
       if (c.extend && until === undefined) throw new HbError('The host asked someone else for these questions');
-      if (until !== undefined && until <= Date.now()) throw new HbError('Your time to write is up');
+      if (until !== undefined && until + SEND_GRACE_MS <= Date.now()) throw new HbError('Your time to write is up');
     };
 
     const collectView = (c: Collect): QuizCollect => {
@@ -708,7 +710,7 @@ export default defineModule<QuizSettings>({
         waitingKey: '',
       };
       // Also notices guests who left without answering, so nobody waits for them
-      c.timer = setInterval(() => (Date.now() >= c.endsAt ? endCollect() : checkCollectDone()), 3000);
+      c.timer = setInterval(() => (Date.now() >= c.endsAt + SEND_GRACE_MS ? endCollect() : checkCollectDone()), 3000);
       collect = c;
       error = null;
       ctx.activity(by ? '{name} wants everyone to write quiz questions, check your phone' : 'Write your own quiz questions, check your phone', { guest: by ?? undefined });
@@ -818,7 +820,7 @@ export default defineModule<QuizSettings>({
           timer: null,
           waitingKey: '',
         };
-        fresh.timer = setInterval(() => (Date.now() >= fresh.endsAt ? endCollect() : checkCollectDone()), 3000);
+        fresh.timer = setInterval(() => (Date.now() >= fresh.endsAt + SEND_GRACE_MS ? endCollect() : checkCollectDone()), 3000);
         collect = c = fresh;
         error = null;
       }
