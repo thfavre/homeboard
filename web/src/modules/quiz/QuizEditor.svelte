@@ -118,12 +118,16 @@
     }
   }
 
+  const TICK = 'Tap the circle next to the correct answer';
   /** What stops each question from being sent ('' when it is fine) */
+  /** Nothing typed in it yet: not an error, it is left out when sending */
+  const isBlank = (q: Draft) => !q.text.trim() && !q.answers.some((a) => a.trim()) && !q.image && q.correct < 0;
   const problems = $derived(
     questions.map((q) => {
+      if (isBlank(q) && questions.length > 1) return '';
       if (!q.text.trim()) return 'Type the question';
       if (q.answers.filter((a) => a.trim()).length < 2) return 'Write at least 2 answers';
-      if (q.correct < 0) return 'Tap the circle next to the correct answer';
+      if (q.correct < 0) return TICK;
       if (!q.answers[q.correct]?.trim()) return 'The answer marked as correct is empty';
       return '';
     }),
@@ -145,7 +149,9 @@
       scrollToQuestion(first);
       return toast({ text: `Question ${first + 1}: ${problems[first].toLowerCase()}`, kind: 'error' });
     }
-    onsave({ id: start?.id, title, questions: $state.snapshot(questions) });
+    const filled = $state.snapshot(questions).filter((q) => !isBlank(q));
+    if (!filled.length) return toast({ text: 'Write at least one question', kind: 'error' });
+    onsave({ id: start?.id, title, questions: filled });
   }
 
   /** A new question only once every question has its correct answer ticked: easy to forget, so it is said above the button */
@@ -153,13 +159,12 @@
   let addBlocked = $state(false);
   function addQuestion() {
     addBlocked = unticked;
-    if (unticked) tried = true;
-    else questions.push(blank());
+    if (!unticked) questions.push(blank());
   }
 
   /** The questions that could be sent as they are (time running out), or null when none can */
   export function complete(): QuizDraft | null {
-    const ok = $state.snapshot(questions).filter((_, i) => !problems[i]);
+    const ok = $state.snapshot(questions).filter((q, i) => !problems[i] && !isBlank(q));
     return ok.length ? { id: start?.id, title, questions: ok } : null;
   }
 
@@ -188,7 +193,8 @@
     <div class="question" class:bad={reveal && problems[i]} data-question={i} onpaste={(e) => onPaste(e, i)}>
       <div class="qhead">
         <span class="eyebrow">Question {i + 1}</span>
-        {#if reveal && problems[i]}<span class="issue">{problems[i]}</span>{/if}
+        <!-- A missing correct answer is said by the hint under the answers instead -->
+        {#if reveal && problems[i] && problems[i] !== TICK}<span class="issue">{problems[i]}</span>{/if}
         <span class="spacer"></span>
         <button type="button" class="btn ghost small" disabled={questions.length === 1} onclick={() => questions.splice(i, 1)} aria-label="Delete question">
           <Trash2 size={16} />
@@ -217,7 +223,7 @@
           </label>
         {/each}
       </div>
-      <p class="faint small">Tap the circle next to the correct answer.</p>
+      <p class="small" class:faint={!(reveal && problems[i] === TICK)} class:issue={reveal && problems[i] === TICK}>Tap the circle next to the correct answer.</p>
     </div>
   {/each}
 
