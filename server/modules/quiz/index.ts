@@ -564,7 +564,7 @@ export default defineModule<QuizSettings>({
         const correctText = filled[num(q?.correct, -1)];
         const answersList = filled.filter(Boolean).slice(0, 4);
         if (answersList.length < 2) throw new HbError(`Question ${i + 1} needs at least 2 answers`);
-        if (!correctText) throw new HbError(`Question ${i + 1}: choose the right answer`);
+        if (!correctText) throw new HbError(`Question ${i + 1}: choose the correct answer`);
         const image = typeof q?.image === 'string' && q.image.startsWith(ctx.mediaUrl('')) ? q.image : undefined;
         const clean: CustomQuestion = { text, answers: answersList, correct: answersList.indexOf(correctText), image };
         if (keepAuthors && typeof q?.authorId === 'string' && q.authorId) {

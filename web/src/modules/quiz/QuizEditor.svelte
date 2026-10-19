@@ -3,7 +3,6 @@
   import { History, ImagePlus, Plus, Trash2, X } from '@lucide/svelte';
   import { ANSWER_STYLES, type CustomQuiz, type QuizDraft } from '$shared/quiz.ts';
   import { toast, upload } from '$lib/client.svelte.ts';
-  import { choose } from '$lib/dialog.svelte.ts';
   import { shrinkImage } from '$lib/image.ts';
   import Shape from './Shape.svelte';
   import { clearDraft, loadDraft, openEditors, saveDraft } from './drafts.svelte.ts';
@@ -49,7 +48,7 @@
     image?: string;
   }
 
-  // No answer is ticked until the author picks the right one (-1 = none yet)
+  // No answer is ticked until the author picks the correct one (-1 = none yet)
   const blank = (): Draft => ({ text: '', answers: ['', '', '', ''], correct: -1 });
   const start = untrack(() => initial);
   const key = untrack(() => draft);
@@ -124,8 +123,8 @@
     questions.map((q) => {
       if (!q.text.trim()) return 'Type the question';
       if (q.answers.filter((a) => a.trim()).length < 2) return 'Write at least 2 answers';
-      if (q.correct < 0) return 'Tap the circle next to the right answer';
-      if (!q.answers[q.correct]?.trim()) return 'The answer marked as right is empty';
+      if (q.correct < 0) return 'Tap the circle next to the correct answer';
+      if (!q.answers[q.correct]?.trim()) return 'The answer marked as correct is empty';
       return '';
     }),
   );
@@ -149,21 +148,13 @@
     onsave({ id: start?.id, title, questions: $state.snapshot(questions) });
   }
 
-  /** A new question only once every question has its right answer ticked: easy to forget, so it is explained */
-  async function addQuestion() {
-    const i = questions.findIndex((q) => q.correct < 0 || !q.answers[q.correct]?.trim());
-    if (i < 0) {
-      questions.push(blank());
-      return;
-    }
-    tried = true;
-    scrollToQuestion(i);
-    await choose({
-      title: 'Pick the right answer first',
-      message: `In question ${i + 1}, tap the circle next to the right answer. Then you can add another question.`,
-      options: [],
-      cancelLabel: 'OK',
-    });
+  /** A new question only once every question has its correct answer ticked: easy to forget, so it is said above the button */
+  const unticked = $derived(questions.some((q) => q.correct < 0 || !q.answers[q.correct]?.trim()));
+  let addBlocked = $state(false);
+  function addQuestion() {
+    addBlocked = unticked;
+    if (unticked) tried = true;
+    else questions.push(blank());
   }
 
   /** The questions that could be sent as they are (time running out), or null when none can */
@@ -220,16 +211,19 @@
       <div class="answers">
         {#each q.answers as _, a}
           <label class="answer" class:right={q.correct === a}>
-            <input type="radio" name="correct-{i}" checked={q.correct === a} onchange={() => (q.correct = a)} aria-label="Right answer" />
+            <input type="radio" name="correct-{i}" checked={q.correct === a} onchange={() => (q.correct = a)} aria-label="Correct answer" />
             <Shape shape={ANSWER_STYLES[a].shape} color={ANSWER_STYLES[a].color} size="1.1rem" />
             <input class="input" bind:value={q.answers[a]} maxlength="80" placeholder={a < 2 ? `Answer ${a + 1}` : `Answer ${a + 1} (optional)`} />
           </label>
         {/each}
       </div>
-      <p class="faint small">Tap the circle next to the right answer.</p>
+      <p class="faint small">Tap the circle next to the correct answer.</p>
     </div>
   {/each}
 
+  {#if addBlocked && unticked}
+    <p class="add-hint">Tap the circle next to the correct answer first.</p>
+  {/if}
   <button type="button" class="btn" disabled={questions.length >= maxQuestions} onclick={addQuestion}><Plus size={18} /> Add a question{maxQuestions < 50 ? ` (${questions.length}/${maxQuestions})` : ''}</button>
 
   <div class="actions">
@@ -272,6 +266,12 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
+  }
+  .add-hint {
+    margin-bottom: -0.4rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--danger);
   }
   .issue {
     min-width: 0;
