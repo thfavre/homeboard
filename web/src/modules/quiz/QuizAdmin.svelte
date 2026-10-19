@@ -102,7 +102,18 @@
   // A saved participative quiz: who wrote it, and giving someone time to add questions
   let details = $state<string | null>(null);
   const detailItem = $derived(details ? (q?.library.find((x) => x.id === details) ?? null) : null);
-  let giving = $state<{ id: string; name: string; minutes: number } | null>(null);
+  // Time (and how many questions) for one guest, or '*' for everyone online
+  let giving = $state<{ id: string; name: string; minutes: number; max: number; min: number } | null>(null);
+  function give(id: string, name: string) {
+    // Never below what the round already allows, or what they already wrote
+    const round = extending?.quizId === details && collect ? collect.max : 1;
+    const authors = detailItem?.authors ?? [];
+    const own = id === '*' ? authors.filter((a) => isOnline(a.id)).map((a) => a.count) : authors.filter((a) => a.id === id).map((a) => a.count);
+    const min = Math.max(1, round, ...own);
+    giving = { id, name, minutes: 3, max: Math.max(min, COLLECT_MAX_QUESTIONS), min };
+  }
+  const isOnline = (id: string) => !!hb.core?.admin?.guests.some((g) => g.id === id && g.online);
+  const onlineCount = $derived((hb.core?.admin?.guests ?? []).filter((g) => g.online).length);
   // Questions in it no guest added (the quiz's own author, or the host)
   const ownQuestions = $derived(detailItem ? detailItem.count - (detailItem.authors ?? []).reduce((n, a) => n + a.count, 0) : 0);
   const extending = $derived(collect?.phase === 'writing' && collect.extend ? collect.extend : null);
@@ -121,8 +132,8 @@
 
   async function giveTime() {
     if (!giving || !details) return;
-    const { id, minutes } = giving;
-    if (await attempt(() => rpc('quiz', 'collectInvite', { quizId: details, guestId: id, minutes }))) giving = null;
+    const { id, minutes, max } = giving;
+    if (await attempt(() => rpc('quiz', 'collectInvite', { quizId: details, guestId: id, minutes, max }))) giving = null;
   }
   const guestTime = (id: string, minutes: number) => attempt(() => rpc('quiz', 'collectGuestTime', { guestId: id, minutes }));
 
@@ -443,6 +454,14 @@
           {/if}
         </div>
 
+        <div class="line">
+          <div class="grow">
+            <strong>Everyone online</strong>
+            <p class="faint small">They all see it again: they change their questions or add some.</p>
+          </div>
+          <button class="btn small" disabled={busyElsewhere || !onlineCount} onclick={() => give('*', 'everyone online')}><AlarmClockPlus size={15} /> Give time</button>
+        </div>
+
         {#if late.length}
           <label class="field">
             <span>Someone else</span>
@@ -451,7 +470,7 @@
               value=""
               onchange={(e) => {
                 const g = late.find((x) => x.id === e.currentTarget.value);
-                if (g) giving = { id: g.id, name: g.name, minutes: 3 };
+                if (g) give(g.id, g.name);
                 e.currentTarget.value = '';
               }}
             >
@@ -463,9 +482,17 @@
 
         {#if giving}
           <div class="give card">
-            <strong>Time for {giving.name} to write</strong>
+            <strong>{giving.id === '*' ? 'Everyone online writes again' : `Time for ${giving.name} to write`}</strong>
             <div class="line">
-              <span class="grow faint small">Up to {extending?.quizId === details && collect ? collect.max : Math.max(COLLECT_MAX_QUESTIONS, ...(detailItem.authors ?? []).map((a) => a.count))} questions</span>
+              <span class="grow">Questions each</span>
+              <div class="stepper">
+                <button class="btn small" disabled={giving.max <= giving.min} onclick={() => giving && giving.max--} aria-label="1 question less"><Minus size={16} /></button>
+                <span class="mono value">{giving.max}</span>
+                <button class="btn small" disabled={giving.max >= COLLECT_LIMIT_MAX} onclick={() => giving && giving.max++} aria-label="1 question more"><Plus size={16} /></button>
+              </div>
+            </div>
+            <div class="line">
+              <span class="grow">Time</span>
               <div class="stepper">
                 <button class="btn small" disabled={giving.minutes <= 1} onclick={() => giving && giving.minutes--} aria-label="1 minute less"><Minus size={16} /></button>
                 <span class="mono value">{giving.minutes} min</span>
@@ -489,7 +516,7 @@
       <button class="btn ghost small" onclick={() => guestTime(id, 1)} aria-label="1 minute more"><Plus size={15} /></button>
     {:else}
       {#if state}<span class="faint small">{state}</span>{/if}
-      <button class="btn ghost small" disabled={busyElsewhere} onclick={() => (giving = { id, name, minutes: 3 })} aria-label="Give {name} time to write"><AlarmClockPlus size={15} /> Give time</button>
+      <button class="btn ghost small" disabled={busyElsewhere} onclick={() => give(id, name)} aria-label="Give {name} time to write"><AlarmClockPlus size={15} /> Give time</button>
     {/if}
   {/snippet}
 

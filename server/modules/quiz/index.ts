@@ -794,12 +794,15 @@ export default defineModule<QuizSettings>({
       ctx.publish();
     };
 
-    /** The host gives one guest time to change or add questions to a saved quiz (late, or more to say) */
-    const inviteToQuiz = (quizId: string, guestId: string, minutes: number) => {
+    /**
+     * The host gives one guest ('*': everyone online) time to change or add questions to a saved quiz
+     * (late, or more to say), up to `max` questions each. The limit of a round only goes up.
+     */
+    const inviteToQuiz = (quizId: string, guestId: string, minutes: number, max: number) => {
       const quiz = library.data.quizzes.find((q) => q.id === quizId);
       if (!quiz) throw new HbError('Quiz not found');
-      const guest = ctx.session.guests.get(guestId);
-      if (!guest) throw new HbError('This guest is not here anymore');
+      const guests = guestId === '*' ? [...ctx.session.guests.values()].filter((g) => g.sockets > 0) : [ctx.session.guests.get(guestId)].filter((g) => !!g);
+      if (!guests.length) throw new HbError(guestId === '*' ? 'Nobody is online' : 'This guest is not here anymore');
       if (phase !== 'idle') throw new HbError('A quiz is running, wait for it to end');
       if (collect?.phase === 'writing' && collect.extend?.quizId !== quizId) throw new HbError('Questions are already being written, wait for it to end');
       const mins = clamp(Math.round(minutes), 1, 30);
@@ -812,8 +815,7 @@ export default defineModule<QuizSettings>({
           by: null,
           phase: 'writing',
           endsAt: 0,
-          // Nobody already in the quiz ends up over the limit
-          max: Math.max(COLLECT_MAX_QUESTIONS, ...authorsOf(quiz).map((a) => a.count)),
+          max: 1,
           entries: new Map(),
           skipped: new Set(),
           editing: new Set(),
@@ -828,14 +830,19 @@ export default defineModule<QuizSettings>({
         error = null;
       }
       const until = c.extend!.until;
-      until.set(guest.id, Date.now() + mins * 60_000);
+      // Nobody invited ends up over the limit
+      const counts = authorsOf(quiz).filter((a) => guests.some((g) => g.id === a.id)).map((a) => a.count);
+      c.max = Math.max(c.max, clamp(Math.round(max), 1, COLLECT_LIMIT_MAX), ...counts);
+      for (const guest of guests) {
+        until.set(guest.id, Date.now() + mins * 60_000);
+        // Their questions already in the quiz come back to change
+        const theirs = quiz.questions.filter((q) => q.authorId === guest.id).map(({ authorId: _id, authorName: _name, ...q }) => q);
+        if (theirs.length && !c.entries.has(guest.id)) c.entries.set(guest.id, { name: guest.name, color: guest.color, questions: theirs });
+        c.skipped.delete(guest.id);
+        c.editing.add(guest.id);
+        ctx.toast(guest, { text: `The host gives you ${mins} min to write up to ${c.max} questions for "${quiz.title}"`, kind: 'info' });
+      }
       c.endsAt = Math.max(...until.values());
-      // Their questions already in the quiz come back to change
-      const theirs = quiz.questions.filter((q) => q.authorId === guest.id).map(({ authorId: _id, authorName: _name, ...q }) => q);
-      if (theirs.length && !c.entries.has(guest.id)) c.entries.set(guest.id, { name: guest.name, color: guest.color, questions: theirs });
-      c.skipped.delete(guest.id);
-      c.editing.add(guest.id);
-      ctx.toast(guest, { text: `The host gives you ${mins} min to write questions for "${quiz.title}"`, kind: 'info' });
       ctx.publish();
     };
 
@@ -1154,7 +1161,7 @@ export default defineModule<QuizSettings>({
       return true;
     });
     ctx.onAdmin('collectInvite', (args) => {
-      inviteToQuiz(String(args.quizId), String(args.guestId), num(args.minutes, 3));
+      inviteToQuiz(String(args.quizId), String(args.guestId), num(args.minutes, 3), num(args.max, COLLECT_MAX_QUESTIONS));
       return true;
     });
     ctx.onAdmin('collectGuestTime', (args) => {
