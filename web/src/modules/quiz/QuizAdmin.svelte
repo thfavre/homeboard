@@ -108,7 +108,7 @@
   const extending = $derived(collect?.phase === 'writing' && collect.extend ? collect.extend : null);
   const busyElsewhere = $derived(collect?.phase === 'writing' && (!extending || extending.quizId !== details));
   const late = $derived(
-    (hb.core?.admin?.guests ?? []).filter((g) => !detailItem?.authors?.some((a) => a.id === g.id) && !(extending?.quizId === details && g.id in extending.until)),
+    (hb.core?.admin?.guests ?? []).filter((g) => g.online && !detailItem?.authors?.some((a) => a.id === g.id) && !(extending?.quizId === details && g.id in extending.until)),
   );
   const leftFor = (id: string) => Math.max(0, Math.ceil(((extending?.until[id] ?? 0) - now) / 1000));
   const clockOf = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -456,7 +456,7 @@
               }}
             >
               <option value="" disabled>Choose a guest</option>
-              {#each late as g (g.id)}<option value={g.id}>{g.name}{g.online ? '' : ' (away)'}</option>{/each}
+              {#each late as g (g.id)}<option value={g.id}>{g.name}</option>{/each}
             </select>
           </label>
         {/if}
