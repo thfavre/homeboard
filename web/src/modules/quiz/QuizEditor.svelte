@@ -82,11 +82,21 @@
     fileInput?.click();
   }
 
-  async function onFile(e: Event) {
+  function onFile(e: Event) {
     const file = (e.currentTarget as HTMLInputElement).files?.[0];
     (e.currentTarget as HTMLInputElement).value = '';
-    if (!file || pickFor < 0) return;
-    const i = pickFor;
+    if (file && pickFor >= 0) setImage(pickFor, file);
+  }
+
+  /** An image pasted anywhere in a question (a screenshot, a copied picture) becomes its picture */
+  function onPaste(e: ClipboardEvent, i: number) {
+    const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
+    if (!file) return;
+    e.preventDefault();
+    if (uploading === null) setImage(i, file);
+  }
+
+  async function setImage(i: number, file: File) {
     uploading = i;
     try {
       const blob = await shrinkImage(file, 1280, 0.85);
@@ -128,7 +138,7 @@
   {/if}
 
   {#each questions as q, i}
-    <div class="question">
+    <div class="question" onpaste={(e) => onPaste(e, i)}>
       <div class="qhead">
         <span class="eyebrow">Question {i + 1}</span>
         <span class="spacer"></span>
@@ -141,12 +151,13 @@
       <div class="image-row">
         {#if q.image}
           <img src={q.image} alt="" />
-          <button type="button" class="btn ghost small" onclick={() => (q.image = undefined)}><X size={16} /> Remove picture</button>
+          <button type="button" class="btn ghost small" disabled={uploading !== null} onclick={() => (q.image = undefined)}><X size={16} /> {uploading === i ? 'Uploading...' : 'Remove picture'}</button>
         {:else}
           <button type="button" class="btn small" disabled={uploading !== null} onclick={() => pickImage(i)}>
             <ImagePlus size={16} />
             {uploading === i ? 'Uploading...' : 'Add a picture (optional)'}
           </button>
+          <span class="faint small paste-hint">or paste one in the question</span>
         {/if}
       </div>
 
@@ -205,6 +216,12 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
+  }
+  /* Pasting is for a keyboard, not a phone */
+  @media (pointer: coarse) {
+    .paste-hint {
+      display: none;
+    }
   }
   .image-row img {
     width: 5rem;
