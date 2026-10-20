@@ -127,7 +127,7 @@
 
 <div class="final" bind:this={stage}>
   {#if q.images.length}
-    <div class="belt" bind:this={belt} aria-hidden="true">
+    <div class="belt" class:titled={!podium.length} bind:this={belt} aria-hidden="true">
       <div
         class="strip"
         class:sliding={!!slide}
@@ -147,7 +147,8 @@
     </div>
   {/if}
 
-  <h1 class="big">{podium.length ? 'And the winner is' : 'Thanks for playing'}</h1>
+  <!-- With a winner, the pictures take the top of the screen instead of a title -->
+  {#if !podium.length}<h1 class="big">Thanks for playing</h1>{/if}
 
   <div class="podium">
     {#each [1, 0, 2] as rank}
@@ -226,17 +227,20 @@
   /* Behind the title and podium, across the whole quiz area */
   .belt {
     position: absolute;
-    top: 8rem;
+    top: 0;
     bottom: 0;
     left: -2.5rem;
     right: -2.5rem;
     display: flex;
-    /* Just under the title (the padding leaves room for the tilt) */
+    /* At the top, above the podium (the padding leaves room for the tilt) */
     align-items: flex-start;
     padding-top: 2.5rem;
     overflow: hidden;
     pointer-events: none;
     mask-image: linear-gradient(90deg, transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
+  }
+  .belt.titled {
+    top: 8rem;
   }
   /* Question 1 last in the row, so it is the first to come in from the left */
   .strip {
@@ -270,13 +274,15 @@
     filter: brightness(0.72);
   }
   .pic img {
-    width: 17rem;
-    height: 12.5rem;
+    width: 24rem;
+    height: 17.5rem;
     object-fit: cover;
     border-radius: 0.25rem;
     background: #111;
   }
+  /* Bottom row, also when there is no title above */
   .podium {
+    grid-row: 2;
     position: relative;
     display: flex;
     align-items: flex-end;
