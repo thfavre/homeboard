@@ -92,9 +92,54 @@
     return () => clearInterval(t);
   });
   const remaining = $derived(q.endsAt ? Math.max(0, q.endsAt - now) : q.pausedLeft);
+
+  // ------------------------------------------------------------ slide of the quiz pictures
+  /** Longest an image takes to cross the screen */
+  const CROSS_SEC = 10;
+  let belt = $state<HTMLDivElement>();
+  let strip = $state<HTMLDivElement>();
+  let slide = $state<{ from: number; to: number; sec: number } | null>(null);
+
+  /**
+   * The whole row slides at one steady speed: fast enough that each picture crosses
+   * in 10s at most, and that the last one is gone before the end screen closes.
+   * When there are few pictures, the row comes round again.
+   */
+  onMount(() => {
+    const frame = requestAnimationFrame(() => {
+      if (!belt || !strip) return;
+      const w = belt.clientWidth;
+      const s = strip.scrollWidth;
+      const left = (q.endsAt ? q.endsAt - serverNow() : q.pausedLeft || q.phaseMs) / 1000 - 1;
+      const speed = Math.max(w / CROSS_SEC, left > 0 ? (s + w) / left : 0);
+      slide = { from: -s, to: w, sec: (s + w) / speed };
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+
+  /** A small tilt and height change for each picture, alternating sides */
+  const tilt = (i: number) => ({ r: `${(i % 2 ? 1 : -1) * (2 + ((i * 37) % 3))}deg`, y: `${(((i * 53) % 5) - 2) * 0.9}rem` });
 </script>
 
 <div class="final" bind:this={stage}>
+  {#if q.images.length}
+    <div class="belt" bind:this={belt} aria-hidden="true">
+      <div
+        class="strip"
+        class:sliding={!!slide}
+        bind:this={strip}
+        style:--from="{slide?.from ?? 0}px"
+        style:--to="{slide?.to ?? 0}px"
+        style:animation-duration="{slide?.sec ?? 0}s"
+      >
+        {#each q.images as src, i (src)}
+          {@const t = tilt(i)}
+          <figure class="pic" style:--r={t.r} style:--y={t.y}><img {src} alt="" /></figure>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   <h1 class="big">{podium.length ? 'And the winner is' : 'Thanks for playing'}</h1>
 
   <div class="podium">
@@ -162,10 +207,65 @@
     gap: 2rem;
   }
   .big {
+    position: relative;
     font-size: 5rem;
     letter-spacing: -0.04em;
   }
+  /* Behind the title and podium, across the whole quiz area */
+  .belt {
+    position: absolute;
+    top: 8rem;
+    bottom: 0;
+    left: -2.5rem;
+    right: -2.5rem;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    pointer-events: none;
+    mask-image: linear-gradient(90deg, transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
+  }
+  /* Question 1 last in the row, so it is the first to come in from the left */
+  .strip {
+    flex: none;
+    display: flex;
+    flex-direction: row-reverse;
+    gap: 5rem;
+    padding: 0 2.5rem;
+    visibility: hidden;
+    will-change: transform;
+  }
+  .strip.sliding {
+    visibility: visible;
+    animation: slide linear infinite;
+  }
+  @keyframes slide {
+    from {
+      transform: translateX(var(--from));
+    }
+    to {
+      transform: translateX(var(--to));
+    }
+  }
+  /* Like the photos on the TV: a white frame, a little tilted */
+  .pic {
+    flex: none;
+    margin: 0;
+    padding: 0.8rem;
+    background: #fbfaf7;
+    border-radius: 0.5rem;
+    box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.85);
+    transform: translateY(var(--y)) rotate(var(--r));
+    filter: brightness(0.72);
+  }
+  .pic img {
+    width: 17rem;
+    height: 12.5rem;
+    object-fit: cover;
+    border-radius: 0.25rem;
+    background: #111;
+  }
   .podium {
+    position: relative;
     display: flex;
     align-items: flex-end;
     gap: 2rem;

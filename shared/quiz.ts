@@ -162,6 +162,8 @@ export interface QuizState {
   players: QuizPlayer[];
   /** Ids of the top 3 at the end */
   podium: string[];
+  /** At the end: the pictures of the questions, in order, for the slide behind the podium */
+  images: string[];
   error: string | null;
   settings: QuizSettings;
   library: LibraryItem[];

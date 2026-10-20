@@ -942,6 +942,7 @@ export default defineModule<QuizSettings>({
         reveal,
         players: [...players.values()].sort((a, b) => b.score - a.score),
         podium,
+        images: phase === 'final' ? [...new Set(questions.flatMap((x) => (x.image ? [x.image] : [])))] : [],
         error,
         settings: ctx.settings.get(),
         library: library.data.quizzes.map(libraryItem),
