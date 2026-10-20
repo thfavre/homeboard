@@ -1,7 +1,14 @@
 <script lang="ts">
   import { serverNow } from '$lib/client.svelte.ts';
   /** Circular countdown until `endsAt` */
-  let { endsAt, totalMs, size = '5rem', pausedLeft = 0 }: { endsAt: number | null; totalMs: number; size?: string; pausedLeft?: number } = $props();
+  /** `lowMs`: the ring turns red under this much time (0 = never) */
+  let {
+    endsAt,
+    totalMs,
+    size = '5rem',
+    pausedLeft = 0,
+    lowMs = 5000,
+  }: { endsAt: number | null; totalMs: number; size?: string; pausedLeft?: number; lowMs?: number } = $props();
   let now = $state(serverNow());
   $effect(() => {
     let frame = requestAnimationFrame(function loop() {
@@ -19,7 +26,7 @@
 <div class="ring" style:width={size} style:height={size}>
   <svg viewBox="0 0 100 100">
     <circle cx="50" cy="50" r="45" class="track" />
-    <circle cx="50" cy="50" r="45" class="fill" class:low={left < 5000} stroke-dasharray={C} stroke-dashoffset={C * (1 - ratio)} />
+    <circle cx="50" cy="50" r="45" class="fill" class:low={left < lowMs} stroke-dasharray={C} stroke-dashoffset={C * (1 - ratio)} />
   </svg>
   <span class="mono">{Math.ceil(left / 1000)}</span>
 </div>

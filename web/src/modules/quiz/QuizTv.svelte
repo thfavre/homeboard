@@ -95,7 +95,11 @@
       {/key}
     {:else if q.phase === 'scores'}
       <div class="scores" in:fade>
-        <h1 class="big">Leaderboard</h1>
+        <div class="scores-head">
+          <h1 class="big">Leaderboard</h1>
+          <!-- Short screen: no red "hurry" color -->
+          <Ring endsAt={q.endsAt} totalMs={phaseTotal} pausedLeft={q.pausedLeft} size="6rem" lowMs={0} />
+        </div>
         <ol>
           {#each q.players.slice(0, 8) as p, i (p.id)}
             <li class="card" animate:flip={{ duration: 600 }}>
@@ -288,6 +292,12 @@
     max-width: 70rem;
     width: 100%;
     margin: 0 auto;
+  }
+  .scores-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
   }
   .scores ol {
     list-style: none;

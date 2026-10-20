@@ -44,7 +44,7 @@ interface Question {
 
 const COUNTDOWN_MS = 5_000;
 const REVEAL_MS = 6_000;
-const SCORES_MS = 6_000;
+const SCORES_MS = 4_000;
 const LOBBY_MS = LOBBY_MAX_SEC * 1000;
 /** When half the players are ready, the lobby waits at most this long */
 const HALF_READY_MS = 15_000;
