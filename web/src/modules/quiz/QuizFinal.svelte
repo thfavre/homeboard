@@ -219,7 +219,9 @@
     left: -2.5rem;
     right: -2.5rem;
     display: flex;
-    align-items: center;
+    /* Just under the title (the padding leaves room for the tilt) */
+    align-items: flex-start;
+    padding-top: 2.5rem;
     overflow: hidden;
     pointer-events: none;
     mask-image: linear-gradient(90deg, transparent, #000 6rem, #000 calc(100% - 6rem), transparent);
