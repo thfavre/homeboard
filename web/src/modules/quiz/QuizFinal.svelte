@@ -98,21 +98,25 @@
   const CROSS_SEC = 10;
   let belt = $state<HTMLDivElement>();
   let strip = $state<HTMLDivElement>();
-  let slide = $state<{ from: number; to: number; sec: number } | null>(null);
+  let slide = $state<{ from: number; to: number; sec: number; delay: number; gap: number } | null>(null);
 
   /**
-   * The whole row slides at one steady speed: fast enough that each picture crosses
-   * in 10s at most, and that the last one is gone before the end screen closes.
-   * When there are few pictures, the row comes round again.
+   * The row slides by once, at one steady speed, and the last picture leaves the screen
+   * when the end screen closes. Each picture crosses in 10s at most: when there are
+   * few of them, they are spread further apart to fill the time (a single one waits).
    */
   onMount(() => {
     const frame = requestAnimationFrame(() => {
       if (!belt || !strip) return;
       const w = belt.clientWidth;
-      const s = strip.scrollWidth;
-      const left = (q.endsAt ? q.endsAt - serverNow() : q.pausedLeft || q.phaseMs) / 1000 - 1;
-      const speed = Math.max(w / CROSS_SEC, left > 0 ? (s + w) / left : 0);
-      slide = { from: -s, to: w, sec: (s + w) / speed };
+      const row = strip.scrollWidth;
+      const left = Math.max(1, (q.endsAt ? q.endsAt - serverNow() : q.pausedLeft || q.phaseMs) / 1000);
+      const speed = Math.max(w / CROSS_SEC, (row + w) / left);
+      const spare = speed * left - (row + w);
+      const gaps = q.images.length - 1;
+      const gap = gaps ? spare / gaps : 0;
+      const s = row + gap * gaps;
+      slide = { from: -s, to: w, sec: (s + w) / speed, delay: gaps ? 0 : spare / speed, gap };
     });
     return () => cancelAnimationFrame(frame);
   });
@@ -130,7 +134,10 @@
         bind:this={strip}
         style:--from="{slide?.from ?? 0}px"
         style:--to="{slide?.to ?? 0}px"
+        style:gap="calc(5rem + {slide?.gap ?? 0}px)"
         style:animation-duration="{slide?.sec ?? 0}s"
+        style:animation-delay="{slide?.delay ?? 0}s"
+        style:animation-play-state={q.paused ? 'paused' : 'running'}
       >
         {#each q.images as src, i (src)}
           {@const t = tilt(i)}
@@ -231,14 +238,12 @@
     flex: none;
     display: flex;
     flex-direction: row-reverse;
-    gap: 5rem;
-    padding: 0 2.5rem;
     visibility: hidden;
     will-change: transform;
   }
   .strip.sliding {
     visibility: visible;
-    animation: slide linear infinite;
+    animation: slide linear both;
   }
   @keyframes slide {
     from {
