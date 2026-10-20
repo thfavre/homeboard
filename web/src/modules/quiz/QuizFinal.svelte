@@ -213,6 +213,11 @@
     justify-items: center;
     gap: 2rem;
   }
+  /* Initials are a see-through tint: give them a solid back, so the winner flying over
+     the podium (or a picture sliding behind) does not show through */
+  .final :global(.avatar) {
+    background: linear-gradient(color-mix(in srgb, var(--c) 22%, transparent), color-mix(in srgb, var(--c) 22%, transparent)), var(--bg);
+  }
   .big {
     position: relative;
     font-size: 5rem;
