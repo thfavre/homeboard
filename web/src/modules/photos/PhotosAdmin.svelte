@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Synced } from '$lib/synced.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
-  import { Repeat, SkipForward, Trash2 } from '@lucide/svelte';
+  import { Download, Repeat, SkipForward, Trash2 } from '@lucide/svelte';
   import type { Photo, PhotosState } from '$shared/photos.ts';
   import { hb, rpc, attempt } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -23,6 +23,15 @@
     });
     if (refund === null) return;
     attempt(() => rpc('photos', 'remove', { id: p.id, refund }), refund ? 'Removed and refunded' : 'Removed');
+  }
+
+  /** "margaux-2026-10-17-1432.jpg": who sent it and when, keeping the file's own type */
+  function fileName(p: Photo) {
+    const ext = p.url.split('?')[0].match(/\.(\w+)$/)?.[1] ?? 'jpg';
+    const who = p.guest.name.normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'photo';
+    const d = new Date(p.at);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${who}-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${ext}`;
   }
 
   const set = (args: Record<string, unknown>) => attempt(() => rpc('photos', 'setOptions', args));
@@ -93,6 +102,7 @@
             <button class="btn ghost small" aria-label="Show again" onclick={() => attempt(() => rpc('photos', 'showAgain', { id: p.id }), 'Queued')}>
               <Repeat size={15} />
             </button>
+            <a class="btn ghost small" href={p.url} download={fileName(p)} aria-label="Download"><Download size={15} /></a>
             <button class="btn ghost small" aria-label="Remove" onclick={() => remove(p)}><Trash2 size={15} /></button>
           </div>
         </div>
@@ -170,6 +180,10 @@
     display: flex;
     justify-content: flex-end;
     padding: 0 0.2rem 0.2rem;
+  }
+  /* The download link looks like the buttons next to it */
+  .actions a {
+    color: inherit;
   }
   .line {
     display: flex;
