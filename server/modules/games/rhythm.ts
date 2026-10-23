@@ -343,7 +343,8 @@ export function songLanes(kept: BsNote[], chart: BsNote[], k: number, minGapMs: 
   for (const kn of kept) {
     const n = (at.get(kn.ms) ?? [kn]).find((x) => base(x) !== prev) ?? kn;
     let lane = base(n);
-    if (last && lane === prev && kn.ms - last.ms < FAST_GAPS * minGapMs && (n.x !== last.x || n.c !== last.c)) {
+    // (One key: nowhere else to go)
+    if (k > 1 && last && lane === prev && kn.ms - last.ms < FAST_GAPS * minGapMs && (n.x !== last.x || n.c !== last.c)) {
       const pos = n.x + n.c / 2;
       const was = last.x + last.c / 2;
       const dir = pos > was ? 1 : pos < was ? -1 : lane < (k - 1) / 2 ? 1 : -1;
