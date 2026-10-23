@@ -74,7 +74,6 @@
   }
   .clock.hidden {
     color: var(--text-faint);
-    animation: hb-pulse 1.6s ease-in-out infinite;
   }
   .lead {
     font-size: 1.8rem;

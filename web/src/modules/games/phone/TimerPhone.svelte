@@ -65,7 +65,7 @@
     </div>
   {:else if !stopped}
     <div class="center">
-      <span class="label running">Count to {v.target / 1000} in your head...</span>
+      <span class="label">Count to {v.target / 1000} in your head...</span>
       <button class="stop" onpointerdown={(e) => (e.preventDefault(), stop())}>
         <Hand size={44} />
         STOP
@@ -109,9 +109,6 @@
     font-size: 6rem;
     font-weight: 700;
     line-height: 1;
-  }
-  .running {
-    animation: hb-pulse 1.4s ease-in-out infinite;
   }
   .stop {
     width: min(17rem, 75vw);
