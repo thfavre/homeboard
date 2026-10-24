@@ -34,14 +34,19 @@
   /** Bumped each time the board changes, to restart the progress bar */
   let turn = $state(0);
 
+  const rotating = $derived(boards.length > 1);
+
+  // The wait restarts on each turn only: the boards' rows change all the time during a party (a song queued,
+  // a pixel painted), and restarting it on those kept the same board on screen with its bar full
   $effect(() => {
-    if (boards.length < 2) return;
-    const t = setInterval(() => {
+    if (!rotating) return;
+    void turn;
+    const t = setTimeout(() => {
       const i = current ? boards.indexOf(current) : -1;
       currentId = boards[(i + 1) % boards.length].id;
       turn++;
     }, seconds * 1000);
-    return () => clearInterval(t);
+    return () => clearTimeout(t);
   });
 
   // The card follows the height of the board it shows, so it grows and shrinks smoothly
