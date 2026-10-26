@@ -481,7 +481,7 @@ export default defineModule({
 
     /** The hidden menu on the TV (its name tapped 5 times): stop and start the whole project again */
     ctx.onTv('restart', () => {
-      if (!process.env.HB_SUPERVISED) throw new HbError('Only works when started with "bun run party"');
+      if (!process.env.HB_SUPERVISED) throw new HbError('Only works when started with "npm run party"');
       // Answer first, then go down
       setTimeout(() => hub.bus.emit('restart'), 300);
       return { ok: true };

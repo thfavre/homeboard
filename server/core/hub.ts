@@ -646,7 +646,7 @@ export class Hub {
   get lanUrl(): string {
     const all = Object.values(networkInterfaces()).flat();
     const ip =
-      all.find((i) => i && i.family === 'IPv4' && !i.internal && i.address.startsWith('192.168.'))?.address ??
+      all.find((i) => i && i.family === 'IPv4' && !i.internal && /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./.test(i.address))?.address ??
       all.find((i) => i && i.family === 'IPv4' && !i.internal)?.address ??
       'localhost';
     return `http://${ip}:${this.port}`;

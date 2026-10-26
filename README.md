@@ -9,6 +9,8 @@ Ideas and to-dos: [IDEAS.md](IDEAS.md).
 
 ## Quick start
 
+Needs Node.js 22.12 or newer.
+
 ```bash
 npm install
 npm run party      # build, start, open the TV page in Chrome kiosk mode
@@ -26,7 +28,8 @@ Show pairing code** turns your phone into a host remote.
 | `npm run check` | Type check |
 
 Environment: `PORT` (4300), `HB_TUNNEL=0` (no tunnel), `HB_TV_POSITION=1920,0` (kiosk on a
-second screen), `HB_BROWSER` (browser path).
+second screen), `HB_BROWSER` (browser path), `HB_DATA_DIR` (another data folder, to run a test
+copy without touching the real guests and settings).
 
 ## Modules
 
@@ -66,3 +69,7 @@ register both. It gets an on/off switch, its prices in the Economy screen and a 
 
 **New theme**: copy `web/src/themes/midnight.css`, import it in `web/src/themes/index.ts` and
 add it to `shared/themes.ts`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

@@ -85,7 +85,7 @@
 {#if hb.authError}
   <div class="center">
     <h2>This screen is only available on the Homeboard PC</h2>
-    <p class="dim">Open <span class="mono">http://localhost:4300/tv</span> on the computer connected to the TV.</p>
+    <p class="dim">Open the TV address printed in the Homeboard console, on the computer connected to the TV.</p>
   </div>
 {:else if !hb.core}
   <div class="center"><p class="dim">Connecting...</p></div>

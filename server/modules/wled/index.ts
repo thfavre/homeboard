@@ -160,12 +160,7 @@ export default defineModule<WledSettings>({
   name: 'Lights',
   description: 'Guests trigger effects on your WLED lights',
   settings: {
-    devices: [
-      { id: 'tv', host: '192.168.1.130', name: 'TV' },
-      { id: 'window', host: '192.168.1.236', name: 'Windowsill' },
-      { id: 'chill', host: '192.168.1.200', name: 'Chill Guy' },
-      { id: 'light4', host: '192.168.1.121', name: 'Light 4' },
-    ],
+    devices: [],
     effects: DEFAULT_WLED_EFFECTS,
     scenes: DEFAULT_WLED_SCENES,
     scene: null,

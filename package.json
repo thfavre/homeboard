@@ -10,8 +10,11 @@
     "party": "tsx server/run.ts --kiosk"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Thomas",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  },
   "dependencies": {
     "@fontsource/bungee": "^5.3.0",
     "@fontsource/pacifico": "^5.3.0",

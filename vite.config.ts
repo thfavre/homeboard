@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { resolve } from 'node:path';
 
-const SERVER = 'http://localhost:4300';
+const SERVER = `http://localhost:${process.env.PORT ?? 4300}`;
 
 export default defineConfig({
   root: 'web',
