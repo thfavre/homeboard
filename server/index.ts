@@ -1,3 +1,4 @@
+import './core/env.ts';
 import { Hub } from './core/hub.ts';
 import { openTvKiosk } from './core/kiosk.ts';
 import { RESTART_CODE, log } from './core/util.ts';

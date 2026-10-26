@@ -667,11 +667,17 @@ export class Hub {
     return process.argv.includes('--dev') ? 'http://localhost:5173' : `http://localhost:${this.port}`;
   }
 
+  /** The own domain: HB_DOMAIN and HB_TUNNEL_NAME in .env win over the one saved from the admin */
+  get ownDomain(): { domain: string; name: string; fromEnv: boolean } {
+    const domain = process.env.HB_DOMAIN?.trim();
+    if (domain) return { domain, name: process.env.HB_TUNNEL_NAME?.trim() || 'homeboard', fromEnv: true };
+    return { domain: this.core.tunnelDomain, name: this.core.tunnelName, fromEnv: false };
+  }
+
   /** Start the public tunnel: on the own domain when one is set, else a quick tunnel */
   startTunnel(): Promise<void> {
-    const { tunnelName, tunnelDomain } = this.core;
-    const named = tunnelName && tunnelDomain ? { name: tunnelName, domain: tunnelDomain } : null;
-    return this.tunnel.start(this.tunnelTarget, named);
+    const { domain, name } = this.ownDomain;
+    return this.tunnel.start(this.tunnelTarget, domain && name ? { name, domain } : null);
   }
 
   /** Serve the built web apps (production). In development Vite serves them. */

@@ -198,6 +198,8 @@ export interface CoreAdminState {
   /** Own domain through a named Cloudflare tunnel (empty: quick tunnel) */
   tunnelName: string;
   tunnelDomain: string;
+  /** Set by HB_DOMAIN in .env: not editable from the admin */
+  tunnelFromEnv: boolean;
   sessionStartedAt: number;
   passiveMinutes: number;
   passiveAwayMinutes: number;

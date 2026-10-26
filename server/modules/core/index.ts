@@ -224,8 +224,9 @@ export default defineModule({
           publicUrl: hub.tunnel.url,
           lanUrl: hub.lanUrl,
           tunnel: hub.tunnel.status,
-          tunnelName: c.tunnelName,
-          tunnelDomain: c.tunnelDomain,
+          tunnelName: hub.ownDomain.name,
+          tunnelDomain: hub.ownDomain.domain,
+          tunnelFromEnv: hub.ownDomain.fromEnv,
           sessionStartedAt: session.startedAt,
           passiveMinutes: c.passiveMinutes,
           passiveAwayMinutes: c.passiveAwayMinutes,
@@ -593,6 +594,7 @@ export default defineModule({
     });
 
     ctx.onAdmin('setDomain', (args) => {
+      if (hub.ownDomain.fromEnv) throw new HbError('The domain is set in the .env file');
       const domain = String(args.domain ?? '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
       const name = String(args.name ?? '').trim();
       if (domain && !/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(domain)) throw new HbError('That is not a domain name');

@@ -72,20 +72,33 @@
   </div>
 </Section>
 
-<Section
-  title="Own domain"
-  hint="Create the tunnel once on this PC with cloudflared (tunnel login, tunnel create, tunnel route dns), then enter its name and domain. Leave the domain empty to go back to a random address."
->
-  <div class="row wrap">
-    <input class="input" bind:value={domain} placeholder="homeboard.online" aria-label="Domain" />
-    <input class="input" bind:value={tunnelName} placeholder="Tunnel name" aria-label="Tunnel name" />
-    <button
-      class="btn"
-      onclick={() => attempt(() => rpc('core', 'setDomain', { domain, name: tunnelName }), domain.trim() ? 'Domain saved, tunnel restarting' : 'Back to a random address')}
-      >Save</button
-    >
-  </div>
-</Section>
+{#if admin.tunnelFromEnv}
+  <Section title="Own domain" hint="Set in the .env file (HB_DOMAIN, HB_TUNNEL_NAME). Change it there and restart Homeboard.">
+    <div class="line">
+      <span class="dim">Domain</span>
+      <span class="mono small">{admin.tunnelDomain}</span>
+    </div>
+    <div class="line">
+      <span class="dim">Tunnel</span>
+      <span class="mono small">{admin.tunnelName}</span>
+    </div>
+  </Section>
+{:else}
+  <Section
+    title="Own domain"
+    hint="Create the tunnel once on this PC with cloudflared (tunnel login, tunnel create, tunnel route dns), then enter its name and domain, here or in the .env file. Leave the domain empty to go back to a random address."
+  >
+    <div class="row wrap">
+      <input class="input" bind:value={domain} placeholder="example.com" aria-label="Domain" />
+      <input class="input" bind:value={tunnelName} placeholder="Tunnel name" aria-label="Tunnel name" />
+      <button
+        class="btn"
+        onclick={() => attempt(() => rpc('core', 'setDomain', { domain, name: tunnelName }), domain.trim() ? 'Domain saved, tunnel restarting' : 'Back to a random address')}
+        >Save</button
+      >
+    </div>
+  </Section>
+{/if}
 
 <Section title="Joining">
   <div class="line">

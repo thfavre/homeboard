@@ -27,9 +27,10 @@ Show pairing code** turns your phone into a host remote.
 | `npm run dev` | Server auto reload + Vite on port 5173 |
 | `npm run check` | Type check |
 
-Environment: `PORT` (4300), `HB_TUNNEL=0` (no tunnel), `HB_TV_POSITION=1920,0` (kiosk on a
-second screen), `HB_BROWSER` (browser path), `HB_DATA_DIR` (another data folder, to run a test
-copy without touching the real guests and settings).
+Settings for this PC go in a `.env` file (copy `.env.example`, not in git): `PORT` (4300),
+`HB_DOMAIN` and `HB_TUNNEL_NAME` (own domain), `HB_TUNNEL=0` (no tunnel), `HB_TV_POSITION=1920,0`
+(kiosk on a second screen), `HB_BROWSER` (browser path), `HB_DATA_DIR` (another data folder, to
+run a test copy without touching the real guests and settings).
 
 ## Modules
 
@@ -48,7 +49,9 @@ Plus: selfie avatars, rotating leaderboards, activity feed, gifts, themes, and a
 for every price and reward. Every module can be turned off and configured in the admin.
 
 Guests rejoin from any phone with the same name and PIN; balances live on the server. For a fixed
-address, set up a named Cloudflare tunnel and enter it in admin **Access > Own domain**.
+address, create a named Cloudflare tunnel once (`cloudflared tunnel login`, `tunnel create
+homeboard`, `tunnel route dns homeboard example.com`), then set `HB_DOMAIN` in `.env` or enter it in
+admin **Access > Own domain**.
 
 ## Architecture
 

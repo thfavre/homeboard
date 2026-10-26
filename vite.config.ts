@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+// Same .env as the server (PORT, HB_DOMAIN)
+if (existsSync('.env')) process.loadEnvFile('.env');
 const SERVER = `http://localhost:${process.env.PORT ?? 4300}`;
 
 export default defineConfig({
@@ -29,7 +32,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    allowedHosts: ['.trycloudflare.com'],
+    allowedHosts: ['.trycloudflare.com', ...(process.env.HB_DOMAIN ? [process.env.HB_DOMAIN.trim()] : [])],
     proxy: {
       '/socket.io': { target: SERVER, ws: true },
       '/api': SERVER,

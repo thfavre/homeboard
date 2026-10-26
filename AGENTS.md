@@ -51,9 +51,14 @@ and phones connected. So:
 
 ## Environment variables
 
+Read from `.env` at the project root (`server/core/env.ts`, also `vite.config.ts`); see
+`.env.example`. Variables set in the shell win over `.env`. `.env` is not in git: personal values
+(domain, IP addresses, names) go there or in the admin settings, never in the code.
+
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `PORT` | `4300` | Server port (the Vite dev proxy follows it) |
+| `HB_DOMAIN`, `HB_TUNNEL_NAME` | none, `homeboard` | Own domain through a named Cloudflare tunnel. Wins over the admin setting, which then shows it read-only |
 | `HB_DATA_DIR` | `./data` | Data folder. Point it somewhere else to run a test copy that cannot touch the real guests, balances and settings |
 | `HB_TUNNEL` | on | `0`: no Cloudflare tunnel (local network only) |
 | `HB_TV_POSITION` | none | `x,y` of the kiosk TV window, e.g. `1920,0` for a second screen |
