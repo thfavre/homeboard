@@ -5,7 +5,7 @@ PIN, and spend a custom currency (earned by hanging out and playing) on songs, s
 lights, sounds, quizzes and games. Everything runs on your PC; a free Cloudflare tunnel makes it
 reachable from any network.
 
-Ideas and to-dos: [IDEAS.md](IDEAS.md).
+Ideas and to-dos: [IDEAS.md](IDEAS.md). Working on the code with an AI assistant: [AGENTS.md](AGENTS.md).
 
 ## Quick start
 
