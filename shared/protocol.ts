@@ -222,6 +222,12 @@ export interface VisitorState {
   currency: Currency;
 }
 
+/** Sent to a phone that has to join. `guest`: its account is kept, only the new session code is missing */
+export interface NeedJoin {
+  codeRequired: boolean;
+  guest?: { name: string; color: string; avatar?: string };
+}
+
 export interface RpcRequest {
   module: string;
   method: string;

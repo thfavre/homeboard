@@ -91,7 +91,7 @@
   <div class="line">
     <div>
       <strong>Require session code</strong>
-      <p class="faint small">Stops people who only have the link.</p>
+      <p class="faint small">Stops people who only have the link. A new code makes every guest enter it again (their account is kept).</p>
     </div>
     <Toggle checked={admin.requireCode} label="Require code" onchange={(v) => set({ requireCode: v })} />
   </div>

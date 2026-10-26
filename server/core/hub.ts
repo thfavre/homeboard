@@ -16,6 +16,7 @@ import type {
   RpcRequest,
   RpcResponse,
   ToastMessage,
+  NeedJoin,
   VisitorState,
 } from '../../shared/protocol.ts';
 import { BOARD_KINDS } from '../../shared/protocol.ts';
@@ -320,7 +321,10 @@ export class Hub {
       mediaDir: (sub = '') => ensureDir(join(MEDIA_DIR, id, sub)),
       mediaUrl: (file) => `/media/${id}/${file}`,
       http: router,
-      guestFromRequest: (req) => this.session.byToken(req.get('x-guest-token')),
+      guestFromRequest: (req) => {
+        const guest = this.session.byToken(req.get('x-guest-token'));
+        return guest && this.hasCode(guest) ? guest : undefined;
+      },
       isAdminRequest: (req) => this.isAdminRequest(req),
       state: (provider) => {
         loaded.provider = provider;
@@ -487,8 +491,8 @@ export class Hub {
 
     if (role === 'guest') {
       const guest = socket.data.guestId ? this.session.guests.get(socket.data.guestId) : undefined;
-      if (guest) this.bindGuest(socket, guest);
-      else this.makeVisitor(socket);
+      if (guest && this.hasCode(guest)) this.bindGuest(socket, guest);
+      else this.makeVisitor(socket, guest);
     } else {
       socket.join(`role:${role}`);
       if (role === 'tv') this.tvSockets.push(socket);
@@ -553,17 +557,40 @@ export class Hub {
     return h(req.args ?? {}, guest);
   }
 
-  private makeVisitor(socket: Socket): void {
+  /** `guest`: the account behind this phone, which only has to enter the current code again */
+  private makeVisitor(socket: Socket, guest?: Guest): void {
     socket.join('role:visitor');
+    socket.data.codeGuestId = guest?.id;
     const c = this.core;
     const state: VisitorState = { appName: c.appName, theme: c.theme, currency: c.currency };
     socket.emit('visitor', state);
-    socket.emit('need-join', { codeRequired: c.requireCode });
+    const need: NeedJoin = { codeRequired: c.requireCode };
+    if (guest) need.guest = { name: guest.name, color: guest.color, ...(guest.avatar ? { avatar: guest.avatar.url } : {}) };
+    socket.emit('need-join', need);
+  }
+
+  /** With the code required, only guests who entered the current one are in (the people in the room) */
+  hasCode(guest: Guest): boolean {
+    return !this.core.requireCode || guest.code === this.session.code;
+  }
+
+  /** After a new code, or the code turned on: everyone else goes back to the code screen, their account kept */
+  checkCodes(): void {
+    for (const [id, sockets] of this.guestSockets) {
+      const guest = this.session.guests.get(id);
+      if (!guest || this.hasCode(guest)) continue;
+      for (const socket of [...sockets]) {
+        this.unbindGuest(socket);
+        this.makeVisitor(socket, guest);
+      }
+      this.guestSockets.delete(id);
+    }
   }
 
   private bindGuest(socket: Socket, guest: Guest): void {
     this.unbindGuest(socket);
     socket.leave('role:visitor');
+    socket.data.codeGuestId = undefined;
     socket.data.guestId = guest.id;
     socket.join(['role:guest', `guest:${guest.id}`]);
     let set = this.guestSockets.get(guest.id);

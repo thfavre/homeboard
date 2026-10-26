@@ -276,6 +276,7 @@ export default defineModule({
     hub.onVisitor('join', (args, socket, bind): JoinResult => {
       checkCode(socket.data, args.code);
       const { guest, returning } = session.join(args.name, args.pin);
+      if (core().requireCode) session.enteredCode(guest);
       bind(guest);
       if (!returning) {
         if (economy.enabled) economy.reward(guest, 'core.join');
@@ -284,6 +285,16 @@ export default defineModule({
         ctx.activity('{name} joined the party', { guest });
       }
       return { token: guest.token, me: session.me(guest), returning };
+    });
+
+    // The host changed the code: the phone keeps its account and only enters the new code
+    hub.onVisitor('enterCode', (args, socket, bind) => {
+      checkCode(socket.data, args.code);
+      const guest = session.guests.get(String(socket.data.codeGuestId ?? ''));
+      if (!guest) throw new HbError('Please join the session first');
+      session.enteredCode(guest);
+      bind(guest);
+      return true;
     });
 
     // ------------------------------------------------------------ avatars
@@ -463,6 +474,7 @@ export default defineModule({
       if (args.qrIncludesCode !== undefined) patch.qrIncludesCode = !!args.qrIncludesCode;
       if (args.requireCode !== undefined) patch.requireCode = !!args.requireCode;
       updateCore(patch);
+      if (patch.requireCode) hub.checkCodes();
       // Guests away get theirs when they come back
       if (turnedOn) for (const g of session.guests.values()) if (g.sockets > 0) pendingJoinBonus(g);
     });
@@ -547,6 +559,7 @@ export default defineModule({
 
     ctx.onAdmin('newCode', () => {
       session.newCode();
+      hub.checkCodes();
       ctx.publish();
     });
 

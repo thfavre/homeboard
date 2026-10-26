@@ -10,6 +10,7 @@ import type {
   RpcResponse,
   StateMessage,
   ToastMessage,
+  NeedJoin,
   VisitorState,
 } from '$shared/protocol.ts';
 
@@ -59,6 +60,8 @@ export const hb = $state({
   /** Just joined: offer to take a selfie */
   offerAvatar: false,
   codeRequired: true,
+  /** The account on this phone, waiting for the new session code */
+  codeFor: null as NeedJoin['guest'] | null,
   kickedReason: '',
   activity: [] as ActivityItem[],
   toasts: [] as Toast[],
@@ -149,9 +152,10 @@ export function connect(role: Role): void {
     hb.needJoin = false;
   });
   socket.on('visitor', (v: VisitorState) => (hb.visitor = v));
-  socket.on('need-join', (info: { codeRequired: boolean }) => {
+  socket.on('need-join', (info: NeedJoin) => {
     hb.needJoin = true;
     hb.codeRequired = info.codeRequired;
+    hb.codeFor = info.guest ?? null;
     hb.me = null;
   });
   socket.on('kicked', (info: { reason: string }) => {
@@ -236,6 +240,13 @@ export async function join(args: { code: string; name: string; pin: string }): P
   if (socket) socket.auth = authFor('guest');
   hb.kickedReason = '';
   return result;
+}
+
+/** Back into the account on this phone with the new session code */
+export async function enterCode(code: string): Promise<void> {
+  await rpc('core', 'enterCode', { code });
+  hb.codeFor = null;
+  hb.kickedReason = '';
 }
 
 export const lastName = () => storageGet(STORAGE.lastName) ?? '';

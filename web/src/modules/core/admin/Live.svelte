@@ -24,7 +24,7 @@
         <div class="code mono">{core.join.code}</div>
         <a class="url mono" href={core.join.url} target="_blank" rel="noreferrer">{core.join.url}</a>
         <div class="row">
-          <button class="btn small" onclick={() => attempt(() => rpc('core', 'newCode'), 'New code')}>
+          <button class="btn small" onclick={() => attempt(() => rpc('core', 'newCode'), 'New code: every guest enters it again')}>
             <RefreshCw size={15} /> New code
           </button>
         </div>

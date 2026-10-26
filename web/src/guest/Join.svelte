@@ -3,13 +3,14 @@
   import { untrack } from 'svelte';
   import { fly } from 'svelte/transition';
   import type { NameCheck } from '$shared/protocol.ts';
-  import { hb, join, lastName, rpc, toast } from '$lib/client.svelte.ts';
+  import { enterCode, hb, join, lastName, logout, rpc, toast } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import DigitInput from '$lib/ui/DigitInput.svelte';
 
   /**
    * One question per screen: the code on the TV, your name, then your PIN.
    * Knowing the name first lets the last step say "welcome back" or "choose a PIN".
+   * After the host changes the code, a phone already in only asks for the new code.
    */
   type Step = 'code' | 'name' | 'pin';
 
@@ -20,14 +21,14 @@
   let pin = $state('');
   let check = $state<NameCheck | null>(null);
   let showPin = $state(false);
-  let step = $state<Step>(hb.codeRequired && !codeFromLink ? 'code' : 'name');
+  let step = $state<Step>(hb.codeFor || (hb.codeRequired && !codeFromLink) ? 'code' : 'name');
   let busy = $state(false);
   let error = $state('');
   let shake = $state(0);
   let back = $state(false);
 
-  const steps = $derived<Step[]>(hb.codeRequired ? ['code', 'name', 'pin'] : ['name', 'pin']);
-  const canGoBack = $derived(step === 'pin' || (step === 'name' && hb.codeRequired));
+  const steps = $derived<Step[]>(hb.codeFor ? ['code'] : hb.codeRequired ? ['code', 'name', 'pin'] : ['name', 'pin']);
+  const canGoBack = $derived(!hb.codeFor && (step === 'pin' || (step === 'name' && hb.codeRequired)));
 
   function go(to: Step) {
     back = steps.indexOf(to) < steps.indexOf(step);
@@ -75,6 +76,11 @@
     run(async () => {
       if (!/^\d{4}$/.test(code)) return fail('Enter the 4 digits shown on the TV.');
       try {
+        if (hb.codeFor) {
+          await enterCode(code);
+          if (codeFromLink) history.replaceState(null, '', location.pathname);
+          return;
+        }
         await rpc('core', 'checkCode', { code });
       } catch (err) {
         code = '';
@@ -82,6 +88,9 @@
       }
       go('name');
     });
+
+  // Scanned the QR with the code in it: back in without typing
+  if (hb.codeFor && codeFromLink) submitCode();
 
   const submitName = () =>
     run(async () => {
@@ -136,7 +145,17 @@
 
     {#key step}
       <form novalidate class="step" in:fly={{ x: back ? -24 : 24, duration: 220 }} onsubmit={(e) => (e.preventDefault(), step === 'code' ? submitCode() : step === 'name' ? submitName() : submitPin())}>
-        {#if step === 'code'}
+        {#if step === 'code' && hb.codeFor}
+          <div class="ask">
+            <Avatar name={hb.codeFor.name} color={hb.codeFor.color} src={hb.codeFor.avatar} size="4.2rem" />
+            <h2>New code, {hb.codeFor.name}</h2>
+            <p class="dim">The host changed the code. Enter the one on the TV to get back in.</p>
+          </div>
+          <DigitInput bind:value={code} label="Session code" autofocus {shake} disabled={busy} oncomplete={submitCode} />
+          <p class="faint small center">
+            Not {hb.codeFor.name}? <button type="button" class="link" onclick={logout}>Use another name</button>
+          </p>
+        {:else if step === 'code'}
           <div class="ask">
             <span class="badge"><Tv size={22} /></span>
             <h2>Enter the code on the TV</h2>

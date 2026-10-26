@@ -17,6 +17,8 @@ export interface Guest {
    * Older sessions stored a hash instead: still accepted to log in, but cannot be shown.
    */
   pin?: string | { salt: string; hash: string };
+  /** The session code they last entered: a new code sends them back to the code screen */
+  code?: string;
   color: string;
   /** Selfie: public picture, private original (to edit again) and how it was made */
   avatar?: { url: string; file: string; original: string; params: AvatarParams };
@@ -115,6 +117,12 @@ export class Session extends EventEmitter {
   newCode(): void {
     this.file.data.code = sessionCode();
     this.save();
+  }
+
+  /** The guest typed (or scanned) the current code */
+  enteredCode(guest: Guest): void {
+    guest.code = this.code;
+    this.changed(guest);
   }
 
   byToken(token: unknown): Guest | undefined {
