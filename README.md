@@ -7,6 +7,9 @@ reachable from any network.
 
 Ideas and to-dos: [IDEAS.md](IDEAS.md). Working on the code with an AI assistant: [AGENTS.md](AGENTS.md).
 
+<img width="1250" height="700" alt="image" src="https://github.com/user-attachments/assets/801fe5b3-47ab-4fcc-899f-b26dc2e9794c" />
+
+
 ## Quick start
 
 Needs Node.js 22.12 or newer.
