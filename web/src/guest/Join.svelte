@@ -89,8 +89,13 @@
       go('name');
     });
 
-  // Scanned the QR with the code in it: back in without typing
-  if (hb.codeFor && codeFromLink) submitCode();
+  // Scanned the QR with the code in it: back in without typing.
+  // A link from before the code changed just asks for the new one, without an error.
+  if (hb.codeFor && codeFromLink) {
+    enterCode(params.get('c')!)
+      .catch(() => (code = ''))
+      .finally(() => history.replaceState(null, '', location.pathname));
+  }
 
   const submitName = () =>
     run(async () => {

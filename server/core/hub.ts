@@ -560,6 +560,8 @@ export class Hub {
   /** `guest`: the account behind this phone, which only has to enter the current code again */
   private makeVisitor(socket: Socket, guest?: Guest): void {
     socket.join('role:visitor');
+    // A phone that reconnects with its token but an old code is not in yet: only visitor calls
+    socket.data.guestId = undefined;
     socket.data.codeGuestId = guest?.id;
     const c = this.core;
     const state: VisitorState = { appName: c.appName, theme: c.theme, currency: c.currency };
