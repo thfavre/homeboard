@@ -101,6 +101,12 @@
 
 <div class="perk" in:scale={{ start: 0.9, duration: 300 }}>
   <span class="eyebrow">You won {WON[perk.kind]}! Your prize</span>
+  {#if perk.result}
+    <div class="stat">
+      <span class="mono">{perk.result.label}</span>
+      {#if perk.result.detail}<span class="dim">{perk.result.detail}</span>{/if}
+    </div>
+  {/if}
   {#if perk.kind === 'fireworks'}
     <h1>Light it up</h1>
     <p class="dim">Tap the colors: each one shoots a firework up the light.</p>
@@ -156,6 +162,22 @@
   }
   h1 {
     font-size: 2rem;
+  }
+  /* The winning score, as on the result screen but smaller: the prize is the main thing here */
+  .stat {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.6rem 1.3rem;
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .stat .mono {
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+  .stat .dim {
+    font-size: 0.85rem;
   }
   .perk :global(.pad) {
     width: 100%;

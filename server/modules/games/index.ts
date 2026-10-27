@@ -404,7 +404,8 @@ export default defineModule<GamesSettings>({
       const gameStrip = lights()?.list().find((d) => d.id === s.rhythmLight && d.online);
       if (kind === 'fireworks' && !gameStrip) return false;
       endPerk();
-      const base = { guest: winner, until: Date.now() + sec * 1000, totalMs: sec * 1000 };
+      const result = outcome.lines.find((l) => l.id === winner.id);
+      const base = { guest: winner, until: Date.now() + sec * 1000, totalMs: sec * 1000, ...(result ? { result } : {}) };
       perk =
         outcome.perk.kind === 'lights'
           ? { ...base, kind: 'lights', color: null }

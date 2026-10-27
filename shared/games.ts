@@ -213,7 +213,8 @@ export interface MatchState {
  * lights: Color Reflex, they pick the color of every light. scratch: Perfect Circle, their best circle
  * becomes a vinyl they scratch from the phone, live on the TV (in place of the music's "Up next").
  */
-export type Perk = { guest: GamePlayer; until: number; totalMs: number } & (
+/** `result`: the winner's line of the game they won, kept on their phone while the prize plays */
+export type Perk = { guest: GamePlayer; until: number; totalMs: number; result?: MatchResultLine } & (
   | { kind: 'lights'; color: GameColor | null }
   | { kind: 'scratch'; drawing: CircleDrawing }
   | { kind: 'fireworks'; colors: RhythmColor[] }
