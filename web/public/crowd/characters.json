@@ -1,0 +1,147 @@
+{
+  "frame": 64,
+  "rows": {
+    "walk": {
+      "row": 0,
+      "frames": 9
+    },
+    "run": {
+      "row": 1,
+      "frames": 8
+    },
+    "idleRight": {
+      "row": 2,
+      "frames": 2
+    },
+    "idleDown": {
+      "row": 3,
+      "frames": 2
+    },
+    "hurt": {
+      "row": 4,
+      "frames": 6
+    },
+    "jump": {
+      "row": 5,
+      "frames": 5
+    },
+    "emote": {
+      "row": 6,
+      "frames": 3
+    },
+    "sit": {
+      "row": 7,
+      "frames": 3
+    },
+    "walkDown": {
+      "row": 8,
+      "frames": 9
+    },
+    "happy": {
+      "row": 9,
+      "frames": 2
+    },
+    "dead": {
+      "row": 10,
+      "frames": 1
+    },
+    "walkUp": {
+      "row": 11,
+      "frames": 9
+    },
+    "walkLeft": {
+      "row": 12,
+      "frames": 9
+    },
+    "idleUp": {
+      "row": 13,
+      "frames": 2
+    },
+    "idleLeft": {
+      "row": 14,
+      "frames": 2
+    }
+  },
+  "characters": [
+    {
+      "file": "c00.png",
+      "name": "Red t-shirt, blond hair"
+    },
+    {
+      "file": "c01.png",
+      "name": "Green sweater, afro"
+    },
+    {
+      "file": "c02.png",
+      "name": "Yellow top, long red hair"
+    },
+    {
+      "file": "c03.png",
+      "name": "Gray cardigan, beard, glasses"
+    },
+    {
+      "file": "c04.png",
+      "name": "Blue polo, black bob"
+    },
+    {
+      "file": "c05.png",
+      "name": "Orange tank top, curly hair"
+    },
+    {
+      "file": "c06.png",
+      "name": "Purple top, blond hair half up"
+    },
+    {
+      "file": "c07.png",
+      "name": "White shirt, suspenders, mustache"
+    },
+    {
+      "file": "c08.png",
+      "name": "Teal v-neck, red hat"
+    },
+    {
+      "file": "c09.png",
+      "name": "Pink cardigan, long wavy hair"
+    },
+    {
+      "file": "c10.png",
+      "name": "Blue overalls, ginger beard"
+    },
+    {
+      "file": "c11.png",
+      "name": "Green polo, gray hair, glasses"
+    }
+  ],
+  "suits": [
+    {
+      "file": "s00.png",
+      "name": "Charcoal suit"
+    },
+    {
+      "file": "s01.png",
+      "name": "Navy suit"
+    },
+    {
+      "file": "s02.png",
+      "name": "Burgundy suit"
+    },
+    {
+      "file": "s03.png",
+      "name": "Forest green suit"
+    },
+    {
+      "file": "s04.png",
+      "name": "Tan suit"
+    },
+    {
+      "file": "s05.png",
+      "name": "Light gray suit"
+    }
+  ],
+  "feet": 61,
+  "body": {
+    "top": 14,
+    "left": 21,
+    "right": 41
+  }
+}

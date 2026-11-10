@@ -1,5 +1,6 @@
 import type { Role } from '../../../shared/protocol.ts';
 import type { Song } from './beatsaver.ts';
+import type { FlashOptions, LightFlash } from '../wled/overlay.ts';
 import type { BluffDeal, CircleDrawing, GameColor, GameMode, GamePlayer, GamesSettings, MatchResultLine, PirateCrewDeal, RhythmDifficulty } from '../../../shared/games.ts';
 
 /**
@@ -69,6 +70,15 @@ export interface MatchApi {
   strips(): { id: string; leds: number; send(rgb: Uint8Array): void }[];
   /** One-off event to the TV that plays the sound */
   sound(name: string, data: unknown): void;
+  /** One-off event to every TV (Crowd Race: the frames of the crowd) */
+  tv(name: string, data: unknown): void;
+  /**
+   * A short effect over whatever the lights show, which then carry on as they were (the game does not hold
+   * them). Does nothing when the host turned the game's flashes off or no light can show it.
+   */
+  flash(kind: LightFlash, opts?: FlashOptions): void;
+  /** Keep a copy of what the lights show while the game runs, so the flashes fade back into it */
+  watchLights(on: boolean): void;
   publish(): void;
   finish(outcome: Outcome): void;
   /** Earn rule amount (0 when the economy is off) */

@@ -14,6 +14,7 @@
   import RhythmSongsAdmin from './RhythmSongsAdmin.svelte';
   import PirateSoundsAdmin from './PirateSoundsAdmin.svelte';
   import PirateSongsAdmin from './PirateSongsAdmin.svelte';
+  import CrowdAdmin from './crowd/CrowdAdmin.svelte';
 
   const s = $derived(gamesState());
   const roomGames = GAMES.filter((g) => g.modes.includes('room'));
@@ -93,6 +94,10 @@
         return `${pirateLength(st.pirateLength).name.toLowerCase()} race, ${st.pirateLight ? `on ${lightName(st.pirateLight)}, treasure at ${st.pirateTreasure}%` : 'TV only'}`;
       case 'party':
         return st.partyLight ? `on ${lightName(st.partyLight)}, ${Math.min(st.partyRounds, st.partyMinis.length)} of ${plural(st.partyMinis.length, 'mini game')}` : 'needs a light';
+      case 'crowd':
+        return `${plural(st.crowdRounds, 'round')}, ${st.crowdNpcs} passers-by, ${plural(st.crowdShots, 'shot')} each`;
+      case 'spy':
+        return `${plural(st.spyRounds, 'round')} of ${st.spyMinutes} min, ${plural(st.spyShots, 'shot')} per sniper, ${st.spyNeeded} of 4 suitcases`;
       default:
         return '';
     }
@@ -300,6 +305,8 @@
     </PirateSoundsAdmin>
   {:else if id === 'party'}
     <PartyAdmin settings={s!.settings} lights={s!.lightDevices ?? []} />
+  {:else if id === 'crowd' || id === 'spy'}
+    <CrowdAdmin game={id} settings={s!.settings} />
   {/if}
 {/snippet}
 

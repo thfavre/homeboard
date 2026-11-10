@@ -1,8 +1,9 @@
 // Mini games: 1 vs 1 duels with a stake, room games that anyone can join, or solo games.
 
 import type { PartyMiniId, PartyOptions } from './party.ts';
+import type { CrowdSpeed, SpyGadget } from './crowd.ts';
 
-export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm' | 'pirates' | 'party';
+export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm' | 'pirates' | 'party' | 'crowd' | 'spy';
 export type GameMode = 'duel' | 'room' | 'solo';
 
 export interface GameInfo {
@@ -119,6 +120,28 @@ export const GAMES: GameInfo[] = [
     lights: true,
     steps: ['A few mini games on the light strip, drawn at random', 'Each one starts with its rules: press Got it', 'Points for each place. Most points at the end wins'],
     colors: ['#ff5fc8', '#3d8bff'],
+  },
+  {
+    id: 'crowd',
+    name: 'Crowd Race',
+    tagline: 'Hide in the crowd, cross the line first, shoot the others',
+    rules: 'Every player is one of the people in the crowd on the TV, but nobody knows who: press WALK and watch who moves. Everyone walks to the finish line on the right, passers-by stop now and then. Hold WALK to walk, RUN to run (faster, but nobody else runs). You also have a sniper: move your crosshair with the joystick and press SHOOT. Shoot another player and they are out of the round; a passer-by costs you the bullet. The first to cross the line wins the round, unless a passer-by gets there first. The last player standing wins it too. Most rounds won wins the game.',
+    modes: ['room'],
+    pausesMusic: true,
+    steps: ['You are someone in the crowd: press WALK and find who moves', 'Reach the finish line first. Running is fast, and easy to spot', 'Aim with the joystick and SHOOT the other players'],
+    colors: ['#ff7a3d', '#ffd23d'],
+    maxPlayers: 10,
+  },
+  {
+    id: 'spy',
+    name: 'Spy Hunt',
+    tagline: 'One spy in the crowd, everyone else holds a sniper',
+    rules: 'One player is the spy, hidden in the crowd on the TV: they walk like everyone else with the joystick and must touch the suitcases in the corners. A touched suitcase opens a few seconds later, so nobody sees who touched it. Every other player is a sniper with a few shots: aim with the joystick, SHOOT, and hold DRAW to mark suspects on the TV. Shoot the spy before they open the suitcases or the time runs out. The spy has one gadget a round: a flashbang, smoke or a decoy. Each round has a new spy; the most points wins.',
+    modes: ['room'],
+    pausesMusic: true,
+    steps: ['The spy walks in the crowd and opens the suitcases in the corners', 'Snipers aim with the joystick, SHOOT, and DRAW to point out suspects', 'Spy escapes: 3 points. Sniper who shoots the spy: 2. Time up: 1 per sniper'],
+    colors: ['#3dd6ff', '#8b5bff'],
+    maxPlayers: 10,
   },
 ];
 
@@ -331,6 +354,34 @@ export interface GamesSettings {
   partyOptions: PartyOptions;
   /** The drum's volume on the TV, 0 to 100 (100: as loud as it was made) */
   pirateDrumVolume: number;
+  /** Crowd Race: passers-by, walking speed (everyone), running speed (times walking), shots and reload, rounds */
+  crowdNpcs: number;
+  crowdSpeed: CrowdSpeed;
+  crowdRun: number;
+  crowdShots: number;
+  crowdReloadSec: number;
+  crowdRounds: number;
+  /** Spy Hunt: passers-by, walking speed, shots per sniper and reload, rounds, minutes a round */
+  spyNpcs: number;
+  spySpeed: CrowdSpeed;
+  spyShots: number;
+  spyReloadSec: number;
+  spyRounds: number;
+  spyMinutes: number;
+  /** Suitcases to open to win a round (of the 4), and the delay before a touched one opens (seconds) */
+  spyNeeded: number;
+  spyCollectMin: number;
+  spyCollectMax: number;
+  /** Different suit colors in the crowd (1: everyone looks the same) */
+  spyLooks: number;
+  /** Seconds a sniper's drawing takes to fade */
+  spyDrawFadeSec: number;
+  /** Gadgets the spy can pick from */
+  spyGadgets: SpyGadget[];
+  /** Crowd Race and Spy Hunt on the TV: music and sound volumes (0: off), and the light flashes */
+  sniperMusic: number;
+  sniperSounds: number;
+  sniperLights: boolean;
 }
 
 // ------------------------------------------------------------ per game views

@@ -15,6 +15,10 @@ import ReflexTv from './tv/ReflexTv.svelte';
 import CircleTv from './tv/CircleTv.svelte';
 import PiratesTv from './tv/PiratesTv.svelte';
 import PartyTv from './party/PartyTv.svelte';
+import RacePhone from './crowd/RacePhone.svelte';
+import RaceTv from './crowd/RaceTv.svelte';
+import SpyPhone from './crowd/SpyPhone.svelte';
+import SpyTv from './crowd/SpyTv.svelte';
 
 type View = Component<{ m: MatchState }>;
 
@@ -33,4 +37,6 @@ export const GAME_UI: Record<GameId, { phone: View; tv?: View; tvResult?: boolea
   rhythm: { phone: RhythmPhone, fill: true },
   pirates: { phone: PiratesPhone, tv: PiratesTv, tvResult: true, fill: true },
   party: { phone: PartyPhone, tv: PartyTv },
+  crowd: { phone: RacePhone, tv: RaceTv, fill: true },
+  spy: { phone: SpyPhone, tv: SpyTv, fill: true },
 };

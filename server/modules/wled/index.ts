@@ -14,6 +14,7 @@ import {
   type WledState,
 } from '../../../shared/wled.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
+import { LightOverlay, type FlashOptions, type LightFlash } from './overlay.ts';
 import { defineModule } from '../../core/module.ts';
 import { HbError, clamp, cleanName, num, uid } from '../../core/util.ts';
 import { Fireworks } from './fireworks.ts';
@@ -84,6 +85,13 @@ export interface LightsApi {
    */
   boost(deviceId: string): Promise<void>;
   unboost(deviceId: string): Promise<void>;
+  /**
+   * A short effect over whatever every light shows (a shot, a kill...), which then carries on as it was.
+   * Lights a game holds, a live show or a boost are left alone.
+   */
+  flash(kind: LightFlash, opts?: FlashOptions): void;
+  /** While a game flashes the lights: keep a copy of what they show, so the flashes fade back into it */
+  watch(on: boolean): void;
 }
 
 /** WLED's UDP realtime port, and the DRGB protocol (up to 490 LEDs) */
@@ -548,7 +556,47 @@ export default defineModule<WledSettings>({
       }
     };
 
+    // ------------------------------------------------------------ flashes over the lights
+
+    const overlay = new LightOverlay({
+      lights: () =>
+        held || !ctx.enabled()
+          ? []
+          : devices()
+              .filter((d) => health.get(d.id)?.online && canLive(d) && !boosted.has(d.id) && !live.has(d.id))
+              .map((d) => ({ id: d.id, leds: Math.min(490, health.get(d.id)?.leds ?? 60) })),
+      snapshot: async (id, leds) => {
+        const d = device(id);
+        if (!d) return null;
+        const [state, shown] = await Promise.all([wled(d.host, '/json/state'), wled(d.host, '/json/live')]);
+        if (!state?.on || !(state.bri > 0) || !Array.isArray(shown?.leds)) return null;
+        // What WLED shows is scaled by its brightness, and so are live pixels: undo it once
+        const k = 255 / state.bri;
+        const step = Math.max(1, Number(shown.n) || 1);
+        const px = new Float32Array(leds * 3);
+        for (let i = 0; i < leds; i++) {
+          const hex = String(shown.leds[Math.min(shown.leds.length - 1, Math.floor(i / step))] ?? '000000');
+          const v = parseInt(hex.slice(-6), 16) || 0;
+          px[i * 3] = Math.min(255, ((v >> 16) & 255) * k);
+          px[i * 3 + 1] = Math.min(255, ((v >> 8) & 255) * k);
+          px[i * 3 + 2] = Math.min(255, (v & 255) * k);
+        }
+        return px;
+      },
+      send: (id, rgb) => {
+        const d = device(id);
+        if (!d) return;
+        // Timeout 0 makes WLED leave live mode at once: back to its own effect
+        if (rgb) realtime(d, rgb, 1);
+        else realtime(d, new Uint8Array(0), 0);
+      },
+      frameMs: 30,
+    });
+    ctx.onShutdown(() => overlay.clear());
+
     ctx.provide<LightsApi>('lights', {
+      flash: (kind, opts) => overlay.play(kind, opts),
+      watch: (on) => overlay.watch(on),
       available: () => ctx.enabled() && devices().some((d) => health.get(d.id)?.online),
       list: () => devices().map((d) => ({ id: d.id, name: d.name, online: !!health.get(d.id)?.online, leds: health.get(d.id)?.leds ?? null })),
       // Sent as it comes: a strip shown frames faster than it can draw them queues them up and lags

@@ -52,6 +52,9 @@ import { dealPirateCrews, pirateRace, pirateWaitingLights } from './pirates.ts';
 import { cleanMp3, downloadMp3 } from '../soundboard/myinstants.ts';
 import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
 import { lightParty } from './party/index.ts';
+import { crowdRace } from './crowd/race.ts';
+import { spyHunt } from './crowd/spy.ts';
+import { CROWD_SPEEDS, RUN_FACTORS, SPY_GADGETS } from '../../../shared/crowd.ts';
 import { PARTY_MINIS, cleanPartyOptions } from '../../../shared/party.ts';
 
 /** Songs a new party starts with: well known, well rated maps with charts from Easy or Normal to Expert */
@@ -67,6 +70,8 @@ const FACTORIES: Record<GameId, GameFactory> = {
   rhythm: rhythmRain,
   pirates: pirateRace,
   party: lightParty,
+  crowd: crowdRace,
+  spy: spyHunt,
 };
 
 /** Games played on one light the host picks: the setting that names it */
@@ -139,7 +144,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmHolds: true, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'tv', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {} },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmHolds: true, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'tv', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {}, crowdNpcs: 30, crowdSpeed: 'normal', crowdRun: 2, crowdShots: 1, crowdReloadSec: 2, crowdRounds: 3, spyNpcs: 30, spySpeed: 'normal', spyShots: 3, spyReloadSec: 2, spyRounds: 3, spyMinutes: 3, spyNeeded: 4, spyCollectMin: 2, spyCollectMax: 5, spyLooks: 3, spyDrawFadeSec: 4, spyGadgets: SPY_GADGETS.map((g) => g.id), sniperMusic: 60, sniperSounds: 80, sniperLights: true },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -335,6 +340,8 @@ export default defineModule<GamesSettings>({
     const music = () => ctx.use<MusicApi>('music');
     const pauseMusic = (m: Match) => {
       if (!gameInfo(m.game)?.pausesMusic) return;
+      // Crowd Race and Spy Hunt play their own music, unless the host turned it off
+      if ((m.game === 'crowd' || m.game === 'spy') && ctx.settings.get().sniperMusic <= 0) return;
       void music()
         ?.pause()
         .then((paused) => {
@@ -364,6 +371,8 @@ export default defineModule<GamesSettings>({
       for (const t of m.timers) clearTimeout(t);
       matches.delete(m.id);
       resumeMusic(m);
+      // Crowd Race and Spy Hunt keep a copy of the lights for their flashes: not any more
+      if (m.game === 'crowd' || m.game === 'spy') lights()?.watch(false);
       if (m.usesLights) {
         dimLight(m);
         void lights()?.release();
@@ -558,6 +567,13 @@ export default defineModule<GamesSettings>({
         strips: () =>
           (lights()?.list() ?? []).filter((d) => d.online).map((d) => ({ id: d.id, leds: Math.min(490, d.leds ?? 60), send: (rgb: Uint8Array) => lights()?.frame(d.id, rgb) })),
         sound: (name, data) => ctx.emit('tv-audio', name, data),
+        tv: (name, data) => ctx.emit('tv', name, data),
+        flash: (kind, opts) => {
+          if (ctx.settings.get().sniperLights) lights()?.flash(kind, opts);
+        },
+        watchLights: (on) => {
+          if (!on || ctx.settings.get().sniperLights) lights()?.watch(on);
+        },
         publish: () => ctx.publish(),
         finish: (outcome) => finish(m, outcome),
         reward: (key) => (ctx.economy.enabled ? ctx.economy.earnAmount(key) : 0),
@@ -1084,6 +1100,9 @@ export default defineModule<GamesSettings>({
     });
     ctx.onAdmin('setSettings', (args) => {
       const s = ctx.settings.get();
+      /** A whole number setting from the page, kept between min and max (unchanged when not sent) */
+      const int = <K extends keyof GamesSettings>(key: K, min: number, max: number) =>
+        (args?.[key] !== undefined ? Math.round(clamp(num(args[key], s[key] as number), min, max)) : s[key]) as number;
       ctx.settings.update({
         enabled: Array.isArray(args?.enabled) ? GAMES.map((g) => g.id).filter((id) => args.enabled.includes(id)) : s.enabled,
         maxStake: args?.maxStake !== undefined ? Math.max(0, Math.round(num(args.maxStake, 0))) : s.maxStake,
@@ -1131,7 +1150,31 @@ export default defineModule<GamesSettings>({
         partyRounds: args?.partyRounds !== undefined ? Math.round(clamp(num(args.partyRounds, 3), 1, PARTY_MINIS.length)) : s.partyRounds,
         partyMinis: Array.isArray(args?.partyMinis) ? PARTY_MINIS.map((g) => g.id).filter((id) => args.partyMinis.includes(id)) : s.partyMinis,
         partyOptions: args?.partyOptions !== undefined ? cleanPartyOptions(args.partyOptions) : s.partyOptions,
+        crowdNpcs: int('crowdNpcs', 10, 80),
+        crowdSpeed: CROWD_SPEEDS.some((x) => x.id === args?.crowdSpeed) ? args.crowdSpeed : s.crowdSpeed,
+        crowdRun: RUN_FACTORS.includes(args?.crowdRun) ? args.crowdRun : s.crowdRun,
+        crowdShots: int('crowdShots', 1, 5),
+        crowdReloadSec: int('crowdReloadSec', 0, 10),
+        crowdRounds: int('crowdRounds', 1, 7),
+        spyNpcs: int('spyNpcs', 10, 80),
+        spySpeed: CROWD_SPEEDS.some((x) => x.id === args?.spySpeed) ? args.spySpeed : s.spySpeed,
+        spyShots: int('spyShots', 1, 10),
+        spyReloadSec: int('spyReloadSec', 0, 10),
+        spyRounds: int('spyRounds', 1, 10),
+        spyMinutes: int('spyMinutes', 1, 10),
+        spyNeeded: int('spyNeeded', 1, 4),
+        spyCollectMin: int('spyCollectMin', 0, 15),
+        spyCollectMax: int('spyCollectMax', 0, 15),
+        spyLooks: int('spyLooks', 1, 6),
+        spyDrawFadeSec: int('spyDrawFadeSec', 1, 15),
+        spyGadgets: Array.isArray(args?.spyGadgets) ? SPY_GADGETS.map((g) => g.id).filter((id) => args.spyGadgets.includes(id)) : s.spyGadgets,
+        sniperMusic: int('sniperMusic', 0, 100),
+        sniperSounds: int('sniperSounds', 0, 100),
+        sniperLights: typeof args?.sniperLights === 'boolean' ? args.sniperLights : s.sniperLights,
       });
+      // The shortest delay before a suitcase opens stays below the longest, whichever was moved
+      const c = ctx.settings.get();
+      if (c.spyCollectMin > c.spyCollectMax) ctx.settings.update(args?.spyCollectMin !== undefined ? { spyCollectMax: c.spyCollectMin } : { spyCollectMin: c.spyCollectMax });
       // The shortest stays below the longest, whichever was moved
       const n = ctx.settings.get();
       if (n.rhythmMinSec > n.rhythmMaxSec) {
