@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import { Loader2 } from '@lucide/svelte';
   import type { SheetInfo } from '$shared/world.ts';
 
@@ -15,6 +16,7 @@
     building = false,
     focus = null,
     facing = 'down',
+    children,
   }: {
     url: string | null;
     sheet: SheetInfo | null;
@@ -22,6 +24,8 @@
     focus?: Focus;
     /** 'up' shows the back (capes, wings): the character keeps turning, lingering on the back */
     facing?: 'down' | 'up';
+    /** Shown over the stage (the shop puts the balance in its corner) */
+    children?: Snippet;
   } = $props();
 
   /** The square of the frame to show for a focus (full frame when null) */
@@ -124,6 +128,7 @@
   {#if building}
     <span class="building"><Loader2 size={18} class="spin" /></span>
   {/if}
+  {@render children?.()}
 </div>
 
 <style>

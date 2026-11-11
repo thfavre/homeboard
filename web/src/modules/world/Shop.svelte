@@ -186,12 +186,9 @@
   </div>
 {:else}
   <div class="shop">
-    <div class="balance-row">
-      <span class="balance"><Coins size={16} />{wd?.balance ?? 0} {shop.currencyName}</span>
-      <span class="faint small">You earn them by being in the town</span>
-    </div>
-
-    <AvatarPreview {url} {sheet} building={buildingCount > 0} focus={FOCUS[slot]} facing={slot === 'back' ? 'up' : 'down'} />
+    <AvatarPreview {url} {sheet} building={buildingCount > 0} focus={FOCUS[slot]} facing={slot === 'back' ? 'up' : 'down'}>
+      <span class="balance" title="You earn them by being in the town"><Coins size={15} />{wd?.balance ?? 0} {shop.currencyName}</span>
+    </AvatarPreview>
 
     <div class="slots">
       {#each slots as s (s.id)}
@@ -298,21 +295,21 @@
     padding: 2rem 0;
     color: var(--text-dim);
   }
-  .balance-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.6rem;
-  }
+  /* The balance in the preview's top left corner */
   .balance {
+    position: absolute;
+    top: 0.6rem;
+    left: 0.6rem;
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    font-size: 0.88rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-  }
-  .small {
-    font-size: 0.82rem;
   }
   .slots {
     display: flex;
