@@ -104,15 +104,8 @@
       g.imageSmoothingEnabled = false;
       g.clearRect(0, 0, canvas!.width, canvas!.height);
       if (!imgReady || !sheet) return;
-      // Walk down, right, up, left, a second each, like a little catwalk
-      const order = [
-        { row: 'walkDown', flip: false },
-        { row: 'walk', flip: false },
-        { row: 'walkUp', flip: false },
-        { row: 'walkLeft', flip: false },
-      ];
-      const pick = order[Math.floor(now / 1600) % order.length];
-      const row = sheet.rows[pick.row] ?? sheet.rows.walk;
+      // Walking toward the camera, steady: turning around was found annoying
+      const row = sheet.rows.walkDown ?? sheet.rows.walk;
       if (!row) return;
       const count = Math.max(1, row.frames - 1);
       const frame = row.frames > 1 ? 1 + (Math.floor(now / 110) % count) : 0;

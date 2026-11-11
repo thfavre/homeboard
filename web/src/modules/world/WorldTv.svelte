@@ -28,7 +28,7 @@
 
   /** Per character: distance walked, when its anim started, a breathing offset */
   const locals = new Map<string, { dist: number; anim: number; since: number; phase: number; lx: number; ly: number }>();
-  const pigeons = untrack(() => new Pigeons(6, TOWN_AREA));
+  const pigeons = untrack(() => new Pigeons(3, TOWN_AREA));
   let lastDraw = 0;
 
   onMount(() => {
@@ -157,6 +157,8 @@
     }
     const g = canvas.getContext('2d')!;
     g.setTransform(1, 0, 0, 1, 0, 0);
+    // The whole canvas: birds fly off above the town rectangle, into the letterbox bands
+    g.clearRect(0, 0, cw, ch);
     const k = Math.min(cw / TOWN.w, ch / TOWN.h);
     g.setTransform(k, 0, 0, k, (cw - TOWN.w * k) / 2, (ch - TOWN.h * k) / 2);
     g.imageSmoothingEnabled = false;
