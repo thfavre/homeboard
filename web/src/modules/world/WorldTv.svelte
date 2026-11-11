@@ -223,8 +223,8 @@
     for (const p of people) {
       if (p.anim === WANIM.sleep) {
         const s = sleepSide(p.x);
-        g.moveTo(p.x + s * 36 + 40, p.y + 2);
-        g.ellipse(p.x + s * 36, p.y + 2, 40, 8, 0, 0, Math.PI * 2);
+        g.moveTo(p.x + s * 30 + 30, p.y + 2);
+        g.ellipse(p.x + s * 30, p.y + 2, 30, 7, 0, 0, Math.PI * 2);
       } else {
         g.moveTo(p.x + 15, p.y);
         g.ellipse(p.x, p.y, 15, 5, 0, 0, Math.PI * 2);
