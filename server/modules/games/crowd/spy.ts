@@ -322,7 +322,7 @@ export const spyHunt: GameFactory = (m) => {
     if (gadget === 'flashbang') {
       blindUntil = now + FLASHBANG_MS;
       for (const a of aims.values()) a.draw = false;
-      m.flash('flashbang', { ms: FLASHBANG_MS });
+      m.flash('flashbang', { ms: 2000 });
       events.push({ k: 'gadget', g: 'flashbang', x: Math.round(at.x), y: Math.round(at.y) });
     } else if (gadget === 'smoke') {
       smoke = { x: Math.round(at.x), y: Math.round(at.y - 30), until: now + SMOKE_MS };

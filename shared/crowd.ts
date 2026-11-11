@@ -139,7 +139,7 @@ export const SPY_GADGETS = [
 export type SpyGadget = (typeof SPY_GADGETS)[number]['id'];
 export const FLASHBANG_MS = 3200;
 export const SMOKE_MS = 8000;
-export const SMOKE_RADIUS = 190;
+export const SMOKE_RADIUS = 280;
 /** A suitcase is touched within this distance of its middle */
 export const CASE_RADIUS = 46;
 /** The four suitcases of the basic map, one in each corner */

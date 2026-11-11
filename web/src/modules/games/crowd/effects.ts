@@ -187,8 +187,8 @@ export class Effects {
     this.smokes.push({ x, y, from: now, until: now + ms, next: now });
     for (let k = 0; k < 40; k++) {
       const a = rand(0, Math.PI * 2);
-      const v = rand(60, 230);
-      this.add({ kind: 'smoke', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.7, life: rand(2.4, 4), size: rand(40, 70), grow: rand(25, 50), spin: rand(-0.4, 0.4), color: '#c9cbd2', alpha: 0.85, drag: 1.6 });
+      const v = rand(90, 340);
+      this.add({ kind: 'smoke', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.7, life: rand(2.6, 4.4), size: rand(60, 110), grow: rand(35, 70), spin: rand(-0.4, 0.4), color: '#c9cbd2', alpha: 0.8, drag: 1.4 });
     }
     this.shake(4, 200);
   }
@@ -203,7 +203,7 @@ export class Effects {
       while (s.next < now) {
         s.next += fading ? 140 : 45;
         const a = rand(0, Math.PI * 2);
-        const r = rand(0, 120);
+        const r = rand(0, 210);
         this.add({
           kind: 'smoke',
           x: s.x + Math.cos(a) * r,
@@ -211,8 +211,8 @@ export class Effects {
           vx: Math.cos(a) * rand(5, 30),
           vy: Math.sin(a) * rand(5, 25) - 6,
           life: rand(2.2, 3.6),
-          size: rand(55, 90),
-          grow: rand(10, 25),
+          size: rand(80, 140),
+          grow: rand(15, 35),
           spin: rand(-0.3, 0.3),
           color: Math.random() < 0.5 ? '#c4c6ce' : '#b4b7c0',
           alpha: 0.8,

@@ -559,11 +559,11 @@ export default defineModule<WledSettings>({
     // ------------------------------------------------------------ flashes over the lights
 
     const overlay = new LightOverlay({
-      lights: () =>
+      lights: (all) =>
         held || !ctx.enabled()
           ? []
           : devices()
-              .filter((d) => health.get(d.id)?.online && canLive(d) && !boosted.has(d.id) && !live.has(d.id))
+              .filter((d) => health.get(d.id)?.online && (all || canLive(d)) && !boosted.has(d.id) && !live.has(d.id))
               .map((d) => ({ id: d.id, leds: Math.min(490, health.get(d.id)?.leds ?? 60) })),
       snapshot: async (id, leds) => {
         const d = device(id);

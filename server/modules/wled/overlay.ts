@@ -22,7 +22,7 @@ interface Running {
   color: Rgb;
 }
 
-const DEFAULT_MS: Record<LightFlash, number> = { shot: 200, kill: 1150, flashbang: 3200, smoke: 8000, gold: 700, win: 1900 };
+const DEFAULT_MS: Record<LightFlash, number> = { shot: 200, kill: 1150, flashbang: 2000, smoke: 8000, gold: 700, win: 1900 };
 
 const hexRgb = (hex: string | undefined, fallback: Rgb): Rgb => {
   const n = parseInt(String(hex ?? '').replace('#', '').slice(0, 6), 16);
@@ -48,10 +48,12 @@ function shade(e: Running, t: number, i: number, n: number): { a: number; rgb: R
       return { a, rgb: e.color };
     }
     case 'flashbang': {
-      // Blinding white, a little flicker as it bursts, then a long fade (eyes adjusting)
-      if (t < 260) return { a: t < 40 ? 0.6 + t / 100 : 1, rgb: [255, 255, 255] };
-      const k = 1 - (t - 260) / (e.ms - 260);
-      return { a: Math.max(0, k) ** 1.6, rgb: [255, 250, 235] };
+      // A strobe: white, off, white again (held a moment), then a slow fade back over the rest
+      if (t < 70) return { a: 1, rgb: [255, 255, 255] };
+      if (t < 160) return { a: 0, rgb: [255, 255, 255] };
+      if (t < 320) return { a: 1, rgb: [255, 255, 255] };
+      const k = 1 - (t - 320) / Math.max(1, e.ms - 320);
+      return { a: Math.max(0, k) ** 1.8, rgb: [255, 250, 235] };
     }
     case 'smoke': {
       // A grey haze drifting along the light, thicker in places; it rolls in and clears slowly
@@ -79,8 +81,11 @@ export interface OverlayLight {
 }
 
 export interface OverlayDeps {
-  /** Lights an effect may play on right now (online, whole light, not used by a game or a live show) */
-  lights(): OverlayLight[];
+  /**
+   * Lights an effect may play on right now (online, not used by a game or a live show). `all`: also the
+   * lights set to use only some of their segments (the flashbang takes over every light for a moment)
+   */
+  lights(all?: boolean): OverlayLight[];
   /** What a light shows now, as live pixels would draw it (null: unknown, or the light is off) */
   snapshot(id: string, leds: number): Promise<Float32Array | null>;
   /** Live pixels; `exit`: leave live mode now (the light goes back to its own effect) */
@@ -108,7 +113,7 @@ export class LightOverlay {
     }
     if (this.watchTimer) return;
     const refresh = () => {
-      for (const l of this.deps.lights()) void this.refresh(l);
+      for (const l of this.deps.lights(true)) void this.refresh(l);
     };
     refresh();
     this.watchTimer = setInterval(refresh, 2500);
@@ -130,9 +135,10 @@ export class LightOverlay {
     const now = Date.now();
     const ms = Math.max(100, o.ms ?? DEFAULT_MS[kind]);
     const color = hexRgb(o.color, kind === 'kill' ? [255, 0, 0] : [255, 255, 255]);
-    for (const l of this.deps.lights()) {
-      // A light we know is off stays off
-      if (this.bases.has(l.id) && this.bases.get(l.id) === null) continue;
+    const all = kind === 'flashbang';
+    for (const l of this.deps.lights(all)) {
+      // A light we know is off stays off, except for the flashbang: it blinds every light in the room
+      if (!all && this.bases.has(l.id) && this.bases.get(l.id) === null) continue;
       const list = this.running.get(l.id) ?? [];
       // The same short effect again replaces the one playing
       const kept = kind === 'smoke' ? list : list.filter((e) => e.kind !== kind);
@@ -156,7 +162,7 @@ export class LightOverlay {
 
   private tick(): void {
     const now = Date.now();
-    const leds = new Map(this.deps.lights().map((l) => [l.id, l.leds]));
+    const leds = new Map(this.deps.lights(true).map((l) => [l.id, l.leds]));
     for (const [id, list] of [...this.running]) {
       const live = list.filter((e) => now - e.start < e.ms);
       const n = leds.get(id);

@@ -527,14 +527,22 @@
     if (a <= 0) return;
     const grow = Math.min(1, age / 700);
     // The heart of the cloud, so nobody can be seen inside even between the puffs (they make the look)
-    const core = g.createRadialGradient(s.x, s.y, 0, s.x, s.y, SMOKE_RADIUS * 0.8 * grow);
-    core.addColorStop(0, `rgba(190,192,200,${0.92 * a})`);
-    core.addColorStop(0.75, `rgba(185,187,196,${0.75 * a})`);
+    // Thick in the middle, thinning out slowly to nothing: no edge to see (the puffs give it its shape)
+    const rad = SMOKE_RADIUS * grow;
+    g.save();
+    g.translate(s.x, s.y);
+    g.scale(1, 0.8);
+    const core = g.createRadialGradient(0, 0, 0, 0, 0, rad);
+    core.addColorStop(0, `rgba(190,192,200,${0.93 * a})`);
+    core.addColorStop(0.35, `rgba(188,190,198,${0.88 * a})`);
+    core.addColorStop(0.6, `rgba(185,187,196,${0.55 * a})`);
+    core.addColorStop(0.8, `rgba(182,184,192,${0.2 * a})`);
     core.addColorStop(1, 'rgba(180,182,190,0)');
     g.fillStyle = core;
     g.beginPath();
-    g.ellipse(s.x, s.y, SMOKE_RADIUS * 0.8 * grow, SMOKE_RADIUS * 0.7 * grow, 0, 0, Math.PI * 2);
+    g.arc(0, 0, rad, 0, Math.PI * 2);
     g.fill();
+    g.restore();
   }
 
   function draw() {
