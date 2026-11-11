@@ -6,6 +6,7 @@ import {
   SPY_AREA,
   SPY_CASES,
   SPY_GADGETS,
+  SPY_OBSTACLES,
   SPY_POINTS,
   SUIT_LOOKS,
   SPY_WALK_UPS,
@@ -18,11 +19,12 @@ import {
   type SpyView,
 } from '../../../../shared/crowd.ts';
 import { shuffle, type GameFactory } from '../engine.ts';
-import { TICK_MS, aimOut, dealLooks, dirOf, hitTest, moveAim, newActor, newAim, pack, pick, rand, stick, type Actor, type Aim } from './sim.ts';
+import { HOLD_EXPIRE_MS, TICK_MS, aimOut, blocked, dealLooks, dirOf, hitTest, keepOut, moveAim, newActor, newAim, pack, pick, rand, stick, type Actor, type Aim } from './sim.ts';
 
 /** The spy picks a gadget and finds their character this long before the snipers can shoot */
 const PICK_MS = 12_000;
-const REVEAL_MS = 8000;
+/** The end of a round stays this long: who the spy was, how it ended, the points (time to take it in) */
+const REVEAL_MS = 14_000;
 /** A stick pushed less than this is let go */
 const DEAD_ZONE = 0.35;
 /** A decoy jumps at least this far away when it can */
@@ -55,7 +57,8 @@ export const spyHunt: GameFactory = (m) => {
   let actors: Actor[] = [];
   let looks: number[] = [];
   const aims = new Map<string, Aim>();
-  let push = { x: 0, y: 0 };
+  /** The spy's stick, and when the phone last sent it */
+  let push = { x: 0, y: 0, at: 0 };
   let cases: { x: number; y: number; open: boolean; at: number | null }[] = [];
   let gadget: SpyGadget | null = null;
   let used: SpyGadget | null = null;
@@ -84,12 +87,19 @@ export const spyHunt: GameFactory = (m) => {
     used = null;
     smoke = null;
     blindUntil = 0;
-    push = { x: 0, y: 0 };
+    push = { x: 0, y: 0, at: 0 };
     cases = SPY_CASES.map((c) => ({ ...c, open: false, at: null }));
     const n = Math.max(1, s.spyNpcs + 1);
     looks = dealLooks(n, Math.min(SUIT_LOOKS, Math.max(1, s.spyLooks)));
     actors = looks.map((look, i) => {
-      const a = newActor(i, look, rand(SPY_AREA.x0, SPY_AREA.x1), rand(SPY_AREA.y0, SPY_AREA.y1), pick([0, 1, 2, 3] as const));
+      // Nobody starts inside the fountain or a tree
+      let x = rand(SPY_AREA.x0, SPY_AREA.x1);
+      let y = rand(SPY_AREA.y0, SPY_AREA.y1);
+      for (let k = 0; k < 20 && blocked(x, y, SPY_OBSTACLES, 12); k++) {
+        x = rand(SPY_AREA.x0, SPY_AREA.x1);
+        y = rand(SPY_AREA.y0, SPY_AREA.y1);
+      }
+      const a = newActor(i, look, x, y, pick([0, 1, 2, 3] as const));
       // The crowd comes to life a little at a time
       a.next = now + rand(0, 2500);
       a.tx = a.x;
@@ -101,8 +111,15 @@ export const spyHunt: GameFactory = (m) => {
     const away = actors.filter((a) => SPY_CASES.every((c) => Math.hypot(a.x - c.x, a.y - c.y) > 260));
     spyActor = pick(away.length ? away : actors);
     spyActor.player = spy;
+    // A sniper still holding the stick from last round keeps pushing their new crosshair
+    const held = new Map(aims);
     aims.clear();
-    for (const id of snipers()) aims.set(id, newAim(id, until, Math.max(1, s.spyShots)));
+    for (const id of snipers()) {
+      const a = newAim(id, until, Math.max(1, s.spyShots));
+      const old = held.get(id);
+      if (old) Object.assign(a, { sx: old.sx, sy: old.sy, heard: old.heard });
+      aims.set(id, a);
+    }
     m.publish();
   };
 
@@ -162,8 +179,12 @@ export const spyHunt: GameFactory = (m) => {
       // Somewhere new: often not far, sometimes across the square
       const far = Math.random() < 0.35;
       const r = far ? 900 : rand(120, 420);
-      a.tx = Math.min(SPY_AREA.x1, Math.max(SPY_AREA.x0, a.x + rand(-r, r)));
-      a.ty = Math.min(SPY_AREA.y1, Math.max(SPY_AREA.y0, a.y + rand(-r, r) * 0.6));
+      // Not inside the fountain or a tree: another spot then
+      for (let k = 0; k < 12; k++) {
+        a.tx = Math.min(SPY_AREA.x1, Math.max(SPY_AREA.x0, a.x + rand(-r, r)));
+        a.ty = Math.min(SPY_AREA.y1, Math.max(SPY_AREA.y0, a.y + rand(-r, r) * 0.6));
+        if (!blocked(a.tx, a.ty, SPY_OBSTACLES, 16)) break;
+      }
     }
     // A stop on the way, once in a while
     a.next = now + (Math.random() < 0.25 ? rand(1500, 4000) : 60_000);
@@ -176,6 +197,11 @@ export const spyHunt: GameFactory = (m) => {
     a.x = Math.min(SPY_AREA.x1, Math.max(SPY_AREA.x0, a.x + (dx / len) * d));
     a.y = Math.min(SPY_AREA.y1, Math.max(SPY_AREA.y0, a.y + (dy / len) * d));
     a.dir = dirOf(dx, dy);
+    // Bumped into the fountain, a tree or a lamp: stay at its edge. A passer-by changes its mind
+    if (keepOut(a, SPY_OBSTACLES) && a.player === null) {
+      a.moving = false;
+      a.next = Date.now() + rand(300, 1200);
+    }
   };
 
   const tick = () => {
@@ -195,6 +221,8 @@ export const spyHunt: GameFactory = (m) => {
       for (const a of actors) {
         if (!a.alive) continue;
         if (a === spyActor) {
+          // Nothing heard from the spy's phone for a while: they stop
+          if (now - push.at > HOLD_EXPIRE_MS) push = { x: 0, y: 0, at: push.at };
           const len = Math.hypot(push.x, push.y);
           if (len > DEAD_ZONE) {
             walkTo(a, push.x * 1000, push.y * 1000, dt);
@@ -283,8 +311,10 @@ export const spyHunt: GameFactory = (m) => {
   const useGadget = () => {
     if (step !== 'hunt' || !gadget || used || !spyActor) return false;
     const now = Date.now();
-    used = gadget;
     const at = spyActor;
+    // A decoy needs someone to jump into: with nobody else on the square it stays unused
+    if (gadget === 'decoy' && !actors.some((a) => a.alive && a !== at)) return false;
+    used = gadget;
     if (gadget === 'flashbang') {
       blindUntil = now + FLASHBANG_MS;
       for (const a of aims.values()) a.draw = false;
@@ -306,7 +336,7 @@ export const spyHunt: GameFactory = (m) => {
       next.player = spy;
       next.moving = false;
       spyActor = next;
-      push = { x: 0, y: 0 };
+      push = { x: 0, y: 0, at: 0 };
       m.flash('kill');
       events.push({ k: 'gadget', g: 'decoy', x: Math.round(at.x), y: Math.round(at.y), actor: at.i });
     }
@@ -328,7 +358,7 @@ export const spyHunt: GameFactory = (m) => {
         case 'me':
           return me(id);
         case 'move':
-          if (id === spy) push = stick(args);
+          if (id === spy) push = { ...stick(args), at: Date.now() };
           return true;
         case 'pick': {
           const g = String(args?.g ?? '') as SpyGadget;
@@ -341,7 +371,7 @@ export const spyHunt: GameFactory = (m) => {
           return id === spy ? { ok: useGadget(), ...me(id) } : me(id);
         case 'aim': {
           const a = aims.get(id);
-          if (a) Object.assign(a, ((v) => ({ sx: v.x, sy: v.y }))(stick(args)));
+          if (a) Object.assign(a, ((v) => ({ sx: v.x, sy: v.y, heard: Date.now() }))(stick(args)));
           return true;
         }
         case 'draw': {

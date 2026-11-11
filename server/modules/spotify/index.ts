@@ -252,6 +252,8 @@ export default defineModule<SpotifySettings>({
         // Right after we change the volume, Spotify still reports the old value for a moment
         if (Date.now() >= volumeSettleAt) volume = p?.device?.volume_percent ?? null;
         if (restoreTo !== null) await restore();
+        // A game holds the volume but the music was not playing when it started: now it is, set it
+        if (gameLevel !== null && !duck && now?.isPlaying && startDuck()) applyDuck();
         if (now?.uri !== before || Date.now() - lastQueuePoll > QUEUE_POLL_MS) await pollQueue();
         await feed();
         error = null;
@@ -541,9 +543,14 @@ export default defineModule<SpotifySettings>({
     ctx.onAdmin('previous', () => control('POST', '/me/player/previous'));
     ctx.onAdmin('volume', async (args) => {
       const v = Math.round(Math.min(100, Math.max(0, num(args.volume, 50))));
-      // During a sound, the new volume is applied when the music comes back up
+      // During a sound, the new volume is applied when the music comes back up. During a game that holds the
+      // volume, the host means now: it becomes the game's volume too (and stays after the game)
       if (duck) {
         duck.original = v;
+        if (gameLevel !== null) {
+          gameLevel = v;
+          applyDuck();
+        }
         return;
       }
       restoreTo = null;

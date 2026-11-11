@@ -54,7 +54,7 @@ import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
 import { lightParty } from './party/index.ts';
 import { crowdRace } from './crowd/race.ts';
 import { spyHunt } from './crowd/spy.ts';
-import { CROWD_LIMITS, SPY_GADGETS } from '../../../shared/crowd.ts';
+import { CROWD_DEFAULTS, CROWD_LIMITS, SNIPER_DEFAULTS, SPY_DEFAULTS, SPY_GADGETS } from '../../../shared/crowd.ts';
 import { PARTY_MINIS, cleanPartyOptions } from '../../../shared/party.ts';
 
 /** Songs a new party starts with: well known, well rated maps with charts from Easy or Normal to Expert */
@@ -144,7 +144,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmHolds: true, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'tv', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {}, crowdNpcs: 30, crowdWalk: 100, crowdRun: 2, crowdShots: 1, crowdReloadSec: 2, crowdRounds: 3, spyNpcs: 30, spyWalk: 100, spyShots: 3, spyReloadSec: 2, spyRounds: 3, spyMinutes: 3, spyNeeded: 4, spyCollectMin: 2, spyCollectMax: 5, spyLooks: 3, spyDrawFadeSec: 4, spyGadgets: SPY_GADGETS.map((g) => g.id), sniperMusic: 35, sniperSounds: 80, sniperLights: true },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmHolds: true, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'tv', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {}, ...CROWD_DEFAULTS, ...SPY_DEFAULTS, ...SNIPER_DEFAULTS },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();

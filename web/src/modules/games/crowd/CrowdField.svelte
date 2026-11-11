@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { AIM_RADIUS, ANIM, CASE_RADIUS, SMOKE_RADIUS, SPRITE_SCALE, WORLD, type CrowdAim, type CrowdEvent, type CrowdFrame, type Dir } from '$shared/crowd.ts';
+  import { AIM_RADIUS, ANIM, SMOKE_RADIUS, SPRITE_SCALE, WORLD, type CrowdAim, type CrowdEvent, type CrowdFrame, type Dir } from '$shared/crowd.ts';
   import type { GamePlayer } from '$shared/games.ts';
   import { onEvent, serverNow } from '$lib/client.svelte.ts';
   import { drawCharacter, loadSheets, type Sheets } from './sprites.ts';
   import { crowdSound } from './sound.ts';
   import '@fontsource/press-start-2p';
-  import { CloudShadows, Effects, Pigeons } from './effects.ts';
+  import { Cat, CloudShadows, Effects, Pigeons } from './effects.ts';
+  import { loadEnv, squareGround, squareProps, streetGround, streetProps, type Env, type Prop, type PropHit } from './scene.ts';
   import { RACE_AREA, SPY_AREA, SMOKE_MS } from '$shared/crowd.ts';
 
   /**
@@ -22,6 +23,8 @@
     soundVolume: number;
     /** When each sniper can shoot again (the reload ring) */
     readyAt: Record<string, number>;
+    /** Shots left of each sniper, shown under their crosshair */
+    shots?: Record<string, number>;
     reloadMs?: number;
     /** Server time the screen is black at the end of a round (it fades out before, and in again on the next round) */
     curtainAt?: number | null;
@@ -39,7 +42,7 @@
     /** Each event as it comes, for the screen around */
     onevent?: (e: CrowdEvent) => void;
   }
-  let { kind, round: _round, curtainAt = null, looks, players, soundVolume, readyAt, reloadMs = 2000, reveal = null, winner = null, startX = 95, finishX = 1480, cases = [], smoke = null, blindUntil = 0, drawFadeMs = 4000, onevent }: Props = $props();
+  let { kind, round: _round, curtainAt = null, looks, players, soundVolume, readyAt, shots = {}, reloadMs = 2000, reveal = null, winner = null, startX = 95, finishX = 1480, cases = [], smoke = null, blindUntil = 0, drawFadeMs = 4000, onevent }: Props = $props();
 
   let canvas: HTMLCanvasElement;
   let wrap: HTMLDivElement;
@@ -67,13 +70,23 @@
   const fx = new Effects();
   const clouds = new CloudShadows();
   // Pigeons on the square, or on the sidewalk and the street of the race
-  const pigeons = untrack(() => new Pigeons(kind === 'spy' ? 14 : 12, kind === 'spy' ? SPY_AREA : { x0: 60, x1: WORLD.w - 60, y0: 30, y1: RACE_AREA.y1 }));
+  const pigeons = untrack(() => new Pigeons(kind === 'spy' ? 6 : 5, kind === 'spy' ? SPY_AREA : { x0: 60, x1: WORLD.w - 60, y0: 120, y1: RACE_AREA.y1 }));
+  // A cat lazing on the sidewalk
+  const cat = untrack(() => (kind === 'spy' ? new Cat(158, 120, WORLD.w - 120) : new Cat(150, 80, WORLD.w - 80)));
+  /** The environment art (null until loaded, or when it cannot be: the places are drawn plain) */
+  let env: Env | null = null;
+  let standingProps: Prop[] = [];
   /** The pixel font of the game's text, once it is loaded (the canvas cannot wait for it) */
   const PIXEL = '"Press Start 2P", monospace';
   let fontReady = $state(false);
   void document.fonts?.load(`16px ${PIXEL}`).then(() => (fontReady = true));
   /** Snipers' drawings: points with their time, a gap where the pen was lifted */
   let trails = new Map<string, { x: number; y: number; t: number; gap: boolean }[]>();
+  /** When each collected suitcase started to fade away (one collected before this screen opened is just gone) */
+  let caseGoneAt = new Map<number, number>();
+  /** Bullet holes in the ground this round */
+  let holes: { x: number; y: number; r: number }[] = [];
+  const rand = (a: number, b: number) => a + Math.random() * (b - a);
   /** When the current round first showed (it fades in from black) */
   let roundShownAt = 0;
   /** Where each crosshair is drawn: it glides to the server's position */
@@ -83,9 +96,20 @@
   const handle = (e: CrowdEvent, frame: CrowdFrame) => {
     const at = frame.t;
     switch (e.k) {
-      case 'shot':
+      case 'shot': {
         fx.shot(e.x, e.y, e.hit >= 0);
         pigeons.scare(e.x, e.y, 260);
+        cat.scare(e.x, e.y, 400);
+        if (e.hit >= 0) break;
+        // Nobody hit: the shot lands on a thing (leaves, glass, water) or leaves a hole in the ground
+        let what: PropHit | null = null;
+        for (const p of standingProps) if ((what = p.hit?.(e.x, e.y) ?? null)) break;
+        if (what === 'leaves') fx.leaves(e.x, e.y);
+        else if (what === 'glass') fx.glass(e.x, e.y);
+        else if (what === 'water') fx.splash(e.x, e.y);
+        else holes.push({ x: e.x, y: e.y, r: rand(0, Math.PI * 2) });
+        break;
+      }
         crowdSound('shot', soundVolume);
         break;
       case 'kill': {
@@ -104,6 +128,7 @@
         break;
       case 'case':
         if (cases[e.i]) fx.gold(cases[e.i].x, cases[e.i].y);
+        caseGoneAt.set(e.i, performance.now());
         crowdSound('case', soundVolume);
         break;
       case 'gadget':
@@ -129,6 +154,11 @@
   onMount(() => {
     let raf = 0;
     void loadSheets().then((s) => (sheets = s));
+    void loadEnv().then((e) => {
+      env = e;
+      // Sorted back to front once: the drawing merges them with the characters by depth
+      if (e) standingProps = (kind === 'spy' ? squareProps(e) : streetProps(e)).sort((a, b) => a.y - b.y);
+    });
     const off = onEvent<CrowdFrame>('games', 'crowd', (f) => {
       // A new round: everyone is somewhere else, start over (and fade in from black)
       if (frames.length && frames[frames.length - 1].r !== f.r) {
@@ -136,8 +166,13 @@
         locals = [];
         downed = new Map();
         trails = new Map();
+        holes = [];
+        caseGoneAt = new Map();
+        for (const p of standingProps) p.reset?.();
         roundShownAt = serverNow();
       }
+      // The very first frame: the round starts showing now (the suitcases glow bright for a moment)
+      if (!frames.length && !roundShownAt) roundShownAt = serverNow();
       frames.push(f);
       if (frames.length > 40) frames = frames.slice(-20);
       for (const e of f.ev) handle(e, f);
@@ -171,7 +206,7 @@
   }
 
   function background(): HTMLCanvasElement {
-    const key = `${kind}:${startX}:${finishX}:${fontReady}`;
+    const key = `${kind}:${startX}:${finishX}:${fontReady}:${!!env}`;
     if (bg && bgKind === key) return bg;
     const c = document.createElement('canvas');
     const k = 1.5;
@@ -179,7 +214,12 @@
     c.height = WORLD.h * k;
     const g = c.getContext('2d')!;
     g.scale(k, k);
-    if (kind === 'race') drawStreet(g);
+    if (env) {
+      // The place built from the art at the sprites' size, then scaled up with sharp pixels
+      const ground = kind === 'race' ? streetGround(env, startX, finishX, PIXEL) : squareGround(env);
+      g.imageSmoothingEnabled = false;
+      g.drawImage(ground, 0, 0, ground.width * SPRITE_SCALE, ground.height * SPRITE_SCALE);
+    } else if (kind === 'race') drawStreet(g);
     else drawPlaza(g);
     bg = c;
     bgKind = key;
@@ -316,32 +356,30 @@
     // Planters at the bottom edge
     g.fillStyle = 'rgba(0,0,0,0.25)';
     g.fillRect(0, WORLD.h - 12, WORLD.w, 12);
-    // The drop zones under the suitcases
-    for (const c of cases) {
-      g.beginPath();
-      g.arc(c.x, c.y, CASE_RADIUS + 26, 0, Math.PI * 2);
-      g.fillStyle = 'rgba(255,190,80,0.07)';
-      g.fill();
-      g.setLineDash([10, 9]);
-      g.strokeStyle = 'rgba(255,200,110,0.35)';
-      g.lineWidth = 3;
-      g.stroke();
-      g.setLineDash([]);
-    }
   }
 
   // ------------------------------------------------------------ drawing
 
-  function suitcase(g: CanvasRenderingContext2D, x: number, y: number, open: boolean, now: number) {
+  /**
+   * A suitcase, glowing gold so it is easy to find: brighter and bigger at the start of a round (`boost`
+   * from 1 to 0 over its first seconds), then a soft breathing glow.
+   */
+  function suitcase(g: CanvasRenderingContext2D, x: number, y: number, open: boolean, now: number, boost = 0) {
     g.save();
     g.translate(x, y);
-    if (open) {
-      const glow = g.createRadialGradient(0, -8, 4, 0, -8, 70);
-      glow.addColorStop(0, `rgba(255,210,90,${0.55 + 0.15 * Math.sin(now / 300)})`);
-      glow.addColorStop(1, 'rgba(255,210,90,0)');
-      g.fillStyle = glow;
-      g.fillRect(-70, -78, 140, 140);
-    }
+    // Light added on top of the ground (it shines, it does not paint), breathing; pulsing fast and wide at first
+    const r = 70 + 80 * boost;
+    const a = 0.42 + 0.12 * Math.sin(now / 420) + boost * (0.4 + 0.2 * Math.sin(now / 110));
+    const glow = g.createRadialGradient(0, -6, 2, 0, -6, r);
+    glow.addColorStop(0, `rgba(255,200,80,${Math.min(0.95, a)})`);
+    glow.addColorStop(0.35, `rgba(255,170,50,${Math.min(0.7, a * 0.55)})`);
+    glow.addColorStop(1, 'rgba(255,150,40,0)');
+    g.globalCompositeOperation = 'lighter';
+    g.fillStyle = glow;
+    g.beginPath();
+    g.ellipse(0, -6, r, r * 0.8, 0, 0, Math.PI * 2);
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
     // Shadow, body, edges, clasps, handle
     g.fillStyle = 'rgba(0,0,0,0.35)';
     g.beginPath();
@@ -426,15 +464,21 @@
       g.stroke();
     }
     g.globalAlpha = 1;
-    tag(g, name(a.id), 0, r + 26, c, 12);
+    tag(g, name(a.id), 0, r + 26, c, 12, shots[a.id]);
     g.restore();
   }
 
-  /** A name in the pixel font on a dark plate with a border of the player's color and a hard shadow */
-  function tag(g: CanvasRenderingContext2D, text: string, x: number, y: number, c: string, size = 14) {
+  /**
+   * A name in the pixel font on a dark plate with a border of the player's color and a hard shadow.
+   * `ammo`: the shots left, after the name with a little bullet (red when there are none)
+   */
+  function tag(g: CanvasRenderingContext2D, text: string, x: number, y: number, c: string, size = 14, ammo?: number) {
     if (!text) return;
     g.font = `${size}px ${PIXEL}`;
-    const w = Math.round(g.measureText(text).width + size * 1.4);
+    const nameW = g.measureText(text).width;
+    const ammoText = ammo === undefined ? '' : String(ammo);
+    const ammoW = ammoText ? g.measureText(`x${ammoText}`).width + size * 0.8 + 16 : 0;
+    const w = Math.round(nameW + ammoW + size * 1.4);
     const h = Math.round(size * 2);
     const left = Math.round(x - w / 2);
     const top = Math.round(y - h / 2);
@@ -447,12 +491,32 @@
     g.fillRect(left, top + h - 3, w, 3);
     g.fillRect(left, top, 3, h);
     g.fillRect(left + w - 3, top, 3, h);
-    g.textAlign = 'center';
+    g.textAlign = 'left';
     g.textBaseline = 'middle';
+    const tx = left + Math.round(size * 0.7);
     g.fillStyle = '#000';
-    g.fillText(text, x + 2, y + 3);
+    g.fillText(text, tx + 2, y + 3);
     g.fillStyle = '#fff';
-    g.fillText(text, x, y + 1);
+    g.fillText(text, tx, y + 1);
+    if (ammoText) {
+      // A bullet drawn in pixels, then the number
+      const bx = Math.round(tx + nameW + size * 0.8);
+      const by = Math.round(y - size * 0.55);
+      const out = ammo === 0;
+      const tall = Math.round(size * 1.1);
+      // A cartridge: a pointed tip, the body, a darker base; clearly not a digit
+      g.fillStyle = out ? '#ff5a5a' : '#ffc84a';
+      g.fillRect(bx + 3, by, 3, 2);
+      g.fillRect(bx + 1, by + 2, 7, 2);
+      g.fillRect(bx, by + 4, 9, tall - 6);
+      g.fillStyle = out ? '#b02a2a' : '#b8741f';
+      g.fillRect(bx, by + tall - 2, 9, 3);
+      g.fillStyle = '#000';
+      g.fillText(`x${ammoText}`, bx + 14 + 2, y + 3);
+      g.fillStyle = out ? '#ff8080' : '#ffd36b';
+      g.fillText(`x${ammoText}`, bx + 14, y + 1);
+    }
+    g.textAlign = 'center';
     g.textBaseline = 'alphabetic';
   }
 
@@ -493,12 +557,37 @@
     const step = Math.min(0.1, Math.max(0, (now - lastDraw) / 1000));
     fx.update(step);
     clouds.update(step);
-    // A shot shakes the whole field a little
+    // A shot shakes the whole field a little; it zooms in just enough while it shakes that the picture
+    // always covers the edges (no bare strip showing)
     const shake = fx.offset();
-    g.translate(shake.x, shake.y);
+    if (shake.x || shake.y) {
+      const zoom = 1 + Math.max((2 * Math.abs(shake.x)) / WORLD.w, (2 * Math.abs(shake.y)) / WORLD.h) + 0.002;
+      g.translate(WORLD.w / 2 + shake.x, WORLD.h / 2 + shake.y);
+      g.scale(zoom, zoom);
+      g.translate(-WORLD.w / 2, -WORLD.h / 2);
+    }
 
     g.drawImage(background(), 0, 0, WORLD.w, WORLD.h);
-    if (kind === 'spy') for (const c of cases) suitcase(g, c.x, c.y, c.open, now);
+    // Shadows of the things standing up, on the ground under everyone
+    for (const p of standingProps) p.ground?.(g, now);
+    // The suitcases, sorted with everyone further down: a collected one fades away, rising a little. They
+    // glow brighter for the first seconds of a round, so everyone sees where they are
+    const startGlow = Math.max(0, 1 - (now - roundShownAt) / 5000);
+    const caseItems: { y: number; draw(g: CanvasRenderingContext2D): void }[] = [];
+    if (kind === 'spy')
+      cases.forEach((c, i) => {
+        const at = caseGoneAt.get(i);
+        const p = !c.open ? 0 : at === undefined ? 1 : Math.min(1, (performance.now() - at) / 900);
+        if (p >= 1) return;
+        caseItems.push({
+          y: c.y + 12,
+          draw(g) {
+            g.globalAlpha = 1 - p;
+            suitcase(g, c.x, c.y - p * 24, false, now, startGlow);
+            g.globalAlpha = 1;
+          },
+        });
+      });
 
     // The two frames around the time drawn
     let f0: CrowdFrame | null = null;
@@ -533,10 +622,23 @@
       }
       people.push({ i, x, y, anim, dir });
     }
-    // Dust on the ground and the pigeons, under everyone
+    // Bullet holes, dust on the ground and the pigeons, under everyone
+    for (const h of holes) {
+      g.fillStyle = 'rgba(0,0,0,0.55)';
+      g.beginPath();
+      g.ellipse(h.x, h.y, 6, 4, h.r, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.fillRect(Math.round(h.x - 7), Math.round(h.y + 3), 3, 2);
+      g.fillRect(Math.round(h.x + 4), Math.round(h.y - 5), 2, 2);
+      g.fillStyle = 'rgba(0,0,0,0.3)';
+      for (let k = 0; k < 4; k++) g.fillRect(Math.round(h.x + Math.cos(h.r + k * 1.6) * 9), Math.round(h.y + Math.sin(h.r + k * 1.6) * 6), 2, 2);
+    }
     fx.draw(g, false, PIXEL);
     pigeons.update(step, people.filter((p) => p.anim !== ANIM.dead));
-    pigeons.draw(g);
+    cat.update(step);
+    // Without the art, the plain drawn birds stay on the ground layer
+    if (!env) pigeons.draw(g, null);
     // The fallen first (on the ground), then from the back to the front
     people.sort((a, b) => (a.anim === ANIM.dead ? 0 : 1) - (b.anim === ANIM.dead ? 0 : 1) || a.y - b.y);
 
@@ -567,15 +669,29 @@
       }
     }
 
-    for (const p of people) {
+    // The characters and the things that stand up (trees, lamps, the fountain), back to front together,
+    // so people walk behind and in front of them; the fallen lie on the ground under everything
+    const imgs = kind === 'spy' ? sheets?.suits : sheets?.people;
+    const drawPerson = (p: (typeof people)[number]) => {
       const l = locals[p.i];
       const look = looks[p.i] ?? 0;
-      const imgs = kind === 'spy' ? sheets?.suits : sheets?.people;
       const img = imgs?.length ? imgs[look % imgs.length] : undefined;
       drawCharacter(g, sheets, img, p.x, p.y, { anim: p.anim, dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, (look * 47) % 360);
+    };
+    let pi = 0;
+    while (pi < people.length && people[pi].anim === ANIM.dead) drawPerson(people[pi++]);
+    let qi = 0;
+    // The things standing up, the suitcases, the birds on the ground and the cat, back to front
+    const catItem = cat.item(env);
+    const standing = [...standingProps, ...caseItems, ...(env ? pigeons.groundItems(env) : []), ...(catItem ? [catItem] : [])].sort((a, b) => a.y - b.y);
+    while (pi < people.length || qi < standing.length) {
+      if (qi < standing.length && (pi >= people.length || standing[qi].y <= people[pi].y)) standing[qi++].draw(g, now);
+      else drawPerson(people[pi++]);
     }
 
-    // Smoke, the flashes and sparks over everyone, then the cloud shadows drifting over the whole place
+    // Birds in the air over everything on the ground (roofs and trees too), then the smoke, the flashes and
+    // sparks over everyone, and the cloud shadows drifting over the whole place
+    pigeons.drawAir(g, env);
     if (kind === 'spy' && smoke) smokeCloud(g, smoke, now);
     fx.draw(g, true, PIXEL);
     clouds.draw(g);
@@ -624,6 +740,11 @@
           shown.x += (a.x - shown.x) * glide;
           shown.y += (a.y - shown.y) * glide;
         }
+      }
+      for (const a of latest.aims) {
+        const at = aimShown.get(a.id)!;
+        pigeons.scare(at.x, at.y + 14, 42);
+        cat.nudge(at.x, at.y, 50);
       }
       if (now >= blindUntil) for (const a of latest.aims) crosshair(g, { ...a, ...aimShown.get(a.id)! }, now);
     }

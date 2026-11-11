@@ -1,9 +1,11 @@
 <script lang="ts">
   import { Minus, Plus } from '@lucide/svelte';
-  import { CROWD_LIMITS, SPY_GADGETS, raceRoundSec, type SpyGadget } from '$shared/crowd.ts';
+  import { CROWD_DEFAULTS, CROWD_LIMITS, SPY_DEFAULTS, SPY_GADGETS, raceRoundSec, type SpyGadget } from '$shared/crowd.ts';
   import type { GamesSettings } from '$shared/games.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
   import Toggle from '$lib/ui/Toggle.svelte';
+  import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
+  import { RotateCcw } from '@lucide/svelte';
 
   /** The options of Crowd Race or Spy Hunt in the admin, with the sound and light flashes they share */
   let { game, settings: st }: { game: 'crowd' | 'spy'; settings: GamesSettings } = $props();
@@ -53,6 +55,14 @@
   </div>
 {/snippet}
 
+<div class="line">
+  <span class="label">Recommended settings <span class="faint small">Puts every option of {game === 'crowd' ? 'Crowd Race' : 'Spy Hunt'} back as it came. The sound and light settings below stay as they are</span></span>
+  <TwoStepButton class="small" onconfirm={() => set(game === 'crowd' ? CROWD_DEFAULTS : SPY_DEFAULTS)}>
+    <RotateCcw size={16} /> Reset
+    {#snippet armed()}Reset them all?{/snippet}
+  </TwoStepButton>
+</div>
+
 {#if game === 'crowd'}
   <h4 class="group">Race</h4>
   {@render stepper('Rounds', '1 to 7. Most rounds won wins the game', 'crowdRounds', 1, 7)}
@@ -96,7 +106,7 @@
   <span class="label">Light flashes <span class="faint small">A white flash on each shot, red on a kill, and the gadgets on the WLED lights. They go back to what they were showing right after</span></span>
   <Toggle checked={st.sniperLights} onchange={(v) => set({ sniperLights: v })} label="Light flashes" />
 </div>
-<p class="faint small">Characters: Liberated Pixel Cup sprites (OGA-BY and CC0), by their many authors. <a href="/crowd/CREDITS.txt" target="_blank" rel="noopener">See the credits</a></p>
+<p class="faint small">Characters and places: Liberated Pixel Cup style art (OGA-BY, CC-BY and CC0), by their many authors. Credits: <a href="/crowd/CREDITS.txt" target="_blank" rel="noopener">characters</a>, <a href="/crowd/env/CREDITS.txt" target="_blank" rel="noopener">places</a></p>
 
 <style>
   .group {

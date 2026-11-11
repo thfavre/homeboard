@@ -75,6 +75,7 @@
         players={m.players}
         soundVolume={v.soundVolume}
         readyAt={v.readyAt}
+        shots={v.shots}
         reloadMs={v.reloadMs}
         reveal={v.reveal ?? null}
         winner={v.winner}
