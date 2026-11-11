@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PNG } from 'pngjs';
 import { BEARDS, HAIR_STYLES, type AvatarChoices, type SheetInfo } from '../../../shared/world.ts';
+import { SLOTS, itemById, type Outfit } from '../../../shared/wardrobe.ts';
 import type { LpcFiles } from './lpc.ts';
 
 /**
@@ -48,13 +49,18 @@ interface Item {
   eyes?: string;
 }
 
-/** The items a guest's choices stand for. Everyone starts in their underwear. */
-function itemsOf(c: AvatarChoices): Item[] {
-  const items: Item[] = [
-    { def: `head/heads/human/heads_human_${c.body}`, eyes: c.eyes },
-    { def: 'feet/shoes/feet_shoes_basic', color: 'white' },
-    { def: 'legs/shorts/legs_shorts', color: 'white' },
-  ];
+/**
+ * The items a guest's choices and outfit stand for. The white underwear (shorts and basic shoes)
+ * stays wherever the outfit leaves the body bare; a dress covers the bottom slot too.
+ */
+function itemsOf(c: AvatarChoices, outfit: Outfit): Item[] {
+  const items: Item[] = [{ def: `head/heads/human/heads_human_${c.body}`, eyes: c.eyes }];
+  if (!outfit.feet) items.push({ def: 'feet/shoes/feet_shoes_basic', color: 'white' });
+  if (!outfit.bottom && !outfit.dress) items.push({ def: 'legs/shorts/legs_shorts', color: 'white' });
+  for (const worn of Object.values(outfit)) {
+    const item = itemById(worn.id);
+    if (item) items.push({ def: item.def, color: worn.color });
+  }
   const hair = HAIR_STYLES.find((h) => h.id === c.hair)?.def;
   if (hair) items.push({ def: hair, color: c.hairColor });
   const beard = BEARDS.find((b) => b.id === c.beard)?.def;
@@ -199,8 +205,8 @@ export class Composer {
   }
 
   /** Build the whole sheet of an avatar */
-  async build(c: AvatarChoices): Promise<Composed> {
-    const layers = (await Promise.all([{ def: 'body/body' } as Item, ...itemsOf(c)].map((it) => this.layersOf(it, c)))).flat();
+  async build(c: AvatarChoices, outfit: Outfit = {}): Promise<Composed> {
+    const layers = (await Promise.all([{ def: 'body/body' } as Item, ...itemsOf(c, outfit)].map((it) => this.layersOf(it, c)))).flat();
     const out = new PNG({ width: FRAME * COLUMNS, height: FRAME * SHEET_ROWS });
     for (const r of ROWS) {
       const stack = [...layers];
@@ -276,9 +282,10 @@ export class Composer {
   }
 }
 
-/** A stable name for a set of choices, for the sheet's file name */
-export function choicesHash(c: AvatarChoices): string {
-  return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes])).digest('hex').slice(0, 12);
+/** A stable name for a look (choices plus outfit), for the sheet's file name */
+export function choicesHash(c: AvatarChoices, outfit: Outfit = {}): string {
+  const worn = SLOTS.map((s) => outfit[s.id]).map((w) => (w ? [w.id, w.color] : null));
+  return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes, worn])).digest('hex').slice(0, 12);
 }
 
 /** Swap the colors of an image in place (a color within 1 of a base color counts as that color) */

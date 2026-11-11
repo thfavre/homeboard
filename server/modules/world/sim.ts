@@ -43,6 +43,8 @@ interface Walker {
   /** 0..1, fading out while leaving; a walker at 0 is removed */
   alpha: number;
   fading: boolean;
+  /** The worn art has no sitting sheets: stays off benches and away from the cat */
+  noSit: boolean;
 }
 
 export interface RosterEntry {
@@ -50,6 +52,8 @@ export interface RosterEntry {
   online: boolean;
   /** How long they have been away (ms; 0 while online) */
   awayMs: number;
+  /** See Walker.noSit */
+  noSit?: boolean;
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -110,8 +114,13 @@ export class TownSim {
         if (shouldSleep) continue;
         const from = Math.random() < 0.5 ? -20 : TOWN.w + 20;
         const spot = randSpot();
-        w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false };
+        w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit };
         this.walkers.set(r.id, w);
+      }
+      w.noSit = !!r.noSit;
+      // An outfit change mid-sit (or mid-pet) would show missing art: stand up
+      if (w.noSit && (w.doing.kind === 'sit' || w.doing.kind === 'goBench' || w.doing.kind === 'pet' || w.doing.kind === 'goPet')) {
+        w.doing = { kind: 'idle', until: now + 400 };
       }
       if (shouldSleep && w.doing.kind !== 'sleep' && w.doing.kind !== 'goSleep') {
         // Walk to the nearest edge of the town and lie down there
@@ -198,13 +207,15 @@ export class TownSim {
         const roll = Math.random();
         const all = [...this.walkers.values()];
         // Benches this character can see with a seat left (sitting there, or walking to it, takes the seat)
-        const benches = BENCHES.map((b, i) => ({ ...b, i })).filter(
-          (b) =>
-            Math.hypot(b.x - w.x, b.y - w.y) < ACTIVITIES.bench.radius &&
-            all.filter((o) => (o.doing.kind === 'sit' || o.doing.kind === 'goBench') && o.doing.bench === b.i).length < ACTIVITIES.bench.capacity,
-        );
+        const benches = w.noSit
+          ? []
+          : BENCHES.map((b, i) => ({ ...b, i })).filter(
+              (b) =>
+                Math.hypot(b.x - w.x, b.y - w.y) < ACTIVITIES.bench.radius &&
+                all.filter((o) => (o.doing.kind === 'sit' || o.doing.kind === 'goBench') && o.doing.bench === b.i).length < ACTIVITIES.bench.capacity,
+            );
         const petters = all.filter((o) => o.doing.kind === 'pet' || o.doing.kind === 'goPet').length;
-        const catInSight = petters < ACTIVITIES.petCat.capacity && Math.hypot(this.cat.x - w.x, this.cat.y - w.y) < ACTIVITIES.petCat.radius;
+        const catInSight = !w.noSit && petters < ACTIVITIES.petCat.capacity && Math.hypot(this.cat.x - w.x, this.cat.y - w.y) < ACTIVITIES.petCat.radius;
         if (roll < 0.14 && benches.length) {
           const b = benches[Math.floor(Math.random() * benches.length)];
           w.doing = { kind: 'goBench', bench: b.i };

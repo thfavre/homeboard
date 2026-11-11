@@ -4,6 +4,7 @@
 // (see server/modules/world/compose.ts).
 
 import { SPY_OBSTACLES, SPY_SCENE, WORLD } from './crowd.ts';
+import type { Outfit, Tier, WornItem } from './wardrobe.ts';
 
 /**
  * The town is the crowd games' square for now (same size, same scene, same environment art), so
@@ -144,12 +145,28 @@ export interface TownCharacter {
   url: string;
 }
 
+/** The town's shop as everyone sees it: its own money, prices by tier */
+export interface ShopInfo {
+  currencyName: string;
+  prices: Record<Tier, number>;
+}
+
+/** What a guest owns and wears, fetched per guest (the shared state cannot carry it) */
+export interface WardrobeMine {
+  balance: number;
+  owned: WornItem[];
+  outfit: Outfit;
+}
+
 export interface WorldState {
   characters: TownCharacter[];
   sheet: SheetInfo | null;
+  shop?: ShopInfo;
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
   /** Admin only */
   sleepAfterMin?: number;
   fadeAfterMin?: number;
+  earnPerMin?: number;
+  wallets?: { id: string; name: string; color: string; balance: number }[];
 }
