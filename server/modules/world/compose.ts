@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { PNG } from 'pngjs';
-import { BEARDS, HAIR_STYLES, type AvatarChoices, type SheetInfo } from '../../../shared/world.ts';
+import { BEARDS, DEFAULT_CHOICES, HAIR_STYLES, type AvatarChoices, type SheetInfo } from '../../../shared/world.ts';
 import { SLOTS, itemById, type Outfit } from '../../../shared/wardrobe.ts';
 import type { LpcFiles } from './lpc.ts';
 
@@ -227,6 +227,39 @@ export class Composer {
       }
     }
     return { png: PNG.sync.write(out), info: this.measure(out) };
+  }
+
+  /**
+   * A small picture of one item alone (no body) for the shop's grid: the down-facing idle frame
+   * of its layers, trimmed to the drawn pixels and centered in a square.
+   */
+  async icon(def: string, color: string | undefined, body: 'male' | 'female'): Promise<Buffer> {
+    const c: AvatarChoices = { ...DEFAULT_CHOICES, body };
+    const layers = (await this.layersOf({ def, color }, c)).sort((a, b) => a.zPos - b.zPos);
+    const flat = new PNG({ width: FRAME, height: FRAME });
+    for (const layer of layers) {
+      const png = (await this.sheet(layer, 'idle')) ?? (await this.sheet(layer, 'walk'));
+      if (!png || png.height < (DIR.down + 1) * FRAME || png.width < FRAME) continue;
+      over(flat, 0, 0, png, 0, DIR.down * FRAME, FRAME, FRAME);
+    }
+    let top = FRAME;
+    let bottom = -1;
+    let left = FRAME;
+    let right = -1;
+    for (let y = 0; y < FRAME; y++) {
+      for (let x = 0; x < FRAME; x++) {
+        if (!flat.data[(y * FRAME + x) * 4 + 3]) continue;
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+      }
+    }
+    if (bottom < 0) return PNG.sync.write(flat);
+    const size = Math.max(bottom - top, right - left) + 5;
+    const out = new PNG({ width: size, height: size });
+    over(out, Math.floor((size - (right - left + 1)) / 2), Math.floor((size - (bottom - top + 1)) / 2), flat, left, top, right - left + 1, bottom - top + 1);
+    return PNG.sync.write(out);
   }
 
   /** Rows, frame counts and where the body stands, read off the finished sheet */

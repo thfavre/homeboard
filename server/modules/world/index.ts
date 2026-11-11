@@ -4,7 +4,7 @@ import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { validChoices, type AvatarChoices, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { TIERS, itemById, validOutfit, validWorn, type Outfit, type Tier, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, TIERS, itemById, validOutfit, validWorn, type Outfit, type Tier, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -176,10 +176,15 @@ export default defineModule<WorldSettings>({
     ctx.onGuest('save', async (args, guest) => {
       const choices = validChoices(args?.choices);
       if (!choices) throw new HbError('That look does not exist');
+      const before = store.data.avatars[guest.id];
+      // Who you are is set at creation; only hair, face and clothes change later
+      if (before && (before.choices.body !== choices.body || before.choices.skin !== choices.skin)) {
+        throw new HbError('Your body and skin are set: only hair, face and clothes can change');
+      }
       const outfit = outfitFor(guest.id, choices.body);
       const hash = choicesHash(choices, outfit);
       await composite(choices, outfit);
-      const had = !!store.data.avatars[guest.id];
+      const had = !!before;
       store.data.avatars[guest.id] = { choices, hash, outfit };
       store.save();
       ctx.publish();
@@ -199,6 +204,37 @@ export default defineModule<WorldSettings>({
     const sendWallet = (guestId: string) => ctx.emit({ guest: guestId }, 'wallet', { balance: wallets[guestId] ?? 0 });
 
     ctx.onGuest('wardrobe', (_args, guest) => mine(guest.id));
+
+    // Item pictures for the shop's grid, drawn once per item (the item alone, in its first color)
+    const iconsDir = ctx.mediaDir('icons');
+    const drawingIcons = new Map<string, Promise<void>>();
+    ctx.onGuest('icons', async (args) => {
+      const items = CATALOG.filter((i) => i.slot === args?.slot);
+      const urls: Record<string, string> = {};
+      await Promise.all(
+        items.map(async (item) => {
+          try {
+            const file = join(iconsDir, `${item.id}.png`);
+            if (!existsSync(file)) {
+              let p = drawingIcons.get(item.id);
+              if (!p) {
+                p = composer
+                  .icon(item.def, item.iconColor ?? item.colors[0], item.bodies?.[0] ?? 'male')
+                  .then((png) => writeFileSync(file, png));
+                drawingIcons.set(item.id, p);
+                p.catch(() => drawingIcons.delete(item.id));
+              }
+              await p;
+            }
+            urls[item.id] = ctx.mediaUrl(`icons/${item.id}.png`);
+          } catch (err) {
+            // An item whose picture cannot be drawn shows its name instead
+            ctx.log.warn(`No icon for ${item.id}:`, err);
+          }
+        }),
+      );
+      return urls;
+    });
 
     ctx.onGuest('buy', async (args, guest) => {
       const stored = store.data.avatars[guest.id];

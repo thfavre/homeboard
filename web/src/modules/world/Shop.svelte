@@ -1,25 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Check, Coins, ShoppingBag, X } from '@lucide/svelte';
+  import { Check, ChevronLeft, Coins, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
-  import {
-    CATALOG,
-    COLOR_HEX,
-    SLOTS,
-    TIER_NAMES,
-    colorName,
-    type Outfit,
-    type Slot,
-    type WardrobeItem,
-    type WornItem,
-  } from '$shared/wardrobe.ts';
+  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import AvatarPreview from './AvatarPreview.svelte';
-  import Picker from './Picker.svelte';
 
   /**
-   * The shop and wardrobe: browse the catalog by slot, try everything on your own avatar before
-   * paying, buy with the town's money, and switch owned pieces freely. One view does both: an
+   * The shop and wardrobe: pick a slot, scroll a picture grid of everything it sells, tap a piece
+   * to try it on your own avatar, pick its color, then buy it or wear it. One view does both: an
    * owned piece shows Wear instead of a price.
    */
 
@@ -29,8 +18,10 @@
   let wd = $state<WardrobeMine | null>(null);
   let body = $state<'male' | 'female' | null>(null);
   let slot = $state<Slot>('top');
-  /** The browsed piece per slot, so flipping between slots keeps the picks */
-  let sel = $state<Partial<Record<Slot, WornItem>>>({});
+  /** The piece opened in the detail view (null: the grid) */
+  let open = $state<WornItem | null>(null);
+  /** Item pictures by id, fetched per slot and kept */
+  let icons = $state<Record<string, string>>({});
   let url = $state<string | null>(null);
   let sheet = $state<SheetInfo | null>(null);
   let buildingCount = $state(0);
@@ -38,30 +29,18 @@
 
   const slots = $derived(SLOTS.filter((s) => s.id !== 'dress' || body === 'female'));
   const items = $derived(CATALOG.filter((i) => i.slot === slot && (!i.bodies || (body && i.bodies.includes(body)))));
-  const selected = $derived.by((): (WornItem & { item: WardrobeItem }) | null => {
-    const w = sel[slot] ?? wd?.outfit[slot];
-    const item = (w && items.find((i) => i.id === w.id)) ?? items[0];
-    if (!item) return null;
-    const color = w?.id === item.id && item.colors.includes(w.color) ? w.color : item.colors[0];
-    return { id: item.id, color, item };
-  });
+  const openItem = $derived(open ? (CATALOG.find((i) => i.id === open!.id) ?? null) : null);
 
   const ownedIs = (id: string, color?: string) => (wd?.owned ?? []).some((o) => o.id === id && (color === undefined || o.color === color));
-  const isOwned = $derived(!!selected && ownedIs(selected.id, selected.color));
-  const isWorn = $derived(!!selected && wd?.outfit[slot]?.id === selected.id && wd?.outfit[slot]?.color === selected.color);
-  const wornInSlot = $derived(wd?.outfit[slot]);
-  const price = $derived(selected && shop ? shop.prices[selected.item.tier] : 0);
+  const isOwned = $derived(!!open && ownedIs(open.id, open.color));
+  const isWorn = $derived(!!open && wd?.outfit[slot]?.id === open.id && wd?.outfit[slot]?.color === open.color);
+  const price = $derived(openItem && shop ? shop.prices[openItem.tier] : 0);
 
-  const itemOptions = $derived(items.map((i) => ({ id: i.id, name: i.name, dot: ownedIs(i.id) })));
-  const colorOptions = $derived(
-    (selected?.item.colors ?? []).map((c) => ({ id: c, name: colorName(c), color: COLOR_HEX[c] ?? '#888', dot: !!selected && ownedIs(selected.id, c) })),
-  );
-
-  /** What the preview shows: the outfit with the browsed piece in its slot */
+  /** What the preview shows: the outfit with the opened piece in its slot */
   function candidate(): Outfit {
     const out: Outfit = { ...(wd?.outfit ?? {}) };
-    if (!selected) return out;
-    out[slot] = { id: selected.id, color: selected.color };
+    if (!open) return out;
+    out[slot] = { id: open.id, color: open.color };
     // A dress replaces top and bottom (and they replace it)
     if (slot === 'dress') {
       delete out.top;
@@ -71,7 +50,26 @@
     return out;
   }
 
-  // ------------------------------------------------------------ preview
+  /** Open a piece: in the color worn, else the first owned color, else its first color */
+  function show(id: string) {
+    const item = CATALOG.find((i) => i.id === id);
+    if (!item) return;
+    const worn = wd?.outfit[slot];
+    const color = worn?.id === id ? worn.color : ((wd?.owned ?? []).find((o) => o.id === id)?.color ?? item.colors[0]);
+    open = { id, color };
+  }
+
+  // ------------------------------------------------------------ pictures and preview
+
+  const fetchedSlots = new Set<string>();
+  $effect(() => {
+    const s = slot;
+    if (!body || fetchedSlots.has(s)) return;
+    fetchedSlots.add(s);
+    rpc<Record<string, string>>('world', 'icons', { slot: s })
+      .then((urls) => (icons = { ...icons, ...urls }))
+      .catch(() => fetchedSlots.delete(s));
+  });
 
   let debounce: ReturnType<typeof setTimeout> | undefined;
   let wanted = '';
@@ -93,14 +91,15 @@
     }
   }
 
-  /** Browsing picks survive leaving the panel, like the editor's drafts */
+  /** The opened piece survives leaving the panel, like the editor's drafts */
   const DRAFT_KEY = 'hb.world.shop';
 
   $effect(() => {
     const snapshot = JSON.stringify(candidate());
-    const picks = JSON.stringify({ id: hb.me?.id, slot, sel });
+    const picks = JSON.stringify({ id: hb.me?.id, slot, open });
     if (firstLoad || !body) return;
     storageSet(DRAFT_KEY, picks);
+    if (!open) return;
     clearTimeout(debounce);
     debounce = setTimeout(() => void build(JSON.parse(snapshot)), 250);
     return () => clearTimeout(debounce);
@@ -113,31 +112,27 @@
       wd = await rpc<WardrobeMine>('world', 'wardrobe').catch(() => null);
       try {
         const draft = JSON.parse(storageGet(DRAFT_KEY) ?? 'null');
-        if (draft?.id === hb.me?.id && draft.sel) {
-          sel = draft.sel;
+        if (draft?.id === hb.me?.id) {
           if (SLOTS.some((s) => s.id === draft.slot)) slot = draft.slot;
+          if (draft.open?.id) open = draft.open;
         }
       } catch {
         // A broken draft is just dropped
       }
       firstLoad = false;
-      if (body) void build(candidate());
+      if (body && open) void build(candidate());
     })();
     return onEvent<{ balance: number }>('world', 'wallet', (w) => {
       if (wd) wd.balance = w.balance;
     });
   });
 
-  function pick(id: string, color?: string) {
-    const item = items.find((i) => i.id === id) ?? selected?.item;
-    if (!item) return;
-    const c = color ?? (selected && selected.id === id ? selected.color : undefined);
-    sel[slot] = { id: item.id, color: c && item.colors.includes(c) ? c : item.colors[0] };
-  }
+  // ------------------------------------------------------------ actions
 
   async function buy() {
-    if (!selected) return;
-    const bought = await attempt(() => rpc<WardrobeMine>('world', 'buy', { id: selected.id, color: selected.color }));
+    const piece = open;
+    if (!piece) return;
+    const bought = await attempt(() => rpc<WardrobeMine>('world', 'buy', { id: piece.id, color: piece.color }));
     if (!bought) return;
     wd = bought;
     await wear();
@@ -151,7 +146,6 @@
   async function takeOff() {
     const outfit: Outfit = { ...(wd?.outfit ?? {}) };
     delete outfit[slot];
-    delete sel[slot];
     const done = await attempt(() => rpc<WardrobeMine>('world', 'wear', { outfit }));
     if (done) wd = done;
   }
@@ -173,25 +167,35 @@
       <span class="faint small">You earn them by being in the town</span>
     </div>
 
-    <AvatarPreview {url} {sheet} building={buildingCount > 0} focusHead={slot === 'hat' || slot === 'face' || slot === 'neck'} />
+    {#if open && openItem}
+      <button type="button" class="back" onclick={() => (open = null)}>
+        <ChevronLeft size={18} />
+        All {SLOTS.find((s) => s.id === slot)?.name.toLowerCase()}
+      </button>
 
-    <div class="slots">
-      {#each slots as s (s.id)}
-        <button type="button" class="slot" class:on={slot === s.id} onclick={() => (slot = s.id)}>
-          {s.name}
-          {#if wd?.outfit[s.id]}<span class="worn-dot"></span>{/if}
-        </button>
-      {/each}
-    </div>
+      <AvatarPreview {url} {sheet} building={buildingCount > 0} focusHead={slot === 'hat' || slot === 'face' || slot === 'neck'} />
 
-    {#if selected}
-      <Picker label={SLOTS.find((s) => s.id === slot)?.name ?? ''} items={itemOptions} value={selected.id} onchange={(id) => pick(id)} />
-      <Picker label="Color" items={colorOptions} value={selected.color} per={6} onchange={(c) => pick(selected!.id, c)} />
+      <div class="group">
+        <span class="label">Color <span class="pickname">{colorName(open.color)}</span></span>
+        <div class="colors">
+          {#each openItem.colors as c (c)}
+            <button
+              type="button"
+              class="swatch"
+              class:on={open.color === c}
+              class:dot={ownedIs(openItem.id, c)}
+              style:background={COLOR_HEX[c] ?? '#888'}
+              aria-label={colorName(c)}
+              onclick={() => (open = { id: openItem.id, color: c })}
+            ></button>
+          {/each}
+        </div>
+      </div>
 
       <div class="deal card">
         <div class="what">
-          <span class="name">{selected.item.name}</span>
-          <span class="tier {selected.item.tier}">{TIER_NAMES[selected.item.tier]}</span>
+          <span class="name">{openItem.name}</span>
+          <span class="tier {openItem.tier}">{TIER_NAMES[openItem.tier]}</span>
         </div>
         {#if isWorn}
           <button type="button" class="btn" onclick={takeOff}><X size={18} />Take off</button>
@@ -204,11 +208,35 @@
           </button>
         {/if}
       </div>
-      {#if !isOwned && wornInSlot}
-        <p class="faint small hint">You are wearing {items.find((i) => i.id === wornInSlot.id)?.name ?? 'something'} here.</p>
-      {/if}
     {:else}
-      <p class="faint">Nothing here fits your body.</p>
+      <div class="slots">
+        {#each slots as s (s.id)}
+          <button type="button" class="slot" class:on={slot === s.id} onclick={() => (slot = s.id)}>
+            {s.name}
+            {#if wd?.outfit[s.id]}<span class="worn-dot"></span>{/if}
+          </button>
+        {/each}
+      </div>
+
+      <div class="grid">
+        {#each items as i (i.id)}
+          <button type="button" class="item" class:worn={wd?.outfit[slot]?.id === i.id} onclick={() => show(i.id)}>
+            <span class="pic">
+              {#if icons[i.id]}
+                <img src={icons[i.id]} alt={i.name} loading="lazy" />
+              {/if}
+            </span>
+            <span class="iname">{i.name}</span>
+            {#if wd?.outfit[slot]?.id === i.id}
+              <span class="itag worn-tag">Worn</span>
+            {:else if ownedIs(i.id)}
+              <span class="itag owned-tag"><Check size={12} />Owned</span>
+            {:else}
+              <span class="itag price {i.tier}">{shop.prices[i.tier]} <Coins size={11} /></span>
+            {/if}
+          </button>
+        {/each}
+      </div>
     {/if}
   </div>
 {/if}
@@ -269,6 +297,135 @@
     border-radius: 50%;
     background: var(--accent);
   }
+
+  /* ------------------------------------------------------------ the grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr));
+    gap: 0.5rem;
+  }
+  .item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.55rem 0.3rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    min-width: 0;
+  }
+  .item.worn {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+  }
+  .pic {
+    display: grid;
+    place-items: center;
+    width: 3.4rem;
+    height: 3.4rem;
+  }
+  .pic img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+  .iname {
+    max-width: 100%;
+    font-size: 0.78rem;
+    line-height: 1.15;
+    text-align: center;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .itag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.74rem;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .owned-tag,
+  .worn-tag {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .price.epic {
+    color: #b06ae0;
+  }
+  .price.legendary {
+    color: #d9a732;
+  }
+
+  /* ------------------------------------------------------------ the detail */
+  .back {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin: -0.3rem 0 -0.4rem;
+    padding: 0.3rem 0.5rem 0.3rem 0.2rem;
+    border: none;
+    background: none;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .pickname {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+  .colors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+  .swatch {
+    position: relative;
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    padding: 0;
+  }
+  .swatch.on {
+    border-color: var(--accent);
+    outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .swatch.dot::after {
+    content: '';
+    position: absolute;
+    top: -0.1rem;
+    right: -0.1rem;
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    background: var(--accent);
+    outline: 2px solid var(--surface-1, var(--surface-2));
+  }
   .deal {
     display: flex;
     align-items: center;
@@ -299,8 +456,5 @@
   }
   .tier.legendary {
     color: #d9a732;
-  }
-  .hint {
-    margin: -0.5rem 0 0;
   }
 </style>

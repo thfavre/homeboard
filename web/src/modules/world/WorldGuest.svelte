@@ -6,6 +6,7 @@
   import AvatarPreview from './AvatarPreview.svelte';
   import Picker from './Picker.svelte';
   import Shop from './Shop.svelte';
+  import Wardrobe from './Wardrobe.svelte';
 
   /**
    * The avatar panel: the look editor (body, skin, hair, eyes) and the shop. The server
@@ -15,6 +16,8 @@
   let tab = $state<'look' | 'shop'>('look');
   let choices = $state<AvatarChoices>({ ...DEFAULT_CHOICES });
   let saved = $state<string | null>(null);
+  /** The avatar exists: body and skin are set, only hair, face and clothes change */
+  let created = $state(false);
   let url = $state<string | null>(null);
   let sheet = $state<SheetInfo | null>(null);
   let buildingCount = $state(0);
@@ -97,11 +100,15 @@
       if (mine) {
         choices = mine;
         saved = JSON.stringify(mine);
+        created = true;
       }
       // A half-made look from last time wins over the saved one, so nothing is lost
+      // (except body and skin, which never change once the avatar exists)
       try {
         const draft = JSON.parse(storageGet(DRAFT_KEY) ?? 'null');
-        if (draft?.id === hb.me?.id && draft.choices) choices = { ...DEFAULT_CHOICES, ...draft.choices };
+        if (draft?.id === hb.me?.id && draft.choices) {
+          choices = { ...DEFAULT_CHOICES, ...draft.choices, ...(mine ? { body: mine.body, skin: mine.skin } : {}) };
+        }
       } catch {
         // A broken draft is just dropped
       }
@@ -131,23 +138,27 @@
   <div class="editor">
     <AvatarPreview {url} {sheet} building={buildingCount > 0} {focusHead} />
 
-    <div class="group">
-      <span class="label">Body</span>
-      <div class="row">
-        {#each ['male', 'female'] as const as b}
-          <button type="button" class="pick wide" class:on={choices.body === b} onclick={() => (choices.body = b)}>{b === 'male' ? 'Male' : 'Female'}</button>
-        {/each}
-      </div>
-    </div>
+    <Wardrobe onchanged={() => void build($state.snapshot(choices) as AvatarChoices)} />
 
-    <div class="group">
-      <span class="label">Skin</span>
-      <div class="row">
-        {#each SKINS as s}
-          <button type="button" class="swatch" class:on={choices.skin === s} style:background={SKIN_HEX[s]} aria-label={s} onclick={() => (choices.skin = s)}></button>
-        {/each}
+    {#if !created}
+      <div class="group">
+        <span class="label">Body</span>
+        <div class="row">
+          {#each ['male', 'female'] as const as b}
+            <button type="button" class="pick wide" class:on={choices.body === b} onclick={() => (choices.body = b)}>{b === 'male' ? 'Male' : 'Female'}</button>
+          {/each}
+        </div>
       </div>
-    </div>
+
+      <div class="group">
+        <span class="label">Skin</span>
+        <div class="row">
+          {#each SKINS as s}
+            <button type="button" class="swatch" class:on={choices.skin === s} style:background={SKIN_HEX[s]} aria-label={s} onclick={() => (choices.skin = s)}></button>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     <Picker label="Hair" items={HAIR_STYLES} value={choices.hair} onchange={(id) => (choices.hair = id)} />
     <Picker label="Hair color" items={hairColorItems} value={choices.hairColor} per={6} onchange={(id) => (choices.hairColor = id)} />
@@ -166,7 +177,9 @@
       <Check size={18} />
       {saved ? 'Save my look' : 'Move into the town'}
     </button>
-    <p class="faint hint">You start in your underwear. The shop dresses you up.</p>
+    {#if !created}
+      <p class="faint hint">You start in your underwear. The shop dresses you up.</p>
+    {/if}
   </div>
 {/if}
 

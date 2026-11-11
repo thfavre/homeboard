@@ -30,6 +30,8 @@ export interface WardrobeItem {
   tier: Tier;
   /** Color ids the shop offers: palette colors or sheet variants, checked by the probe */
   colors: readonly string[];
+  /** The color of the shop's picture when the first color does not read well (a white Santa hat) */
+  iconColor?: string;
   /** Only these bodies have the art (dresses); everyone otherwise */
   bodies?: readonly ('male' | 'female')[];
   /** The art has no sit sheet: the sim keeps the wearer off benches and away from the cat */
@@ -136,12 +138,12 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'bonnie_cap', name: 'Bonnie cap', slot: 'hat', def: 'headwear/hats/caps/hat_cap_bonnie', tier: 'common', colors: CLOTH },
   { id: 'bowler', name: 'Bowler', slot: 'hat', def: 'headwear/hats/formal/hat_formal_bowler', tier: 'fancy', colors: ['base', 'base_brown', ...CLOTH] },
   { id: 'tricorne', name: 'Tricorne', slot: 'hat', def: 'headwear/hats/tricorne/hat_tricorne', tier: 'fancy', colors: CLOTH },
-  { id: 'elf_hat', name: 'Elf hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_elf', tier: 'fancy', colors: CLOTH },
-  { id: 'christmas_hat', name: 'Christmas hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_christmas', tier: 'fancy', colors: CLOTH },
-  { id: 'pirate_bandana', name: 'Pirate bandana', slot: 'hat', def: 'headwear/coverings/bandana/hat_bandana_pirate_skull', tier: 'fancy', colors: CLOTH },
+  { id: 'elf_hat', name: 'Elf hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_elf', tier: 'fancy', colors: CLOTH, iconColor: 'green' },
+  { id: 'christmas_hat', name: 'Christmas hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_christmas', tier: 'fancy', colors: CLOTH, iconColor: 'red' },
+  { id: 'pirate_bandana', name: 'Pirate bandana', slot: 'hat', def: 'headwear/coverings/bandana/hat_bandana_pirate_skull', tier: 'fancy', colors: CLOTH, iconColor: 'red' },
   { id: 'top_hat', name: 'Top hat', slot: 'hat', def: 'headwear/hats/formal/hat_formal_tophat', tier: 'epic', colors: ['base', 'base_brown', ...CLOTH] },
-  { id: 'santa_hat', name: 'Santa hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_santa', tier: 'epic', colors: CLOTH },
-  { id: 'pirate_hat', name: 'Pirate captain hat', slot: 'hat', def: 'headwear/hats/athwart/hat_bicorne_athwart_captain_skull', tier: 'epic', colors: CLOTH },
+  { id: 'santa_hat', name: 'Santa hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_santa', tier: 'epic', colors: CLOTH, iconColor: 'red' },
+  { id: 'pirate_hat', name: 'Pirate captain hat', slot: 'hat', def: 'headwear/hats/athwart/hat_bicorne_athwart_captain_skull', tier: 'epic', colors: CLOTH, iconColor: 'charcoal' },
   { id: 'tiara', name: 'Tiara', slot: 'hat', def: 'headwear/hats/formal/hat_formal_tiara', tier: 'epic', colors: ['tiara_gold', 'tiara_silver', 'tiara_bronze', 'tiara_purple'] },
   { id: 'crown', name: 'Crown', slot: 'hat', def: 'headwear/hats/formal/hat_formal_crown', tier: 'legendary', colors: ['crown_gold', 'crown_red', 'crown_blue', 'crown_gray'] },
   { id: 'wizard_hat', name: 'Wizard hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_wizard', tier: 'legendary', colors: ['base_black', 'base_brown', 'base_gray', 'base_red', 'base_teal', 'base_yellow'] },
