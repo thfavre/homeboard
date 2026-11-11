@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { AIM_RADIUS, ANIM, CASE_RADIUS, SMOKE_RADIUS, SPRITE_SCALE, WORLD, type CrowdAim, type CrowdEvent, type CrowdFrame, type Dir } from '$shared/crowd.ts';
+  import { AIM_RADIUS, ANIM, SMOKE_RADIUS, SPRITE_SCALE, WORLD, type CrowdAim, type CrowdEvent, type CrowdFrame, type Dir } from '$shared/crowd.ts';
   import type { GamePlayer } from '$shared/games.ts';
   import { onEvent, serverNow } from '$lib/client.svelte.ts';
   import { drawCharacter, loadSheets, type Sheets } from './sprites.ts';
@@ -171,6 +171,8 @@
         for (const p of standingProps) p.reset?.();
         roundShownAt = serverNow();
       }
+      // The very first frame: the round starts showing now (the suitcases glow bright for a moment)
+      if (!frames.length && !roundShownAt) roundShownAt = serverNow();
       frames.push(f);
       if (frames.length > 40) frames = frames.slice(-20);
       for (const e of f.ev) handle(e, f);
@@ -214,7 +216,7 @@
     g.scale(k, k);
     if (env) {
       // The place built from the art at the sprites' size, then scaled up with sharp pixels
-      const ground = kind === 'race' ? streetGround(env, startX, finishX, PIXEL) : squareGround(env, cases);
+      const ground = kind === 'race' ? streetGround(env, startX, finishX, PIXEL) : squareGround(env);
       g.imageSmoothingEnabled = false;
       g.drawImage(ground, 0, 0, ground.width * SPRITE_SCALE, ground.height * SPRITE_SCALE);
     } else if (kind === 'race') drawStreet(g);
@@ -354,32 +356,30 @@
     // Planters at the bottom edge
     g.fillStyle = 'rgba(0,0,0,0.25)';
     g.fillRect(0, WORLD.h - 12, WORLD.w, 12);
-    // The drop zones under the suitcases
-    for (const c of cases) {
-      g.beginPath();
-      g.arc(c.x, c.y, CASE_RADIUS + 26, 0, Math.PI * 2);
-      g.fillStyle = 'rgba(255,190,80,0.07)';
-      g.fill();
-      g.setLineDash([10, 9]);
-      g.strokeStyle = 'rgba(255,200,110,0.35)';
-      g.lineWidth = 3;
-      g.stroke();
-      g.setLineDash([]);
-    }
   }
 
   // ------------------------------------------------------------ drawing
 
-  function suitcase(g: CanvasRenderingContext2D, x: number, y: number, open: boolean, now: number) {
+  /**
+   * A suitcase, glowing gold so it is easy to find: brighter and bigger at the start of a round (`boost`
+   * from 1 to 0 over its first seconds), then a soft breathing glow.
+   */
+  function suitcase(g: CanvasRenderingContext2D, x: number, y: number, open: boolean, now: number, boost = 0) {
     g.save();
     g.translate(x, y);
-    if (open) {
-      const glow = g.createRadialGradient(0, -8, 4, 0, -8, 70);
-      glow.addColorStop(0, `rgba(255,210,90,${0.55 + 0.15 * Math.sin(now / 300)})`);
-      glow.addColorStop(1, 'rgba(255,210,90,0)');
-      g.fillStyle = glow;
-      g.fillRect(-70, -78, 140, 140);
-    }
+    // Light added on top of the ground (it shines, it does not paint), breathing; pulsing fast and wide at first
+    const r = 70 + 80 * boost;
+    const a = 0.42 + 0.12 * Math.sin(now / 420) + boost * (0.4 + 0.2 * Math.sin(now / 110));
+    const glow = g.createRadialGradient(0, -6, 2, 0, -6, r);
+    glow.addColorStop(0, `rgba(255,200,80,${Math.min(0.95, a)})`);
+    glow.addColorStop(0.35, `rgba(255,170,50,${Math.min(0.7, a * 0.55)})`);
+    glow.addColorStop(1, 'rgba(255,150,40,0)');
+    g.globalCompositeOperation = 'lighter';
+    g.fillStyle = glow;
+    g.beginPath();
+    g.ellipse(0, -6, r, r * 0.8, 0, 0, Math.PI * 2);
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
     // Shadow, body, edges, clasps, handle
     g.fillStyle = 'rgba(0,0,0,0.35)';
     g.beginPath();
@@ -564,7 +564,9 @@
     g.drawImage(background(), 0, 0, WORLD.w, WORLD.h);
     // Shadows of the things standing up, on the ground under everyone
     for (const p of standingProps) p.ground?.(g, now);
-    // The suitcases, sorted with everyone further down: a collected one fades away, rising a little
+    // The suitcases, sorted with everyone further down: a collected one fades away, rising a little. They
+    // glow brighter for the first seconds of a round, so everyone sees where they are
+    const startGlow = Math.max(0, 1 - (now - roundShownAt) / 5000);
     const caseItems: { y: number; draw(g: CanvasRenderingContext2D): void }[] = [];
     if (kind === 'spy')
       cases.forEach((c, i) => {
@@ -575,7 +577,7 @@
           y: c.y + 12,
           draw(g) {
             g.globalAlpha = 1 - p;
-            suitcase(g, c.x, c.y - p * 24, false, now);
+            suitcase(g, c.x, c.y - p * 24, false, now, startGlow);
             g.globalAlpha = 1;
           },
         });

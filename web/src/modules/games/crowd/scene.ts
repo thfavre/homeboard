@@ -1,4 +1,4 @@
-import { CASE_RADIUS, SPRITE_SCALE, SPY_SCENE, WORLD } from '$shared/crowd.ts';
+import { SPRITE_SCALE, SPY_SCENE, WORLD } from '$shared/crowd.ts';
 
 /**
  * The places of the crowd games, made of LPC style environment art (web/public/crowd/env, see its
@@ -182,8 +182,8 @@ export function streetGround(env: Env, startX: number, finishX: number, font: st
   return c;
 }
 
-/** The spy square: houses, a sidewalk, stone slabs, a light ring around the fountain, the drop zones */
-export function squareGround(env: Env, cases: { x: number; y: number }[]): HTMLCanvasElement {
+/** The spy square: houses, a sidewalk, stone slabs, a light frame of stone around the fountain */
+export function squareGround(env: Env): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = PW;
   c.height = PH;
@@ -209,33 +209,6 @@ export function squareGround(env: Env, cases: { x: number; y: number }[]): HTMLC
   }
   houses(g, env, 92, 8);
   sidewalk(g, env, 92, 128);
-  // The drop zones under the suitcases: a dashed ring on the stone
-  for (const z of cases) {
-    const x = z.x / S;
-    const y = z.y / S;
-    const rad = (CASE_RADIUS + 24) / S;
-    g.fillStyle = 'rgba(255,190,80,0.16)';
-    g.beginPath();
-    g.ellipse(x, y, rad, rad * 0.8, 0, 0, Math.PI * 2);
-    g.fill();
-    // A dashed gold ring and four corner marks, like a painted drop spot
-    g.fillStyle = 'rgba(255,205,110,0.85)';
-    for (let a = 0; a < 32; a += 2) {
-      const t = (a / 32) * Math.PI * 2;
-      g.fillRect(Math.round(x + Math.cos(t) * rad) - 1, Math.round(y + Math.sin(t) * rad * 0.8) - 1, 3, 2);
-    }
-    for (const [mx, my] of [
-      [-1, -1],
-      [1, -1],
-      [-1, 1],
-      [1, 1],
-    ]) {
-      const cx = Math.round(x + mx * rad * 0.55);
-      const cy = Math.round(y + my * rad * 0.45);
-      g.fillRect(cx - (mx > 0 ? 5 : 0), cy, 6, 2);
-      g.fillRect(cx - (mx > 0 ? 1 : 0), cy - (my > 0 ? 5 : 0), 2, 6);
-    }
-  }
   return c;
 }
 
