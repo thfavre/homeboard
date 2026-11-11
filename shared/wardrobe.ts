@@ -3,6 +3,10 @@
 // into the avatar's sheet (server/modules/world/compose.ts). The catalog is curated by hand:
 // only definitions whose art covers the town's animations on both bodies are in (checked with a
 // probe script; items missing the sit or cheer art carry noSit/noCheer so the sim avoids those).
+//
+// A color id is one color ("navy") or two ("navy+gold"). The first colors the item; the second
+// colors its extra layers (a feather, a trim) or, for art drawn in two materials (leather armor,
+// a barbarian helmet), the second material.
 
 /** Where an item is worn; one item per slot. A dress replaces top and bottom. */
 export const SLOTS = [
@@ -32,12 +36,23 @@ export interface WardrobeItem {
    *  is the item's own color (the one its art is drawn in, or reads as): the shop's picture and
    *  where a piece opens */
   colors: readonly string[];
+  /** More art drawn with the item, in the second color of a two-color id */
+  extras?: readonly ItemExtra[];
   /** Only these bodies have the art (dresses); everyone otherwise */
   bodies?: readonly ('male' | 'female')[];
   /** The art has no sit sheet: the sim keeps the wearer off benches and away from the cat */
   noSit?: true;
   /** The art has no emote or jump sheet: the wearer does not cheer */
   noCheer?: true;
+}
+
+/** An extra layer of an item: a skull on a hat, a trim on a cape */
+export interface ItemExtra {
+  /** Sheet definition, like the item's */
+  def: string;
+  /** Its color when the item is worn in one color; without one it is only drawn in two-color ids
+   *  (a plain kimono, or one with a trim) */
+  color?: string;
 }
 
 /** The LPC cloth palette (every recolorable garment comes in all of these) */
@@ -64,7 +79,9 @@ const GEM = ['blue', 'green', 'orange', 'purple', 'red', 'yellow'] as const;
 /** A color list with the item's own color moved first (a red Santa hat, a steel necklace) */
 const startingWith = (color: string, list: readonly string[]): string[] => [color, ...list.filter((c) => c !== color)];
 
-/** Swatch hex for every color id above (display only; the art has its own ramps) */
+/** Swatch of every color id (display only; the art has its own ramps): a hex color, or for a
+ *  two-color id a CSS gradient of both halves (filled in below the catalog), so use it as a
+ *  background */
 export const COLOR_HEX: Record<string, string> = {
   // cloth (a readable mid tone of each ramp)
   white: '#e5e6c7', black: '#22282a', charcoal: '#2a3034', gray: '#585561', slate: '#818b8b',
@@ -88,9 +105,33 @@ export const COLOR_HEX: Record<string, string> = {
   steel_purple: '#8a3fc0', brass_yellow: '#e8c22a',
 };
 
-/** Display name of a color id ("base_brown" => "Base brown") */
+/** Display name of a color id ("base_brown" => "Base brown", "navy+gold" => "Navy and gold") */
 export function colorName(id: string): string {
-  return id.replace(/[_]/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  return id
+    .split('+')
+    .map((part) => part.replace(/[_]/g, ' '))
+    .join(' and ')
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+/** The two halves of a color id (the second is undefined for a one-color id) */
+export const splitColor = (id: string): [string, string | undefined] => {
+  const [main, accent] = id.split('+');
+  return [main, accent];
+};
+
+/**
+ * The layers a piece is drawn with: the item in the whole color id (art drawn in two materials
+ * takes both halves), then each extra in the second color, or its own color for a one-color id.
+ */
+export function piecesOf(item: WardrobeItem, color: string): { def: string; color: string }[] {
+  const [, accent] = splitColor(color);
+  const out = [{ def: item.def, color }];
+  for (const extra of item.extras ?? []) {
+    const c = accent ?? extra.color;
+    if (c) out.push({ def: extra.def, color: c });
+  }
+  return out;
 }
 
 export const CATALOG: WardrobeItem[] = [
@@ -118,7 +159,7 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'longsleeve_buttoned', name: 'Buttoned longsleeve', slot: 'top', def: 'torso/shirts/longsleeve/torso_clothes_longsleeve2_buttoned', tier: 'common', colors: CLOTH },
   { id: 'longsleeve_polo', name: 'Longsleeve polo', slot: 'top', def: 'torso/shirts/longsleeve/torso_clothes_longsleeve2_polo', tier: 'common', colors: CLOTH },
   { id: 'cardigan', name: 'Cardigan', slot: 'top', def: 'torso/shirts/longsleeve/torso_clothes_longsleeve2_cardigan', tier: 'fancy', colors: CLOTH },
-  { id: 'overalls', name: 'Overalls', slot: 'top', def: 'torso/aprons/torso_aprons_overalls', tier: 'fancy', colors: CLOTH },
+  { id: 'overalls', name: 'Overalls', slot: 'top', def: 'torso/aprons/torso_aprons_overalls', tier: 'fancy', colors: startingWith('leather', CLOTH) },
   { id: 'chainmail', name: 'Chainmail', slot: 'top', def: 'torso/torso_chainmail', tier: 'epic', colors: startingWith('steel', METAL) },
   { id: 'legion_armor', name: 'Legion armor', slot: 'top', def: 'torso/armour/torso_armour_legion', tier: 'epic', colors: startingWith('steel', METAL) },
   { id: 'plate_armor', name: 'Plate armor', slot: 'top', def: 'torso/armour/torso_armour_plate', tier: 'legendary', colors: startingWith('steel', METAL) },
@@ -184,12 +225,12 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'wide_brim_hat', name: 'Wide-brim hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_large', tier: 'fancy', colors: ['brown'] },
   { id: 'nasal_helm', name: 'Nasal helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_nasal', tier: 'fancy', colors: startingWith('steel', METAL) },
   { id: 'norman_helm', name: 'Norman helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_norman', tier: 'fancy', colors: startingWith('steel', METAL) },
-  { id: 'elf_hat', name: 'Elf hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_elf', tier: 'fancy', colors: startingWith('green', CLOTH) },
+  { id: 'elf_hat', name: 'Elf hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_christmas', extras: [{ def: 'headwear/hats/holiday/hat_holiday_elf', color: 'white' }], tier: 'fancy', colors: [...startingWith('green', CLOTH), 'green+red', 'green+yellow', 'red+green'] },
   { id: 'christmas_hat', name: 'Christmas hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_christmas', tier: 'fancy', colors: startingWith('red', CLOTH) },
-  { id: 'pirate_bandana', name: 'Pirate bandana', slot: 'hat', def: 'headwear/coverings/bandana/hat_bandana_pirate_skull', tier: 'fancy', colors: startingWith('red', CLOTH) },
+  { id: 'pirate_bandana', name: 'Pirate bandana', slot: 'hat', def: 'headwear/coverings/bandana/hat_bandana_pirate', extras: [{ def: 'headwear/coverings/bandana/hat_bandana_pirate_skull', color: 'white' }], tier: 'fancy', colors: [...startingWith('black', CLOTH), 'red+black', 'black+red', 'navy+yellow'] },
   { id: 'top_hat', name: 'Top hat', slot: 'hat', def: 'headwear/hats/formal/hat_formal_tophat', tier: 'epic', colors: ['base', 'base_brown', ...CLOTH] },
-  { id: 'santa_hat', name: 'Santa hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_santa', tier: 'epic', colors: startingWith('red', CLOTH) },
-  { id: 'pirate_hat', name: 'Pirate captain hat', slot: 'hat', def: 'headwear/hats/athwart/hat_bicorne_athwart_captain_skull', tier: 'epic', colors: startingWith('charcoal', CLOTH) },
+  { id: 'santa_hat', name: 'Santa hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_christmas', extras: [{ def: 'headwear/hats/holiday/hat_holiday_santa', color: 'white' }], tier: 'epic', colors: startingWith('red', CLOTH) },
+  { id: 'pirate_hat', name: 'Pirate captain hat', slot: 'hat', def: 'headwear/hats/athwart/hat_bicorne_athwart_captain', extras: [{ def: 'headwear/hats/athwart/hat_bicorne_athwart_captain_skull', color: 'white' }], tier: 'epic', colors: [...startingWith('charcoal', CLOTH), 'black+red', 'navy+yellow', 'maroon+black'] },
   { id: 'admiral_hat', name: 'Admiral hat', slot: 'hat', def: 'headwear/hats/athwart/hat_bicorne_athwart_admiral', tier: 'epic', colors: CLOTH },
   { id: 'commodore_hat', name: 'Commodore hat', slot: 'hat', def: 'headwear/hats/athwart/hat_bicorne_athwart_commodore', tier: 'epic', colors: CLOTH },
   { id: 'morion', name: 'Morion', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_morion', tier: 'epic', colors: startingWith('steel', METAL) },
@@ -207,7 +248,7 @@ export const CATALOG: WardrobeItem[] = [
 
   // ------------------------------------------------------------ face
   { id: 'small_eyepatch', name: 'Small eyepatch', slot: 'face', def: 'headwear/accessories/eyepatch/facial_eyepatch_small_left', tier: 'cheap', colors: CLOTH },
-  { id: 'earring', name: 'Earring', slot: 'face', def: 'headwear/accessories/earrings/facial_earring_left', tier: 'cheap', colors: ['base', ...METAL] },
+  { id: 'earring', name: 'Earring', slot: 'face', def: 'headwear/accessories/earrings/facial_earring_left', tier: 'cheap', colors: startingWith('gold', METAL) },
   { id: 'glasses', name: 'Glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses', tier: 'common', colors: FRAME },
   { id: 'round_glasses', name: 'Round glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses_round', tier: 'common', colors: FRAME },
   { id: 'nerd_glasses', name: 'Nerd glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses_nerd', tier: 'common', colors: FRAME },
@@ -257,13 +298,21 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'lizard_tail', name: 'Lizard tail', slot: 'back', def: 'body/tails/tail_lizard_alt', tier: 'epic', colors: SCALE },
   { id: 'tattered_cape', name: 'Tattered cape', slot: 'back', def: 'torso/cape/cape_tattered', tier: 'epic', colors: CLOTH, noSit: true, noCheer: true },
   { id: 'cape', name: 'Cape', slot: 'back', def: 'torso/cape/cape_solid', tier: 'epic', colors: CLOTH, noSit: true, noCheer: true },
-  { id: 'trimmed_cape', name: 'Trimmed cape', slot: 'back', def: 'torso/cape/cape_trim', tier: 'legendary', colors: startingWith('brown', CLOTH), noSit: true, noCheer: true },
+  { id: 'trimmed_cape', name: 'Trimmed cape', slot: 'back', def: 'torso/cape/cape_solid', extras: [{ def: 'torso/cape/cape_trim', color: 'brown' }], tier: 'legendary', colors: [...CLOTH, 'red+yellow', 'navy+yellow', 'purple+yellow', 'black+red', 'forest+tan', 'maroon+white'], noSit: true, noCheer: true },
   { id: 'angel_wings', name: 'Angel wings', slot: 'back', def: 'body/wings/wings_feathered', tier: 'legendary', colors: WING },
   { id: 'bat_wings', name: 'Bat wings', slot: 'back', def: 'body/wings/wings_bat', tier: 'legendary', colors: WING },
   { id: 'dragon_wings', name: 'Dragon wings', slot: 'back', def: 'body/wings/wings_lizard_alt', tier: 'legendary', colors: SCALE },
 ];
 
-export const itemById = (id: string): WardrobeItem | undefined => CATALOG.find((i) => i.id === id);
+// Two-color swatches: the first color over the second, split on the diagonal
+for (const item of CATALOG) {
+  for (const id of item.colors) {
+    const [main, accent] = splitColor(id);
+    if (accent && !COLOR_HEX[id]) COLOR_HEX[id] = `linear-gradient(135deg, ${COLOR_HEX[main] ?? '#888'} 50%, ${COLOR_HEX[accent] ?? '#888'} 50%)`;
+  }
+}
+
+export const itemById =(id: string): WardrobeItem | undefined => CATALOG.find((i) => i.id === id);
 
 /** One worn or owned piece: a catalog item in one of its colors */
 export interface WornItem {

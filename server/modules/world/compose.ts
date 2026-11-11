@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PNG } from 'pngjs';
 import { BEARDS, DEFAULT_CHOICES, HAIR_STYLES, type AvatarChoices, type SheetInfo } from '../../../shared/world.ts';
-import { SLOTS, itemById, type Outfit } from '../../../shared/wardrobe.ts';
+import { SLOTS, itemById, piecesOf, splitColor, type Outfit } from '../../../shared/wardrobe.ts';
 import type { LpcFiles } from './lpc.ts';
 
 /**
@@ -59,7 +59,7 @@ function itemsOf(c: AvatarChoices, outfit: Outfit): Item[] {
   if (!outfit.bottom && !outfit.dress) items.push({ def: 'legs/shorts/legs_shorts', color: 'white' });
   for (const worn of Object.values(outfit)) {
     const item = itemById(worn.id);
-    if (item) items.push({ def: item.def, color: worn.color });
+    if (item) items.push(...piecesOf(item, worn.color));
   }
   const hair = HAIR_STYLES.find((h) => h.id === c.hair)?.def;
   if (hair) items.push({ def: hair, color: c.hairColor });
@@ -145,22 +145,28 @@ export class Composer {
     return from.map((c, i) => ({ from: rgb(c), to: rgb(to[Math.min(i, to.length - 1)]) }));
   }
 
-  /** The drawn layers of one item for this body, with their color swaps */
+  /**
+   * The drawn layers of one item for this body, with their color swaps. A two-color id
+   * ("leather+steel") gives art drawn in two materials one color each, in order; anything else
+   * takes the first color.
+   */
   private async layersOf(item: Item, c: AvatarChoices): Promise<Layer[]> {
     const def = await this.json(`sheet_definitions/${item.def}.json`);
     const swaps: Swap[] = [];
     let variant: string | undefined;
     const rc = def.recolors;
+    const [main, accent] = item.color ? splitColor(item.color) : [undefined, undefined];
     if (rc?.material) {
-      swaps.push(await this.swapFor(rc, rc.material === 'body' ? c.skin : item.color!));
+      swaps.push(await this.swapFor(rc, rc.material === 'body' ? c.skin : main!));
     } else if (rc?.color_1) {
+      let n = 0;
       for (const [key, r] of Object.entries<any>(rc)) {
         if (!key.startsWith('color_')) continue;
-        const target = r.material === 'body' ? c.skin : r.material === 'eye' ? (item.eyes ?? 'brown') : item.color;
+        const target = r.material === 'body' ? c.skin : r.material === 'eye' ? (item.eyes ?? 'brown') : n++ === 0 ? main : (accent ?? main);
         if (target) swaps.push(await this.swapFor(r, target));
       }
     } else if (def.variants?.length) {
-      variant = item.color && def.variants.includes(item.color) ? item.color : def.variants[0];
+      variant = main && def.variants.includes(main) ? main : def.variants[0];
     }
 
     const out: Layer[] = [];
@@ -231,11 +237,12 @@ export class Composer {
 
   /**
    * A small picture of one item alone (no body) for the shop's grid: the down-facing idle frame
-   * of its layers, trimmed to the drawn pixels and centered in a square.
+   * of its layers (the item's pieces: see piecesOf), trimmed to the drawn pixels and centered in
+   * a square.
    */
-  async icon(def: string, color: string | undefined, body: 'male' | 'female'): Promise<Buffer> {
+  async icon(pieces: Item[], body: 'male' | 'female'): Promise<Buffer> {
     const c: AvatarChoices = { ...DEFAULT_CHOICES, body };
-    const layers = (await this.layersOf({ def, color }, c)).sort((a, b) => a.zPos - b.zPos);
+    const layers = (await Promise.all(pieces.map((p) => this.layersOf(p, c)))).flat().sort((a, b) => a.zPos - b.zPos);
     const flat = new PNG({ width: FRAME, height: FRAME });
     for (const layer of layers) {
       const png = (await this.sheet(layer, 'idle')) ?? (await this.sheet(layer, 'walk'));
@@ -315,9 +322,12 @@ export class Composer {
   }
 }
 
-/** A stable name for a look (choices plus outfit), for the sheet's file name */
+/** A stable name for a look (choices plus outfit, with the layers each piece draws), for the sheet's file name */
 export function choicesHash(c: AvatarChoices, outfit: Outfit = {}): string {
-  const worn = SLOTS.map((s) => outfit[s.id]).map((w) => (w ? [w.id, w.color] : null));
+  const worn = SLOTS.map((s) => outfit[s.id]).map((w) => {
+    const item = w && itemById(w.id);
+    return w ? [w.id, w.color, ...(item ? piecesOf(item, w.color) : [])] : null;
+  });
   return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes, worn])).digest('hex').slice(0, 12);
 }
 
