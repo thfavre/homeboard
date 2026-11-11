@@ -118,6 +118,7 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'shorts', name: 'Shorts', slot: 'bottom', def: 'legs/shorts/legs_shorts', tier: 'cheap', colors: CLOTH },
   { id: 'short_shorts', name: 'Short shorts', slot: 'bottom', def: 'legs/shorts/legs_shorts_short', tier: 'cheap', colors: CLOTH },
   { id: 'leggings', name: 'Leggings', slot: 'bottom', def: 'legs/leggings/legs_leggings', tier: 'cheap', colors: CLOTH },
+  { id: 'fitted_leggings', name: 'Fitted leggings', slot: 'bottom', def: 'legs/leggings/legs_leggings2', tier: 'cheap', colors: CLOTH },
   { id: 'pants', name: 'Pants', slot: 'bottom', def: 'legs/pants/legs_pants', tier: 'common', colors: CLOTH },
   { id: 'slim_pants', name: 'Slim pants', slot: 'bottom', def: 'legs/pants/legs_pants2', tier: 'common', colors: CLOTH },
   { id: 'cuffed_pants', name: 'Cuffed pants', slot: 'bottom', def: 'legs/pants/legs_cuffed', tier: 'common', colors: CLOTH },
@@ -128,8 +129,10 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'striped_pants', name: 'Striped pants', slot: 'bottom', def: 'legs/pants/legs_formal_striped', tier: 'fancy', colors: CLOTH },
   { id: 'pantaloons', name: 'Pantaloons', slot: 'bottom', def: 'legs/pants/legs_pantaloons', tier: 'fancy', colors: CLOTH },
   { id: 'slit_skirt', name: 'Slit skirt', slot: 'bottom', def: 'legs/skirts/legs_skirts_slit', tier: 'fancy', colors: CLOTH, noSit: true, noCheer: true },
+  { id: 'overskirt', name: 'Overskirt', slot: 'bottom', def: 'legs/skirts/legs_skirt_overskirt', tier: 'fancy', colors: CLOTH, bodies: ['female'], noSit: true, noCheer: true },
   { id: 'legion_skirt', name: 'Legion skirt', slot: 'bottom', def: 'legs/skirts/legs_skirts_legion', tier: 'epic', colors: CLOTH },
   { id: 'belle_skirt', name: 'Belle skirt', slot: 'bottom', def: 'legs/skirts/legs_skirt_belle', tier: 'epic', colors: CLOTH, bodies: ['female'], noSit: true, noCheer: true },
+  { id: 'plate_greaves', name: 'Plate greaves', slot: 'bottom', def: 'legs/legs_armour', tier: 'legendary', colors: startingWith('steel', METAL) },
 
   // ------------------------------------------------------------ feet
   { id: 'sandals', name: 'Sandals', slot: 'feet', def: 'feet/feet_sandals', tier: 'cheap', colors: CLOTH },
