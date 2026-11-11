@@ -26,20 +26,17 @@ export function asSheets(info: SheetInfo | null): Sheets | null {
   return info ? { info: { frame: info.frame, rows: info.rows, characters: [] }, people: [], suits: [] } : null;
 }
 
-/** The games' animation for what a character of the town is doing. Sleep lies down (the dead row). */
-export function gameAnim(anim: number): { anim: number; skipFall: boolean } {
+/** The games' animation for what a character of the town is doing (sleepers are drawn apart: the idle turned flat) */
+export function gameAnim(anim: number): number {
   switch (anim) {
     case WANIM.walk:
-      return { anim: ANIM.walk, skipFall: false };
+      return ANIM.walk;
     case WANIM.sit:
     case WANIM.pet:
-      return { anim: ANIM.sit, skipFall: false };
-    case WANIM.sleep:
-      // The dead animation first falls over; a sleeper is already lying there
-      return { anim: ANIM.dead, skipFall: true };
+      return ANIM.sit;
     case WANIM.cheer:
-      return { anim: ANIM.cheer, skipFall: false };
+      return ANIM.cheer;
     default:
-      return { anim: ANIM.idle, skipFall: false };
+      return ANIM.idle;
   }
 }

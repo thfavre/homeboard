@@ -217,13 +217,18 @@
     // Sleepers lie on the ground under everyone, then back to front
     people.sort((a, b) => (a.anim === WANIM.sleep ? 0 : 1) - (b.anim === WANIM.sleep ? 0 : 1) || a.y - b.y);
 
-    // Standing shadows in one pass
+    // Shadows in one pass: round under the standing, long under the sleepers
     g.fillStyle = 'rgba(0,0,0,0.28)';
     g.beginPath();
     for (const p of people) {
-      if (p.anim === WANIM.sleep) continue;
-      g.moveTo(p.x + 15, p.y);
-      g.ellipse(p.x, p.y, 15, 5, 0, 0, Math.PI * 2);
+      if (p.anim === WANIM.sleep) {
+        const s = sleepSide(p.x);
+        g.moveTo(p.x + s * 36 + 40, p.y + 2);
+        g.ellipse(p.x + s * 36, p.y + 2, 40, 8, 0, 0, Math.PI * 2);
+      } else {
+        g.moveTo(p.x + 15, p.y);
+        g.ellipse(p.x, p.y, 15, 5, 0, 0, Math.PI * 2);
+      }
     }
     g.fill();
 
@@ -240,11 +245,20 @@
         l.since = now;
       }
       const c = byId.get(p.id);
-      const a = gameAnim(p.anim);
-      // A sleeper starts lying there: the fall of the dead animation is skipped
-      const since = now - l.since + (a.skipFall ? 60_000 : 0);
+      const img = (c && sheetImage(c.url)) ?? undefined;
       g.globalAlpha = p.alpha;
-      drawCharacter(g, sheets, (c && sheetImage(c.url)) ?? undefined, p.x, p.y, { anim: a.anim, dir: p.dir, dist: l.dist, since, now, phase: l.phase }, hue(p.id));
+      if (p.anim === WANIM.sleep) {
+        // Asleep on their side: the side-view idle turned flat (the breathing keeps playing),
+        // head away from the edge of town so nobody's head sticks out of the picture
+        const s = sleepSide(p.x);
+        g.save();
+        g.translate(p.x, p.y);
+        g.rotate((s * Math.PI) / 2);
+        drawCharacter(g, sheets, img, 0, 0, { anim: gameAnim(WANIM.idle), dir: s === 1 ? 1 : 3, dist: 0, since: now - l.since, now, phase: l.phase }, hue(p.id));
+        g.restore();
+      } else {
+        drawCharacter(g, sheets, img, p.x, p.y, { anim: gameAnim(p.anim), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id));
+      }
       g.globalAlpha = 1;
     };
 
@@ -276,8 +290,9 @@
     const tall = world?.sheet ? (world.sheet.feet - world.sheet.body.top) * 1.35 : 64;
     for (const p of people) {
       const c = byId.get(p.id);
-      if (c) nameTag(g, c.name, p.x, p.anim === WANIM.sleep ? p.y - 40 : p.y - tall - 14, p.alpha);
-      if (p.anim === WANIM.sleep) drawZzz(g, p.x, p.y, now, p.alpha);
+      const s = sleepSide(p.x);
+      if (c) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - tall - 14, p.alpha);
+      if (p.anim === WANIM.sleep) drawZzz(g, p.x + s * 58, p.y - 4, now, p.alpha);
     }
 
     // Nobody lives here yet: say how to move in
@@ -291,6 +306,9 @@
       g.fillText('Create your avatar on your phone to move in', TOWN.w / 2, 462);
     }
   }
+
+  /** Which way a sleeper lies: body toward the middle of the town */
+  const sleepSide = (x: number) => (x < TOWN.w / 2 ? 1 : -1);
 
   /** A steady hue for a guest whose sheet is still loading */
   function hue(id: string): number {
