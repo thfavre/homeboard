@@ -3,7 +3,7 @@
 // avatar editor. The sprites are composited on the server from the Universal LPC generator's art
 // (see server/modules/world/compose.ts).
 
-import { SPY_OBSTACLES, SPY_SCENE, WORLD } from './crowd.ts';
+import { SPRITE_SCALE, SPY_OBSTACLES, SPY_SCENE, SQUARE_HOUSES, WORLD, houseRow, type HouseKind } from './crowd.ts';
 import type { Outfit, Tier, WornItem } from './wardrobe.ts';
 
 /**
@@ -13,16 +13,73 @@ import type { Outfit, Tier, WornItem } from './wardrobe.ts';
 export const TOWN = WORLD;
 export const TOWN_SCENE = SPY_SCENE;
 export const TOWN_OBSTACLES = SPY_OBSTACLES;
-/** Where characters walk: the square below the sidewalk */
-export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
 /** Benches characters can sit on: where the square's benches stand, and where a sitter's feet land */
 export const BENCHES: { x: number; y: number }[] = [
   { x: 400, y: 178 },
   { x: 1200, y: 178 },
 ];
 
-/** What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat) */
-export const WANIM = { idle: 0, walk: 1, sit: 2, sleep: 3, pet: 4, cheer: 5 } as const;
+// ------------------------------------------------------------ the shops
+
+/** The places a character walks into when its guest changes their look on the phone */
+export type PlaceId = 'clothes' | 'barber';
+
+/**
+ * A shop of the town: one of the square's houses, dressed up as a shop on the TV. All in world
+ * units: `door` is where a character goes in, `front` where it stands before the door on the square,
+ * `window` the shop window on the wall where the ones inside are seen, `seats` the x of each place
+ * inside (as many as the shop takes at once; the others queue at the door).
+ */
+export interface TownPlace {
+  id: PlaceId;
+  name: string;
+  house: { kind: HouseKind; x0: number; x1: number; bottom: number };
+  door: { x: number; y: number };
+  front: { x: number; y: number };
+  window: { x: number; y: number; w: number; h: number };
+  seats: number[];
+}
+
+/**
+ * Where the door and a shop window go on each kind of house (sprite pixels: x from the house's left,
+ * heights up from its bottom). The window is wider than the house's own, to show the shop's inside.
+ */
+const SHOPFRONTS: Partial<Record<HouseKind, { door: number; doorUp: number; win: { x0: number; x1: number; top: number; bottom: number } }>> = {
+  brickA: { door: 47.5, doorUp: 25, win: { x0: 72, x1: 130, top: 68, bottom: 29 } },
+  brickB: { door: 79.5, doorUp: 4, win: { x0: 10, x1: 57, top: 63, bottom: 24 } },
+};
+
+/** A shop in the house of this kind nearest to `nearX` (world units) */
+function place(id: PlaceId, name: string, kind: HouseKind, nearX: number, seats: number): TownPlace {
+  const S = SPRITE_SCALE;
+  const row = houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / S)).filter((h) => h.kind === kind);
+  const h = row.reduce((a, b) => (Math.abs((b.x + b.w / 2) * S - nearX) < Math.abs((a.x + a.w / 2) * S - nearX) ? b : a));
+  const f = SHOPFRONTS[kind]!;
+  const bottom = SQUARE_HOUSES.bottom * S;
+  const window = { x: (h.x + f.win.x0) * S, y: bottom - f.win.top * S, w: (f.win.x1 - f.win.x0) * S, h: (f.win.top - f.win.bottom) * S };
+  const doorX = (h.x + f.door) * S;
+  return {
+    id,
+    name,
+    house: { kind, x0: h.x * S, x1: (h.x + h.w) * S, bottom },
+    door: { x: doorX, y: bottom - f.doorUp * S + 2 },
+    front: { x: doorX, y: TOWN_AREA.y0 + 2 },
+    window,
+    seats: Array.from({ length: seats }, (_, i) => window.x + (window.w * (i + 0.5)) / seats),
+  };
+}
+
+/** Where characters walk: the square below the sidewalk */
+export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
+
+/** The clothes shop (the big house near the middle) and the barber (the small one on the right) */
+export const TOWN_PLACES: Record<PlaceId, TownPlace> = {
+  clothes: place('clothes', 'Clothes shop', 'brickA', 860, 2),
+  barber: place('barber', 'Barber', 'brickB', 1330, 1),
+};
+
+/** What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat, inside is seen through a shop window) */
+export const WANIM = { idle: 0, walk: 1, sit: 2, sleep: 3, pet: 4, cheer: 5, inside: 6 } as const;
 export type WAnimId = (typeof WANIM)[keyof typeof WANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
 export type WDir = 0 | 1 | 2 | 3;
@@ -180,5 +237,11 @@ export interface WorldState {
   fadeAfterMin?: number;
   earnPerMin?: number;
   startMoney?: number;
+  shopVisits?: boolean;
+  visitMinSec?: number;
+  visitMaxSec?: number;
+  finishWithinSec?: number;
+  wrapMinSec?: number;
+  wrapMaxSec?: number;
   wallets?: { id: string; name: string; color: string; balance: number }[];
 }

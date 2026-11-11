@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type LookPart, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type LookPart, type PlaceId, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, piecesOf, validOutfit, validWorn, type Outfit, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -32,6 +32,16 @@ interface WorldSettings {
   lookHairColor: number;
   lookBeard: number;
   lookEyes: number;
+  /** A look changed on the phone shows in the town after a trip to the clothes shop or the barber (off: at once) */
+  shopVisits: boolean;
+  /** Time spent inside a shop (seconds, a random time in the range) */
+  visitMinSec: number;
+  visitMaxSec: number;
+  /** What a character is doing is finished first if it ends within this (seconds) */
+  finishWithinSec: number;
+  /** Otherwise it is wrapped up within this range (seconds), unless it cannot be cut short */
+  wrapMinSec: number;
+  wrapMaxSec: number;
 }
 
 const LOOK_KEY: Record<LookPart, 'lookHair' | 'lookHairColor' | 'lookBeard' | 'lookEyes'> = {
@@ -53,7 +63,28 @@ interface StoredAvatar {
   choices: AvatarChoices;
   hash: string;
   outfit?: Outfit;
+  /**
+   * What the town shows, when it differs from the look above: the phone has the new look at once,
+   * the town character only once it has been to the shop for it. Absent: the same.
+   */
+  town?: TownLook;
 }
+
+interface TownLook {
+  choices: AvatarChoices;
+  outfit: Outfit;
+  hash: string;
+}
+
+/** What the town shows of a guest */
+const townOf = (a: StoredAvatar): TownLook => a.town ?? { choices: a.choices, outfit: a.outfit ?? {}, hash: a.hash };
+/** What a visit to the clothes shop changes */
+const outfitKey = (o: Outfit) => JSON.stringify(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
+/**
+ * What a visit to the barber changes. The eye color is not in it: it shows in the town at once, as
+ * a barber does not change eyes and a trip for two pixels on the TV would look pointless.
+ */
+const hairKey = (c: AvatarChoices) => `${c.hair}|${c.hairColor}|${c.beard}`;
 
 interface WorldData {
   avatars: Record<string, StoredAvatar>;
@@ -92,6 +123,12 @@ export default defineModule<WorldSettings>({
     lookHairColor: 20,
     lookBeard: 15,
     lookEyes: 10,
+    shopVisits: true,
+    visitMinSec: 2,
+    visitMaxSec: 5,
+    finishWithinSec: 20,
+    wrapMinSec: 2,
+    wrapMaxSec: 10,
   },
 
   setup(ctx) {
@@ -102,7 +139,7 @@ export default defineModule<WorldSettings>({
     const composer = new Composer(new LpcFiles());
     for (const [file, cr] of Object.entries(store.data.credits)) composer.credits.set(file, cr);
     const sheetsDir = ctx.mediaDir('sheets');
-    const sim = new TownSim();
+    const sim = new TownSim({ dress: (id, place) => dress(id, place) });
 
     /** Builds by hash, so the same look is composited once even when asked twice at once */
     const building = new Map<string, Promise<SheetInfo>>();
@@ -135,12 +172,75 @@ export default defineModule<WorldSettings>({
 
     /** Delete sheets no avatar uses anymore (previews pile up while a guest plays with the editor) */
     const cleanSheets = () => {
-      const used = new Set(Object.values(store.data.avatars).map((a) => `${a.hash}.png`));
+      const used = new Set<string>();
+      for (const a of Object.values(store.data.avatars)) used.add(`${a.hash}.png`).add(`${townOf(a).hash}.png`);
+      for (const d of dressing.values()) used.add(`${d.hash}.png`);
       for (const f of readdirSync(sheetsDir)) {
         if (f.endsWith('.png') && !used.has(f) && !building.has(f.replace(/\.png$/, ''))) unlinkSync(join(sheetsDir, f));
       }
     };
     setInterval(cleanSheets, 10 * 60_000);
+
+    // ------------------------------------------------------------ the town look
+
+    /** Town looks being composited, by guest (the newest wins when several overlap) */
+    const dressing = new Map<string, { look: Omit<TownLook, 'hash'>; hash: string }>();
+
+    /** What the town shows of a guest, or is about to once its sheet is built */
+    const townSoon = (id: string, a: StoredAvatar): Omit<TownLook, 'hash'> => dressing.get(id)?.look ?? townOf(a);
+
+    /** Keep what the town shows before the phone look changes (absent means "the same as the phone") */
+    const pinTown = (a: StoredAvatar) => {
+      a.town ??= { choices: a.choices, outfit: a.outfit ?? {}, hash: a.hash };
+    };
+
+    /** Show this look in the town once its sheet is built (the sheet must exist before the TV asks for it) */
+    const setTown = (id: string, look: Omit<TownLook, 'hash'>) => {
+      const a = store.data.avatars[id];
+      if (!a) return;
+      const hash = choicesHash(look.choices, look.outfit);
+      if (hash === (dressing.get(id)?.hash ?? townOf(a).hash)) return;
+      dressing.set(id, { look, hash });
+      composite(look.choices, look.outfit).then(
+        () => {
+          const cur = store.data.avatars[id];
+          if (dressing.get(id)?.hash !== hash || !cur) return; // A newer look came meanwhile
+          dressing.delete(id);
+          // Back to the phone look: nothing to keep apart anymore
+          cur.town = hash === cur.hash ? undefined : { ...look, hash };
+          store.save();
+          ctx.publish();
+        },
+        (err) => {
+          // Cannot be built: the phone look then (its sheet exists), so no trip is made again for nothing
+          ctx.log.warn(`Town look of ${id} failed:`, err);
+          if (dressing.get(id)?.hash !== hash) return;
+          dressing.delete(id);
+          const cur = store.data.avatars[id];
+          if (cur) cur.town = undefined;
+          store.save();
+          ctx.publish();
+        },
+      );
+    };
+
+    /** A character has been to a shop: the town now shows that shop's part of the phone look */
+    const dress = (id: string, place: PlaceId) => {
+      const a = store.data.avatars[id];
+      if (!a) return;
+      const t = townSoon(id, a);
+      if (place === 'clothes') setTown(id, { choices: t.choices, outfit: a.outfit ?? {} });
+      else setTown(id, { choices: { ...t.choices, hair: a.choices.hair, hairColor: a.choices.hairColor, beard: a.choices.beard }, outfit: t.outfit });
+    };
+
+    /** The shops a character must visit to look like on the phone (one trip each, whatever the number of changes) */
+    const errandsOf = (id: string, a: StoredAvatar): PlaceId[] => {
+      const t = townSoon(id, a);
+      const out: PlaceId[] = [];
+      if (outfitKey(t.outfit) !== outfitKey(a.outfit ?? {})) out.push('clothes');
+      if (hairKey(t.choices) !== hairKey(a.choices)) out.push('barber');
+      return out;
+    };
 
     const tierPrices = (): Record<Tier, number> => {
       const s = ctx.settings.get();
@@ -156,7 +256,7 @@ export default defineModule<WorldSettings>({
       const characters = Object.entries(store.data.avatars)
         .map(([id, a]) => {
           const guest = ctx.session.guests.get(id);
-          return guest ? { id, name: guest.name, color: guest.color, url: ctx.mediaUrl(`sheets/${a.hash}.png`) } : null;
+          return guest ? { id, name: guest.name, color: guest.color, url: ctx.mediaUrl(`sheets/${townOf(a).hash}.png`) } : null;
         })
         .filter((c): c is NonNullable<typeof c> => !!c);
       const s = ctx.settings.get();
@@ -169,6 +269,12 @@ export default defineModule<WorldSettings>({
           fadeAfterMin: s.fadeAfterMin,
           earnPerMin: s.earnPerMin,
           startMoney: s.startMoney,
+          shopVisits: s.shopVisits,
+          visitMinSec: s.visitMinSec,
+          visitMaxSec: s.visitMaxSec,
+          finishWithinSec: s.finishWithinSec,
+          wrapMinSec: s.wrapMinSec,
+          wrapMaxSec: s.wrapMaxSec,
           wallets: guests.map((g) => ({ id: g.id, name: g.name, color: g.color, balance: wallets[g.id] ?? 0 })),
         };
       }
@@ -225,7 +331,13 @@ export default defineModule<WorldSettings>({
         sendWallet(guest.id);
       }
       const had = !!before;
-      store.data.avatars[guest.id] = { choices, hash, outfit };
+      if (before) pinTown(before);
+      store.data.avatars[guest.id] = { choices, hash, outfit, town: before?.town };
+      // The eyes show in the town at once (see hairKey); hair and beard after a trip to the barber
+      if (before) {
+        const t = townSoon(guest.id, before);
+        if (t.choices.eyes !== choices.eyes) setTown(guest.id, { choices: { ...t.choices, eyes: choices.eyes }, outfit: t.outfit });
+      }
       if (!had) {
         // Pocket money to get the first clothes with
         const start = Math.max(0, Math.round(ctx.settings.get().startMoney));
@@ -343,6 +455,8 @@ export default defineModule<WorldSettings>({
       }
       const hash = choicesHash(stored.choices, outfit);
       await composite(stored.choices, outfit);
+      // The town character keeps its clothes until it has been to the clothes shop
+      pinTown(stored);
       stored.outfit = outfit;
       stored.hash = hash;
       store.save();
@@ -367,9 +481,10 @@ export default defineModule<WorldSettings>({
 
     // ------------------------------------------------------------ the town
 
-    /** Worn art without sit or cheer sheets keeps the character out of those poses */
+    /** Worn art without sit or cheer sheets keeps the character out of those poses (what the town character wears) */
     const wornLimits = (guestId: string): { noSit: boolean; noCheer: boolean } => {
-      const items = Object.values(store.data.avatars[guestId]?.outfit ?? {}).map((w) => itemById(w.id));
+      const a = store.data.avatars[guestId];
+      const items = Object.values(a ? townOf(a).outfit : {}).map((w) => itemById(w.id));
       return { noSit: items.some((i) => i?.noSit), noCheer: items.some((i) => i?.noCheer) };
     };
 
@@ -377,11 +492,27 @@ export default defineModule<WorldSettings>({
       if (!ctx.enabled()) return;
       const s = ctx.settings.get();
       const now = Date.now();
-      const roster = Object.keys(store.data.avatars)
-        .map((id) => ctx.session.guests.get(id))
-        .filter((g): g is NonNullable<typeof g> => !!g)
-        .map((g) => ({ id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), noSit: wornLimits(g.id).noSit }));
-      ctx.emit('tv', 'frame', sim.tick(roster, s.sleepAfterMin * 60_000, s.fadeAfterMin * 60_000));
+      const roster = Object.entries(store.data.avatars)
+        .map(([id, a]) => ({ a, g: ctx.session.guests.get(id) }))
+        .filter((r): r is { a: StoredAvatar; g: NonNullable<typeof r.g> } => !!r.g)
+        .map(({ a, g }) => {
+          let errands = errandsOf(g.id, a);
+          if (!s.shopVisits && errands.length) {
+            // Visits off: the town follows the phone at once
+            setTown(g.id, { choices: a.choices, outfit: a.outfit ?? {} });
+            errands = [];
+          }
+          return { id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), noSit: wornLimits(g.id).noSit, errands };
+        });
+      const sec = (a: number, b: number): [number, number] => [Math.min(a, b) * 1000, Math.max(a, b) * 1000];
+      const frame = sim.tick(roster, {
+        sleepAfterMs: s.sleepAfterMin * 60_000,
+        fadeAfterMs: s.fadeAfterMin * 60_000,
+        insideMs: sec(s.visitMinSec, s.visitMaxSec),
+        finishWithinMs: s.finishWithinSec * 1000,
+        wrapUpMs: sec(s.wrapMinSec, s.wrapMaxSec),
+      });
+      ctx.emit('tv', 'frame', frame);
     }, 1000 / FRAME_HZ);
 
     /** A character celebrates, unless the worn art has no cheer sheets (the dress would vanish) */
@@ -397,6 +528,7 @@ export default defineModule<WorldSettings>({
     ctx.onAdmin('setOptions', (args) => {
       const s = ctx.settings.get();
       const price = (v: unknown, old: number) => Math.max(0, Math.min(1_000_000, Math.round(num(v, old))));
+      const secs = (v: unknown, old: number, max: number) => Math.max(0, Math.min(max, Math.round(num(v, old) * 10) / 10));
       ctx.settings.update({
         sleepAfterMin: Math.max(1, Math.min(240, num(args.sleepAfterMin, s.sleepAfterMin))),
         fadeAfterMin: Math.max(1, Math.min(480, num(args.fadeAfterMin, s.fadeAfterMin))),
@@ -412,6 +544,12 @@ export default defineModule<WorldSettings>({
         lookHairColor: price(args.lookHairColor, s.lookHairColor),
         lookBeard: price(args.lookBeard, s.lookBeard),
         lookEyes: price(args.lookEyes, s.lookEyes),
+        shopVisits: typeof args.shopVisits === 'boolean' ? args.shopVisits : s.shopVisits,
+        visitMinSec: secs(args.visitMinSec, s.visitMinSec, 60),
+        visitMaxSec: secs(args.visitMaxSec, s.visitMaxSec, 60),
+        finishWithinSec: secs(args.finishWithinSec, s.finishWithinSec, 300),
+        wrapMinSec: secs(args.wrapMinSec, s.wrapMinSec, 120),
+        wrapMaxSec: secs(args.wrapMaxSec, s.wrapMaxSec, 120),
       });
       ctx.publish();
     });
@@ -432,6 +570,7 @@ export default defineModule<WorldSettings>({
 
     ctx.onSessionReset(() => {
       store.data.avatars = {};
+      dressing.clear();
       // In place: wallets and owned alias these objects
       for (const k of Object.keys(wallets)) delete wallets[k];
       for (const k of Object.keys(owned)) delete owned[k];
