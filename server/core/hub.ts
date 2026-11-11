@@ -689,8 +689,9 @@ export class Hub {
       return;
     }
     this.app.use(express.static(WEB_DIST, { index: 'index.html', maxAge: '1h' }));
-    this.app.get('/tv', (_req, res) => res.sendFile(join(WEB_DIST, 'tv.html')));
-    this.app.get('/admin', (_req, res) => res.sendFile(join(WEB_DIST, 'admin.html')));
+    // With a root, a dot-folder in the project's own path (a git worktree under .claude) cannot 404 the page
+    this.app.get('/tv', (_req, res) => res.sendFile('tv.html', { root: WEB_DIST }));
+    this.app.get('/admin', (_req, res) => res.sendFile('admin.html', { root: WEB_DIST }));
   }
 
   async listen(): Promise<void> {
