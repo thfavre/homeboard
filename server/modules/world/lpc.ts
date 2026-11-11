@@ -6,7 +6,8 @@ import { createGunzip } from 'node:zlib';
 /**
  * The art of the Universal LPC Spritesheet Character Generator, read from a local pack when the
  * admin downloaded it, and fetched file by file (with a cache on disk) otherwise. The pack makes
- * the world independent of GitHub; the per-file fallback lets it work without the 1.5 GB download.
+ * the world independent of GitHub; the per-file fallback lets it work without the download (about
+ * 150 MB of art: the repository is much bigger, but only through its git history).
  */
 
 const REPO = 'LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator';

@@ -31,7 +31,7 @@
   <Section title="Art pack">
     <p class="faint small">
       Avatars are built from the Universal LPC sprite collection. Without the pack, each piece of art is fetched from
-      GitHub the first time someone uses it (and kept); the full pack (about 1.5 GB) makes the world work with no
+      GitHub the first time someone uses it (and kept); the full pack (about 150 MB) makes the world work with no
       internet at all.
     </p>
     {#if pack.kind === 'ready'}
@@ -43,14 +43,14 @@
         </TwoStepButton>
       </div>
     {:else if pack.kind === 'downloading'}
-      <span class="status"><Loader2 size={17} class="spin" /> Downloading... {pack.mb} MB of about 1500 MB</span>
+      <span class="status"><Loader2 size={17} class="spin" /> Downloading... {pack.mb} MB</span>
     {:else}
       {#if pack.kind === 'error'}
         <p class="error small">The download failed: {pack.message}</p>
       {/if}
       <div>
         <button type="button" class="btn" onclick={() => attempt(() => rpc('world', 'downloadPack'))}>
-          <Download size={17} /> Download the pack (~1.5 GB)
+          <Download size={17} /> Download the pack (~150 MB)
         </button>
       </div>
     {/if}

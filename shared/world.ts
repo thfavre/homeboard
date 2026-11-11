@@ -3,21 +3,21 @@
 // avatar editor. The sprites are composited on the server from the Universal LPC generator's art
 // (see server/modules/world/compose.ts).
 
-/** The town, in world units: the TV scales it to its screen (16:9) */
-export const TOWN = { w: 1600, h: 900 };
-/** Size of a sprite frame (px) and world units per sprite pixel on the TV */
-export const WORLD_FRAME_PX = 64;
-export const WORLD_SPRITE_SCALE = 1.6;
-/** The body inside a 64 px frame (sprite pixels from the frame's top left; feet = world position) */
-export const WORLD_BODY = { feetY: 61, centerX: 31 };
+import { SPY_OBSTACLES, SPY_SCENE, WORLD } from './crowd.ts';
 
-/** Where characters walk: a band of ground in front of the town (y is depth for overlapping) */
-export const GROUND = { y0: 640, y1: 870 };
-/** Benches characters can sit on (x of the seat, y of the feet when seated) */
+/**
+ * The town is the crowd games' square for now (same size, same scene, same environment art), so
+ * the world and the games look like one place. Once guests can buy houses the town gets its own map.
+ */
+export const TOWN = WORLD;
+export const TOWN_SCENE = SPY_SCENE;
+export const TOWN_OBSTACLES = SPY_OBSTACLES;
+/** Where characters walk: the square below the sidewalk */
+export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
+/** Benches characters can sit on: where the square's benches stand, and where a sitter's feet land */
 export const BENCHES: { x: number; y: number }[] = [
-  { x: 320, y: 700 },
-  { x: 860, y: 672 },
-  { x: 1360, y: 718 },
+  { x: 400, y: 178 },
+  { x: 1200, y: 178 },
 ];
 
 /** What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat) */

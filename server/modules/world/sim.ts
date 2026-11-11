@@ -1,4 +1,4 @@
-import { BENCHES, GROUND, TOWN, WANIM, type TownFrame, type WDir } from '../../../shared/world.ts';
+import { BENCHES, TOWN, TOWN_AREA, TOWN_OBSTACLES, WANIM, type TownFrame, type WDir } from '../../../shared/world.ts';
 
 /**
  * The life of the town: characters wander the ground band, stop for a while, sit on benches, pet
@@ -43,7 +43,33 @@ export interface RosterEntry {
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
-const randGround = () => ({ x: rand(60, TOWN.w - 60), y: rand(GROUND.y0 + 20, GROUND.y1 - 10) });
+
+/** Inside an obstacle on the square (the fountain, a tree, a lamp post) */
+function blocked(x: number, y: number, margin = 0): boolean {
+  return TOWN_OBSTACLES.some((o) => ((x - o.x) / (o.rx + margin)) ** 2 + ((y - o.y) / (o.ry + margin)) ** 2 < 1);
+}
+
+/** Push a character out of the obstacle it walked into, to its edge */
+function keepOut(a: { x: number; y: number }): void {
+  for (const o of TOWN_OBSTACLES) {
+    const nx = (a.x - o.x) / o.rx;
+    const ny = (a.y - o.y) / o.ry;
+    const d = Math.hypot(nx, ny);
+    if (d >= 1 || d === 0) continue;
+    a.x = o.x + (nx / d) * o.rx;
+    a.y = o.y + (ny / d) * o.ry;
+  }
+}
+
+/** A free spot on the square */
+function randSpot() {
+  for (let k = 0; k < 20; k++) {
+    const x = rand(TOWN_AREA.x0, TOWN_AREA.x1);
+    const y = rand(TOWN_AREA.y0, TOWN_AREA.y1);
+    if (!blocked(x, y, 14)) return { x, y };
+  }
+  return { x: TOWN.w / 2, y: (TOWN_AREA.y0 + TOWN_AREA.y1) / 2 };
+}
 
 export class TownSim {
   private walkers = new Map<string, Walker>();
@@ -73,14 +99,14 @@ export class TownSim {
         // Faded away (or new): only come back when awake. New arrivals walk in from an edge.
         if (shouldSleep) continue;
         const from = Math.random() < 0.5 ? -20 : TOWN.w + 20;
-        const spot = randGround();
+        const spot = randSpot();
         w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false };
         this.walkers.set(r.id, w);
       }
       if (shouldSleep && w.doing.kind !== 'sleep' && w.doing.kind !== 'goSleep') {
         // Walk to the nearest edge of the town and lie down there
         const edge = w.x < TOWN.w / 2 ? rand(30, 90) : rand(TOWN.w - 90, TOWN.w - 30);
-        w.doing = { kind: 'goSleep', tx: edge, ty: rand(GROUND.y0 + 30, GROUND.y1 - 20) };
+        w.doing = { kind: 'goSleep', tx: edge, ty: rand(TOWN_AREA.y0 + 40, TOWN_AREA.y1 - 20) };
       }
       if (!shouldSleep && (w.doing.kind === 'sleep' || w.doing.kind === 'goSleep')) {
         w.fading = false;
@@ -168,7 +194,7 @@ export class TownSim {
         } else if (roll < 0.24 && catFree) {
           w.doing = { kind: 'goPet' };
         } else {
-          const t = randGround();
+          const t = randSpot();
           w.doing = { kind: 'wander', tx: t.x, ty: t.y };
         }
         break;
@@ -249,11 +275,11 @@ export class TownSim {
       c.y += ((d.ty - c.y) / len) * step;
       c.dir = dx > 0 ? 3 : 1;
     } else if (c.doing.kind === 'idle' && now >= c.doing.until) {
-      const t = randGround();
+      const t = randSpot();
       c.doing = { kind: 'wander', tx: t.x, ty: t.y };
     }
   }
 }
 
-const clampX = (x: number) => Math.max(20, Math.min(TOWN.w - 20, x));
-const clampY = (y: number) => Math.max(GROUND.y0, Math.min(GROUND.y1, y));
+const clampX = (x: number) => Math.max(TOWN_AREA.x0, Math.min(TOWN_AREA.x1, x));
+const clampY = (y: number) => Math.max(TOWN_AREA.y0, Math.min(TOWN_AREA.y1, y));
