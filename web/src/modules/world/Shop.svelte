@@ -235,7 +235,14 @@
     <div class="scroll">
     <div class="grid">
       {#each items as i (i.id)}
-        <button type="button" class="item" class:on={open?.id === i.id} onclick={() => show(i.id)}>
+        <button
+          type="button"
+          class="item"
+          class:on={open?.id === i.id}
+          class:owned={ownedIs(i.id)}
+          class:wearing={wd?.outfit[slot]?.id === i.id}
+          onclick={() => show(i.id)}
+        >
           <span class="pic">
             {#if pictureOf(i.id)}
               <img src={pictureOf(i.id)} alt={i.name} loading="lazy" />
@@ -425,6 +432,13 @@
   }
 
   /* ------------------------------------------------------------ the tried-on piece */
+  /* Owned pieces get a light tint of the accent, the worn one a stronger one */
+  .item.owned {
+    background: color-mix(in srgb, var(--accent) 9%, var(--surface-2));
+  }
+  .item.wearing {
+    background: color-mix(in srgb, var(--accent) 22%, var(--surface-2));
+  }
   .item.on {
     border-color: var(--accent);
     outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
