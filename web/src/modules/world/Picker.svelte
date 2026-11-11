@@ -11,6 +11,8 @@
     name: string;
     /** A color swatch instead of a text pill */
     color?: string;
+    /** A small marker on the option (the shop: already owned) */
+    dot?: boolean;
   }
   let {
     label,
@@ -44,9 +46,9 @@
     <div class="options" style:--per={per}>
       {#each shown as item (item.id)}
         {#if item.color}
-          <button type="button" class="swatch" class:on={item.id === value} style:background={item.color} aria-label={item.name} onclick={() => onchange(item.id)}></button>
+          <button type="button" class="swatch" class:on={item.id === value} class:dot={item.dot} style:background={item.color} aria-label={item.name} onclick={() => onchange(item.id)}></button>
         {:else}
-          <button type="button" class="pill" class:on={item.id === value} onclick={() => onchange(item.id)}>{item.name}</button>
+          <button type="button" class="pill" class:on={item.id === value} class:dot={item.dot} onclick={() => onchange(item.id)}>{item.name}</button>
         {/if}
       {/each}
     </div>
@@ -138,5 +140,24 @@
   .swatch.on {
     border-color: var(--accent);
     outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .pill,
+  .swatch {
+    position: relative;
+  }
+  .dot::after {
+    content: '';
+    position: absolute;
+    top: 0.22rem;
+    right: 0.22rem;
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .swatch.dot::after {
+    top: -0.1rem;
+    right: -0.1rem;
+    outline: 2px solid var(--surface-1, var(--surface-2));
   }
 </style>

@@ -1,15 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Check, Loader2 } from '@lucide/svelte';
+  import { Check, PersonStanding, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
   import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, type AvatarChoices, type SheetInfo } from '$shared/world.ts';
+  import AvatarPreview from './AvatarPreview.svelte';
   import Picker from './Picker.svelte';
+  import Shop from './Shop.svelte';
 
   /**
-   * The avatar editor: pick a body, skin, hair and eyes, watch the character live, then move into
-   * the town. The server composites a sheet for every look; the preview shows it walking.
+   * The avatar panel: the look editor (body, skin, hair, eyes) and the shop. The server
+   * composites a sheet for every look; the preview shows it walking.
    */
 
+  let tab = $state<'look' | 'shop'>('look');
   let choices = $state<AvatarChoices>({ ...DEFAULT_CHOICES });
   let saved = $state<string | null>(null);
   let url = $state<string | null>(null);
@@ -57,8 +60,9 @@
     }
   }
 
-  /** Editing the head zooms the preview onto it until then; a body or skin change zooms out */
-  let headUntil = 0;
+  /** Editing the head zooms the preview onto it for a moment; a body or skin change zooms out */
+  let focusHead = $state(false);
+  let focusTimer: ReturnType<typeof setTimeout> | undefined;
   let lastHead = '';
   let lastBody = '';
 
@@ -70,8 +74,15 @@
     const head = JSON.stringify([choices.hair, choices.hairColor, choices.beard, choices.eyes]);
     const body = JSON.stringify([choices.body, choices.skin]);
     if (firstLoad) return;
-    if (lastHead && head !== lastHead) headUntil = Date.now() + 5500;
-    if (lastBody && body !== lastBody) headUntil = 0;
+    if (lastHead && head !== lastHead) {
+      focusHead = true;
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => (focusHead = false), 5500);
+    }
+    if (lastBody && body !== lastBody) {
+      focusHead = false;
+      clearTimeout(focusTimer);
+    }
     lastHead = head;
     lastBody = body;
     storageSet(DRAFT_KEY, snapshot === saved ? null : JSON.stringify({ id: hb.me?.id, choices: JSON.parse(snapshot) }));
@@ -107,137 +118,87 @@
       storageSet(DRAFT_KEY, null);
     }
   }
-
-  // ------------------------------------------------------------ the live preview
-
-  let canvas = $state<HTMLCanvasElement>();
-  const img = new Image();
-  let imgReady = $state(false);
-  $effect(() => {
-    if (!url) return;
-    imgReady = false;
-    const me = url;
-    img.onload = () => {
-      if (me === url) imgReady = true;
-    };
-    img.src = url;
-  });
-
-  $effect(() => {
-    if (!canvas) return;
-    let raf = 0;
-    let zoom = 0;
-    let last = Date.now();
-    const g = canvas.getContext('2d')!;
-    const loop = () => {
-      raf = requestAnimationFrame(loop);
-      const now = Date.now();
-      const dt = Math.min(0.1, (now - last) / 1000);
-      last = now;
-      g.imageSmoothingEnabled = false;
-      g.clearRect(0, 0, canvas!.width, canvas!.height);
-      if (!imgReady || !sheet) return;
-      // Walking toward the camera, steady: turning around was found annoying
-      const row = sheet.rows.walkDown ?? sheet.rows.walk;
-      if (!row) return;
-      const count = Math.max(1, row.frames - 1);
-      const frame = row.frames > 1 ? 1 + (Math.floor(now / 110) % count) : 0;
-      const px = sheet.frame;
-      // Editing the head glides the view onto it, and out again after a few untouched seconds
-      zoom += ((now < headUntil ? 1 : 0) - zoom) * Math.min(1, dt * 7);
-      const headSize = 34;
-      const headY = Math.max(0, (sheet.body.top ?? 8) - 3);
-      const ease = zoom * zoom * (3 - 2 * zoom);
-      const size = px + (headSize - px) * ease;
-      const sx = ((px - headSize) / 2) * ease;
-      const sy = headY * ease;
-      g.drawImage(img, frame * px + sx, row.row * px + sy, size, size, 0, 0, canvas!.width, canvas!.height);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  });
 </script>
 
-<div class="editor">
-  <div class="stage card">
-    <canvas bind:this={canvas} width="192" height="192"></canvas>
-    {#if buildingCount > 0}
-      <span class="building"><Loader2 size={18} class="spin" /></span>
-    {/if}
-  </div>
-
-  <div class="group">
-    <span class="label">Body</span>
-    <div class="row">
-      {#each ['male', 'female'] as const as b}
-        <button type="button" class="pick wide" class:on={choices.body === b} onclick={() => (choices.body = b)}>{b === 'male' ? 'Male' : 'Female'}</button>
-      {/each}
-    </div>
-  </div>
-
-  <div class="group">
-    <span class="label">Skin</span>
-    <div class="row">
-      {#each SKINS as s}
-        <button type="button" class="swatch" class:on={choices.skin === s} style:background={SKIN_HEX[s]} aria-label={s} onclick={() => (choices.skin = s)}></button>
-      {/each}
-    </div>
-  </div>
-
-  <Picker label="Hair" items={HAIR_STYLES} value={choices.hair} onchange={(id) => (choices.hair = id)} />
-  <Picker label="Hair color" items={hairColorItems} value={choices.hairColor} per={6} onchange={(id) => (choices.hairColor = id)} />
-  <Picker label="Facial hair" items={BEARDS} value={choices.beard} onchange={(id) => (choices.beard = id)} />
-
-  <div class="group">
-    <span class="label">Eyes</span>
-    <div class="row">
-      {#each EYE_COLORS as c}
-        <button type="button" class="swatch" class:on={choices.eyes === c} style:background={EYE_HEX[c]} aria-label={c} onclick={() => (choices.eyes = c)}></button>
-      {/each}
-    </div>
-  </div>
-
-  <button type="button" class="btn primary save" disabled={!dirty || buildingCount > 0} onclick={save}>
-    <Check size={18} />
-    {saved ? 'Save my look' : 'Move into the town'}
-  </button>
-  <p class="faint hint">You start in your underwear. Clothes come to the town's shop soon.</p>
+<div class="tabs">
+  <button type="button" class="tab" class:on={tab === 'look'} onclick={() => (tab = 'look')}><PersonStanding size={17} />My look</button>
+  <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => (tab = 'shop')}><ShoppingBag size={16} />Shop</button>
 </div>
 
+{#if tab === 'shop'}
+  <Shop />
+{:else}
+  <div class="editor">
+    <AvatarPreview {url} {sheet} building={buildingCount > 0} {focusHead} />
+
+    <div class="group">
+      <span class="label">Body</span>
+      <div class="row">
+        {#each ['male', 'female'] as const as b}
+          <button type="button" class="pick wide" class:on={choices.body === b} onclick={() => (choices.body = b)}>{b === 'male' ? 'Male' : 'Female'}</button>
+        {/each}
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="label">Skin</span>
+      <div class="row">
+        {#each SKINS as s}
+          <button type="button" class="swatch" class:on={choices.skin === s} style:background={SKIN_HEX[s]} aria-label={s} onclick={() => (choices.skin = s)}></button>
+        {/each}
+      </div>
+    </div>
+
+    <Picker label="Hair" items={HAIR_STYLES} value={choices.hair} onchange={(id) => (choices.hair = id)} />
+    <Picker label="Hair color" items={hairColorItems} value={choices.hairColor} per={6} onchange={(id) => (choices.hairColor = id)} />
+    <Picker label="Facial hair" items={BEARDS} value={choices.beard} onchange={(id) => (choices.beard = id)} />
+
+    <div class="group">
+      <span class="label">Eyes</span>
+      <div class="row">
+        {#each EYE_COLORS as c}
+          <button type="button" class="swatch" class:on={choices.eyes === c} style:background={EYE_HEX[c]} aria-label={c} onclick={() => (choices.eyes = c)}></button>
+        {/each}
+      </div>
+    </div>
+
+    <button type="button" class="btn primary save" disabled={!dirty || buildingCount > 0} onclick={save}>
+      <Check size={18} />
+      {saved ? 'Save my look' : 'Move into the town'}
+    </button>
+    <p class="faint hint">You start in your underwear. The shop dresses you up.</p>
+  </div>
+{/if}
+
 <style>
+  .tabs {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+  }
+  .tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+  .tab.on {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
+    color: var(--text);
+  }
   .editor {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-  }
-  .stage {
-    display: grid;
-    place-items: center;
-    padding: 0.8rem;
-    position: relative;
-    background:
-      linear-gradient(rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.12)),
-      var(--surface-2);
-  }
-  .stage canvas {
-    width: 10rem;
-    height: 10rem;
-    image-rendering: pixelated;
-  }
-  .building {
-    position: absolute;
-    top: 0.6rem;
-    right: 0.6rem;
-    color: var(--text-dim);
-    display: grid;
-  }
-  .building :global(.spin) {
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
   .group {
     display: flex;
