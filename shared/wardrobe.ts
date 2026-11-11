@@ -28,10 +28,10 @@ export interface WardrobeItem {
   /** Sheet definition under assets/lpc/sheet_definitions/, without .json */
   def: string;
   tier: Tier;
-  /** Color ids the shop offers: palette colors or sheet variants, checked by the probe */
+  /** Color ids the shop offers: palette colors or sheet variants, checked by the probe. The first
+   *  is the item's own color (the one its art is drawn in, or reads as): the shop's picture and
+   *  where a piece opens */
   colors: readonly string[];
-  /** The color of the shop's picture when the first color does not read well (a white Santa hat) */
-  iconColor?: string;
   /** Only these bodies have the art (dresses); everyone otherwise */
   bodies?: readonly ('male' | 'female')[];
   /** The art has no sit sheet: the sim keeps the wearer off benches and away from the cat */
@@ -54,6 +54,9 @@ const FUR = ['fur_brown', 'fur_black', 'fur_grey', 'fur_white', 'fur_tan', 'fur_
 const WING = ['white', 'black', 'gray', 'blonde', 'red', 'blue', 'green', 'purple', 'pink', 'gold'] as const;
 /** Frame colors of the glasses */
 const FRAME = ['black', 'brown', 'gray', 'red', 'blue', 'pink', 'gold', 'silver'] as const;
+
+/** A color list with the item's own color moved first (a red Santa hat, a steel necklace) */
+const startingWith = (color: string, list: readonly string[]): string[] => [color, ...list.filter((c) => c !== color)];
 
 /** Swatch hex for every color id above (display only; the art has its own ramps) */
 export const COLOR_HEX: Record<string, string> = {
@@ -128,7 +131,7 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'folded_boots', name: 'Folded boots', slot: 'feet', def: 'feet/boots/feet_boots_fold', tier: 'fancy', colors: CLOTH },
   { id: 'rimmed_boots', name: 'Rimmed boots', slot: 'feet', def: 'feet/boots/feet_boots_rim', tier: 'fancy', colors: CLOTH },
   { id: 'tall_boots', name: 'Tall boots', slot: 'feet', def: 'feet/boots/feet_boots_revised', tier: 'fancy', colors: CLOTH },
-  { id: 'armored_boots', name: 'Armored boots', slot: 'feet', def: 'feet/feet_armour', tier: 'epic', colors: METAL },
+  { id: 'armored_boots', name: 'Armored boots', slot: 'feet', def: 'feet/feet_armour', tier: 'epic', colors: startingWith('steel', METAL) },
 
   // ------------------------------------------------------------ hats
   { id: 'headband', name: 'Headband', slot: 'hat', def: 'headwear/coverings/headbands/hat_headband_tied', tier: 'cheap', colors: CLOTH },
@@ -138,12 +141,12 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'bonnie_cap', name: 'Bonnie cap', slot: 'hat', def: 'headwear/hats/caps/hat_cap_bonnie', tier: 'common', colors: CLOTH },
   { id: 'bowler', name: 'Bowler', slot: 'hat', def: 'headwear/hats/formal/hat_formal_bowler', tier: 'fancy', colors: ['base', 'base_brown', ...CLOTH] },
   { id: 'tricorne', name: 'Tricorne', slot: 'hat', def: 'headwear/hats/tricorne/hat_tricorne', tier: 'fancy', colors: CLOTH },
-  { id: 'elf_hat', name: 'Elf hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_elf', tier: 'fancy', colors: CLOTH, iconColor: 'green' },
-  { id: 'christmas_hat', name: 'Christmas hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_christmas', tier: 'fancy', colors: CLOTH, iconColor: 'red' },
-  { id: 'pirate_bandana', name: 'Pirate bandana', slot: 'hat', def: 'headwear/coverings/bandana/hat_bandana_pirate_skull', tier: 'fancy', colors: CLOTH, iconColor: 'red' },
+  { id: 'elf_hat', name: 'Elf hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_elf', tier: 'fancy', colors: startingWith('green', CLOTH) },
+  { id: 'christmas_hat', name: 'Christmas hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_christmas', tier: 'fancy', colors: startingWith('red', CLOTH) },
+  { id: 'pirate_bandana', name: 'Pirate bandana', slot: 'hat', def: 'headwear/coverings/bandana/hat_bandana_pirate_skull', tier: 'fancy', colors: startingWith('red', CLOTH) },
   { id: 'top_hat', name: 'Top hat', slot: 'hat', def: 'headwear/hats/formal/hat_formal_tophat', tier: 'epic', colors: ['base', 'base_brown', ...CLOTH] },
-  { id: 'santa_hat', name: 'Santa hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_santa', tier: 'epic', colors: CLOTH, iconColor: 'red' },
-  { id: 'pirate_hat', name: 'Pirate captain hat', slot: 'hat', def: 'headwear/hats/athwart/hat_bicorne_athwart_captain_skull', tier: 'epic', colors: CLOTH, iconColor: 'charcoal' },
+  { id: 'santa_hat', name: 'Santa hat', slot: 'hat', def: 'headwear/hats/holiday/hat_holiday_santa', tier: 'epic', colors: startingWith('red', CLOTH) },
+  { id: 'pirate_hat', name: 'Pirate captain hat', slot: 'hat', def: 'headwear/hats/athwart/hat_bicorne_athwart_captain_skull', tier: 'epic', colors: startingWith('charcoal', CLOTH) },
   { id: 'tiara', name: 'Tiara', slot: 'hat', def: 'headwear/hats/formal/hat_formal_tiara', tier: 'epic', colors: ['tiara_gold', 'tiara_silver', 'tiara_bronze', 'tiara_purple'] },
   { id: 'crown', name: 'Crown', slot: 'hat', def: 'headwear/hats/formal/hat_formal_crown', tier: 'legendary', colors: ['crown_gold', 'crown_red', 'crown_blue', 'crown_gray'] },
   { id: 'wizard_hat', name: 'Wizard hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_wizard', tier: 'legendary', colors: ['base_black', 'base_brown', 'base_gray', 'base_red', 'base_teal', 'base_yellow'] },
@@ -157,17 +160,17 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'halfmoon_glasses', name: 'Half-moon glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses_halfmoon', tier: 'fancy', colors: FRAME },
   { id: 'sunglasses', name: 'Sunglasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses_sunglasses', tier: 'fancy', colors: ['sunglasses', ...FRAME] },
   { id: 'eyepatch', name: 'Eyepatch', slot: 'face', def: 'headwear/accessories/eyepatch/facial_eyepatch_left', tier: 'fancy', colors: ['base', 'black', 'brown', 'red'] },
-  { id: 'monocle', name: 'Monocle', slot: 'face', def: 'headwear/accessories/monocle/facial_monocle_left', tier: 'epic', colors: ['gold', 'silver', 'steel'] },
+  { id: 'monocle', name: 'Monocle', slot: 'face', def: 'headwear/accessories/monocle/facial_monocle_left', tier: 'epic', colors: ['steel', 'gold', 'silver'] },
 
   // ------------------------------------------------------------ neck
   { id: 'necktie', name: 'Necktie', slot: 'neck', def: 'headwear/neck/neck_necktie', tier: 'common', colors: CLOTH },
   { id: 'bowtie', name: 'Bow tie', slot: 'neck', def: 'headwear/neck/neck_bowtie', tier: 'common', colors: CLOTH },
   { id: 'scarf', name: 'Scarf', slot: 'neck', def: 'headwear/neck/neck_scarf', tier: 'common', colors: CLOTH },
-  { id: 'beaded_necklace', name: 'Beaded necklace', slot: 'neck', def: 'headwear/neck/neck_necklace_beaded_small', tier: 'common', colors: METAL },
+  { id: 'beaded_necklace', name: 'Beaded necklace', slot: 'neck', def: 'headwear/neck/neck_necklace_beaded_small', tier: 'common', colors: startingWith('steel', METAL) },
   { id: 'cravat', name: 'Cravat', slot: 'neck', def: 'headwear/neck/neck_cravat', tier: 'fancy', colors: CLOTH },
   { id: 'jabot', name: 'Jabot', slot: 'neck', def: 'headwear/neck/neck_jabot', tier: 'fancy', colors: CLOTH },
-  { id: 'necklace', name: 'Necklace', slot: 'neck', def: 'headwear/neck/neck_necklace_simple', tier: 'fancy', colors: METAL, noSit: true, noCheer: true },
-  { id: 'chain', name: 'Chain', slot: 'neck', def: 'headwear/neck/neck_necklace_chain', tier: 'fancy', colors: METAL, noSit: true, noCheer: true },
+  { id: 'necklace', name: 'Necklace', slot: 'neck', def: 'headwear/neck/neck_necklace_simple', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
+  { id: 'chain', name: 'Chain', slot: 'neck', def: 'headwear/neck/neck_necklace_chain', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
 
   // ------------------------------------------------------------ dresses (replace top and bottom)
   { id: 'slit_dress', name: 'Slit dress', slot: 'dress', def: 'torso/dresses/dress_slit', tier: 'fancy', colors: CLOTH, bodies: ['female'], noSit: true, noCheer: true },
@@ -180,7 +183,7 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'fluffy_tail', name: 'Fluffy tail', slot: 'back', def: 'body/tails/tail_wolf_fluffy', tier: 'epic', colors: FUR },
   { id: 'tattered_cape', name: 'Tattered cape', slot: 'back', def: 'torso/cape/cape_tattered', tier: 'epic', colors: CLOTH, noSit: true, noCheer: true },
   { id: 'cape', name: 'Cape', slot: 'back', def: 'torso/cape/cape_solid', tier: 'epic', colors: CLOTH, noSit: true, noCheer: true },
-  { id: 'trimmed_cape', name: 'Trimmed cape', slot: 'back', def: 'torso/cape/cape_trim', tier: 'legendary', colors: CLOTH, noSit: true, noCheer: true },
+  { id: 'trimmed_cape', name: 'Trimmed cape', slot: 'back', def: 'torso/cape/cape_trim', tier: 'legendary', colors: startingWith('brown', CLOTH), noSit: true, noCheer: true },
   { id: 'angel_wings', name: 'Angel wings', slot: 'back', def: 'body/wings/wings_feathered', tier: 'legendary', colors: WING },
   { id: 'bat_wings', name: 'Bat wings', slot: 'back', def: 'body/wings/wings_bat', tier: 'legendary', colors: WING },
 ];

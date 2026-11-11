@@ -218,16 +218,17 @@ export default defineModule<WorldSettings>({
     ctx.onGuest('wardrobe', (_args, guest) => mine(guest.id));
 
     // Item pictures: the item alone, drawn once per item and color. The shop's grid shows each
-    // item in its first color; the wardrobe shows the owned pieces in their own colors.
+    // item in its own (first) color; the wardrobe shows the owned pieces in their colors.
     const iconsDir = ctx.mediaDir('icons');
     const drawingIcons = new Map<string, Promise<void>>();
-    async function iconUrl(item: WardrobeItem, color?: string): Promise<string> {
-      const name = color ? `${item.id}--${color}` : item.id;
+    async function iconUrl(item: WardrobeItem, color = item.colors[0]): Promise<string> {
+      // Named by item and color, so a catalog change of the first color draws a new picture
+      const name = `${item.id}--${color}`;
       const file = join(iconsDir, `${name}.png`);
       if (!existsSync(file)) {
         let p = drawingIcons.get(name);
         if (!p) {
-          p = composer.icon(item.def, color ?? item.iconColor ?? item.colors[0], item.bodies?.[0] ?? 'male').then((png) => writeFileSync(file, png));
+          p = composer.icon(item.def, color, item.bodies?.[0] ?? 'male').then((png) => writeFileSync(file, png));
           drawingIcons.set(name, p);
           p.catch(() => drawingIcons.delete(name));
         }
