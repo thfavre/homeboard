@@ -234,7 +234,6 @@
     <!-- The colors you own of the worn piece, to switch between -->
     {#if worn && wornEntry && wornEntry.colors.length > 1}
       <div class="sheet">
-        <span class="name">{wornEntry.item.name}<span class="faint"> · {colorName(worn.color).toLowerCase()}</span></span>
         <div class="colors">
           {#each wornEntry.colors as c (c)}
             <button
@@ -498,12 +497,6 @@
       linear-gradient(var(--surface-2), var(--surface-2)),
       var(--bg);
     box-shadow: var(--shadow);
-  }
-  .name {
-    font-weight: 600;
-  }
-  .name .faint {
-    font-weight: 500;
   }
   .pic :global(svg) {
     color: var(--text-dim);
