@@ -241,3 +241,39 @@ export interface SpyMe {
   gadget: SpyGadget | null;
   used: boolean;
 }
+
+// ------------------------------------------------------------ the row of houses
+
+/** A small random generator, so a place is the same every time */
+export function seeded(seed: number): () => number {
+  return () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+}
+
+/** The houses along the top of a place, in the order they come in a row, with their width (sprite pixels) */
+export const HOUSE_KINDS = [
+  { kind: 'brickA', w: 208 },
+  { kind: 'paneled', w: 160 },
+  { kind: 'brickB', w: 144 },
+] as const;
+export type HouseKind = (typeof HOUSE_KINDS)[number]['kind'];
+
+/** The house row of the spy square (and the town): the seed its houses are picked with, and their bottom (sprite pixels) */
+export const SQUARE_HOUSES = { seed: 8, bottom: 92 };
+
+/**
+ * Where each house of a row stands: its kind and left edge in sprite pixels, from the left of the
+ * place to `width` (sprite pixels). The server uses it too, to know where the town's doors are.
+ */
+export function houseRow(seed: number, width: number): { kind: HouseKind; x: number; w: number }[] {
+  const r = seeded(seed);
+  const out: { kind: HouseKind; x: number; w: number }[] = [];
+  let x = -Math.floor(r() * 60);
+  let k = Math.floor(r() * 3);
+  while (x < width) {
+    const h = HOUSE_KINDS[k % HOUSE_KINDS.length];
+    out.push({ kind: h.kind, x, w: h.w });
+    x += h.w + 6;
+    k += 1;
+  }
+  return out;
+}

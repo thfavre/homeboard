@@ -1,4 +1,4 @@
-import { SPRITE_SCALE, SPY_SCENE, WORLD } from '$shared/crowd.ts';
+import { SPRITE_SCALE, SPY_SCENE, SQUARE_HOUSES, WORLD, houseRow, seeded, type HouseKind } from '$shared/crowd.ts';
 
 /**
  * The places of the crowd games, made of LPC style environment art (web/public/crowd/env, see its
@@ -71,11 +71,6 @@ const CUT = {
   fountain: [0, 0, 64, 96] as Cut,
 };
 
-/** A small random generator, so the ground is the same every time */
-function seeded(seed: number) {
-  return () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-}
-
 /** Draw a cut of a sheet with its bottom middle at (x, y), `scale` world units a pixel */
 function put(g: CanvasRenderingContext2D, img: HTMLImageElement, c: Cut, x: number, y: number, scale = S, dx = 0) {
   const w = c[2] * scale;
@@ -91,19 +86,14 @@ const PH = Math.ceil(WORLD.h / S);
 
 /** A row of houses along the top, bottom at `bottom` (sprite pixels), cut off by the top of the screen */
 function houses(g: CanvasRenderingContext2D, env: Env, bottom: number, seed: number) {
-  const r = seeded(seed);
-  const kinds: [HTMLImageElement, Cut][] = [
-    [env['house-brick-a'], CUT.houseA],
-    [env['house-paneled'], CUT.housePaneled],
-    [env['house-brick-b'], CUT.houseB],
-  ];
-  let x = -Math.floor(r() * 60);
-  let k = Math.floor(r() * 3);
-  while (x < PW) {
-    const [img, c] = kinds[k % kinds.length];
-    g.drawImage(img, c[0], c[1], c[2], c[3], x, bottom - c[3], c[2], c[3]);
-    x += c[2] + 6;
-    k += 1;
+  const art: Record<HouseKind, [HTMLImageElement, Cut]> = {
+    brickA: [env['house-brick-a'], CUT.houseA],
+    paneled: [env['house-paneled'], CUT.housePaneled],
+    brickB: [env['house-brick-b'], CUT.houseB],
+  };
+  for (const h of houseRow(seed, PW)) {
+    const [img, c] = art[h.kind];
+    g.drawImage(img, c[0], c[1], c[2], c[3], h.x, bottom - c[3], c[2], c[3]);
   }
 }
 
@@ -207,8 +197,8 @@ export function squareGround(env: Env): HTMLCanvasElement {
       g.drawImage(slabs, col * 32, row * 32, 32, 32, x, y, 32, 32);
     }
   }
-  houses(g, env, 92, 8);
-  sidewalk(g, env, 92, 128);
+  houses(g, env, SQUARE_HOUSES.bottom, SQUARE_HOUSES.seed);
+  sidewalk(g, env, SQUARE_HOUSES.bottom, 128);
   return c;
 }
 
