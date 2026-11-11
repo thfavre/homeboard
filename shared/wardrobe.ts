@@ -54,6 +54,8 @@ const FUR = ['fur_brown', 'fur_black', 'fur_grey', 'fur_white', 'fur_tan', 'fur_
 const WING = ['white', 'black', 'gray', 'blonde', 'red', 'blue', 'green', 'purple', 'pink', 'gold'] as const;
 /** Frame colors of the glasses */
 const FRAME = ['black', 'brown', 'gray', 'red', 'blue', 'pink', 'gold', 'silver'] as const;
+/** Scale colors of the lizard tail and dragon wings */
+const SCALE = ['green', 'blue', 'navy', 'red', 'orange', 'gold', 'purple', 'black', 'white'] as const;
 /** Metal and gem pairs of the amulets (the swatch is the gem) */
 const AMULET = ['gold_red', 'silver_blue', 'bronze_green', 'copper_orange', 'steel_purple', 'brass_yellow'] as const;
 /** Gem colors of the gem pendants */
@@ -251,11 +253,14 @@ export const CATALOG: WardrobeItem[] = [
   // ------------------------------------------------------------ back
   { id: 'cat_tail', name: 'Cat tail', slot: 'back', def: 'body/tails/tail_cat', tier: 'epic', colors: FUR },
   { id: 'fluffy_tail', name: 'Fluffy tail', slot: 'back', def: 'body/tails/tail_wolf_fluffy', tier: 'epic', colors: FUR },
+  { id: 'wolf_tail', name: 'Wolf tail', slot: 'back', def: 'body/tails/tail_wolf', tier: 'epic', colors: FUR },
+  { id: 'lizard_tail', name: 'Lizard tail', slot: 'back', def: 'body/tails/tail_lizard_alt', tier: 'epic', colors: SCALE },
   { id: 'tattered_cape', name: 'Tattered cape', slot: 'back', def: 'torso/cape/cape_tattered', tier: 'epic', colors: CLOTH, noSit: true, noCheer: true },
   { id: 'cape', name: 'Cape', slot: 'back', def: 'torso/cape/cape_solid', tier: 'epic', colors: CLOTH, noSit: true, noCheer: true },
   { id: 'trimmed_cape', name: 'Trimmed cape', slot: 'back', def: 'torso/cape/cape_trim', tier: 'legendary', colors: startingWith('brown', CLOTH), noSit: true, noCheer: true },
   { id: 'angel_wings', name: 'Angel wings', slot: 'back', def: 'body/wings/wings_feathered', tier: 'legendary', colors: WING },
   { id: 'bat_wings', name: 'Bat wings', slot: 'back', def: 'body/wings/wings_bat', tier: 'legendary', colors: WING },
+  { id: 'dragon_wings', name: 'Dragon wings', slot: 'back', def: 'body/wings/wings_lizard_alt', tier: 'legendary', colors: SCALE },
 ];
 
 export const itemById = (id: string): WardrobeItem | undefined => CATALOG.find((i) => i.id === id);
