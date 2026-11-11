@@ -1,13 +1,13 @@
 <script lang="ts">
   import { Loader2 } from '@lucide/svelte';
   import type { SheetInfo } from '$shared/world.ts';
+  import type { Focus } from './preview.ts';
 
   /**
-   * The live avatar preview of the editor and the shop: the composited sheet walking toward the
+   * The live avatar preview of the avatar panel: the composited sheet walking toward the
    * camera. `focus` glides the view onto a body part (the head while editing hair or browsing
    * hats, the legs for bottoms, the feet for shoes).
    */
-  type Focus = 'head' | 'torso' | 'legs' | 'feet' | null;
 
   let {
     url,
@@ -57,16 +57,17 @@
   }
 
   let canvas = $state<HTMLCanvasElement>();
-  const img = new Image();
-  let imgReady = $state(false);
+  /** The drawn sheet: the old one stays on screen until the new one has loaded, so it never blinks */
+  let drawn = $state<{ img: HTMLImageElement; sheet: SheetInfo } | null>(null);
   $effect(() => {
-    if (!url) return;
-    imgReady = false;
+    if (!url || !sheet) return;
     const me = url;
-    img.onload = () => {
-      if (me === url) imgReady = true;
+    const info = sheet;
+    const next = new Image();
+    next.onload = () => {
+      if (me === url) drawn = { img: next, sheet: info };
     };
-    img.src = url;
+    next.src = url;
   });
 
   $effect(() => {
@@ -85,7 +86,8 @@
       last = now;
       g.imageSmoothingEnabled = false;
       g.clearRect(0, 0, canvas!.width, canvas!.height);
-      if (!imgReady || !sheet) return;
+      if (!drawn) return;
+      const { img, sheet } = drawn;
       // Walking steadily toward the camera. For back pieces the character keeps turning on the
       // spot instead, pausing on each side and resting longest with the back to the camera.
       const poses = [sheet.rows.walkDown ?? sheet.rows.walk, sheet.rows.walkLeft, sheet.rows.walkUp, sheet.rows.walk];

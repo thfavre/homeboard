@@ -4,7 +4,7 @@
   import { attempt, onEvent, rpc } from '$lib/client.svelte.ts';
   import { COLOR_HEX, SLOTS, colorName, itemById, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine } from '$shared/world.ts';
-  import AvatarPreview from './AvatarPreview.svelte';
+  import type { PreviewView } from './preview.ts';
 
   /**
    * The closet: everything the guest bought, sorted by slot. The strip on top is the outfit at a
@@ -13,7 +13,7 @@
    * between the colors you own of it. Buying happens in the shop.
    */
 
-  let { onshop }: { onshop?: (slot: Slot) => void } = $props();
+  let { onshop, view }: { onshop?: (slot: Slot) => void; view: PreviewView } = $props();
 
   let wd = $state<WardrobeMine | null>(null);
   let body = $state<'male' | 'female' | null>(null);
@@ -82,6 +82,17 @@
       buildingCount--;
     }
   }
+
+  // The panel's shared preview shows the worn outfit, zoomed on the picked slot
+  $effect(() => {
+    if (url && sheet) {
+      view.url = url;
+      view.sheet = sheet;
+    }
+    view.building = buildingCount > 0;
+    view.focus = FOCUS[slot];
+    view.facing = slot === 'back' ? 'up' : 'down';
+  });
 
   onMount(() => {
     void (async () => {
@@ -156,8 +167,6 @@
   </div>
 {:else}
   <div class="wardrobe">
-    <AvatarPreview {url} {sheet} building={buildingCount > 0} focus={FOCUS[slot]} facing={slot === 'back' ? 'up' : 'down'} />
-
     <span class="label">Wearing</span>
     <div class="outfit" role="tablist" aria-label="Slots">
       {#each slots as s (s.id)}

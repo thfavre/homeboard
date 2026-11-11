@@ -7,6 +7,7 @@
   import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, type AvatarChoices, type SheetInfo } from '$shared/world.ts';
   import AvatarPreview from './AvatarPreview.svelte';
   import Picker from './Picker.svelte';
+  import type { PreviewView } from './preview.ts';
   import Shop from './Shop.svelte';
   import Wardrobe from './Wardrobe.svelte';
 
@@ -17,6 +18,9 @@
    */
 
   let tab = $state<'look' | 'wardrobe' | 'shop'>('look');
+  /** The one preview of the panel; the open tab says what it shows */
+  const view = $state<PreviewView>({ url: null, sheet: null, building: false, focus: null, facing: 'down' });
+
   /** The new tab slides in from the right when going right, from the left when going back */
   const ORDER = ['look', 'wardrobe', 'shop'];
   let slideFrom = $state(0);
@@ -136,6 +140,17 @@
     if (!firstLoad) void build($state.snapshot(choices) as AvatarChoices);
   }
 
+  $effect(() => {
+    if (tab !== 'look') return;
+    if (url && sheet) {
+      view.url = url;
+      view.sheet = sheet;
+    }
+    view.building = buildingCount > 0;
+    view.focus = focusHead ? 'head' : null;
+    view.facing = 'down';
+  });
+
   async function save() {
     const c = $state.snapshot(choices) as AvatarChoices;
     const done = await attempt(() => rpc('world', 'save', { choices: c }), 'Saved');
@@ -154,12 +169,16 @@
   <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => tab !== 'shop' && ((shopSlot = null), go('shop'))}><ShoppingBag size={16} />Shop</button>
 </div>
 
+<!-- Stays put across the tabs: only the character inside changes and zooms -->
+<div class="stage-wrap"><AvatarPreview {...view} /></div>
+
 {#key tab}
 <div class="pane" in:fly={{ x: slideFrom, duration: 220 }}>
 {#if tab === 'shop'}
-  <Shop startSlot={shopSlot} />
+  <Shop startSlot={shopSlot} {view} />
 {:else if tab === 'wardrobe'}
   <Wardrobe
+    {view}
     onshop={(s) => {
       shopSlot = s;
       go('shop');
@@ -167,8 +186,6 @@
   />
 {:else}
   <div class="editor">
-    <AvatarPreview {url} {sheet} building={buildingCount > 0} focus={focusHead ? 'head' : null} />
-
     {#if !created}
       <div class="group">
         <span class="label">Body</span>
@@ -231,6 +248,10 @@
   .fit > .pane > :global(*) {
     flex: 1;
     min-height: 0;
+  }
+  .stage-wrap {
+    flex: none;
+    margin-bottom: 1rem;
   }
   .tabs {
     flex: none;

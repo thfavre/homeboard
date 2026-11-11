@@ -4,7 +4,7 @@
   import { attempt, hb, onEvent, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
   import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
-  import AvatarPreview from './AvatarPreview.svelte';
+  import type { PreviewView } from './preview.ts';
 
   /**
    * The shop and wardrobe: pick a slot, scroll a picture grid of everything it sells, tap a piece
@@ -13,7 +13,7 @@
    */
 
   /** Open on this slot instead of the one browsed last (the wardrobe's shop button) */
-  let { startSlot = null }: { startSlot?: Slot | null } = $props();
+  let { startSlot = null, view }: { startSlot?: Slot | null; view: PreviewView } = $props();
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
   const shop = $derived(mod?.shop);
@@ -114,6 +114,17 @@
     }
   }
 
+  // The panel's shared preview shows the tried-on outfit, zoomed on the browsed slot
+  $effect(() => {
+    if (url && sheet) {
+      view.url = url;
+      view.sheet = sheet;
+    }
+    view.building = buildingCount > 0;
+    view.focus = FOCUS[slot];
+    view.facing = slot === 'back' ? 'up' : 'down';
+  });
+
   /** The opened piece survives leaving the panel, like the editor's drafts */
   const DRAFT_KEY = 'hb.world.shop';
 
@@ -181,8 +192,6 @@
   </div>
 {:else}
   <div class="shop">
-    <AvatarPreview {url} {sheet} building={buildingCount > 0} focus={FOCUS[slot]} facing={slot === 'back' ? 'up' : 'down'} />
-
     <div class="slots">
       {#each slots as s (s.id)}
         <button
@@ -211,7 +220,9 @@
             {/if}
           </span>
           <span class="iname">{i.name}</span>
-          {#if ownedIs(i.id)}
+          {#if wd?.outfit[slot]?.id === i.id}
+            <span class="itag owned-tag"><Check size={12} />Wearing</span>
+          {:else if ownedIs(i.id)}
             <span class="itag owned-tag"><Check size={12} />Owned</span>
           {:else}
             <span class="itag price {i.tier}">{shop.prices[i.tier]} <Coins size={13} /></span>
