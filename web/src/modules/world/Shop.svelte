@@ -204,16 +204,14 @@
     <div class="scroll">
     <div class="grid">
       {#each items as i (i.id)}
-        <button type="button" class="item" class:on={open?.id === i.id} class:worn={wd?.outfit[slot]?.id === i.id} onclick={() => show(i.id)}>
+        <button type="button" class="item" class:on={open?.id === i.id} onclick={() => show(i.id)}>
           <span class="pic">
             {#if icons[i.id]}
               <img src={icons[i.id]} alt={i.name} loading="lazy" />
             {/if}
           </span>
           <span class="iname">{i.name}</span>
-          {#if wd?.outfit[slot]?.id === i.id}
-            <span class="itag worn-tag">Worn</span>
-          {:else if ownedIs(i.id)}
+          {#if ownedIs(i.id)}
             <span class="itag owned-tag"><Check size={12} />Owned</span>
           {:else}
             <span class="itag price {i.tier}">{shop.prices[i.tier]} <Coins size={13} /></span>
@@ -336,10 +334,6 @@
     color: var(--text);
     min-width: 0;
   }
-  .item.worn {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
-  }
   .pic {
     display: grid;
     place-items: center;
@@ -386,8 +380,7 @@
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;
   }
-  .owned-tag,
-  .worn-tag {
+  .owned-tag {
     color: var(--accent);
     font-weight: 600;
   }
