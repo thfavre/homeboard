@@ -3,6 +3,7 @@
   import { Check, Loader2 } from '@lucide/svelte';
   import { attempt, rpc } from '$lib/client.svelte.ts';
   import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, type AvatarChoices, type SheetInfo } from '$shared/world.ts';
+  import Picker from './Picker.svelte';
 
   /**
    * The avatar editor: pick a body, skin, hair and eyes, watch the character live, then move into
@@ -30,6 +31,9 @@
   const EYE_HEX: Record<string, string> = {
     brown: '#6d4529', blue: '#5686ae', green: '#53b351', gray: '#8b8b94', purple: '#b90da0', red: '#cb4a39', orange: '#d97d2c', yellow: '#d9c32e',
   };
+
+  const colorName = (id: string) => id.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  const hairColorItems = HAIR_COLORS.map((c) => ({ id: c, name: colorName(c), color: HAIR_HEX[c] }));
 
   // ------------------------------------------------------------ preview
 
@@ -143,28 +147,9 @@
     </div>
   </div>
 
-  <div class="group">
-    <span class="label">Hair</span>
-    <div class="row wrap">
-      {#each HAIR_STYLES as h}
-        <button type="button" class="pick" class:on={choices.hair === h.id} onclick={() => (choices.hair = h.id)}>{h.name}</button>
-      {/each}
-    </div>
-    <div class="row wrap">
-      {#each HAIR_COLORS as c}
-        <button type="button" class="swatch" class:on={choices.hairColor === c} style:background={HAIR_HEX[c]} aria-label={c} onclick={() => (choices.hairColor = c)}></button>
-      {/each}
-    </div>
-  </div>
-
-  <div class="group">
-    <span class="label">Facial hair</span>
-    <div class="row wrap">
-      {#each BEARDS as b}
-        <button type="button" class="pick" class:on={choices.beard === b.id} onclick={() => (choices.beard = b.id)}>{b.name}</button>
-      {/each}
-    </div>
-  </div>
+  <Picker label="Hair" items={HAIR_STYLES} value={choices.hair} onchange={(id) => (choices.hair = id)} />
+  <Picker label="Hair color" items={hairColorItems} value={choices.hairColor} per={6} onchange={(id) => (choices.hairColor = id)} />
+  <Picker label="Facial hair" items={BEARDS} value={choices.beard} onchange={(id) => (choices.beard = id)} />
 
   <div class="group">
     <span class="label">Eyes</span>
@@ -232,9 +217,6 @@
   .row {
     display: flex;
     gap: 0.45rem;
-  }
-  .row.wrap {
-    flex-wrap: wrap;
   }
   .pick {
     padding: 0.42rem 0.7rem;
