@@ -8,6 +8,16 @@ import { BENCHES, TOWN, TOWN_AREA, TOWN_OBSTACLES, WANIM, type TownFrame, type W
 
 const WALK_UPS = 42;
 const CAT_UPS = 26;
+
+/**
+ * What a character can go do. An activity is only considered within its viewing distance of the
+ * character (0: seen from the whole town) and while it has room: `capacity` characters may do it,
+ * or head for it, at once (per bench for the benches).
+ */
+const ACTIVITIES = {
+  petCat: { radius: 300, capacity: 1 },
+  bench: { radius: 540, capacity: 1 },
+};
 /** Two standing characters this close push each other apart (nobody stands on anyone) */
 const PERSONAL_SPACE = 34;
 /** Close enough to a target to be there */
@@ -186,12 +196,19 @@ export class TownSim {
       case 'idle': {
         if (now < d.until) break;
         const roll = Math.random();
-        const freeBench = BENCHES.map((b, i) => ({ ...b, i })).filter((b) => ![...this.walkers.values()].some((o) => o.doing.kind === 'sit' && o.doing.bench === b.i));
-        const catFree = ![...this.walkers.values()].some((o) => o.doing.kind === 'pet' || o.doing.kind === 'goPet');
-        if (roll < 0.14 && freeBench.length) {
-          const b = freeBench[Math.floor(Math.random() * freeBench.length)];
+        const all = [...this.walkers.values()];
+        // Benches this character can see with a seat left (sitting there, or walking to it, takes the seat)
+        const benches = BENCHES.map((b, i) => ({ ...b, i })).filter(
+          (b) =>
+            Math.hypot(b.x - w.x, b.y - w.y) < ACTIVITIES.bench.radius &&
+            all.filter((o) => (o.doing.kind === 'sit' || o.doing.kind === 'goBench') && o.doing.bench === b.i).length < ACTIVITIES.bench.capacity,
+        );
+        const petters = all.filter((o) => o.doing.kind === 'pet' || o.doing.kind === 'goPet').length;
+        const catInSight = petters < ACTIVITIES.petCat.capacity && Math.hypot(this.cat.x - w.x, this.cat.y - w.y) < ACTIVITIES.petCat.radius;
+        if (roll < 0.14 && benches.length) {
+          const b = benches[Math.floor(Math.random() * benches.length)];
           w.doing = { kind: 'goBench', bench: b.i };
-        } else if (roll < 0.24 && catFree) {
+        } else if (roll < 0.24 && catInSight) {
           w.doing = { kind: 'goPet' };
         } else {
           const t = randSpot();
