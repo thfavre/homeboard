@@ -1,0 +1,67 @@
+{
+  "name": "Wolf Ears Skintone",
+  "layer_1": {
+    "zPos": 131,
+    "male": "head/ears/wolf/skin/adult/fg/",
+    "muscular": "head/ears/wolf/skin/adult/fg/",
+    "female": "head/ears/wolf/skin/adult/fg/",
+    "teen": "head/ears/wolf/skin/adult/fg/",
+    "pregnant": "head/ears/wolf/skin/adult/fg/",
+    "child": "head/ears/wolf/skin/child/fg/"
+  },
+  "layer_2": {
+    "zPos": 9,
+    "male": "head/ears/wolf/skin/adult/bg/",
+    "muscular": "head/ears/wolf/skin/adult/bg/",
+    "female": "head/ears/wolf/skin/adult/bg/",
+    "pregnant": "head/ears/wolf/skin/adult/bg/",
+    "teen": "head/ears/wolf/skin/adult/bg/",
+    "child": "head/ears/wolf/skin/child/bg/"
+  },
+  "match_body_color": true,
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "head/ears/wolf",
+      "notes": "",
+      "authors": [
+        "JaidynReiman"
+      ],
+      "licenses": [
+        "OGA-BY 3.0+",
+        "CC-BY 3.0+",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-furry-ears-tails-for-rpg-sprites"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "body",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "furry_ears_skin"
+}

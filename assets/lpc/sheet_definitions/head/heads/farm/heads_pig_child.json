@@ -1,0 +1,58 @@
+{
+  "name": "Pig child",
+  "tags": [
+    "animal",
+    "child"
+  ],
+  "layer_1": {
+    "zPos": 100,
+    "child": "head/heads/pig/child/"
+  },
+  "match_body_color": true,
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "head/heads/pig/child",
+      "notes": "original pig by daneeklu, adapted to modular head by bluecarrot16",
+      "authors": [
+        "bluecarrot16",
+        "Daniel Eddeland (daneeklu)"
+      ],
+      "licenses": [
+        "CC-BY 3.0",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-style-farm-animals",
+        "http://opengameart.org/content/lpc-folk"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "body",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "head"
+}

@@ -1,0 +1,60 @@
+{
+  "name": "Troll child",
+  "tags": [
+    "troll",
+    "child"
+  ],
+  "layer_1": {
+    "zPos": 100,
+    "child": "head/heads/troll/child/"
+  },
+  "match_body_color": true,
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "head/heads/troll/child",
+      "notes": "original \"Muscleman/Ogre/Minotaur\" by Reemax, modified to \"Troll\" by AntumDeluge, edited to LPC style and converted to modular head by bluecarrot16; child version by bluecarrot16",
+      "authors": [
+        "bluecarrot16",
+        "AntumDeluge",
+        "Tuomo Untinen (reemax)"
+      ],
+      "licenses": [
+        "CC-BY 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/musclemanogreminotaur",
+        "https://opengameart.org/content/trolls-0",
+        "https://opengameart.org/content/lpc-folk"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "body",
+    "base": "ulpc.green",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "head"
+}

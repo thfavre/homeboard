@@ -9,9 +9,10 @@ import soundboard from './soundboard/index.ts';
 import quiz from './quiz/index.ts';
 import tts from './tts/index.ts';
 import games from './games/index.ts';
+import world from './world/index.ts';
 
 /**
  * All modules, in load order. To add a feature: create server/modules/<id>/index.ts
  * with defineModule(), add it here, and register its UI in web/src/modules/index.ts.
  */
-export const modules: ModuleDef<any>[] = [core, spotify, canvas, stickers, photos, wled, soundboard, quiz, tts, games];
+export const modules: ModuleDef<any>[] = [core, spotify, canvas, stickers, photos, wled, soundboard, quiz, tts, games, world];

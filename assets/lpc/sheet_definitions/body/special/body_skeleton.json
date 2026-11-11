@@ -1,0 +1,53 @@
+{
+  "name": "Skeleton",
+  "layer_1": {
+    "zPos": 10,
+    "male": "body/bodies/skeleton/",
+    "female": "body/bodies/skeleton/",
+    "teen": "body/bodies/skeleton/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle"
+  ],
+  "credits": [
+    {
+      "file": "body/bodies/skeleton",
+      "notes": "",
+      "authors": [
+        "bluecarrot16",
+        "Napsio",
+        "JaidynReiman",
+        "Johannes Sjölund (wulax)",
+        "Stephen Challener (Redshrike)"
+      ],
+      "licenses": [
+        "OGA-BY 3.0",
+        "CC-BY-SA 3.0",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles",
+        "https://opengameart.org/content/lpc-medieval-fantasy-character-sprites",
+        "https://opengameart.org/content/lpc-skeleton",
+        "https://opengameart.org/content/lpc-character-bases"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "cloth",
+    "base": "white",
+    "palettes": [
+      "ulpc",
+      "body.ulpc",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "body"
+}

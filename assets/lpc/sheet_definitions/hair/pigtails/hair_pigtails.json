@@ -1,0 +1,70 @@
+{
+  "name": "Pigtails",
+  "layer_1": {
+    "zPos": 120,
+    "male": "hair/pigtails/adult/",
+    "muscular": "hair/pigtails/adult/",
+    "female": "hair/pigtails/adult/",
+    "pregnant": "hair/pigtails/adult/",
+    "teen": "hair/pigtails/adult/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "hair/pigtails",
+      "notes": "(betty)",
+      "authors": [
+        "Radomir Dopieralski",
+        "bluecarrot16"
+      ],
+      "licenses": [
+        "CC-BY-SA 3.0",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/one-more-lpc-alternate-character",
+        "https://opengameart.org/content/lpc-hair"
+      ]
+    }
+  ],
+  "recolors": {
+    "color_1": {
+      "material": "hair",
+      "palettes": [
+        "ulpc",
+        "lpcr",
+        "all.lpcr"
+      ]
+    },
+    "color_2": {
+      "type_name": "hair_tie",
+      "label": "Hair Tie",
+      "material": "cloth",
+      "base": null,
+      "source": ["#180716", "#0E4E72", "#156c99", "#0098b2", "#00cfdf", "#ffffff"],
+      "palettes": [
+        "ulpc",
+        "all.lpcr"
+      ]
+    }
+  },
+  "type_name": "hair"
+}

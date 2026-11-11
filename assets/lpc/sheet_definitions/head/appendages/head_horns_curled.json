@@ -1,0 +1,71 @@
+{
+  "name": "Curled Horns",
+  "layer_1": {
+    "zPos": 126,
+    "male": "head/horns/curled/adult/",
+    "muscular": "head/horns/curled/adult/",
+    "female": "head/horns/curled/adult/",
+    "pregnant": "head/horns/curled/adult/",
+    "teen": "head/horns/curled/adult/",
+    "child": "head/horns/curled/child/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "head/horns/curled",
+      "notes": "",
+      "authors": [
+        "Nila122"
+      ],
+      "licenses": [
+        "OGA-BY 3.0",
+        "GPL 3.0",
+        "CC-BY-SA 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-lizard-headgear"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "body",
+    "palettes": [
+      "ulpc",
+      "metal.ulpc",
+      "cloth.ulpc",
+      "all.lpcr"
+    ]
+  },
+  "aliases": {
+    "Curled_Horns_horns": "all.lpcr.yellow",
+    "Curled_Horns_skin_black": "body.ulpc.black",
+    "Curled_Horns_skin_blue": "body.ulpc.blue",
+    "Curled_Horns_metallic_steel": "metal.ulpc.steel",
+    "Curled_Horns_metallic_iron": "metal.ulpc.iron",
+    "Curled_Horns_metallic_ceramic": "metal.ulpc.ceramic",
+    "Curled_Horns_metallic_brass": "metal.ulpc.brass",
+    "Curled_Horns_metallic_copper": "metal.ulpc.copper",
+    "Curled_Horns_metallic_bronze": "metal.ulpc.bronze",
+    "Curled_Horns_metallic_silver": "metal.ulpc.silver",
+    "Curled_Horns_metallic_gold": "metal.ulpc.gold"
+  },
+  "type_name": "horns"
+}

@@ -1,0 +1,56 @@
+{
+  "name": "Messy3",
+  "layer_1": {
+    "zPos": 120,
+    "male": "hair/messy3/adult/",
+    "muscular": "hair/messy3/adult/",
+    "female": "hair/messy3/adult/",
+    "pregnant": "hair/messy3/adult/",
+    "teen": "hair/messy3/adult/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "hair/messy3",
+      "notes": "",
+      "authors": [
+        "Fabzy",
+        "bluecarrot16"
+      ],
+      "licenses": [
+        "CC-BY-SA 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/the-revolution-hair",
+        "https://opengameart.org/content/lpc-hair"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "hair",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "hair"
+}

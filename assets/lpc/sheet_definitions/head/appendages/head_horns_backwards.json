@@ -1,0 +1,80 @@
+{
+  "name": "Backwards Horns",
+  "layer_1": {
+    "zPos": 126,
+    "male": "head/horns/backwards/adult/fg/",
+    "muscular": "head/horns/backwards/adult/fg/",
+    "female": "head/horns/backwards/adult/fg/",
+    "pregnant": "head/horns/backwards/adult/fg/",
+    "teen": "head/horns/backwards/adult/fg/",
+    "child": "head/horns/backwards/child/fg/"
+  },
+  "layer_2": {
+    "zPos": 7,
+    "male": "head/horns/backwards/adult/bg/",
+    "muscular": "head/horns/backwards/adult/bg/",
+    "female": "head/horns/backwards/adult/bg/",
+    "pregnant": "head/horns/backwards/adult/bg/",
+    "teen": "head/horns/backwards/adult/bg/",
+    "child": "head/horns/backwards/child/bg/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "head/horns/backwards",
+      "notes": "",
+      "authors": [
+        "Nila122"
+      ],
+      "licenses": [
+        "OGA-BY 3.0",
+        "GPL 3.0",
+        "CC-BY-SA 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-lizard-headgear"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "body",
+    "palettes": [
+      "ulpc",
+      "metal.ulpc",
+      "cloth.ulpc",
+      "all.lpcr"
+    ]
+  },
+  "aliases": {
+    "Backwards_Horns_horns": "all.lpcr.yellow",
+    "Backwards_Horns_skin_black": "body.ulpc.black",
+    "Backwards_Horns_skin_blue": "body.ulpc.blue",
+    "Backwards_Horns_metallic_steel": "metal.ulpc.steel",
+    "Backwards_Horns_metallic_iron": "metal.ulpc.iron",
+    "Backwards_Horns_metallic_ceramic": "metal.ulpc.ceramic",
+    "Backwards_Horns_metallic_brass": "metal.ulpc.brass",
+    "Backwards_Horns_metallic_copper": "metal.ulpc.copper",
+    "Backwards_Horns_metallic_bronze": "metal.ulpc.bronze",
+    "Backwards_Horns_metallic_silver": "metal.ulpc.silver",
+    "Backwards_Horns_metallic_gold": "metal.ulpc.gold"
+  },
+  "type_name": "horns"
+}

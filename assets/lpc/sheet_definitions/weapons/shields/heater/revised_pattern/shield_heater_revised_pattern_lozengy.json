@@ -1,0 +1,64 @@
+{
+  "name": "revised_lozengy",
+  "layer_1": {
+    "zPos": 4,
+    "male": "shield/heater/revised/pattern/lozengy/bg/",
+    "muscular": "shield/heater/revised/pattern/lozengy/bg/",
+    "female": "shield/heater/revised/pattern/lozengy/bg/",
+    "pregnant": "shield/heater/revised/pattern/lozengy/bg/",
+    "teen": "shield/heater/revised/pattern/lozengy/bg/"
+  },
+  "layer_2": {
+    "zPos": 112,
+    "male": "shield/heater/revised/pattern/lozengy/fg/",
+    "muscular": "shield/heater/revised/pattern/lozengy/fg/",
+    "female": "shield/heater/revised/pattern/lozengy/fg/",
+    "pregnant": "shield/heater/revised/pattern/lozengy/fg/",
+    "teen": "shield/heater/revised/pattern/lozengy/fg/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "shield/heater/revised/pattern/lozengy",
+      "notes": "pattern by ElizaWy, mapped by bluecarrot / Sander Franken, remaining angles finished by JaidynReiman",
+      "authors": [
+        "bluecarrot16",
+        "Sander Frenken (castelonia)",
+        "ElizaWy",
+        "JaidynReiman"
+      ],
+      "licenses": [
+        "OGA-BY 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-shields"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "cloth",
+    "palettes": [
+      "ulpc",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "shield_pattern"
+}

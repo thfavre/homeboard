@@ -1,0 +1,312 @@
+import { createHash } from 'node:crypto';
+import { PNG } from 'pngjs';
+import { BEARDS, HAIR_STYLES, type AvatarChoices, type SheetInfo } from '../../../shared/world.ts';
+import type { LpcFiles } from './lpc.ts';
+
+/**
+ * Composites a guest's avatar into one sprite sheet, the same way scripts/crowd-sprites.ts builds
+ * the crowd game characters (same rows, so the TV can draw both with the same code): each item's
+ * layers are recolored from their palette and stacked in z order, one animation per row.
+ *
+ * Differences from the build script: art comes through LpcFiles (local pack or cached fetches),
+ * a layer without a sheet for an animation is skipped instead of refused (the body always has
+ * them all), and CC-BY-SA is accepted: the generated sheets are art, not code, and they stay in
+ * the data folder with their credits (data/modules/world/avatars/CREDITS.txt).
+ */
+
+const FRAME = 64;
+const COLUMNS = 13;
+
+type Anim = 'walk' | 'run' | 'idle' | 'hurt' | 'jump' | 'emote' | 'sit';
+const DIR = { up: 0, left: 1, down: 2, right: 3 } as const;
+type Face = 'happy' | 'closed';
+
+/** The rows of an output sheet, identical to scripts/crowd-sprites.ts (the TV reuses its renderer) */
+const ROWS: { key: string; row: number; anim: Anim; dir: number; face?: Face; last?: boolean }[] = [
+  { key: 'walk', row: 0, anim: 'walk', dir: DIR.right },
+  { key: 'run', row: 1, anim: 'run', dir: DIR.right },
+  { key: 'idleRight', row: 2, anim: 'idle', dir: DIR.right },
+  { key: 'idleDown', row: 3, anim: 'idle', dir: DIR.down },
+  { key: 'hurt', row: 4, anim: 'hurt', dir: 0 },
+  { key: 'jump', row: 5, anim: 'jump', dir: DIR.down },
+  { key: 'emote', row: 6, anim: 'emote', dir: DIR.down },
+  { key: 'sit', row: 7, anim: 'sit', dir: DIR.down },
+  { key: 'walkDown', row: 8, anim: 'walk', dir: DIR.down },
+  { key: 'happy', row: 9, anim: 'idle', dir: DIR.down, face: 'happy' },
+  { key: 'dead', row: 10, anim: 'hurt', dir: 0, face: 'closed', last: true },
+  { key: 'walkUp', row: 11, anim: 'walk', dir: DIR.up },
+  { key: 'walkLeft', row: 12, anim: 'walk', dir: DIR.left },
+  { key: 'idleUp', row: 13, anim: 'idle', dir: DIR.up },
+  { key: 'idleLeft', row: 14, anim: 'idle', dir: DIR.left },
+];
+const SHEET_ROWS = Math.max(...ROWS.map((r) => r.row)) + 1;
+
+/** One item of an avatar: a sheet definition, its color, the eye color for heads */
+interface Item {
+  def: string;
+  color?: string;
+  eyes?: string;
+}
+
+/** The items a guest's choices stand for. Everyone starts in their underwear. */
+function itemsOf(c: AvatarChoices): Item[] {
+  const items: Item[] = [
+    { def: `head/heads/human/heads_human_${c.body}`, eyes: c.eyes },
+    { def: 'feet/shoes/feet_shoes_basic', color: 'white' },
+    { def: 'legs/shorts/legs_shorts', color: 'white' },
+  ];
+  const hair = HAIR_STYLES.find((h) => h.id === c.hair)?.def;
+  if (hair) items.push({ def: hair, color: c.hairColor });
+  const beard = BEARDS.find((b) => b.id === c.beard)?.def;
+  if (beard) items.push({ def: beard, color: c.hairColor });
+  return items;
+}
+
+type Rgb = [number, number, number];
+const rgb = (hex: string): Rgb => {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
+type Swap = { from: Rgb; to: Rgb }[];
+
+interface Layer {
+  zPos: number;
+  dir: string;
+  variant?: string;
+  swaps: Swap[];
+  /** The skin itself: its sheets set how many frames an animation really has */
+  body?: boolean;
+}
+
+export interface Composed {
+  png: Buffer;
+  info: SheetInfo;
+}
+
+const OK_LICENSE = /^(CC0|OGA-BY|CC-BY|CC-BY-SA)( \d(\.\d)?)?$/;
+const pickLicense = (licenses: string[]) =>
+  licenses.find((l) => l.startsWith('CC0')) ??
+  licenses.find((l) => l.startsWith('OGA-BY')) ??
+  licenses.find((l) => /^CC-BY( |$)/.test(l)) ??
+  licenses.find((l) => OK_LICENSE.test(l));
+
+export class Composer {
+  private defs = new Map<string, Promise<any>>();
+  private palettes = new Map<string, Promise<{ base: string; colors: Record<string, string[]> }>>();
+  /** Credit lines of every layer ever used, kept by the module next to the sheets */
+  credits = new Map<string, { authors: string[]; license: string; urls: string[]; notes?: string }>();
+
+  constructor(private files: LpcFiles) {}
+
+  private async json(path: string): Promise<any> {
+    let p = this.defs.get(path);
+    if (!p) {
+      p = this.files.read(path).then((buf) => {
+        if (!buf) throw new Error(`Missing ${path}`);
+        return JSON.parse(buf.toString('utf8'));
+      });
+      this.defs.set(path, p);
+      p.catch(() => this.defs.delete(path));
+    }
+    return p;
+  }
+
+  private async image(path: string): Promise<PNG | null> {
+    const buf = await this.files.read(path);
+    return buf ? PNG.sync.read(buf) : null;
+  }
+
+  /** The palettes of a material (body, cloth, hair, eye) and the base the art is drawn in */
+  private async palette(material: string): Promise<{ base: string; colors: Record<string, string[]> }> {
+    let p = this.palettes.get(material);
+    if (!p) {
+      p = (async () => {
+        const meta = await this.json(`palette_definitions/${material}/meta_${material}.json`);
+        return { base: meta.base, colors: await this.json(`palette_definitions/${material}/${material}_ulpc.json`) };
+      })();
+      this.palettes.set(material, p);
+      p.catch(() => this.palettes.delete(material));
+    }
+    return p;
+  }
+
+  private async swapFor(recolor: { material: string; base?: string }, target: string): Promise<Swap> {
+    const p = await this.palette(recolor.material);
+    const from = p.colors[recolor.base ?? p.base];
+    const to = p.colors[target];
+    if (!from || !to) throw new Error(`No ${recolor.material} color "${target}"`);
+    return from.map((c, i) => ({ from: rgb(c), to: rgb(to[Math.min(i, to.length - 1)]) }));
+  }
+
+  /** The drawn layers of one item for this body, with their color swaps */
+  private async layersOf(item: Item, c: AvatarChoices): Promise<Layer[]> {
+    const def = await this.json(`sheet_definitions/${item.def}.json`);
+    const swaps: Swap[] = [];
+    let variant: string | undefined;
+    const rc = def.recolors;
+    if (rc?.material) {
+      swaps.push(await this.swapFor(rc, rc.material === 'body' ? c.skin : item.color!));
+    } else if (rc?.color_1) {
+      for (const [key, r] of Object.entries<any>(rc)) {
+        if (!key.startsWith('color_')) continue;
+        const target = r.material === 'body' ? c.skin : r.material === 'eye' ? (item.eyes ?? 'brown') : item.color;
+        if (target) swaps.push(await this.swapFor(r, target));
+      }
+    } else if (def.variants?.length) {
+      variant = item.color && def.variants.includes(item.color) ? item.color : def.variants[0];
+    }
+
+    const out: Layer[] = [];
+    for (const key of Object.keys(def).filter((k) => /^layer_\d+$/.test(k))) {
+      const l = def[key];
+      const raw: string | undefined = l[c.body];
+      if (!raw) continue;
+      const dir = raw.replace('${head}', c.body);
+      this.collectCredits(def, dir);
+      out.push({ zPos: l.zPos, dir, variant, swaps, body: item.def === 'body/body' });
+    }
+    if (!out.length) throw new Error(`${item.def} has no ${c.body} version`);
+    return out;
+  }
+
+  /** Keep the credit lines that cover this folder; a layer with none, or none we may use, is refused */
+  private collectCredits(def: any, dir: string): void {
+    const path = dir.replace(/\/$/, '');
+    const lines = (def.credits ?? []).filter(
+      (cr: any) => path.startsWith(String(cr.file).replace(/\/$/, '').replace(/\.png$/, '')) || String(cr.file).startsWith(path),
+    );
+    if (!lines.length) throw new Error(`${def.name}: no credit line for ${path}`);
+    for (const cr of lines) {
+      const license = pickLicense(cr.licenses ?? []);
+      if (!license) throw new Error(`${def.name}: ${cr.file} is only ${(cr.licenses ?? []).join(', ')}`);
+      this.credits.set(cr.file, { authors: cr.authors ?? [], license, urls: cr.urls ?? [], notes: cr.notes });
+    }
+  }
+
+  private async faceLayer(face: Face, c: AvatarChoices): Promise<Layer> {
+    const def = await this.json(`sheet_definitions/head/faces/face_${face}.json`);
+    const dir = String(def.layer_1[c.body]).replace('${head}', c.body);
+    this.collectCredits(def, dir);
+    return { zPos: def.layer_1.zPos, dir, swaps: [await this.swapFor(def.recolors.material ? def.recolors : def.recolors.color_1, c.skin)] };
+  }
+
+  /** One animation of a layer, colored (null: the layer has no sheet for it; it is left out) */
+  private async sheet(layer: Layer, anim: Anim): Promise<PNG | null> {
+    const png = await this.image(`spritesheets/${layer.dir}${anim}${layer.variant ? `/${layer.variant}` : ''}.png`);
+    if (png && layer.swaps.length) recolor(png, layer.swaps);
+    return png;
+  }
+
+  /** Build the whole sheet of an avatar */
+  async build(c: AvatarChoices): Promise<Composed> {
+    const layers = (await Promise.all([{ def: 'body/body' } as Item, ...itemsOf(c)].map((it) => this.layersOf(it, c)))).flat();
+    const out = new PNG({ width: FRAME * COLUMNS, height: FRAME * SHEET_ROWS });
+    for (const r of ROWS) {
+      const stack = [...layers];
+      if (r.face) stack.push(await this.faceLayer(r.face, c));
+      stack.sort((a, b) => a.zPos - b.zPos);
+      const loaded = await Promise.all(stack.map((l) => this.sheet(l, r.anim)));
+      const sheets = loaded.filter((s): s is PNG => !!s);
+      if (!sheets.length) continue;
+      // The body sets the frame count: an item with extra frames would otherwise float on its own
+      const bodySheet = loaded.find((s, i) => s && stack[i].body) ?? sheets[0];
+      const frames = Math.min(COLUMNS, bodySheet.width / FRAME);
+      const first = r.last ? frames - 1 : 0;
+      for (let f = first; f < frames; f++) {
+        for (const s of sheets) {
+          if (s.height < (r.dir + 1) * FRAME || s.width < (f + 1) * FRAME) continue;
+          over(out, (f - first) * FRAME, r.row * FRAME, s, f * FRAME, r.dir * FRAME, FRAME, FRAME);
+        }
+      }
+    }
+    return { png: PNG.sync.write(out), info: this.measure(out) };
+  }
+
+  /** Rows, frame counts and where the body stands, read off the finished sheet */
+  private measure(png: PNG): SheetInfo {
+    const emptyCell = (col: number, row: number) => {
+      for (let y = 0; y < FRAME; y++) for (let x = 0; x < FRAME; x++) if (png.data[((row * FRAME + y) * png.width + col * FRAME + x) * 4 + 3]) return false;
+      return true;
+    };
+    const rows: SheetInfo['rows'] = {};
+    for (const r of ROWS) {
+      let frames = 0;
+      while (frames < COLUMNS && !emptyCell(frames, r.row)) frames++;
+      rows[r.key] = { row: r.row, frames };
+    }
+    let top = FRAME;
+    let bottom = 0;
+    let left = FRAME;
+    let right = 0;
+    for (let y = 0; y < FRAME; y++) {
+      for (let x = 0; x < FRAME; x++) {
+        if (png.data[(y * png.width + x) * 4 + 3] < 128) continue;
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+      }
+    }
+    return { frame: FRAME, rows, feet: bottom, body: { top, left, right } };
+  }
+
+  /** The credits of everything used so far, ready to write next to the sheets */
+  creditsText(): string {
+    const authors = [...new Set([...this.credits.values()].flatMap((cr) => cr.authors))].sort((a, b) => a.localeCompare(b));
+    return [
+      'Avatar sheets of the Homeboard world, made with the Universal LPC Spritesheet Character Generator',
+      'https://github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator',
+      'Each layer below is used under the license named on its line; sheets using CC-BY-SA layers are CC-BY-SA.',
+      '',
+      ...[...this.credits.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .flatMap(([file, cr]) => [
+          `${file}`,
+          `  License: ${cr.license}`,
+          `  Authors: ${cr.authors.join(', ')}`,
+          ...(cr.notes ? [`  Notes: ${cr.notes}`] : []),
+          ...cr.urls.map((u) => `  ${u}`),
+          '',
+        ]),
+      `Sprites by: ${authors.join(', ')}`,
+      'Sprites contributed as part of the Liberated Pixel Cup project: http://opengameart.org/content/lpc-collection',
+      '',
+    ].join('\n');
+  }
+}
+
+/** A stable name for a set of choices, for the sheet's file name */
+export function choicesHash(c: AvatarChoices): string {
+  return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes])).digest('hex').slice(0, 12);
+}
+
+/** Swap the colors of an image in place (a color within 1 of a base color counts as that color) */
+function recolor(png: PNG, swaps: Swap[]): void {
+  const d = png.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (!d[i + 3]) continue;
+    for (const swap of swaps) {
+      const hit = swap.find((s) => Math.abs(d[i] - s.from[0]) <= 1 && Math.abs(d[i + 1] - s.from[1]) <= 1 && Math.abs(d[i + 2] - s.from[2]) <= 1);
+      if (!hit) continue;
+      [d[i], d[i + 1], d[i + 2]] = hit.to;
+      break;
+    }
+  }
+}
+
+/** Draw `src` over `dst` (straight alpha) */
+function over(dst: PNG, dx: number, dy: number, src: PNG, sx: number, sy: number, w: number, h: number): void {
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const si = ((sy + y) * src.width + sx + x) * 4;
+      const a = src.data[si + 3] / 255;
+      if (!a) continue;
+      const di = ((dy + y) * dst.width + dx + x) * 4;
+      const b = dst.data[di + 3] / 255;
+      const outA = a + b * (1 - a);
+      for (let k = 0; k < 3; k++) dst.data[di + k] = Math.round((src.data[si + k] * a + dst.data[di + k] * b * (1 - a)) / outA);
+      dst.data[di + 3] = Math.round(outA * 255);
+    }
+  }
+}

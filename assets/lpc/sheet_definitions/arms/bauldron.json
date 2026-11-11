@@ -1,0 +1,54 @@
+{
+  "name": "Bauldron",
+  "layer_1": {
+    "zPos": 65,
+    "male": "shoulders/bauldron/male/",
+    "muscular": "shoulders/bauldron/male/",
+    "teen": "shoulders/bauldron/thin/",
+    "female": "shoulders/bauldron/thin/",
+    "pregnant": "shoulders/bauldron/thin/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "climb",
+    "idle",
+    "jump",
+    "sit",
+    "emote",
+    "run"
+  ],
+  "credits": [
+    {
+      "file": "shoulders/bauldron",
+      "notes": "Original by Nila122, climb/jump/sit/emote/run by JaidynReiman",
+      "authors": [
+        "Nila122",
+        "JaidynReiman"
+      ],
+      "licenses": [
+        "GPL 2.0",
+        "GPL 3.0",
+        "OGA-BY 3.0",
+        "CC-BY-SA 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/more-lpc-clothes-and-hair"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "cloth",
+    "palettes": [
+      "ulpc",
+      "metal.ulpc",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "bauldron"
+}

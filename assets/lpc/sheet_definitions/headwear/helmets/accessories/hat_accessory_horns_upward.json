@@ -1,0 +1,62 @@
+{
+  "name": "Upward Horns",
+  "layer_1": {
+    "zPos": 139,
+    "female": "hat/accessory/horns_upward/fg/adult/",
+    "pregnant": "hat/accessory/horns_upward/fg/adult/",
+    "male": "hat/accessory/horns_upward/fg/adult/",
+    "muscular": "hat/accessory/horns_upward/fg/adult/"
+  },
+  "layer_2": {
+    "zPos": 95,
+    "female": "hat/accessory/horns_upward/bg/adult/",
+    "pregnant": "hat/accessory/horns_upward/bg/adult/",
+    "male": "hat/accessory/horns_upward/bg/adult/",
+    "muscular": "hat/accessory/horns_upward/bg/adult/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "hat/accessory/horns_upward",
+      "notes": "",
+      "authors": [
+        "bluecarrot16"
+      ],
+      "licenses": [
+        "OGA-BY 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-helmets",
+        "https://opengameart.org/content/lpc-expanded-hats-facial-helmets"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "metal",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "cloth.ulpc",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "accessory"
+}

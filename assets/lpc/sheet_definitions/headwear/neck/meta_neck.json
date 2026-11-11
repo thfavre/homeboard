@@ -1,0 +1,4 @@
+{
+    "priority": 50,
+    "required": ["male", "female", "muscular", "pregnant", "teen"]
+}

@@ -1,0 +1,69 @@
+{
+  "name": "Side Cat Ears",
+  "layer_1": {
+    "zPos": 126,
+    "male": "head/ears/zabos/adult/",
+    "muscular": "head/ears/zabos/adult/",
+    "female": "head/ears/zabos/adult/",
+    "teen": "head/ears/zabos/adult/",
+    "pregnant": "head/ears/zabos/adult/",
+    "child": "head/ears/zabos/child/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk", 
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "head/ears/zabos",
+      "notes": "",
+      "authors": [
+        "JaidynReiman"
+      ],
+      "licenses": [
+        "OGA-BY 3.0+",
+        "CC-BY 3.0+",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-furry-ears-tails-for-rpg-sprites"
+      ]
+    }
+  ],
+  "recolors": {
+    "color_1": {
+      "material": "hair",
+      "palettes": [
+        "ulpc",
+        "lpcr",
+        "all.lpcr"
+      ]
+    },
+    "color_2": {
+      "type_name": "inner_ear",
+      "label": "Inner Ear",
+      "material": "hair",
+      "base": "white",
+      "palettes": [
+        "ulpc",
+        "lpcr",
+        "all.lpcr"
+      ]
+    }
+  },
+  "type_name": "ears"
+}
