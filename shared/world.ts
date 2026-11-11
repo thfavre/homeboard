@@ -168,5 +168,6 @@ export interface WorldState {
   sleepAfterMin?: number;
   fadeAfterMin?: number;
   earnPerMin?: number;
+  startMoney?: number;
   wallets?: { id: string; name: string; color: string; balance: number }[];
 }

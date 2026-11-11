@@ -99,7 +99,6 @@
     const picks = JSON.stringify({ id: hb.me?.id, slot, open });
     if (firstLoad || !body) return;
     storageSet(DRAFT_KEY, picks);
-    if (!open) return;
     clearTimeout(debounce);
     debounce = setTimeout(() => void build(JSON.parse(snapshot)), 250);
     return () => clearTimeout(debounce);
@@ -120,7 +119,7 @@
         // A broken draft is just dropped
       }
       firstLoad = false;
-      if (body && open) void build(candidate());
+      if (body) void build(candidate());
     })();
     return onEvent<{ balance: number }>('world', 'wallet', (w) => {
       if (wd) wd.balance = w.balance;
@@ -172,9 +171,11 @@
         <ChevronLeft size={18} />
         All {SLOTS.find((s) => s.id === slot)?.name.toLowerCase()}
       </button>
+    {/if}
 
-      <AvatarPreview {url} {sheet} building={buildingCount > 0} focusHead={slot === 'hat' || slot === 'face' || slot === 'neck'} />
+    <AvatarPreview {url} {sheet} building={buildingCount > 0} focusHead={!!open && (slot === 'hat' || slot === 'face' || slot === 'neck')} />
 
+    {#if open && openItem}
       <div class="group">
         <span class="label">Color <span class="pickname">{colorName(open.color)}</span></span>
         <div class="colors">

@@ -175,11 +175,8 @@
 
     <button type="button" class="btn primary save" disabled={!dirty || buildingCount > 0} onclick={save}>
       <Check size={18} />
-      {saved ? 'Save my look' : 'Move into the town'}
+      {saved ? 'Save my look' : 'Create'}
     </button>
-    {#if !created}
-      <p class="faint hint">You start in your underwear. The shop dresses you up.</p>
-    {/if}
   </div>
 {/if}
 
@@ -258,10 +255,5 @@
   }
   .save {
     justify-content: center;
-  }
-  .hint {
-    margin: -0.4rem 0 0;
-    text-align: center;
-    font-size: 0.85rem;
   }
 </style>

@@ -39,6 +39,11 @@
       <input class="input" type="text" maxlength="24" value={mod.shop?.currencyName ?? ''} onchange={(e) => setOption('currencyName', e.currentTarget.value)} />
     </label>
     <label class="field">
+      <span>Starting money</span>
+      <input class="input" type="number" min="0" value={mod.startMoney} onchange={(e) => setAmount('startMoney', e.currentTarget.value)} />
+    </label>
+    <p class="faint small">Pocket money a newly created character starts with.</p>
+    <label class="field">
       <span>Earned per minute in the town</span>
       <input class="input" type="number" min="0" value={mod.earnPerMin} onchange={(e) => setAmount('earnPerMin', e.currentTarget.value)} />
     </label>

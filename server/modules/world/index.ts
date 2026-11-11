@@ -18,6 +18,8 @@ interface WorldSettings {
   currencyName: string;
   /** Earned per minute spent in the town (online with an avatar) */
   earnPerMin: number;
+  /** Pocket money a newly created character starts with */
+  startMoney: number;
   /** Shop prices by tier */
   priceCheap: number;
   priceCommon: number;
@@ -67,6 +69,7 @@ export default defineModule<WorldSettings>({
     fadeAfterMin: 20,
     currencyName: 'Acorns',
     earnPerMin: 3,
+    startMoney: 50,
     priceCheap: 10,
     priceCommon: 25,
     priceFancy: 60,
@@ -143,6 +146,7 @@ export default defineModule<WorldSettings>({
           sleepAfterMin: s.sleepAfterMin,
           fadeAfterMin: s.fadeAfterMin,
           earnPerMin: s.earnPerMin,
+          startMoney: s.startMoney,
           wallets: guests.map((g) => ({ id: g.id, name: g.name, color: g.color, balance: wallets[g.id] ?? 0 })),
         };
       }
@@ -186,6 +190,14 @@ export default defineModule<WorldSettings>({
       await composite(choices, outfit);
       const had = !!before;
       store.data.avatars[guest.id] = { choices, hash, outfit };
+      if (!had) {
+        // Pocket money to get the first clothes with
+        const start = Math.max(0, Math.round(ctx.settings.get().startMoney));
+        if (start) {
+          wallets[guest.id] = (wallets[guest.id] ?? 0) + start;
+          sendWallet(guest.id);
+        }
+      }
       store.save();
       ctx.publish();
       if (!had) ctx.activity('{name} moved into the town', { guest });
@@ -329,6 +341,7 @@ export default defineModule<WorldSettings>({
         fadeAfterMin: Math.max(1, Math.min(480, num(args.fadeAfterMin, s.fadeAfterMin))),
         currencyName: typeof args.currencyName === 'string' && args.currencyName.trim() ? args.currencyName.trim().slice(0, 24) : s.currencyName,
         earnPerMin: price(args.earnPerMin, s.earnPerMin),
+        startMoney: price(args.startMoney, s.startMoney),
         priceCheap: price(args.priceCheap, s.priceCheap),
         priceCommon: price(args.priceCommon, s.priceCommon),
         priceFancy: price(args.priceFancy, s.priceFancy),
