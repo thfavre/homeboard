@@ -1,0 +1,74 @@
+{
+  "name": "Ribs",
+  "priority": 60,
+  "layer_1": {
+    "zPos": 15,
+    "male": "body/wound/ribs/",
+    "muscular": "body/wound/ribs/",
+    "female": "body/wound/ribs/",
+    "pregnant": "body/wound/ribs/",
+    "teen": "body/wound/ribs/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote"
+  ],
+  "credits": [
+    {
+      "file": "body/wound/ribs",
+      "notes": "",
+      "authors": [
+        "Benjamin K. Smith (BenCreating)",
+        "Sander Frenken (castelonia)"
+      ],
+      "licenses": [
+        "CC-BY-SA 3.0",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-zombie"
+      ]
+    }
+  ],
+  "recolors": {
+    "color_1": {
+      "material": "cloth",
+      "base": "maroon",
+      "palettes": [
+        "ulpc",
+        "all.lpcr"
+      ]
+    },
+    "color_2": {
+      "type_name": "bones",
+      "label": "Ribs",
+      "material": "cloth",
+      "base": "white",
+      "palettes": [
+        "ulpc",
+        "all.lpcr"
+      ]
+    },
+    "color_3": {
+      "type_name": "stomach",
+      "label": "Stomach",
+      "material": "body",
+      "palettes": [
+        "ulpc",
+        "lpcr",
+        "all.lpcr"
+      ]
+    }
+  },
+  "type_name": "wound_ribs"
+}

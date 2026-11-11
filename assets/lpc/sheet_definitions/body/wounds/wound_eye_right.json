@@ -1,0 +1,57 @@
+{
+  "name": "Right Eye",
+  "priority": 40,
+  "layer_1": {
+    "zPos": 115,
+    "male": "body/wound/eye_right/",
+    "muscular": "body/wound/eye_right/",
+    "female": "body/wound/eye_right/",
+    "pregnant": "body/wound/eye_right/",
+    "teen": "body/wound/eye_right/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "body/wound/eye_right",
+      "notes": "Zombie by BenCreating, commissioned by castelonia",
+      "authors": [
+        "Benjamin K. Smith (BenCreating)",
+        "Sander Frenken (castelonia)"
+      ],
+      "licenses": [
+        "CC-BY-SA 3.0",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-zombie"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "cloth",
+    "base": "maroon",
+    "palettes": [
+      "ulpc",
+      "body.ulpc",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "wound_eye_right"
+}

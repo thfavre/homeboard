@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { validChoices, type AvatarChoices, type PackStatus, type SheetInfo, type WorldState } from '../../../shared/world.ts';
+import { validChoices, type AvatarChoices, type SheetInfo, type WorldState } from '../../../shared/world.ts';
 import { Composer, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -42,13 +42,10 @@ export default defineModule<WorldSettings>({
 
   setup(ctx) {
     const store = new JsonFile<WorldData>(join(ctx.dataDir, 'world.json'), { avatars: {}, sheet: null, credits: {} });
-    const lpc = new LpcFiles(ctx.dataDir);
-    const composer = new Composer(lpc);
+    const composer = new Composer(new LpcFiles());
     for (const [file, cr] of Object.entries(store.data.credits)) composer.credits.set(file, cr);
     const sheetsDir = ctx.mediaDir('sheets');
     const sim = new TownSim();
-
-    let pack: PackStatus = lpc.ready() ? { kind: 'ready', mb: lpc.packMb() } : { kind: 'none' };
 
     /** Builds by hash, so the same look is composited once even when asked twice at once */
     const building = new Map<string, Promise<SheetInfo>>();
@@ -98,7 +95,7 @@ export default defineModule<WorldSettings>({
       const base: WorldState = { characters, sheet: store.data.sheet };
       if (role === 'admin') {
         const s = ctx.settings.get();
-        return { ...base, pack, sleepAfterMin: s.sleepAfterMin, fadeAfterMin: s.fadeAfterMin };
+        return { ...base, sleepAfterMin: s.sleepAfterMin, fadeAfterMin: s.fadeAfterMin };
       }
       return base;
     });
@@ -152,35 +149,6 @@ export default defineModule<WorldSettings>({
         sleepAfterMin: Math.max(1, Math.min(240, num(args.sleepAfterMin, s.sleepAfterMin))),
         fadeAfterMin: Math.max(1, Math.min(480, num(args.fadeAfterMin, s.fadeAfterMin))),
       });
-      ctx.publish();
-    });
-
-    ctx.onAdmin('downloadPack', () => {
-      if (pack.kind === 'downloading') throw new HbError('Already downloading');
-      pack = { kind: 'downloading', mb: 0 };
-      ctx.publish();
-      void lpc
-        .download((mb) => {
-          pack = { kind: 'downloading', mb };
-          ctx.publish();
-        })
-        .then(() => {
-          pack = { kind: 'ready', mb: lpc.packMb() };
-          ctx.log.info('LPC pack downloaded');
-          ctx.publish();
-        })
-        .catch((err) => {
-          ctx.log.error('LPC pack download failed', err);
-          pack = { kind: 'error', message: (err as Error).message };
-          ctx.publish();
-        });
-      return { started: true };
-    });
-
-    ctx.onAdmin('deletePack', () => {
-      if (pack.kind === 'downloading') throw new HbError('Wait for the download to finish');
-      lpc.deletePack();
-      pack = { kind: 'none' };
       ctx.publish();
     });
 

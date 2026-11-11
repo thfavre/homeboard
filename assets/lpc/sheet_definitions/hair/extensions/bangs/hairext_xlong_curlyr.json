@@ -1,0 +1,56 @@
+{
+  "name": "Right XLong Curly",
+  "layer_1": {
+    "zPos": 128,
+    "male": "hair/extensions/bangs/xlong_curlyr/adult/",
+    "muscular": "hair/extensions/bangs/xlong_curlyr/adult/",
+    "female": "hair/extensions/bangs/xlong_curlyr/adult/",
+    "pregnant": "hair/extensions/bangs/xlong_curlyr/adult/",
+    "teen": "hair/extensions/bangs/xlong_curlyr/adult/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "hair/extensions/bangs/xlong_curlyr",
+      "notes": "",
+      "authors": [
+        "JaidynReiman"
+      ],
+      "licenses": [
+        "OGA-BY 3.0+",
+        "CC-BY 3.0+",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-expanded-xlong-hair"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "hair",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "hairextr"
+}

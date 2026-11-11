@@ -1,0 +1,57 @@
+{
+  "name": "Wrinkles",
+  "priority": 80,
+  "layer_1": {
+    "zPos": 102,
+    "male": "head/wrinkles/",
+    "muscular": "head/wrinkles/",
+    "female": "head/wrinkles/",
+    "teen": "head/wrinkles/",
+    "pregnant": "head/wrinkles/"
+  },
+  "match_body_color": true,
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "head/wrinkles",
+      "notes": "",
+      "authors": [
+        "bluecarrot16"
+      ],
+      "licenses": [
+        "CC0"
+      ],
+      "urls": []
+    }
+  ],
+  "recolors": {
+    "material": "body",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "aliases": {
+    "wrinkes=*": "wrinkles=*"
+  },
+  "type_name": "wrinkles"
+}

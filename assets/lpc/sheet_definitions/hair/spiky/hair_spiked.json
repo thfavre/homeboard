@@ -1,0 +1,55 @@
+{
+  "name": "Spiked",
+  "layer_1": {
+    "zPos": 120,
+    "male": "hair/spiked/adult/",
+    "muscular": "hair/spiked/adult/",
+    "female": "hair/spiked/adult/",
+    "pregnant": "hair/spiked/adult/",
+    "teen": "hair/spiked/adult/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "hair/spiked",
+      "notes": "",
+      "authors": [
+        "kcilds/Rocetti/Eredah"
+      ],
+      "licenses": [
+        "CC-BY 4.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/eredah-rpg-character-base-48x64-ongoing",
+        "https://opengameart.org/content/lpc-hair"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "hair",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "hair"
+}

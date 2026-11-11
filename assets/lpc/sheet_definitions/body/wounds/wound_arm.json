@@ -1,0 +1,54 @@
+{
+  "name": "Arm",
+  "priority": 50,
+  "layer_1": {
+    "zPos": 15,
+    "male": "body/wound/arm/",
+    "muscular": "body/wound/arm/",
+    "female": "body/wound/arm/",
+    "pregnant": "body/wound/arm/",
+    "teen": "body/wound/arm/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb"
+  ],
+  "credits": [
+    {
+      "file": "body/wound/arm",
+      "notes": "",
+      "authors": [
+        "Benjamin K. Smith (BenCreating)",
+        "Sander Frenken (castelonia)"
+      ],
+      "licenses": [
+        "CC-BY-SA 3.0",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-zombie"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "cloth",
+    "base": "maroon",
+    "palettes": [
+      "ulpc",
+      "body.ulpc",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "wound_arm"
+}

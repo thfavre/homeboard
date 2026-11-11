@@ -77,7 +77,7 @@ export const HAIR_STYLES: { id: string; name: string; def: string | null }[] = [
   { id: 'plain', name: 'Plain', def: 'hair/short/hair_plain' },
   { id: 'parted', name: 'Parted', def: 'hair/short/hair_parted3' },
   { id: 'swoop', name: 'Swoop', def: 'hair/short/hair_swoop' },
-  { id: 'messy', name: 'Messy', def: 'hair/short/hair_messy' },
+  { id: 'messy', name: 'Messy', def: 'hair/short/hair_messy1' },
   { id: 'bedhead', name: 'Bedhead', def: 'hair/short/hair_bedhead' },
   { id: 'pixie', name: 'Pixie', def: 'hair/short/hair_pixie' },
   { id: 'buzzcut', name: 'Buzzcut', def: 'hair/bald/hair_buzzcut' },
@@ -144,16 +144,12 @@ export interface TownCharacter {
   url: string;
 }
 
-/** The LPC asset pack: not there, downloading (MB so far), or on disk */
-export type PackStatus = { kind: 'none' } | { kind: 'downloading'; mb: number } | { kind: 'ready'; mb: number } | { kind: 'error'; message: string };
-
 export interface WorldState {
   characters: TownCharacter[];
   sheet: SheetInfo | null;
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
   /** Admin only */
-  pack?: PackStatus;
   sleepAfterMin?: number;
   fadeAfterMin?: number;
 }

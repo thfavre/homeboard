@@ -1,0 +1,65 @@
+{
+  "name": "Braid2",
+  "layer_1": {
+    "zPos": 120,
+    "male": "hair/braid2/adult/fg/",
+    "muscular": "hair/braid2/adult/fg/",
+    "female": "hair/braid2/adult/fg/",
+    "pregnant": "hair/braid2/adult/fg/",
+    "teen": "hair/braid2/adult/fg/"
+  },
+  "layer_2": {
+    "zPos": 9,
+    "male": "hair/braid2/adult/bg/",
+    "muscular": "hair/braid2/adult/bg/",
+    "female": "hair/braid2/adult/bg/",
+    "pregnant": "hair/braid2/adult/bg/",
+    "teen": "hair/braid2/adult/bg/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "hair/braid2",
+      "notes": "(lidia)",
+      "authors": [
+        "Yamilian",
+        "bluecarrot16"
+      ],
+      "licenses": [
+        "CC-BY-SA 3.0",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-heroine",
+        "https://opengameart.org/content/lpc-hair"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "hair",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "hair"
+}

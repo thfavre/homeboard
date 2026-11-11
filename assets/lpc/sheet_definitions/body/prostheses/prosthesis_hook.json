@@ -1,0 +1,51 @@
+{
+  "name": "Hook Hand",
+  "layer_1": {
+    "zPos": 100,
+    "is_mask": true,
+    "male": "body/prosthesis/hook/male/mask/"
+  },
+  "layer_2": {
+    "zPos": 100,
+    "male": "body/prosthesis/hook/male/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "emote"
+  ],
+  "credits": [
+    {
+      "file": "body/prosthesis/hook",
+      "notes": "original by bluecarrot16, color reduced & emote by JaidynReiman",
+      "authors": [
+        "bluecarrot16",
+        "JaidynReiman"
+      ],
+      "licenses": [
+        "OGA-BY 3.0",
+        "CC-BY-SA 3.0",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-pirates"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "metal",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "cloth.ulpc",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "prosthesis_hand"
+}

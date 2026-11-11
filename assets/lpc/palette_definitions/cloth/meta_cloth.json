@@ -1,0 +1,7 @@
+{
+    "type": "material",
+    "label": "General",
+    "desc": "Palettes designed for general colors, but especially cloth or fabric.",
+    "default": "ulpc",
+    "base": "white"
+}

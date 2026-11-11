@@ -1,0 +1,64 @@
+{
+  "name": "Relm XLong",
+  "layer_1": {
+    "zPos": 120,
+    "male": "hair/relm_xlong/adult/fg/",
+    "muscular": "hair/relm_xlong/adult/fg/",
+    "female": "hair/relm_xlong/adult/fg/",
+    "pregnant": "hair/relm_xlong/adult/fg/",
+    "teen": "hair/relm_xlong/adult/fg/"
+  },
+  "layer_2": {
+    "zPos": 9,
+    "male": "hair/relm_xlong/adult/bg/",
+    "muscular": "hair/relm_xlong/adult/bg/",
+    "female": "hair/relm_xlong/adult/bg/",
+    "pregnant": "hair/relm_xlong/adult/bg/",
+    "teen": "hair/relm_xlong/adult/bg/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "hair/relm_xlong",
+      "notes": "",
+      "authors": [
+        "JaidynReiman"
+      ],
+      "licenses": [
+        "OGA-BY 3.0+",
+        "CC-BY 3.0+",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-expanded-xlong-hair"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "hair",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "hair"
+}

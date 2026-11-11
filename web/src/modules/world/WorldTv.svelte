@@ -63,21 +63,17 @@
   }
 
   /** A name over a head, like a game nametag */
-  function nameTag(g: CanvasRenderingContext2D, text: string, color: string, x: number, y: number, alpha: number): void {
+  function nameTag(g: CanvasRenderingContext2D, text: string, x: number, y: number, alpha: number): void {
     g.font = '600 15px system-ui, sans-serif';
     const w = g.measureText(text).width + 16;
     g.fillStyle = `rgba(10,10,18,${0.55 * alpha})`;
     g.beginPath();
-    g.roundRect(x - w / 2, y - 12, w, 22, 6);
+    g.roundRect(x - w / 2, y - 11, w, 22, 6);
     g.fill();
     g.fillStyle = `rgba(255,255,255,${0.92 * alpha})`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(text, x, y);
-    g.globalAlpha = alpha;
-    g.fillStyle = color;
-    g.fillRect(x - w / 2, y + 8, w, 2.5);
-    g.globalAlpha = 1;
     g.textBaseline = 'alphabetic';
   }
 
@@ -273,11 +269,12 @@
       g.fillRect(0, 0, TOWN.w, TOWN.h);
     }
 
-    // Names and sleep bubbles over everything
-    const tall = 64 * 1.35;
+    // Names and sleep bubbles over everything. The head's top comes from the measured sheet, so
+    // the name hangs just over the hair.
+    const tall = world?.sheet ? (world.sheet.feet - world.sheet.body.top) * 1.35 : 64;
     for (const p of people) {
       const c = byId.get(p.id);
-      if (c) nameTag(g, c.name, c.color, p.x, p.anim === WANIM.sleep ? p.y - 44 : p.y - tall - 10, p.alpha);
+      if (c) nameTag(g, c.name, p.x, p.anim === WANIM.sleep ? p.y - 40 : p.y - tall - 14, p.alpha);
       if (p.anim === WANIM.sleep) drawZzz(g, p.x, p.y, now, p.alpha);
     }
 

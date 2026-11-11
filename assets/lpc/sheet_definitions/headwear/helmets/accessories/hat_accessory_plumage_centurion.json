@@ -1,0 +1,69 @@
+{
+  "name": "Centurion Plumage",
+  "layer_1": {
+    "zPos": 139,
+    "female": "hat/accessory/plumage_centurion/adult/",
+    "pregnant": "hat/accessory/plumage_centurion/adult/",
+    "male": "hat/accessory/plumage_centurion/adult/",
+    "muscular": "hat/accessory/plumage_centurion/adult/",
+    "teen": "hat/accessory/plumage_centurion/adult/"
+  },
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "hat/accessory/plumage_centurion",
+      "notes": "",
+      "authors": [
+        "bluecarrot16",
+        "DCSS authors"
+      ],
+      "licenses": [
+        "CC0"
+      ],
+      "urls": [
+        "http://opengameart.org/content/dungeon-crawl-32x32-tiles",
+        "https://opengameart.org/content/cc0-headgear-icons",
+        "https://opengameart.org/content/lpc-helmets-mega-pack",
+        "https://opengameart.org/content/lpc-expanded-hats-facial-helmets"
+      ]
+    }
+  ],
+  "recolors": {
+    "color_1": {
+      "material": "cloth",
+      "base": "brown",
+      "palettes": [
+        "ulpc",
+        "all.lpcr"
+      ]
+    },
+    "color_2": {
+      "type_name": "hat_accessory_secondary",
+      "label": "Legion Pattern",
+      "material": "cloth",
+      "palettes": [
+        "ulpc",
+        "all.lpcr"
+      ]
+    }
+  },
+  "type_name": "accessory"
+}

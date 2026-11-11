@@ -1,0 +1,33 @@
+{
+  "name": "Messy",
+  "layer_1": {
+    "zPos": 120,
+    "child": "hair/messy/child/"
+  },
+  "credits": [
+    {
+      "file": "hair/messy",
+      "notes": "",
+      "authors": [
+        "Nila122"
+      ],
+      "licenses": [
+        "OGA-BY 3.0",
+        "CC-BY-SA 3.0",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/lpc-clothes-for-children"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "hair",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "hair"
+}

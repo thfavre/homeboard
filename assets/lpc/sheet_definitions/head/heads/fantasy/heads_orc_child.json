@@ -1,0 +1,62 @@
+{
+  "name": "Orc child",
+  "tags": [
+    "orc",
+    "child"
+  ],
+  "layer_1": {
+    "zPos": 100,
+    "child": "head/heads/orc/child/"
+  },
+  "match_body_color": true,
+  "animations": [
+    "spellcast",
+    "thrust",
+    "walk",
+    "slash",
+    "shoot",
+    "hurt",
+    "watering",
+    "idle",
+    "jump",
+    "run",
+    "sit",
+    "emote",
+    "climb",
+    "combat",
+    "1h_slash",
+    "1h_backslash",
+    "1h_halfslash"
+  ],
+  "credits": [
+    {
+      "file": "head/heads/orc/child",
+      "notes": "child base by kheftel, orc version created by Nila122, head extracted by bluecarrot16",
+      "authors": [
+        "Nila122",
+        "kheftel",
+        "Stephen Challener (Redshrike)"
+      ],
+      "licenses": [
+        "OGA-BY 3.0",
+        "CC-BY-SA 3.0",
+        "GPL 3.0"
+      ],
+      "urls": [
+        "https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles",
+        "https://opengameart.org/content/lpc-child-standing-template",
+        "https://opengameart.org/content/lpc-children-walk-animation"
+      ]
+    }
+  ],
+  "recolors": {
+    "material": "body",
+    "base": "ulpc.green",
+    "palettes": [
+      "ulpc",
+      "lpcr",
+      "all.lpcr"
+    ]
+  },
+  "type_name": "head"
+}
