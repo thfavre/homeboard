@@ -28,7 +28,7 @@ const QUEUE_GAP = 36;
 /** How far from a door a character fades in or out of it */
 const DOOR_FADE = 26;
 /** Time inside after the look changes: the TV shows it changing (the barber's cut, the curtain) */
-const CHANGE_MS = 2200;
+const CHANGE_MS = 3200;
 
 type Doing =
   | { kind: 'idle'; until: number }

@@ -36,7 +36,7 @@
   const shown = new Map<string, { url: string; img: HTMLImageElement | null; prev: HTMLImageElement | null; at: number }>();
   /** How long the clothes shop's curtain takes, and the barber's cut across the hair */
   const SWISH_MS = 900;
-  const CUT_MS = 1500;
+  const CUT_MS = 2500;
 
   /** Cut hair falling in the barber's window: the old hair's own pixels, in world units (per second) */
   let clippings: { x: number; y: number; vx: number; vy: number; color: string; life: number; floor: number }[] = [];
