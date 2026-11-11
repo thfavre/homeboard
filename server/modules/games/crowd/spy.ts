@@ -23,7 +23,8 @@ import { TICK_MS, aimOut, blocked, dealLooks, dirOf, hitTest, keepOut, moveAim, 
 
 /** The spy picks a gadget and finds their character this long before the snipers can shoot */
 const PICK_MS = 12_000;
-const REVEAL_MS = 8000;
+/** The end of a round stays this long: who the spy was, how it ended, the points (time to take it in) */
+const REVEAL_MS = 14_000;
 /** A stick pushed less than this is let go */
 const DEAD_ZONE = 0.35;
 /** A decoy jumps at least this far away when it can */
