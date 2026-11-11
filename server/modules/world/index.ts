@@ -4,7 +4,7 @@ import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { validChoices, type AvatarChoices, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { CATALOG, TIERS, itemById, validOutfit, validWorn, type Outfit, type Tier, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, TIERS, itemById, validOutfit, validWorn, type Outfit, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -217,31 +217,52 @@ export default defineModule<WorldSettings>({
 
     ctx.onGuest('wardrobe', (_args, guest) => mine(guest.id));
 
-    // Item pictures for the shop's grid, drawn once per item (the item alone, in its first color)
+    // Item pictures: the item alone, drawn once per item and color. The shop's grid shows each
+    // item in its first color; the wardrobe shows the owned pieces in their own colors.
     const iconsDir = ctx.mediaDir('icons');
     const drawingIcons = new Map<string, Promise<void>>();
+    async function iconUrl(item: WardrobeItem, color?: string): Promise<string> {
+      const name = color ? `${item.id}--${color}` : item.id;
+      const file = join(iconsDir, `${name}.png`);
+      if (!existsSync(file)) {
+        let p = drawingIcons.get(name);
+        if (!p) {
+          p = composer.icon(item.def, color ?? item.iconColor ?? item.colors[0], item.bodies?.[0] ?? 'male').then((png) => writeFileSync(file, png));
+          drawingIcons.set(name, p);
+          p.catch(() => drawingIcons.delete(name));
+        }
+        await p;
+      }
+      return ctx.mediaUrl(`icons/${name}.png`);
+    }
+
     ctx.onGuest('icons', async (args) => {
       const items = CATALOG.filter((i) => i.slot === args?.slot);
       const urls: Record<string, string> = {};
       await Promise.all(
         items.map(async (item) => {
           try {
-            const file = join(iconsDir, `${item.id}.png`);
-            if (!existsSync(file)) {
-              let p = drawingIcons.get(item.id);
-              if (!p) {
-                p = composer
-                  .icon(item.def, item.iconColor ?? item.colors[0], item.bodies?.[0] ?? 'male')
-                  .then((png) => writeFileSync(file, png));
-                drawingIcons.set(item.id, p);
-                p.catch(() => drawingIcons.delete(item.id));
-              }
-              await p;
-            }
-            urls[item.id] = ctx.mediaUrl(`icons/${item.id}.png`);
+            urls[item.id] = await iconUrl(item);
           } catch (err) {
             // An item whose picture cannot be drawn shows its name instead
             ctx.log.warn(`No icon for ${item.id}:`, err);
+          }
+        }),
+      );
+      return urls;
+    });
+
+    /** The pictures of the guest's own pieces, each in its color, keyed "id:color" */
+    ctx.onGuest('ownedIcons', async (_args, guest) => {
+      const urls: Record<string, string> = {};
+      await Promise.all(
+        (owned[guest.id] ?? []).map(async (o) => {
+          const worn = validWorn(o);
+          if (!worn) return;
+          try {
+            urls[`${o.id}:${o.color}`] = await iconUrl(worn.item, o.color);
+          } catch (err) {
+            ctx.log.warn(`No icon for ${o.id} in ${o.color}:`, err);
           }
         }),
       );

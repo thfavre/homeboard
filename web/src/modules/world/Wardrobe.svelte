@@ -9,8 +9,8 @@
   /**
    * The closet: everything the guest bought, sorted by slot. The strip on top is the outfit at a
    * glance (one tile per slot, showing what is worn there) and picks the slot; below it, the
-   * pieces owned for that slot. Tap a piece to wear it (Nothing leaves the slot empty) and switch
-   * between the colors you own of it. Buying happens in the shop.
+   * pieces owned for that slot. Tap a piece to wear it (Nothing leaves the slot empty); a piece
+   * owned in several colors turns into a square per color to pick from. Buying happens in the shop.
    */
 
   let { onshop, view }: { onshop?: (slot: Slot) => void; view: PreviewView } = $props();
@@ -19,6 +19,18 @@
   let body = $state<'male' | 'female' | null>(null);
   let slot = $state<Slot>('top');
   let icons = $state<Record<string, string>>({});
+  /** Pictures of the owned pieces in their own colors, keyed "id:color" */
+  let colored = $state<Record<string, string>>({});
+  /** Counts up every 3 seconds: cards of pieces owned in several colors fade through them */
+  let tick = $state(0);
+
+  /** The picture of a piece in a color, the plain one until the colored one is there */
+  const pictureOf = (id: string, color: string) => colored[`${id}:${color}`] ?? icons[id];
+  /** The color a card shows now: the worn one for the worn piece, else the next in turn */
+  function shownColor(p: { item: WardrobeItem; colors: string[] }): string {
+    if (worn?.id === p.item.id) return worn.color;
+    return p.colors[tick % p.colors.length];
+  }
   let url = $state<string | null>(null);
   let sheet = $state<SheetInfo | null>(null);
   let buildingCount = $state(0);
@@ -52,7 +64,7 @@
       else list.push({ item, colors: [o.color] });
       bySlot.set(item.slot, list);
     }
-    // Colors in the catalog's order, so the swatches never jump around
+    // Colors in the catalog's order, so the squares never jump around
     for (const list of bySlot.values()) {
       for (const e of list) e.colors.sort((a, b) => e.item.colors.indexOf(a) - e.item.colors.indexOf(b));
     }
@@ -60,7 +72,6 @@
   });
   const pieces = $derived(closet.get(slot) ?? []);
   const worn = $derived(wd?.outfit[slot] ?? null);
-  const wornEntry = $derived(worn ? (pieces.find((p) => p.item.id === worn.id) ?? null) : null);
   const ownedCount = $derived((wd?.owned ?? []).length);
 
   // ------------------------------------------------------------ preview
@@ -104,15 +115,23 @@
       if (first) slot = first.id;
       loaded = true;
       if (body && wd) void build($state.snapshot(wd.outfit) as Outfit);
+      rpc<Record<string, string>>('world', 'ownedIcons')
+        .then((urls) => (colored = urls))
+        .catch(() => {});
       for (const s of closet.keys()) {
         rpc<Record<string, string>>('world', 'icons', { slot: s })
           .then((urls) => (icons = { ...icons, ...urls }))
           .catch(() => {});
       }
     })();
-    return onEvent<{ balance: number }>('world', 'wallet', (w) => {
+    const timer = setInterval(() => tick++, 3000);
+    const off = onEvent<{ balance: number }>('world', 'wallet', (w) => {
       if (wd) wd.balance = w.balance;
     });
+    return () => {
+      clearInterval(timer);
+      off();
+    };
   });
 
   // ------------------------------------------------------------ actions
@@ -145,10 +164,26 @@
     void apply(outfit);
   }
 
-  /** Tapping a piece wears it in its first owned color; the sheet switches between the others */
+  /** The piece whose card shows its owned colors to pick from (null: none) */
+  let picking = $state<string | null>(null);
+  $effect(() => {
+    void slot;
+    picking = null;
+  });
+
+  /** One color: wear it. Several: the card turns into a square per owned color */
   function tap(p: { item: WardrobeItem; colors: string[] }) {
-    if (worn?.id === p.item.id) return;
-    wear(p.item.id, p.colors[0]);
+    if (p.colors.length > 1) {
+      picking = p.item.id;
+      return;
+    }
+    picking = null;
+    if (worn?.id !== p.item.id) wear(p.item.id, p.colors[0]);
+  }
+
+  function pick(id: string, color: string) {
+    picking = null;
+    if (worn?.id !== id || worn.color !== color) wear(id, color);
   }
 </script>
 
@@ -182,8 +217,8 @@
           onclick={() => (slot = s.id)}
         >
           <span class="spic">
-            {#if w && icons[w.id]}
-              <img src={icons[w.id]} alt="" />
+            {#if w && pictureOf(w.id, w.color)}
+              <img src={pictureOf(w.id, w.color)} alt="" />
             {:else}
               <span class="blank"></span>
             {/if}
@@ -201,51 +236,59 @@
         <button type="button" class="shoplink" onclick={() => onshop?.(slot)}><ShoppingBag size={15} />Buy more</button>
       </div>
       {#if pieces.length}
-        <div class="scroll" class:docked={!!worn && !!wornEntry && wornEntry.colors.length > 1}>
+        <div class="scroll">
         <div class="grid">
           <!-- Nothing: the slot left empty -->
-          <button type="button" class="piece" class:worn={!worn} disabled={busy} onclick={() => worn && takeOff()}>
+          <button type="button" class="piece" class:worn={!worn} disabled={busy} onclick={() => ((picking = null), worn && takeOff())}>
             <span class="pic"><Ban size={30} strokeWidth={1.5} /></span>
             <span class="pname">Nothing</span>
             <span class="dots"></span>
           </button>
           {#each pieces as p (p.item.id)}
-            <button type="button" class="piece" class:worn={worn?.id === p.item.id} disabled={busy} onclick={() => tap(p)}>
-              <span class="pic">
-                {#if icons[p.item.id]}
-                  <img src={icons[p.item.id]} alt={p.item.name} loading="lazy" />
-                {/if}
-              </span>
-              <span class="pname">{p.item.name}</span>
-              <span class="dots">
-                {#each p.colors as c (c)}
-                  <span class="dot" class:cur={worn?.id === p.item.id && worn.color === c} style:background={COLOR_HEX[c] ?? '#888'}></span>
-                {/each}
-              </span>
-            </button>
+            <!-- While picking, the color squares lie over the card, so its size never changes -->
+            <div class="cell">
+              <button type="button" class="piece" class:worn={worn?.id === p.item.id} disabled={busy} onclick={() => tap(p)}>
+                <!-- One picture per owned color, stacked: the shown one fades in over the others -->
+                <span class="pic stack">
+                  {#each p.colors as c (c)}
+                    {#if pictureOf(p.item.id, c)}
+                      <img src={pictureOf(p.item.id, c)} alt={c === shownColor(p) ? p.item.name : ''} class:shown={c === shownColor(p)} />
+                    {/if}
+                  {/each}
+                </span>
+                <span class="pname">{p.item.name}</span>
+                <span class="dots">
+                  {#if p.colors.length > 1}
+                    {#each p.colors as c (c)}
+                      <span class="dot" class:cur={c === shownColor(p)} style:background={COLOR_HEX[c] ?? '#888'}></span>
+                    {/each}
+                  {/if}
+                </span>
+              </button>
+              {#if picking === p.item.id}
+                <div class="picker" class:worn={worn?.id === p.item.id}>
+                  <span class="pname">{p.item.name}</span>
+                  <div class="squares" style:--cols={p.colors.length <= 4 ? 2 : 3}>
+                    {#each p.colors as c (c)}
+                      <button
+                        type="button"
+                        class="square"
+                        class:on={worn?.id === p.item.id && worn.color === c}
+                        style:background={COLOR_HEX[c] ?? '#888'}
+                        aria-label={colorName(c)}
+                        disabled={busy}
+                        onclick={() => pick(p.item.id, c)}
+                      ></button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            </div>
           {/each}
         </div>
         </div>
       {:else}
         <p class="faint none-yet">Nothing here yet. The shop has some.</p>
-      {/if}
-      <!-- The colors you own of the worn piece, floating over the bottom of the list -->
-      {#if worn && wornEntry && wornEntry.colors.length > 1}
-        <div class="dock">
-          <div class="colors">
-            {#each wornEntry.colors as c (c)}
-              <button
-                type="button"
-                class="swatch"
-                class:on={worn.color === c}
-                style:background={COLOR_HEX[c] ?? '#888'}
-                aria-label={colorName(c)}
-                disabled={busy}
-                onclick={() => worn.color !== c && wear(wornEntry.item.id, c)}
-              ></button>
-            {/each}
-          </div>
-        </div>
       {/if}
     </section>
 
@@ -421,6 +464,44 @@
     color: var(--text);
     min-width: 0;
   }
+  .cell {
+    position: relative;
+    display: grid;
+  }
+  /* The color picker laid over a card: one square per owned color */
+  .picker {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    padding: 1.9rem 0.45rem 0.45rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    /* The theme's surface can be see-through: lay it on the page color so the card below hides */
+    background:
+      linear-gradient(var(--surface-2), var(--surface-2)),
+      var(--bg);
+  }
+  .squares {
+    flex: 1;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(var(--cols), 1fr);
+    grid-auto-rows: 1fr;
+    gap: 0.35rem;
+    min-height: 0;
+  }
+  .square {
+    padding: 0;
+    min-height: 0;
+    border: 2px solid color-mix(in srgb, #000 25%, transparent);
+    border-radius: var(--radius-sm);
+  }
+  .square.on {
+    border-color: var(--accent);
+    outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  }
   .piece.worn {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
@@ -431,6 +512,18 @@
     place-items: center;
     width: 100%;
     height: 7.2rem;
+  }
+  .stack {
+    position: relative;
+  }
+  .stack img {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.8s ease;
+  }
+  .stack img.shown {
+    opacity: 1;
   }
   .pic img {
     width: 100%;
@@ -463,16 +556,20 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
   }
+  /* Always one row: with many colors the dots shrink instead of wrapping (the card keeps its height) */
   .dots {
-    display: inline-flex;
-    flex-wrap: wrap;
+    display: flex;
     justify-content: center;
+    align-items: center;
     gap: 0.2rem;
-    min-height: 0.7rem;
+    width: 100%;
+    height: 0.75rem;
+    padding: 0 0.2rem;
   }
   .dot {
-    width: 0.62rem;
-    height: 0.62rem;
+    flex: 0 1 0.62rem;
+    min-width: 0.3rem;
+    aspect-ratio: 1;
     border-radius: 50%;
     border: 1px solid var(--border);
   }
@@ -487,46 +584,7 @@
   }
 
   /* ------------------------------------------------------------ the worn piece */
-  /* A small pill floating over the list, so it takes no room from it */
-  .dock {
-    position: absolute;
-    left: 50%;
-    bottom: 0.7rem;
-    z-index: 2;
-    transform: translateX(-50%);
-    max-width: calc(100% - 1.5rem);
-    padding: 0.35rem 0.45rem;
-    border: 1px solid var(--border-strong, var(--border));
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--surface-2) 88%, transparent);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: var(--shadow);
-  }
-  /* Room under the last row so the dock never hides it */
-  .scroll.docked {
-    padding-bottom: 3.4rem;
-  }
   .pic :global(svg) {
     color: var(--text-dim);
-  }
-  .colors {
-    display: flex;
-    gap: 0.4rem;
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding: 0.15rem;
-  }
-  .swatch {
-    flex: none;
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    padding: 0;
-  }
-  .swatch.on {
-    border-color: var(--accent);
-    outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   }
 </style>
