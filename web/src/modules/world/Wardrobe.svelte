@@ -201,7 +201,7 @@
         <button type="button" class="shoplink" onclick={() => onshop?.(slot)}><ShoppingBag size={15} />Buy more</button>
       </div>
       {#if pieces.length}
-        <div class="scroll">
+        <div class="scroll" class:docked={!!worn && !!wornEntry && wornEntry.colors.length > 1}>
         <div class="grid">
           <!-- Nothing: the slot left empty -->
           <button type="button" class="piece" class:worn={!worn} disabled={busy} onclick={() => worn && takeOff()}>
@@ -229,26 +229,26 @@
       {:else}
         <p class="faint none-yet">Nothing here yet. The shop has some.</p>
       {/if}
+      <!-- The colors you own of the worn piece, floating over the bottom of the list -->
+      {#if worn && wornEntry && wornEntry.colors.length > 1}
+        <div class="dock">
+          <div class="colors">
+            {#each wornEntry.colors as c (c)}
+              <button
+                type="button"
+                class="swatch"
+                class:on={worn.color === c}
+                style:background={COLOR_HEX[c] ?? '#888'}
+                aria-label={colorName(c)}
+                disabled={busy}
+                onclick={() => worn.color !== c && wear(wornEntry.item.id, c)}
+              ></button>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </section>
 
-    <!-- The colors you own of the worn piece, to switch between -->
-    {#if worn && wornEntry && wornEntry.colors.length > 1}
-      <div class="sheet">
-        <div class="colors">
-          {#each wornEntry.colors as c (c)}
-            <button
-              type="button"
-              class="swatch"
-              class:on={worn.color === c}
-              style:background={COLOR_HEX[c] ?? '#888'}
-              aria-label={colorName(c)}
-              disabled={busy}
-              onclick={() => worn.color !== c && wear(wornEntry.item.id, c)}
-            ></button>
-          {/each}
-        </div>
-      </div>
-    {/if}
   </div>
 {/if}
 
@@ -369,6 +369,7 @@
     padding: 0.2rem;
   }
   .closet {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
@@ -486,31 +487,40 @@
   }
 
   /* ------------------------------------------------------------ the worn piece */
-  .sheet {
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
-    padding: 0.7rem 0.8rem;
+  /* A small pill floating over the list, so it takes no room from it */
+  .dock {
+    position: absolute;
+    left: 50%;
+    bottom: 0.7rem;
+    z-index: 2;
+    transform: translateX(-50%);
+    max-width: calc(100% - 1.5rem);
+    padding: 0.35rem 0.45rem;
     border: 1px solid var(--border-strong, var(--border));
-    border-radius: var(--radius);
-    background:
-      linear-gradient(var(--surface-2), var(--surface-2)),
-      var(--bg);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     box-shadow: var(--shadow);
+  }
+  /* Room under the last row so the dock never hides it */
+  .scroll.docked {
+    padding-bottom: 3.4rem;
   }
   .pic :global(svg) {
     color: var(--text-dim);
   }
   .colors {
     display: flex;
-    gap: 0.45rem;
+    gap: 0.4rem;
     overflow-x: auto;
-    padding: 0.15rem 0.1rem 0.25rem;
+    scrollbar-width: none;
+    padding: 0.15rem;
   }
   .swatch {
     flex: none;
-    width: 2.1rem;
-    height: 2.1rem;
+    width: 1.75rem;
+    height: 1.75rem;
     border-radius: 50%;
     border: 2px solid var(--border);
     padding: 0;
