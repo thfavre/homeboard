@@ -129,22 +129,36 @@
 </div>
 
 <style>
+  /* The character fills the box from top to bottom: zoomed in, it runs off the edges of the box
+     (not of a smaller square inside it), under a soft inner shadow all around */
   .stage {
     display: grid;
     place-items: center;
-    padding: 0.8rem;
+    padding: 0;
     position: relative;
+    overflow: hidden;
     background:
       linear-gradient(rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.12)),
       var(--surface-2);
   }
+  .stage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow:
+      inset 0 0 14px rgba(0, 0, 0, 0.35),
+      inset 0 0 2px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+  }
   .stage canvas {
-    width: 10rem;
-    height: 10rem;
+    width: 11.6rem;
+    height: 11.6rem;
     image-rendering: pixelated;
   }
   .building {
     position: absolute;
+    z-index: 1;
     top: 0.6rem;
     right: 0.6rem;
     color: var(--text-dim);
