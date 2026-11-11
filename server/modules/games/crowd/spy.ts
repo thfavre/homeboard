@@ -329,20 +329,27 @@ export const spyHunt: GameFactory = (m) => {
       m.flash('smoke', { ms: SMOKE_MS });
       events.push({ k: 'gadget', g: 'smoke', x: smoke.x, y: smoke.y });
     } else {
-      // The spy jumps into someone else, far if possible; the body left behind falls as if shot
-      const others = actors.filter((a) => a.alive && a !== at);
-      const far = others.filter((a) => Math.hypot(a.x - at.x, a.y - at.y) > DECOY_MIN_DIST);
-      const next = pick(far.length ? far : others);
-      if (!next) return false;
-      at.alive = false;
-      at.anim = ANIM.dead;
-      at.player = null;
-      next.player = spy;
-      next.moving = false;
-      spyActor = next;
-      push = { x: 0, y: 0, at: 0 };
-      m.flash('kill');
-      events.push({ k: 'gadget', g: 'decoy', x: Math.round(at.x), y: Math.round(at.y), actor: at.i });
+      // The spy jumps into someone else, far if possible; the body left behind falls as if shot. It goes off
+      // a moment after the press (0.2 to 0.5 s), so the thumb on a phone and the fall on the TV do not line up
+      m.later(rand(200, 500), () => {
+        const from = spyActor;
+        // Shot meanwhile, or the round is over: too late
+        if (step !== 'hunt' || !from || !from.alive) return;
+        const others = actors.filter((a) => a.alive && a !== from);
+        const far = others.filter((a) => Math.hypot(a.x - from.x, a.y - from.y) > DECOY_MIN_DIST);
+        const next = pick(far.length ? far : others);
+        if (!next) return;
+        from.alive = false;
+        from.anim = ANIM.dead;
+        from.player = null;
+        next.player = spy;
+        next.moving = false;
+        spyActor = next;
+        push = { x: 0, y: 0, at: 0 };
+        m.flash('kill');
+        events.push({ k: 'gadget', g: 'decoy', x: Math.round(from.x), y: Math.round(from.y), actor: from.i });
+        m.publish();
+      });
     }
     m.publish();
     return true;
