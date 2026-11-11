@@ -54,6 +54,10 @@ const FUR = ['fur_brown', 'fur_black', 'fur_grey', 'fur_white', 'fur_tan', 'fur_
 const WING = ['white', 'black', 'gray', 'blonde', 'red', 'blue', 'green', 'purple', 'pink', 'gold'] as const;
 /** Frame colors of the glasses */
 const FRAME = ['black', 'brown', 'gray', 'red', 'blue', 'pink', 'gold', 'silver'] as const;
+/** Metal and gem pairs of the amulets (the swatch is the gem) */
+const AMULET = ['gold_red', 'silver_blue', 'bronze_green', 'copper_orange', 'steel_purple', 'brass_yellow'] as const;
+/** Gem colors of the gem pendants */
+const GEM = ['blue', 'green', 'orange', 'purple', 'red', 'yellow'] as const;
 
 /** A color list with the item's own color moved first (a red Santa hat, a steel necklace) */
 const startingWith = (color: string, list: readonly string[]): string[] => [color, ...list.filter((c) => c !== color)];
@@ -78,6 +82,8 @@ export const COLOR_HEX: Record<string, string> = {
   tiara_gold: '#d9a732', tiara_silver: '#aeb4be', tiara_bronze: '#8c6a1e', tiara_purple: '#7141b2',
   base_black: '#22282a', base_gray: '#585561', base_red: '#82171c', base_teal: '#156c99', base_yellow: '#d99431',
   dark: '#2b2a33',
+  pirate: '#a08a4a', gold_red: '#c2242c', silver_blue: '#3c6cd0', bronze_green: '#2f9a3e', copper_orange: '#e0761f',
+  steel_purple: '#8a3fc0', brass_yellow: '#e8c22a',
 };
 
 /** Display name of a color id ("base_brown" => "Base brown") */
@@ -214,12 +220,26 @@ export const CATALOG: WardrobeItem[] = [
   // ------------------------------------------------------------ neck
   { id: 'necktie', name: 'Necktie', slot: 'neck', def: 'headwear/neck/neck_necktie', tier: 'common', colors: CLOTH },
   { id: 'bowtie', name: 'Bow tie', slot: 'neck', def: 'headwear/neck/neck_bowtie', tier: 'common', colors: CLOTH },
+  { id: 'big_bowtie', name: 'Big bow tie', slot: 'neck', def: 'headwear/neck/neck_bowtie2', tier: 'common', colors: CLOTH },
   { id: 'scarf', name: 'Scarf', slot: 'neck', def: 'headwear/neck/neck_scarf', tier: 'common', colors: CLOTH },
   { id: 'beaded_necklace', name: 'Beaded necklace', slot: 'neck', def: 'headwear/neck/neck_necklace_beaded_small', tier: 'common', colors: startingWith('steel', METAL) },
   { id: 'cravat', name: 'Cravat', slot: 'neck', def: 'headwear/neck/neck_cravat', tier: 'fancy', colors: CLOTH },
   { id: 'jabot', name: 'Jabot', slot: 'neck', def: 'headwear/neck/neck_jabot', tier: 'fancy', colors: CLOTH },
+  { id: 'large_beads', name: 'Large beaded necklace', slot: 'neck', def: 'headwear/neck/neck_necklace_beaded_large', tier: 'fancy', colors: startingWith('steel', METAL) },
   { id: 'necklace', name: 'Necklace', slot: 'neck', def: 'headwear/neck/neck_necklace_simple', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
   { id: 'chain', name: 'Chain', slot: 'neck', def: 'headwear/neck/neck_necklace_chain', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
+  { id: 'pendant', name: 'Pendant', slot: 'neck', def: 'headwear/neck/neck_necklace', tier: 'fancy', colors: [...startingWith('steel', METAL), 'pirate'], noSit: true, noCheer: true },
+  { id: 'ring_charm', name: 'Ring charm', slot: 'neck', def: 'headwear/neck/charms/neck_charm_ring', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
+  { id: 'box_charm', name: 'Box charm', slot: 'neck', def: 'headwear/neck/charms/neck_charm_box', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
+  { id: 'star_charm', name: 'Star charm', slot: 'neck', def: 'headwear/neck/charms/neck_charm_star', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
+  { id: 'pearl_pendant', name: 'Pearl pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_pearl', tier: 'epic', colors: GEM, noSit: true, noCheer: true },
+  { id: 'round_gem', name: 'Round gem pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_round', tier: 'epic', colors: GEM, noSit: true, noCheer: true },
+  { id: 'square_gem', name: 'Square gem pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_princess', tier: 'epic', colors: GEM, noSit: true, noCheer: true },
+  { id: 'teardrop_gem', name: 'Teardrop gem pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_pear', tier: 'epic', colors: GEM, noSit: true, noCheer: true },
+  { id: 'star_amulet', name: 'Star amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_star', tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
+  { id: 'cross_amulet', name: 'Cross amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_cross', tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
+  { id: 'drop_amulet', name: 'Drop amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_dangle', tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
+  { id: 'spider_amulet', name: 'Spider amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_spider', tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
 
   // ------------------------------------------------------------ dresses (replace top and bottom)
   { id: 'slit_dress', name: 'Slit dress', slot: 'dress', def: 'torso/dresses/dress_slit', tier: 'fancy', colors: CLOTH, bodies: ['female'], noSit: true, noCheer: true },
