@@ -168,13 +168,6 @@
     const done = await attempt(() => rpc<WardrobeMine>('world', 'wear', { outfit: candidate() }), 'On you');
     if (done) wd = done;
   }
-
-  async function takeOff() {
-    const outfit: Outfit = { ...(wd?.outfit ?? {}) };
-    delete outfit[slot];
-    const done = await attempt(() => rpc<WardrobeMine>('world', 'wear', { outfit }));
-    if (done) wd = done;
-  }
 </script>
 
 {#if !shop}
@@ -238,7 +231,7 @@
             <span class="tier {openItem.tier}">{TIER_NAMES[openItem.tier]}</span>
           </div>
           {#if isWorn}
-            <button type="button" class="btn" onclick={takeOff}><X size={18} />Take off</button>
+            <span class="wearing"><Check size={16} />Wearing</span>
           {:else if isOwned}
             <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={wear}><Check size={18} />Wear</button>
           {:else}
@@ -478,6 +471,15 @@
   }
   .name {
     font-weight: 600;
+  }
+  /* Bought pieces are worn at once; taking them off happens in the wardrobe */
+  .wearing {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0 0.4rem;
+    font-weight: 600;
+    color: var(--accent);
   }
   .tier {
     font-size: 0.78rem;
