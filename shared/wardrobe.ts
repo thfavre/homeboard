@@ -77,6 +77,7 @@ export const COLOR_HEX: Record<string, string> = {
   crown_gold: '#d9a732', crown_red: '#ab1e1e', crown_blue: '#3c49ad', crown_gray: '#818b8b',
   tiara_gold: '#d9a732', tiara_silver: '#aeb4be', tiara_bronze: '#8c6a1e', tiara_purple: '#7141b2',
   base_black: '#22282a', base_gray: '#585561', base_red: '#82171c', base_teal: '#156c99', base_yellow: '#d99431',
+  dark: '#2b2a33',
 };
 
 /** Display name of a color id ("base_brown" => "Base brown") */
@@ -197,6 +198,8 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'star_wizard_hat', name: 'Star wizard hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_celestial', tier: 'legendary', colors: CLOTH },
 
   // ------------------------------------------------------------ face
+  { id: 'small_eyepatch', name: 'Small eyepatch', slot: 'face', def: 'headwear/accessories/eyepatch/facial_eyepatch_small_left', tier: 'cheap', colors: CLOTH },
+  { id: 'earring', name: 'Earring', slot: 'face', def: 'headwear/accessories/earrings/facial_earring_left', tier: 'cheap', colors: ['base', ...METAL] },
   { id: 'glasses', name: 'Glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses', tier: 'common', colors: FRAME },
   { id: 'round_glasses', name: 'Round glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses_round', tier: 'common', colors: FRAME },
   { id: 'nerd_glasses', name: 'Nerd glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses_nerd', tier: 'common', colors: FRAME },
@@ -204,6 +207,8 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'halfmoon_glasses', name: 'Half-moon glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses_halfmoon', tier: 'fancy', colors: FRAME },
   { id: 'sunglasses', name: 'Sunglasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses_sunglasses', tier: 'fancy', colors: ['sunglasses', ...FRAME] },
   { id: 'eyepatch', name: 'Eyepatch', slot: 'face', def: 'headwear/accessories/eyepatch/facial_eyepatch_left', tier: 'fancy', colors: ['base', 'black', 'brown', 'red'] },
+  { id: 'strap_eyepatch', name: 'Strap eyepatch', slot: 'face', def: 'headwear/accessories/eyepatch/facial_eyepatch2_left', tier: 'fancy', colors: CLOTH },
+  { id: 'plain_mask', name: 'Plain mask', slot: 'face', def: 'headwear/accessories/facial_mask_plain', tier: 'fancy', colors: ['dark', ...CLOTH, ...METAL] },
   { id: 'monocle', name: 'Monocle', slot: 'face', def: 'headwear/accessories/monocle/facial_monocle_left', tier: 'epic', colors: ['steel', 'gold', 'silver'] },
 
   // ------------------------------------------------------------ neck
