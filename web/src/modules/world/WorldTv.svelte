@@ -324,13 +324,19 @@
               const right = Math.min(64, (info?.body.right ?? 44) + 7);
               const col = left + Math.floor((e / CUT_MS) * (right - left + 1));
               const cutX = Math.round(q.x + (col - BODY.centerX) * SPRITE_SCALE);
-              drawPerson(q, s.img);
-              gg.save();
-              gg.beginPath();
-              gg.rect(cutX, place.window.y, place.window.x + place.window.w - cutX, place.window.h);
-              gg.clip();
-              drawPerson(q, s.prev);
-              gg.restore();
+              // Each look only on its side of the scissors: the new hair shows where the old one is cut away, never under it
+              const { x: wx, y: wy, w: ww, h: wh } = place.window;
+              for (const [sheet, x0, x1] of [
+                [s.img, wx, cutX],
+                [s.prev, cutX, wx + ww],
+              ] as const) {
+                gg.save();
+                gg.beginPath();
+                gg.rect(x0, wy, x1 - x0, wh);
+                gg.clip();
+                drawPerson(q, sheet);
+                gg.restore();
+              }
               // What the scissors went through since the last frame falls off, in the old hair's colors
               const done = cutCols.get(p.id) ?? left - 1;
               if (col > done && s.img) {
