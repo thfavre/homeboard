@@ -29,6 +29,19 @@
   const KEEPS_COLOR: Slot[] = ['top', 'bottom', 'feet'];
   /** Item pictures by id, fetched per slot and kept */
   let icons = $state<Record<string, string>>({});
+  /** Pictures of the owned pieces in their own colors, keyed "id:color" */
+  let colored = $state<Record<string, string>>({});
+
+  /** An owned item's card shows the color it opens in (worn, else owned); others their own color */
+  function pictureOf(id: string): string | undefined {
+    const worn = wd?.outfit[slot];
+    const color = worn?.id === id ? worn.color : (wd?.owned ?? []).find((o) => o.id === id)?.color;
+    return (color && colored[`${id}:${color}`]) || icons[id];
+  }
+  const loadColored = () =>
+    rpc<Record<string, string>>('world', 'ownedIcons')
+      .then((urls) => (colored = urls))
+      .catch(() => {});
   let url = $state<string | null>(null);
   let sheet = $state<SheetInfo | null>(null);
   let buildingCount = $state(0);
@@ -143,6 +156,7 @@
       const mine = await rpc<{ body: 'male' | 'female' } | null>('world', 'mine').catch(() => null);
       body = mine?.body ?? null;
       wd = await rpc<WardrobeMine>('world', 'wardrobe').catch(() => null);
+      void loadColored();
       try {
         const draft = JSON.parse(storageGet(DRAFT_KEY) ?? 'null');
         if (draft?.id === hb.me?.id) {
@@ -172,6 +186,7 @@
     const bought = await attempt(() => rpc<WardrobeMine>('world', 'buy', { id: piece.id, color: piece.color }));
     if (!bought) return;
     wd = bought;
+    void loadColored();
     await wear();
   }
 
@@ -215,8 +230,8 @@
       {#each items as i (i.id)}
         <button type="button" class="item" class:on={open?.id === i.id} onclick={() => show(i.id)}>
           <span class="pic">
-            {#if icons[i.id]}
-              <img src={icons[i.id]} alt={i.name} loading="lazy" />
+            {#if pictureOf(i.id)}
+              <img src={pictureOf(i.id)} alt={i.name} loading="lazy" />
             {/if}
           </span>
           <span class="iname">{i.name}</span>
