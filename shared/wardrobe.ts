@@ -246,6 +246,7 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'bodice_dress', name: 'Bodice dress', slot: 'dress', def: 'torso/dresses/dress_bodice', tier: 'fancy', colors: CLOTH, bodies: ['female'], noSit: true, noCheer: true },
   { id: 'sash_dress', name: 'Sash dress', slot: 'dress', def: 'torso/dresses/dress_sash', tier: 'epic', colors: CLOTH, bodies: ['female'], noSit: true, noCheer: true },
   { id: 'kimono', name: 'Kimono', slot: 'dress', def: 'torso/dresses/kimono/dress_kimono', tier: 'epic', colors: CLOTH, bodies: ['female'], noSit: true, noCheer: true },
+  { id: 'split_kimono', name: 'Split kimono', slot: 'dress', def: 'torso/dresses/kimono/dress_kimono_split', tier: 'epic', colors: CLOTH, bodies: ['female'], noSit: true, noCheer: true },
 
   // ------------------------------------------------------------ back
   { id: 'cat_tail', name: 'Cat tail', slot: 'back', def: 'body/tails/tail_cat', tier: 'epic', colors: FUR },
