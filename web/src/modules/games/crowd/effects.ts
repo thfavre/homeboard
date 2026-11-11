@@ -1,4 +1,5 @@
-import { WORLD } from '$shared/crowd.ts';
+import { SPRITE_SCALE, WORLD } from '$shared/crowd.ts';
+import type { Env } from './scene.ts';
 
 /**
  * Everything on the crowd field that is not a character: particles (smoke, dust, sparks, the muzzle
@@ -422,9 +423,13 @@ export class Pigeons {
     }
   }
 
-  /** The birds, each with its feet at (x, y) (the draw order follows y with the characters is not needed: they are small) */
-  draw(g: CanvasRenderingContext2D) {
+  /**
+   * The birds, each with its feet at (x, y): pigeon sprites walking and pecking, black birds flying off.
+   * Without the sprites, little drawn birds.
+   */
+  draw(g: CanvasRenderingContext2D, env: Env | null) {
     const now = performance.now();
+    if (env) return this.drawSprites(g, env, now);
     const px = 4;
     for (const b of this.birds) {
       if (b.state === 'land' && now < b.next) continue;
@@ -457,5 +462,103 @@ export class Pigeons {
         p(1, -1, 1, 1, '#c8775a');
       }
     }
+  }
+
+  private drawSprites(g: CanvasRenderingContext2D, env: Env, now: number) {
+    const size = 32 * SPRITE_SCALE;
+    for (const b of this.birds) {
+      if (b.state === 'land' && now < b.next) continue;
+      const flying = b.state === 'fly' || b.z > 0;
+      const x = Math.round(b.x - size / 2);
+      const y = Math.round(b.y - b.z - size + 6);
+      // Shadow on the ground
+      g.fillStyle = 'rgba(0,0,0,0.22)';
+      g.beginPath();
+      g.ellipse(b.x, b.y + 2, 7, 3, 0, 0, Math.PI * 2);
+      g.fill();
+      if (flying) {
+        // Black birds' flying rows: 0 to the left, 3 to the right
+        const f = Math.floor(now / 70 + b.shade * 10) % 3;
+        g.drawImage(env['bird-black'], f * 32, (b.dir < 0 ? 0 : 3) * 32, 32, 32, x, y, size, size);
+      } else {
+        // Pigeon rows: 1 to the right, 3 to the left; the middle frame stands still, the others walk (and peck)
+        const walking = b.state === 'walk';
+        const peck = !walking && Math.sin(now / 160 + b.shade * 9) > 0.7;
+        const f = walking ? [0, 1, 2, 1][Math.floor(now / 120 + b.shade * 7) % 4] : peck ? 0 : 1;
+        g.drawImage(env.pigeon, f * 32, (b.dir < 0 ? 3 : 1) * 32, 32, 32, x, y, size, size);
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------ a cat
+
+/**
+ * A cat on the sidewalk: it lies in the sun, now and then gets up and strolls a little further, and
+ * runs off when a shot goes off near it (coming back a while later).
+ */
+export class Cat {
+  private x: number;
+  private dir: 1 | -1 = 1;
+  private state: 'lie' | 'walk' | 'run' | 'gone' = 'lie';
+  private next = performance.now() + rand(6000, 14000);
+  private tx = 0;
+  private color = Math.floor(rand(0, 4));
+
+  constructor(
+    private y: number,
+    private x0: number,
+    private x1: number,
+  ) {
+    this.x = rand(x0, x1);
+  }
+
+  scare(x: number, y: number, r: number) {
+    if (this.state === 'gone' || this.state === 'run' || Math.hypot(this.x - x, this.y - y) > r) return;
+    this.state = 'run';
+    this.dir = this.x < x ? -1 : 1;
+  }
+
+  update(dt: number) {
+    const now = performance.now();
+    if (this.state === 'run') {
+      this.x += this.dir * 260 * dt;
+      if (this.x < -60 || this.x > WORLD.w + 60) {
+        this.state = 'gone';
+        this.next = now + rand(15000, 30000);
+      }
+    } else if (this.state === 'gone') {
+      if (now > this.next) {
+        // Back from a side, strolling in
+        this.dir = Math.random() < 0.5 ? 1 : -1;
+        this.x = this.dir > 0 ? -40 : WORLD.w + 40;
+        this.tx = rand(this.x0, this.x1);
+        this.state = 'walk';
+      }
+    } else if (this.state === 'walk') {
+      const d = this.tx - this.x;
+      if (Math.abs(d) < 2) {
+        this.state = 'lie';
+        this.next = now + rand(8000, 20000);
+      } else this.x += Math.sign(d) * 34 * dt;
+    } else if (now > this.next) {
+      this.tx = Math.min(this.x1, Math.max(this.x0, this.x + rand(-260, 260)));
+      this.dir = this.tx < this.x ? -1 : 1;
+      this.state = 'walk';
+    }
+  }
+
+  draw(g: CanvasRenderingContext2D, env: Env | null) {
+    if (!env || this.state === 'gone') return;
+    const now = performance.now();
+    const size = 32 * SPRITE_SCALE;
+    // Rows: 0 to the right (lying in column 3), 3 to the left; four colors side by side
+    const row = this.dir > 0 ? 0 : 3;
+    const col = this.state === 'lie' ? 3 : Math.floor(now / (this.state === 'run' ? 70 : 140)) % 3;
+    g.fillStyle = 'rgba(0,0,0,0.22)';
+    g.beginPath();
+    g.ellipse(this.x, this.y + 1, 14, 4, 0, 0, Math.PI * 2);
+    g.fill();
+    g.drawImage(env.cats, (this.color * 4 + col) * 32, row * 32, 32, 32, Math.round(this.x - size / 2), Math.round(this.y - size + 6), size, size);
   }
 }

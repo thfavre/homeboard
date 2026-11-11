@@ -96,7 +96,7 @@
   <span class="label">Light flashes <span class="faint small">A white flash on each shot, red on a kill, and the gadgets on the WLED lights. They go back to what they were showing right after</span></span>
   <Toggle checked={st.sniperLights} onchange={(v) => set({ sniperLights: v })} label="Light flashes" />
 </div>
-<p class="faint small">Characters: Liberated Pixel Cup sprites (OGA-BY and CC0), by their many authors. <a href="/crowd/CREDITS.txt" target="_blank" rel="noopener">See the credits</a></p>
+<p class="faint small">Characters and places: Liberated Pixel Cup style art (OGA-BY, CC-BY and CC0), by their many authors. Credits: <a href="/crowd/CREDITS.txt" target="_blank" rel="noopener">characters</a>, <a href="/crowd/env/CREDITS.txt" target="_blank" rel="noopener">places</a></p>
 
 <style>
   .group {

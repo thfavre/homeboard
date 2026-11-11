@@ -1,0 +1,113 @@
+Environment art of the crowd games (city square, street, props, ambient animals)
+Downloaded unchanged except for the file names. Each entry below names the files, the authors,
+the license we use them under, and where they come from. Where a page offers several licenses,
+the one named here is the one we chose (never CC-BY-SA or GPL).
+
+LPC Modern Streets
+  Files: street-sidewalk.png (sidewalk_terrain.png), street-road.png (base_road_tile.png),
+         street-road-cracked.png (cracked_road.png), street-cracks.png (cracks_transparent.png),
+         street-gutter.png (rain_gutter_terrain.png), street-gutter-drains.png (rain_gutter_drain.png),
+         street-markings.png (traffic_markings.png), street-manhole.png (manhole_and_cover.png),
+         street-cones.png (traffic_cones.png), street-trash-bins.png (trash_bins.png),
+         street-traffic-lights.png (traffic_lights.png), street-sign-poles.png (sign_poles.png),
+         street-sign-bases.png (traffic_sign_base.png), street-sign-pictograms.png (traffic_signs_pictograms.png)
+  License: CC0
+  Authors: Faufilage
+  https://opengameart.org/content/lpc-modern-streets
+
+Mage City Arcanos
+  Files: magecity.png (magecity_1.png)
+  License: CC0
+  Authors: Hyptosis
+  Notes: credit not required, but the author appreciates "Hyptosis" or a link to www.lorestrome.com
+  https://opengameart.org/content/mage-city-arcanos
+
+[LPC] Water Fountain
+  Files: fountain-anim.png (WaterFountain.png)
+  License: CC-BY 3.0
+  Authors: Curt, Lanea Zimmerman (Sharm), William.Thompsonj
+  https://opengameart.org/content/lpc-water-fountain
+
+LPC Revised (4-Season Terrain), terrain, trees, bushes, flowers and water effects
+  Files: grass.png (Terrain/Grass (Summer).png), water-pond-anim.png (Terrain/Grass-Shallows (Summer).png),
+         tree-canopies.png (Terrain Objects/Trees, Generic.png), tree-trunks.png (Terrain Objects/Trees, Trunks.png),
+         tree-shadows.png (Terrain Objects/Trees, Generic - Shadows.png),
+         bush-leafy.png (Terrain Objects/Bush - Seasonal A.png), bush-round.png (Terrain Objects/Bush - Seasonal B.png),
+         bush-cypress.png (Terrain Objects/Bush - Evergreen A.png), flowers.png (Terrain Objects/Flowers - Garden.png),
+         water-sparkle-anim.png (FX/Water Reflections.png), water-ripple-anim.png (FX/WaterRipple.png)
+  License: OGA-BY 3.0
+  Authors: Eliza Wyatt (ElizaWy, DeathsDarling), Lanea Zimmerman (Sharm), Hyptosis, bluecarrot16
+  Notes: grass, water and trees originally by Lanea Zimmerman, edited, animated and recolored by Eliza Wyatt;
+         bushes partly by Hyptosis; flowers by bluecarrot16 (rose bush, CC0), Sharm and Hyptosis, recolored by
+         Eliza Wyatt; water effects by Eliza Wyatt. Hyptosis allowed his CC-BY 3.0 work to be used under OGA-BY 3.0.
+  https://opengameart.org/content/lpc-revised-4-season-terrain
+  https://github.com/ElizaWy/LPC/tree/main/Terrain
+  https://github.com/ElizaWy/LPC/tree/main/FX
+  https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+
+LPC Revised, floors
+  Files: pave-tile-small.png (Structure/Floor/Tile A.png), pave-stone-slabs.png (Structure/Floor/Tile C.png),
+         pave-herringbone.png (Structure/Floor/Herringbone A.png),
+         pave-stone-diamond.png (Structure/Floor/Diamond Tile C.png)
+  License: OGA-BY 3.0
+  Authors: Eliza Wyatt (ElizaWy), Lanea Zimmerman (Sharm)
+  Notes: Tile A, Tile C and Herringbone A by Eliza Wyatt; Diamond Tile C by Lanea Zimmerman, recolored by Eliza Wyatt
+  https://github.com/ElizaWy/LPC/tree/main/Structure/Floor
+  https://opengameart.org/content/lpc-dungeon-elements
+
+LPC Revised, pool
+  Files: pool.png (Structure/Misc/Pool A.png)
+  License: OGA-BY 3.0
+  Authors: Lanea Zimmerman (Sharm), Eliza Wyatt (ElizaWy)
+  https://github.com/ElizaWy/LPC/tree/main/Structure/Misc
+  https://opengameart.org/content/lpc-arabic-elements
+
+LPC Revised, furniture and small items
+  Files: lamp-post.png (Objects/Furniture/Lighting, Outdoors.png), planters.png (Objects/Furniture/Planter.png),
+         barrels.png (Objects/Furniture/Barrel.png), crates.png (Objects/Furniture/Crate.png),
+         bins.png (Objects/Furniture/Bin.png), market-tables.png (Objects/Furniture/Table, Rough Wood.png),
+         baskets.png (Objects/Small Items/Baskets A.png)
+  License: OGA-BY 3.0
+  Authors: Lanea Zimmerman (Sharm), Eliza Wyatt (ElizaWy), bluecarrot16
+  Notes: lamp post, planters, barrels and tables originally by Lanea Zimmerman, recolored and edited by Eliza Wyatt;
+         crates and bins by Eliza Wyatt; baskets by bluecarrot16, edited and recolored by Eliza Wyatt
+  https://github.com/ElizaWy/LPC/tree/main/Objects/Furniture
+  https://github.com/ElizaWy/LPC/tree/main/Objects/Small%20Items
+  https://opengameart.org/content/lpc-modified-base-tiles
+  https://opengameart.org/content/lpc-interior-castle-tiles
+  https://opengameart.org/content/lpc-tailor
+  https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+
+LPC Revised, buildings
+  Files: house-brick-a.png (Structure/Structures/Brick House A.png), house-brick-b.png (Brick House B.png),
+         house-paneled.png (Paneled House A.png), market-awnings.png (Structure/Windows/Window Awnings A.png)
+  License: OGA-BY 3.0
+  Authors: Lanea Zimmerman (Sharm), Eliza Wyatt (ElizaWy)
+  https://github.com/ElizaWy/LPC/tree/main/Structure/Structures
+  https://github.com/ElizaWy/LPC/tree/main/Structure/Windows
+  https://opengameart.org/content/lpc-adobe-building-set
+
+[LPC] Birds
+  Files: bird-white.png (bird_2_white.png), bird-black.png (bird_2_black.png), bird-brown.png (bird_2_brown_1.png),
+         bird-sparrow.png (bird_3_sparrow.png)
+  License: OGA-BY 3.0
+  Authors: bluecarrot16, commissioned by castelonia
+  Notes: the author asks for a link back to the OpenGameArt page
+  https://opengameart.org/content/lpc-birds
+
+Pigeon (Blue Bird Rework)
+  Files: pigeon.png
+  License: OGA-BY 3.0
+  Authors: Onno Timmerman (Enquest), Jordan Irwin (AntumDeluge)
+  https://opengameart.org/content/pigeon-blue-bird-rework
+
+[LPC] Cats and Dogs
+  Files: cats.png (cat_0.png), dogs.png (dog_2.png)
+  License: OGA-BY 3.0
+  Authors: bluecarrot16
+  https://opengameart.org/content/lpc-cats-and-dogs
+
+License texts:
+  CC0 1.0:      https://creativecommons.org/publicdomain/zero/1.0/
+  CC-BY 3.0:    https://creativecommons.org/licenses/by/3.0/
+  OGA-BY 3.0:   https://opengameart.org/content/oga-by-30-faq

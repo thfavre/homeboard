@@ -6,7 +6,8 @@
   import { drawCharacter, loadSheets, type Sheets } from './sprites.ts';
   import { crowdSound } from './sound.ts';
   import '@fontsource/press-start-2p';
-  import { CloudShadows, Effects, Pigeons } from './effects.ts';
+  import { Cat, CloudShadows, Effects, Pigeons } from './effects.ts';
+  import { loadEnv, squareGround, squareProps, streetGround, streetProps, type Env, type Prop } from './scene.ts';
   import { RACE_AREA, SPY_AREA, SMOKE_MS } from '$shared/crowd.ts';
 
   /**
@@ -68,6 +69,11 @@
   const clouds = new CloudShadows();
   // Pigeons on the square, or on the sidewalk and the street of the race
   const pigeons = untrack(() => new Pigeons(kind === 'spy' ? 14 : 12, kind === 'spy' ? SPY_AREA : { x0: 60, x1: WORLD.w - 60, y0: 30, y1: RACE_AREA.y1 }));
+  // A cat lazing on the sidewalk
+  const cat = untrack(() => (kind === 'spy' ? new Cat(158, 120, WORLD.w - 120) : new Cat(150, 80, WORLD.w - 80)));
+  /** The environment art (null until loaded, or when it cannot be: the places are drawn plain) */
+  let env: Env | null = null;
+  let standingProps: Prop[] = [];
   /** The pixel font of the game's text, once it is loaded (the canvas cannot wait for it) */
   const PIXEL = '"Press Start 2P", monospace';
   let fontReady = $state(false);
@@ -86,6 +92,7 @@
       case 'shot':
         fx.shot(e.x, e.y, e.hit >= 0);
         pigeons.scare(e.x, e.y, 260);
+        cat.scare(e.x, e.y, 400);
         crowdSound('shot', soundVolume);
         break;
       case 'kill': {
@@ -129,6 +136,10 @@
   onMount(() => {
     let raf = 0;
     void loadSheets().then((s) => (sheets = s));
+    void loadEnv().then((e) => {
+      env = e;
+      if (e) standingProps = kind === 'spy' ? squareProps(e) : streetProps(e);
+    });
     const off = onEvent<CrowdFrame>('games', 'crowd', (f) => {
       // A new round: everyone is somewhere else, start over (and fade in from black)
       if (frames.length && frames[frames.length - 1].r !== f.r) {
@@ -171,7 +182,7 @@
   }
 
   function background(): HTMLCanvasElement {
-    const key = `${kind}:${startX}:${finishX}:${fontReady}`;
+    const key = `${kind}:${startX}:${finishX}:${fontReady}:${!!env}`;
     if (bg && bgKind === key) return bg;
     const c = document.createElement('canvas');
     const k = 1.5;
@@ -179,7 +190,12 @@
     c.height = WORLD.h * k;
     const g = c.getContext('2d')!;
     g.scale(k, k);
-    if (kind === 'race') drawStreet(g);
+    if (env) {
+      // The place built from the art at the sprites' size, then scaled up with sharp pixels
+      const ground = kind === 'race' ? streetGround(env, startX, finishX, PIXEL) : squareGround(env, cases);
+      g.imageSmoothingEnabled = false;
+      g.drawImage(ground, 0, 0, ground.width * SPRITE_SCALE, ground.height * SPRITE_SCALE);
+    } else if (kind === 'race') drawStreet(g);
     else drawPlaza(g);
     bg = c;
     bgKind = key;
@@ -536,7 +552,9 @@
     // Dust on the ground and the pigeons, under everyone
     fx.draw(g, false, PIXEL);
     pigeons.update(step, people.filter((p) => p.anim !== ANIM.dead));
-    pigeons.draw(g);
+    pigeons.draw(g, env);
+    cat.update(step);
+    cat.draw(g, env);
     // The fallen first (on the ground), then from the back to the front
     people.sort((a, b) => (a.anim === ANIM.dead ? 0 : 1) - (b.anim === ANIM.dead ? 0 : 1) || a.y - b.y);
 
@@ -567,12 +585,22 @@
       }
     }
 
-    for (const p of people) {
+    // The characters and the things that stand up (trees, lamps, the fountain), back to front together,
+    // so people walk behind and in front of them; the fallen lie on the ground under everything
+    const imgs = kind === 'spy' ? sheets?.suits : sheets?.people;
+    const drawPerson = (p: (typeof people)[number]) => {
       const l = locals[p.i];
       const look = looks[p.i] ?? 0;
-      const imgs = kind === 'spy' ? sheets?.suits : sheets?.people;
       const img = imgs?.length ? imgs[look % imgs.length] : undefined;
       drawCharacter(g, sheets, img, p.x, p.y, { anim: p.anim, dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, (look * 47) % 360);
+    };
+    let pi = 0;
+    while (pi < people.length && people[pi].anim === ANIM.dead) drawPerson(people[pi++]);
+    let qi = 0;
+    const standing = standingProps;
+    while (pi < people.length || qi < standing.length) {
+      if (qi < standing.length && (pi >= people.length || standing[qi].y <= people[pi].y)) standing[qi++].draw(g, now);
+      else drawPerson(people[pi++]);
     }
 
     // Smoke, the flashes and sparks over everyone, then the cloud shadows drifting over the whole place

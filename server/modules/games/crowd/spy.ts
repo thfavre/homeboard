@@ -6,6 +6,7 @@ import {
   SPY_AREA,
   SPY_CASES,
   SPY_GADGETS,
+  SPY_OBSTACLES,
   SPY_POINTS,
   SUIT_LOOKS,
   SPY_WALK_UPS,
@@ -18,7 +19,7 @@ import {
   type SpyView,
 } from '../../../../shared/crowd.ts';
 import { shuffle, type GameFactory } from '../engine.ts';
-import { TICK_MS, aimOut, dealLooks, dirOf, hitTest, moveAim, newActor, newAim, pack, pick, rand, stick, type Actor, type Aim } from './sim.ts';
+import { TICK_MS, aimOut, blocked, dealLooks, dirOf, hitTest, keepOut, moveAim, newActor, newAim, pack, pick, rand, stick, type Actor, type Aim } from './sim.ts';
 
 /** The spy picks a gadget and finds their character this long before the snipers can shoot */
 const PICK_MS = 12_000;
@@ -89,7 +90,14 @@ export const spyHunt: GameFactory = (m) => {
     const n = Math.max(1, s.spyNpcs + 1);
     looks = dealLooks(n, Math.min(SUIT_LOOKS, Math.max(1, s.spyLooks)));
     actors = looks.map((look, i) => {
-      const a = newActor(i, look, rand(SPY_AREA.x0, SPY_AREA.x1), rand(SPY_AREA.y0, SPY_AREA.y1), pick([0, 1, 2, 3] as const));
+      // Nobody starts inside the fountain or a tree
+      let x = rand(SPY_AREA.x0, SPY_AREA.x1);
+      let y = rand(SPY_AREA.y0, SPY_AREA.y1);
+      for (let k = 0; k < 20 && blocked(x, y, SPY_OBSTACLES, 12); k++) {
+        x = rand(SPY_AREA.x0, SPY_AREA.x1);
+        y = rand(SPY_AREA.y0, SPY_AREA.y1);
+      }
+      const a = newActor(i, look, x, y, pick([0, 1, 2, 3] as const));
       // The crowd comes to life a little at a time
       a.next = now + rand(0, 2500);
       a.tx = a.x;
@@ -162,8 +170,12 @@ export const spyHunt: GameFactory = (m) => {
       // Somewhere new: often not far, sometimes across the square
       const far = Math.random() < 0.35;
       const r = far ? 900 : rand(120, 420);
-      a.tx = Math.min(SPY_AREA.x1, Math.max(SPY_AREA.x0, a.x + rand(-r, r)));
-      a.ty = Math.min(SPY_AREA.y1, Math.max(SPY_AREA.y0, a.y + rand(-r, r) * 0.6));
+      // Not inside the fountain or a tree: another spot then
+      for (let k = 0; k < 12; k++) {
+        a.tx = Math.min(SPY_AREA.x1, Math.max(SPY_AREA.x0, a.x + rand(-r, r)));
+        a.ty = Math.min(SPY_AREA.y1, Math.max(SPY_AREA.y0, a.y + rand(-r, r) * 0.6));
+        if (!blocked(a.tx, a.ty, SPY_OBSTACLES, 16)) break;
+      }
     }
     // A stop on the way, once in a while
     a.next = now + (Math.random() < 0.25 ? rand(1500, 4000) : 60_000);
@@ -176,6 +188,11 @@ export const spyHunt: GameFactory = (m) => {
     a.x = Math.min(SPY_AREA.x1, Math.max(SPY_AREA.x0, a.x + (dx / len) * d));
     a.y = Math.min(SPY_AREA.y1, Math.max(SPY_AREA.y0, a.y + (dy / len) * d));
     a.dir = dirOf(dx, dy);
+    // Bumped into the fountain, a tree or a lamp: stay at its edge. A passer-by changes its mind
+    if (keepOut(a, SPY_OBSTACLES) && a.player === null) {
+      a.moving = false;
+      a.next = Date.now() + rand(300, 1200);
+    }
   };
 
   const tick = () => {

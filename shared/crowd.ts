@@ -144,6 +144,33 @@ export const SPY_CASES: { x: number; y: number }[] = [
   { x: 190, y: 800 },
   { x: 1410, y: 800 },
 ];
+/**
+ * The fixed things on the spy square, in world units (the TV draws them, the server makes people walk
+ * around them): the fountain in the middle, the trees and the lamp posts. `y` is where they stand.
+ */
+export const SPY_SCENE = {
+  fountain: { x: 800, y: 545 },
+  trees: [
+    { x: 430, y: 440 },
+    { x: 1170, y: 440 },
+    { x: 480, y: 780 },
+    { x: 1120, y: 780 },
+  ],
+  lamps: [
+    { x: 620, y: 300 },
+    { x: 980, y: 300 },
+    { x: 300, y: 610 },
+    { x: 1300, y: 610 },
+    { x: 660, y: 830 },
+    { x: 940, y: 830 },
+  ],
+};
+/** Where nobody can stand: an ellipse on the ground around each of them */
+export const SPY_OBSTACLES: { x: number; y: number; rx: number; ry: number }[] = [
+  { x: SPY_SCENE.fountain.x, y: SPY_SCENE.fountain.y, rx: 74, ry: 34 },
+  ...SPY_SCENE.trees.map((t) => ({ x: t.x, y: t.y, rx: 20, ry: 10 })),
+  ...SPY_SCENE.lamps.map((l) => ({ x: l.x, y: l.y, rx: 12, ry: 7 })),
+];
 /** Where characters walk: the whole field but the strip at the top (the score) */
 export const SPY_AREA = { x0: 70, x1: 1530, y0: 175, y1: 875 };
 export const RACE_AREA = { y0: 190, y1: 870 };

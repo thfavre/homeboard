@@ -89,6 +89,31 @@ export function moveAim(a: Aim, dt: number): void {
   a.y = clamp(a.y + a.vy * dt, 0, WORLD.h);
 }
 
+/** Inside one of these ellipses (with a margin, in world units)? */
+export function blocked(x: number, y: number, obstacles: { x: number; y: number; rx: number; ry: number }[], margin = 0): boolean {
+  return obstacles.some((o) => ((x - o.x) / (o.rx + margin)) ** 2 + ((y - o.y) / (o.ry + margin)) ** 2 < 1);
+}
+
+/** Push a character out of the obstacles it walked into, to their edge. True when it had to be */
+export function keepOut(a: { x: number; y: number }, obstacles: { x: number; y: number; rx: number; ry: number }[]): boolean {
+  let pushed = false;
+  for (const o of obstacles) {
+    let dx = (a.x - o.x) / o.rx;
+    let dy = (a.y - o.y) / o.ry;
+    const d = Math.hypot(dx, dy);
+    if (d >= 1) continue;
+    if (d < 1e-3) {
+      dx = 1;
+      dy = 0;
+    }
+    const len = d < 1e-3 ? 1 : d;
+    a.x = o.x + (dx / len) * o.rx * 1.01;
+    a.y = o.y + (dy / len) * o.ry * 1.01;
+    pushed = true;
+  }
+  return pushed;
+}
+
 /** The character a shot at (x, y) hits: the one in front (lowest on the screen) whose body is there */
 export function hitTest(actors: Actor[], x: number, y: number): Actor | null {
   const halfW = BODY.halfW * SPRITE_SCALE;

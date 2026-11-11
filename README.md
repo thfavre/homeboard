@@ -48,7 +48,8 @@ run a test copy without touching the real guests and settings).
 - **Games**: 1 vs 1 duels with a bet or room games: Blind Timer, Light Simon, Color Reflex,
   Perfect Circle, Bluff, Coin Flip, Rhythm Rain, Pirate Race, Crowd Race and Spy Hunt (hide in a
   crowd on the TV, snipe from the phones). Their characters are LPC sprites, built by
-  `scripts/crowd-sprites.ts`; credits in `web/public/crowd/CREDITS.txt`
+  `scripts/crowd-sprites.ts`, and their streets and square are LPC style environment art; credits in
+  `web/public/crowd/CREDITS.txt` and `web/public/crowd/env/CREDITS.txt`
 
 Plus: selfie avatars, rotating leaderboards, activity feed, gifts, themes, and an economy editor
 for every price and reward. Every module can be turned off and configured in the admin.
