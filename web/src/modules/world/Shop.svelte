@@ -20,6 +20,8 @@
   let slot = $state<Slot>('top');
   /** The piece opened in the detail view (null: the grid) */
   let open = $state<WornItem | null>(null);
+  /** The swatch picked while browsing this slot: the next items open in it too (reset per slot) */
+  let pickedColor = $state<string | null>(null);
   /** Item pictures by id, fetched per slot and kept */
   let icons = $state<Record<string, string>>({});
   let url = $state<string | null>(null);
@@ -61,12 +63,17 @@
     return out;
   }
 
-  /** Open a piece: in the color worn, else the first owned color, else its first color */
+  /** Open a piece: in the color picked in this slot, else worn, else owned, else its first */
   function show(id: string) {
     const item = CATALOG.find((i) => i.id === id);
     if (!item) return;
     const worn = wd?.outfit[slot];
-    const color = worn?.id === id ? worn.color : ((wd?.owned ?? []).find((o) => o.id === id)?.color ?? item.colors[0]);
+    const color =
+      pickedColor && item.colors.includes(pickedColor)
+        ? pickedColor
+        : worn?.id === id
+          ? worn.color
+          : ((wd?.owned ?? []).find((o) => o.id === id)?.color ?? item.colors[0]);
     open = { id, color };
   }
 
@@ -188,6 +195,7 @@
           onclick={() => {
             slot = s.id;
             open = null;
+            pickedColor = null;
           }}
         >
           {s.name}
@@ -244,7 +252,10 @@
               class:dot={ownedIs(openItem.id, c)}
               style:background={COLOR_HEX[c] ?? '#888'}
               aria-label={colorName(c)}
-              onclick={() => (open = { id: openItem.id, color: c })}
+              onclick={() => {
+                open = { id: openItem.id, color: c };
+                pickedColor = c;
+              }}
             ></button>
           {/each}
         </div>
