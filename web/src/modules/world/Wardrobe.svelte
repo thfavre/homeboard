@@ -375,7 +375,7 @@
     border: 1px solid var(--border);
   }
   .sname {
-    font-size: 0.9rem;
+    font-size: 1.05rem;
     font-weight: 600;
   }
   .count {
