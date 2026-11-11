@@ -254,7 +254,8 @@
         g.save();
         g.translate(p.x, p.y);
         g.rotate((s * Math.PI) / 2);
-        drawCharacter(g, sheets, img, 0, 0, { anim: gameAnim(WANIM.idle), dir: s === 1 ? 1 : 3, dist: 0, since: now - l.since, now, phase: l.phase }, hue(p.id));
+        // The clock runs slow for a sleeper, so the idle breathing is calm
+        drawCharacter(g, sheets, img, 0, 0, { anim: gameAnim(WANIM.idle), dir: s === 1 ? 1 : 3, dist: 0, since: now - l.since, now: now / 2.5, phase: l.phase / 2.5 }, hue(p.id));
         g.restore();
       } else {
         drawCharacter(g, sheets, img, p.x, p.y, { anim: gameAnim(p.anim), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id));
