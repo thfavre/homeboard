@@ -31,6 +31,9 @@
 - [x] make the Led guitar hero playable in solo, gusest should be able to preview 5s of the song, make the WLED effect a bit nicer? Also it should pause the spotify music when the game is played, and resume it after the game is finished. Only play the sound of the button on the TV speaker when he plays solo with music, otherwise only do the effect on the player phone (so at 2 player with or without music it should only play the sound on the guest deivce that is playing, to his own action). Also make sure the games in sync music / led effect.
 - [ ] quiz participatif, it asks to all participants to write 1 to 3 questions (and possibility to skip), then saves it and the host or everyone can start it (guest can no modify it / see answers of course)
 - [ ] random flashbang (HA effect) every X minutes when at least 2 guests are online
+- [ ] pico parc
+- [ ] sniper and hide, or running ninja
+- [ ] trouver la couleur de qqch (https://toontone.app/) logo etc.
 
 # Bugs / improvements
 - [x] The TV page sometimes cahnge the layout and the right part become too big (for ex when I add a lot of music to the queue...)
@@ -49,3 +52,5 @@
 - [ ] idea, think if its good, amin desactivable of course: make prices degressives when the feature is not used.. until its 1 or even free
 - improve the game settings admin side
 - [ ] add a button to hear on his phone the sound of soundboard?
+- ! [ ] add undo action in pixel canvas
+- [ ] picture in photos lodaing a long time, or bug I have to scroll to make it appears
