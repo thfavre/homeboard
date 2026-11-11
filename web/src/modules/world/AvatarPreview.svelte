@@ -20,7 +20,7 @@
     sheet: SheetInfo | null;
     building?: boolean;
     focus?: Focus;
-    /** 'up' shows the back (capes, wings): the character turns around pose by pose */
+    /** 'up' shows the back (capes, wings): the character keeps turning, lingering on the back */
     facing?: 'down' | 'up';
   } = $props();
 
@@ -86,11 +86,18 @@
       g.imageSmoothingEnabled = false;
       g.clearRect(0, 0, canvas!.width, canvas!.height);
       if (!imgReady || !sheet) return;
-      // Walking steadily toward the camera (or away from it while trying on back pieces)
-      const poses = [sheet.rows.walkDown ?? sheet.rows.walk, sheet.rows.walkLeft, sheet.rows.walkUp];
-      const wanted = facing === 'up' && poses[2] ? 2 : 0;
-      if (pose !== wanted && now - turnedAt > 170) {
-        pose += Math.sign(wanted - pose);
+      // Walking steadily toward the camera. For back pieces the character keeps turning on the
+      // spot instead, pausing on each side and resting longest with the back to the camera.
+      const poses = [sheet.rows.walkDown ?? sheet.rows.walk, sheet.rows.walkLeft, sheet.rows.walkUp, sheet.rows.walk];
+      if (facing === 'up' && poses[1] && poses[2] && poses[3]) {
+        const dwell = pose === 2 ? 2400 : 550;
+        if (now - turnedAt > dwell) {
+          pose = (pose + 1) % 4;
+          turnedAt = now;
+        }
+      } else if (pose !== 0 && now - turnedAt > 170) {
+        // Back to facing the camera the short way around
+        pose = pose === 3 ? 0 : pose - 1;
         turnedAt = now;
       }
       const row = poses[pose] ?? poses[0];
