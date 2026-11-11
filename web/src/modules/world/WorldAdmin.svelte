@@ -2,7 +2,7 @@
   import { attempt, hb, rpc } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import { TIERS, TIER_NAMES } from '$shared/wardrobe.ts';
-  import type { WorldState } from '$shared/world.ts';
+  import { LOOK_PARTS, LOOK_PART_NAMES, type WorldState } from '$shared/world.ts';
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
 
@@ -21,6 +21,7 @@
   }
 
   const priceKey = (tier: string) => `price${tier[0].toUpperCase()}${tier.slice(1)}`;
+  const lookKey = (part: string) => `look${part[0].toUpperCase()}${part.slice(1)}`;
 
   /** Amount typed per guest row (give takes it, take negates it) */
   let amounts = $state<Record<string, string>>({});
@@ -57,6 +58,15 @@
       {/each}
     </div>
     <p class="faint small">What the shop charges per price tier.</p>
+    <div class="prices">
+      {#each LOOK_PARTS as part (part)}
+        <label class="field">
+          <span>{LOOK_PART_NAMES[part]}</span>
+          <input class="input" type="number" min="0" value={mod.shop?.look[part] ?? 0} onchange={(e) => setAmount(lookKey(part), e.currentTarget.value)} />
+        </label>
+      {/each}
+    </div>
+    <p class="faint small">What changing each part of a look costs once the character exists (creating it is free).</p>
     <label class="field">
       <span>Fall asleep after (minutes away)</span>
       <input class="input" type="number" min="1" max="240" value={mod.sleepAfterMin} onchange={(e) => setMinutes('sleepAfterMin', e.currentTarget.value)} />

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { validChoices, type AvatarChoices, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type LookPart, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, validOutfit, validWorn, type Outfit, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -26,7 +26,19 @@ interface WorldSettings {
   priceFancy: number;
   priceEpic: number;
   priceLegendary: number;
+  /** What changing each part of an existing look costs (the hair style, its color...) */
+  lookHair: number;
+  lookHairColor: number;
+  lookBeard: number;
+  lookEyes: number;
 }
+
+const LOOK_KEY: Record<LookPart, 'lookHair' | 'lookHairColor' | 'lookBeard' | 'lookEyes'> = {
+  hair: 'lookHair',
+  hairColor: 'lookHairColor',
+  beard: 'lookBeard',
+  eyes: 'lookEyes',
+};
 
 const PRICE_KEY: Record<Tier, 'priceCheap' | 'priceCommon' | 'priceFancy' | 'priceEpic' | 'priceLegendary'> = {
   cheap: 'priceCheap',
@@ -75,6 +87,10 @@ export default defineModule<WorldSettings>({
     priceFancy: 60,
     priceEpic: 150,
     priceLegendary: 400,
+    lookHair: 30,
+    lookHairColor: 20,
+    lookBeard: 15,
+    lookEyes: 10,
   },
 
   setup(ctx) {
@@ -130,6 +146,11 @@ export default defineModule<WorldSettings>({
       return Object.fromEntries(TIERS.map((t) => [t, s[PRICE_KEY[t]]])) as Record<Tier, number>;
     };
 
+    const lookPrices = (): Record<LookPart, number> => {
+      const s = ctx.settings.get();
+      return Object.fromEntries(LOOK_PARTS.map((p) => [p, s[LOOK_KEY[p]]])) as Record<LookPart, number>;
+    };
+
     ctx.state((role): WorldState | undefined => {
       const characters = Object.entries(store.data.avatars)
         .map(([id, a]) => {
@@ -138,7 +159,7 @@ export default defineModule<WorldSettings>({
         })
         .filter((c): c is NonNullable<typeof c> => !!c);
       const s = ctx.settings.get();
-      const base: WorldState = { characters, sheet: store.data.sheet, shop: { currencyName: s.currencyName, prices: tierPrices() } };
+      const base: WorldState = { characters, sheet: store.data.sheet, shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices() } };
       if (role === 'admin') {
         const guests = [...ctx.session.guests.values()];
         return {
@@ -185,9 +206,23 @@ export default defineModule<WorldSettings>({
       if (before && (before.choices.body !== choices.body || before.choices.skin !== choices.skin)) {
         throw new HbError('Your body and skin are set: only hair, face and clothes can change');
       }
+      // Creating the avatar is free; changing it afterwards costs per changed part
+      const cost = before ? lookCost(before.choices, choices, lookPrices()) : 0;
+      const name = ctx.settings.get().currencyName;
+      const afford = () => {
+        const balance = wallets[guest.id] ?? 0;
+        if (balance < cost) throw new HbError(`Not enough ${name}: this costs ${cost}, you have ${balance}`, 'NO_MONEY');
+      };
+      afford();
       const outfit = outfitFor(guest.id, choices.body);
       const hash = choicesHash(choices, outfit);
       await composite(choices, outfit);
+      // Checked again: money may have moved while the sheet was drawn
+      afford();
+      if (cost) {
+        wallets[guest.id] = (wallets[guest.id] ?? 0) - cost;
+        sendWallet(guest.id);
+      }
       const had = !!before;
       store.data.avatars[guest.id] = { choices, hash, outfit };
       if (!had) {
@@ -369,6 +404,10 @@ export default defineModule<WorldSettings>({
         priceFancy: price(args.priceFancy, s.priceFancy),
         priceEpic: price(args.priceEpic, s.priceEpic),
         priceLegendary: price(args.priceLegendary, s.priceLegendary),
+        lookHair: price(args.lookHair, s.lookHair),
+        lookHairColor: price(args.lookHairColor, s.lookHairColor),
+        lookBeard: price(args.lookBeard, s.lookBeard),
+        lookEyes: price(args.lookEyes, s.lookEyes),
       });
       ctx.publish();
     });

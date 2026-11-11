@@ -145,10 +145,21 @@ export interface TownCharacter {
   url: string;
 }
 
-/** The town's shop as everyone sees it: its own money, prices by tier */
+/** The parts of a look that cost money to change once the avatar exists (body and skin never change) */
+export const LOOK_PARTS = ['hair', 'hairColor', 'beard', 'eyes'] as const;
+export type LookPart = (typeof LOOK_PARTS)[number];
+export const LOOK_PART_NAMES: Record<LookPart, string> = { hair: 'Hair style', hairColor: 'Hair color', beard: 'Facial hair', eyes: 'Eyes' };
+
+/** What changing from one look to another costs: the price of each part that differs */
+export function lookCost(before: AvatarChoices, after: AvatarChoices, prices: Record<LookPart, number>): number {
+  return LOOK_PARTS.reduce((sum, part) => sum + (before[part] !== after[part] ? prices[part] : 0), 0);
+}
+
+/** The town's shop as everyone sees it: its own money, prices by tier and for look changes */
 export interface ShopInfo {
   currencyName: string;
   prices: Record<Tier, number>;
+  look: Record<LookPart, number>;
 }
 
 /** What a guest owns and wears, fetched per guest (the shared state cannot carry it) */

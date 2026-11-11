@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
-  import { Check, PersonStanding, Shirt, ShoppingBag } from '@lucide/svelte';
+  import { Check, Coins, PersonStanding, Shirt, ShoppingBag, Undo2 } from '@lucide/svelte';
   import { attempt, hb, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
   import type { Slot } from '$shared/wardrobe.ts';
-  import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, type AvatarChoices, type SheetInfo } from '$shared/world.ts';
+  import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, lookCost, type AvatarChoices, type SheetInfo, type WorldState } from '$shared/world.ts';
   import AvatarPreview from './AvatarPreview.svelte';
   import Picker from './Picker.svelte';
   import type { PreviewView } from './preview.ts';
@@ -40,6 +40,9 @@
   let firstLoad = $state(true);
 
   const dirty = $derived(saved !== JSON.stringify(choices));
+  const shop = $derived((hb.modules.world as WorldState | undefined)?.shop);
+  /** What the changes cost (creating is free; after that, each changed part has its price) */
+  const cost = $derived(created && saved && shop ? lookCost(JSON.parse(saved) as AvatarChoices, choices, shop.look) : 0);
 
   /** Swatch colors, roughly the LPC palettes */
   const SKIN_HEX: Record<string, string> = {
@@ -151,11 +154,20 @@
     view.facing = 'down';
   });
 
+  /** Back to the saved look, dropping the changes */
+  function cancel() {
+    if (!saved) return;
+    choices = JSON.parse(saved);
+    storageSet(DRAFT_KEY, null);
+  }
+
   async function save() {
     const c = $state.snapshot(choices) as AvatarChoices;
-    const done = await attempt(() => rpc('world', 'save', { choices: c }), 'Saved');
+    const done = await attempt(() => rpc('world', 'save', { choices: c }), created ? 'New look' : 'Saved');
     if (done) {
       saved = JSON.stringify(c);
+      // Once created, body and skin are set and later changes are paid
+      created = true;
       storageSet(DRAFT_KEY, null);
     }
   }
@@ -219,10 +231,21 @@
       </div>
     </div>
 
-    <button type="button" class="btn primary save" disabled={!dirty || buildingCount > 0} onclick={save}>
-      <Check size={18} />
-      {saved ? 'Save my look' : 'Create'}
-    </button>
+    {#if !created}
+      <button type="button" class="btn primary save" disabled={buildingCount > 0} onclick={save}><Check size={18} />Create</button>
+    {:else if dirty}
+      <!-- Changing a look is paid: undo the changes, or pay for them -->
+      <div class="deal">
+        <button type="button" class="btn" onclick={cancel}><Undo2 size={18} />Cancel</button>
+        <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={save}>
+          {#if cost}
+            <Coins size={18} />Buy for {cost} {shop?.currencyName ?? ''}
+          {:else}
+            <Check size={18} />Save
+          {/if}
+        </button>
+      </div>
+    {/if}
   </div>
 {/if}
 </div>
@@ -327,6 +350,14 @@
     outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   }
   .save {
+    justify-content: center;
+  }
+  .deal {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem;
+  }
+  .deal .btn {
     justify-content: center;
   }
 </style>
