@@ -32,10 +32,20 @@
   /** Pictures of the owned pieces in their own colors, keyed "id:color" */
   let colored = $state<Record<string, string>>({});
 
-  /** An owned item's card shows the color it opens in (worn, else owned); others their own color */
-  function pictureOf(id: string): string | undefined {
+  /**
+   * The color an item opens in and shows on its card: its own color when not owned, or owned among
+   * others; else the worn color; else the color it was bought in
+   */
+  function colorOf(id: string): string | undefined {
+    const item = CATALOG.find((i) => i.id === id);
+    if (!item) return undefined;
+    const mine = (wd?.owned ?? []).filter((o) => o.id === id).map((o) => o.color);
     const worn = wd?.outfit[slot];
-    const color = worn?.id === id ? worn.color : (wd?.owned ?? []).find((o) => o.id === id)?.color;
+    if (!mine.length || mine.includes(item.colors[0])) return item.colors[0];
+    return worn?.id === id ? worn.color : mine[0];
+  }
+  function pictureOf(id: string): string | undefined {
+    const color = colorOf(id);
     return (color && colored[`${id}:${color}`]) || icons[id];
   }
   const loadColored = () =>
@@ -81,17 +91,14 @@
     return out;
   }
 
-  /** Open a piece: in the color picked in this slot, else worn, else owned, else its first */
+  /** Open a piece: in the color picked in this slot (clothes), else the color its card shows */
   function show(id: string) {
     const item = CATALOG.find((i) => i.id === id);
     if (!item) return;
-    const worn = wd?.outfit[slot];
     const color =
       pickedColor && KEEPS_COLOR.includes(slot) && item.colors.includes(pickedColor)
         ? pickedColor
-        : worn?.id === id
-          ? worn.color
-          : ((wd?.owned ?? []).find((o) => o.id === id)?.color ?? item.colors[0]);
+        : (colorOf(id) ?? item.colors[0]);
     open = { id, color };
   }
 
