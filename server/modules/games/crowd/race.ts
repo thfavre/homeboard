@@ -1,6 +1,6 @@
 import { ANIM, RACE_AREA, RACE_LOOKS, RACE_WALK_UPS, walkSpeed, type CrowdEvent, type CrowdFrame, type CrowdKill, type CrowdRaceView } from '../../../../shared/crowd.ts';
 import type { GameFactory } from '../engine.ts';
-import { TICK_MS, aimOut, dealLooks, hitTest, moveAim, newActor, newAim, pack, rand, stick, type Actor, type Aim } from './sim.ts';
+import { HOLD_EXPIRE_MS, TICK_MS, aimOut, dealLooks, hitTest, moveAim, newActor, newAim, pack, rand, stick, type Actor, type Aim } from './sim.ts';
 
 /** The start line and the finish line (world x) */
 const START_X = 95;
@@ -45,7 +45,8 @@ export const crowdRace: GameFactory = (m) => {
   let actors: Actor[] = [];
   let looks: number[] = [];
   const aims = new Map<string, Aim>();
-  const moves = new Map<string, Move>();
+  /** What each player holds down, and when the phone last said so */
+  const moves = new Map<string, { m: Move; at: number }>();
   const alive = new Set<string>();
   const points: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]));
   const totalKills: Record<string, number> = Object.fromEntries(ids.map((id) => [id, 0]));
@@ -87,13 +88,16 @@ export const crowdRace: GameFactory = (m) => {
     alive.clear();
     for (const id of ids) {
       alive.add(id);
-      moves.set(id, 'stop');
+      moves.set(id, { m: 'stop', at: 0 });
       const old = aims.get(id);
       const a = newAim(id, goAt, Math.max(1, s.crowdShots));
-      // The crosshair stays where it was from one round to the next
+      // The crosshair stays where it was from one round to the next, and a stick still held keeps pushing it
       if (old) {
         a.x = old.x;
         a.y = old.y;
+        a.sx = old.sx;
+        a.sy = old.sy;
+        a.heard = old.heard;
       }
       aims.set(id, a);
     }
@@ -169,7 +173,9 @@ export const crowdRace: GameFactory = (m) => {
         if (!a.alive) continue;
         let speed = 0;
         if (a.player) {
-          const mv = moves.get(a.player) ?? 'stop';
+          // Nothing heard from the phone for a while: it stops (a locked or lost phone does not walk on its own)
+          const held = moves.get(a.player);
+          const mv = held && now - held.at < HOLD_EXPIRE_MS ? held.m : 'stop';
           speed = mv === 'run' ? run : mv === 'walk' ? walk : 0;
         } else {
           think(a, now);
@@ -221,7 +227,7 @@ export const crowdRace: GameFactory = (m) => {
       events.push({ k: 'kill', actor: target.i, by: id, victim: target.player });
       if (target.player) {
         alive.delete(target.player);
-        moves.set(target.player, 'stop');
+        moves.set(target.player, { m: 'stop', at: now });
         if (target.player !== id) totalKills[id] += 1;
         m.flash('kill');
         // Nobody left: nobody wins. The last one standing still has to beat the passers-by to the line
@@ -243,12 +249,12 @@ export const crowdRace: GameFactory = (m) => {
       switch (args?.t) {
         case 'move': {
           const mv: Move = args?.m === 'run' ? 'run' : args?.m === 'walk' ? 'walk' : 'stop';
-          if (alive.has(id)) moves.set(id, mv);
+          if (alive.has(id)) moves.set(id, { m: mv, at: Date.now() });
           return true;
         }
         case 'aim': {
           const a = aims.get(id);
-          if (a) Object.assign(a, ((v) => ({ sx: v.x, sy: v.y }))(stick(args)));
+          if (a) Object.assign(a, ((v) => ({ sx: v.x, sy: v.y, heard: Date.now() }))(stick(args)));
           return true;
         }
         case 'fire':

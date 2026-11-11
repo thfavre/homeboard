@@ -3,6 +3,11 @@ import { clamp, num } from '../../../core/util.ts';
 
 /** Server ticks a second: the crowd moves and a frame goes to the TV each tick */
 export const TICK_MS = 50;
+/**
+ * A phone repeats what is held down (WALK, a stick) every second. Nothing heard for this long: the phone
+ * locked, reloaded or lost the connection, and the hold is let go (the character stops, the crosshair too)
+ */
+export const HOLD_EXPIRE_MS = 2500;
 
 /** One character of the crowd: a passer-by, or a player hidden in it */
 export interface Actor {
@@ -29,6 +34,8 @@ export interface Aim {
   y: number;
   sx: number;
   sy: number;
+  /** When the stick was last heard (see HOLD_EXPIRE_MS) */
+  heard: number;
   /** Its speed now: it eases to what the stick asks, so it starts and stops smoothly */
   vx: number;
   vy: number;
@@ -59,7 +66,7 @@ export function newActor(i: number, look: number, x: number, y: number, dir: Dir
 }
 
 export function newAim(id: string, readyAt: number, shots: number): Aim {
-  return { id, x: rand(WORLD.w * 0.3, WORLD.w * 0.7), y: rand(WORLD.h * 0.4, WORLD.h * 0.65), sx: 0, sy: 0, vx: 0, vy: 0, shots, readyAt, draw: false };
+  return { id, x: rand(WORLD.w * 0.3, WORLD.w * 0.7), y: rand(WORLD.h * 0.4, WORLD.h * 0.65), sx: 0, sy: 0, heard: 0, vx: 0, vy: 0, shots, readyAt, draw: false };
 }
 
 /** A stick from a phone: x and y between -1 and 1, inside the circle */
@@ -76,6 +83,8 @@ export function stick(args: any): { x: number; y: number } {
 
 /** Move a crosshair by its stick for `dt` seconds: slow near the middle of the stick for fine aiming, eased */
 export function moveAim(a: Aim, dt: number): void {
+  // The phone went quiet: the stick is let go
+  if ((a.sx || a.sy) && Date.now() - a.heard > HOLD_EXPIRE_MS) a.sx = a.sy = 0;
   const len = Math.hypot(a.sx, a.sy);
   const speed = len < 0.06 ? 0 : AIM_SPEED * len ** AIM_CURVE;
   const tx = len ? (a.sx / len) * speed : 0;

@@ -7,7 +7,7 @@
   import HoldButton from './HoldButton.svelte';
   import Joystick from './Joystick.svelte';
   import Bullets from './Bullets.svelte';
-  import { play, stickSender } from './input.ts';
+  import { HOLD_REPEAT_MS, play, stickSender } from './input.ts';
 
   /**
    * Crowd Race on a phone: WALK and RUN under the left thumb (held down), the sniper under the right one:
@@ -26,12 +26,14 @@
   let walk = $state(false);
   let run = $state(false);
   const mode = $derived(!alive || v?.step !== 'race' ? 'stop' : run ? 'run' : walk ? 'walk' : 'stop');
-  // The server hears each change of pace once
-  let sent = 'stop';
+  // The server hears each change of pace at once, and the pace again every second while WALK or RUN is held
+  // (it stops a character whose phone went quiet)
   $effect(() => {
-    if (mode === sent) return;
-    sent = mode;
-    void play({ t: 'move', m: mode });
+    const m = mode;
+    void play({ t: 'move', m });
+    if (m === 'stop') return;
+    const t = setInterval(() => void play({ t: 'move', m }), HOLD_REPEAT_MS);
+    return () => clearInterval(t);
   });
 
   const aim = stickSender('aim');

@@ -557,9 +557,15 @@
     const step = Math.min(0.1, Math.max(0, (now - lastDraw) / 1000));
     fx.update(step);
     clouds.update(step);
-    // A shot shakes the whole field a little
+    // A shot shakes the whole field a little; it zooms in just enough while it shakes that the picture
+    // always covers the edges (no bare strip showing)
     const shake = fx.offset();
-    g.translate(shake.x, shake.y);
+    if (shake.x || shake.y) {
+      const zoom = 1 + Math.max((2 * Math.abs(shake.x)) / WORLD.w, (2 * Math.abs(shake.y)) / WORLD.h) + 0.002;
+      g.translate(WORLD.w / 2 + shake.x, WORLD.h / 2 + shake.y);
+      g.scale(zoom, zoom);
+      g.translate(-WORLD.w / 2, -WORLD.h / 2);
+    }
 
     g.drawImage(background(), 0, 0, WORLD.w, WORLD.h);
     // Shadows of the things standing up, on the ground under everyone

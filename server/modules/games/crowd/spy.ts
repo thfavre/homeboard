@@ -19,7 +19,7 @@ import {
   type SpyView,
 } from '../../../../shared/crowd.ts';
 import { shuffle, type GameFactory } from '../engine.ts';
-import { TICK_MS, aimOut, blocked, dealLooks, dirOf, hitTest, keepOut, moveAim, newActor, newAim, pack, pick, rand, stick, type Actor, type Aim } from './sim.ts';
+import { HOLD_EXPIRE_MS, TICK_MS, aimOut, blocked, dealLooks, dirOf, hitTest, keepOut, moveAim, newActor, newAim, pack, pick, rand, stick, type Actor, type Aim } from './sim.ts';
 
 /** The spy picks a gadget and finds their character this long before the snipers can shoot */
 const PICK_MS = 12_000;
@@ -57,7 +57,8 @@ export const spyHunt: GameFactory = (m) => {
   let actors: Actor[] = [];
   let looks: number[] = [];
   const aims = new Map<string, Aim>();
-  let push = { x: 0, y: 0 };
+  /** The spy's stick, and when the phone last sent it */
+  let push = { x: 0, y: 0, at: 0 };
   let cases: { x: number; y: number; open: boolean; at: number | null }[] = [];
   let gadget: SpyGadget | null = null;
   let used: SpyGadget | null = null;
@@ -86,7 +87,7 @@ export const spyHunt: GameFactory = (m) => {
     used = null;
     smoke = null;
     blindUntil = 0;
-    push = { x: 0, y: 0 };
+    push = { x: 0, y: 0, at: 0 };
     cases = SPY_CASES.map((c) => ({ ...c, open: false, at: null }));
     const n = Math.max(1, s.spyNpcs + 1);
     looks = dealLooks(n, Math.min(SUIT_LOOKS, Math.max(1, s.spyLooks)));
@@ -110,8 +111,15 @@ export const spyHunt: GameFactory = (m) => {
     const away = actors.filter((a) => SPY_CASES.every((c) => Math.hypot(a.x - c.x, a.y - c.y) > 260));
     spyActor = pick(away.length ? away : actors);
     spyActor.player = spy;
+    // A sniper still holding the stick from last round keeps pushing their new crosshair
+    const held = new Map(aims);
     aims.clear();
-    for (const id of snipers()) aims.set(id, newAim(id, until, Math.max(1, s.spyShots)));
+    for (const id of snipers()) {
+      const a = newAim(id, until, Math.max(1, s.spyShots));
+      const old = held.get(id);
+      if (old) Object.assign(a, { sx: old.sx, sy: old.sy, heard: old.heard });
+      aims.set(id, a);
+    }
     m.publish();
   };
 
@@ -213,6 +221,8 @@ export const spyHunt: GameFactory = (m) => {
       for (const a of actors) {
         if (!a.alive) continue;
         if (a === spyActor) {
+          // Nothing heard from the spy's phone for a while: they stop
+          if (now - push.at > HOLD_EXPIRE_MS) push = { x: 0, y: 0, at: push.at };
           const len = Math.hypot(push.x, push.y);
           if (len > DEAD_ZONE) {
             walkTo(a, push.x * 1000, push.y * 1000, dt);
@@ -301,8 +311,10 @@ export const spyHunt: GameFactory = (m) => {
   const useGadget = () => {
     if (step !== 'hunt' || !gadget || used || !spyActor) return false;
     const now = Date.now();
-    used = gadget;
     const at = spyActor;
+    // A decoy needs someone to jump into: with nobody else on the square it stays unused
+    if (gadget === 'decoy' && !actors.some((a) => a.alive && a !== at)) return false;
+    used = gadget;
     if (gadget === 'flashbang') {
       blindUntil = now + FLASHBANG_MS;
       for (const a of aims.values()) a.draw = false;
@@ -324,7 +336,7 @@ export const spyHunt: GameFactory = (m) => {
       next.player = spy;
       next.moving = false;
       spyActor = next;
-      push = { x: 0, y: 0 };
+      push = { x: 0, y: 0, at: 0 };
       m.flash('kill');
       events.push({ k: 'gadget', g: 'decoy', x: Math.round(at.x), y: Math.round(at.y), actor: at.i });
     }
@@ -346,7 +358,7 @@ export const spyHunt: GameFactory = (m) => {
         case 'me':
           return me(id);
         case 'move':
-          if (id === spy) push = stick(args);
+          if (id === spy) push = { ...stick(args), at: Date.now() };
           return true;
         case 'pick': {
           const g = String(args?.g ?? '') as SpyGadget;
@@ -359,7 +371,7 @@ export const spyHunt: GameFactory = (m) => {
           return id === spy ? { ok: useGadget(), ...me(id) } : me(id);
         case 'aim': {
           const a = aims.get(id);
-          if (a) Object.assign(a, ((v) => ({ sx: v.x, sy: v.y }))(stick(args)));
+          if (a) Object.assign(a, ((v) => ({ sx: v.x, sy: v.y, heard: Date.now() }))(stick(args)));
           return true;
         }
         case 'draw': {
