@@ -8,6 +8,7 @@
 - [ ] Add something that cost a lot, like 1000, and advertise it as a big thing, but it will just like stop the lights, and do a fart sound, or something like that. (like a joke for the rich people)
 - [x] ! Make the leaderboard more divers. Like sometimes it changes to the leaderboardt of the most pixels draw in the canas, or more stickers sent, most games done,... (with a smooth transtition, and not just a hard change) (and also when a song has been played on guitar hero by more than 5 players (in 1vs1 save both player score of course, with the same difficulty / numbers of colors), allow it to show on the leaderboard with the score (show the cover and song name))
 - [ ] a new settings that admin can activate : everyone pricy is in public by default, but the guest can pay X so for example when sharing a picture or doing a sound, it doesnt say who it is.
+- [ ] Avatar world instead of the pixel war home screen: each guest creates their own avatar (naked or almost by default, the starting outfit is an admin setting). There are activities to do and finish that earn money, used to buy things (clothes) and places (a house, ...). Some things are unique, like the King rank: someone buys it, then another guest can buy it from them, and the previous king gets all or part of the money back (admin setting). Inspiration for the look and the layered clothes: https://liberatedpixelcup.github.io/Universal-LPC-Spritesheet-Character-Generator/
 -- games ---
 - [x] 1vs1 someone on the TV (like a game show (and put some coins?))
 - [ ] gift for a condition? Like we can see somewhere that doing X gives a gift.
@@ -49,3 +50,4 @@
 - [ ] idea, think if its good, amin desactivable of course: make prices degressives when the feature is not used.. until its 1 or even free
 - improve the game settings admin side
 - [ ] add a button to hear on his phone the sound of soundboard?
+- [ ] game selection: the "1vs1" and "everyone" choice at the top is not very visible, make it stand out more
