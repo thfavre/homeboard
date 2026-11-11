@@ -108,6 +108,7 @@
         players={m.players}
         soundVolume={v.soundVolume}
         readyAt={v.readyAt}
+        shots={v.shots}
         reloadMs={v.reloadMs}
         reveal={v.reveal !== undefined ? { [v.spy]: v.reveal } : null}
         winner={v.outcome === 'cases' || v.outcome === 'ammo' ? v.spy : null}

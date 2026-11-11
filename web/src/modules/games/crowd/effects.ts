@@ -149,6 +149,32 @@ export class Effects {
     this.add({ kind: 'text', x, y: y - 50, vy: -40, life: 1.4, size: 26, color: '#ffd35a', text: '+1' });
   }
 
+  /** A shot in a tree: leaves twirling down */
+  leaves(x: number, y: number) {
+    for (let k = 0; k < 14; k++) {
+      this.add({ kind: 'bit', x: x + rand(-30, 30), y: y + rand(-20, 20), vx: rand(-60, 60), vy: rand(-40, 20), life: rand(1.2, 2.2), size: rand(4, 6), color: Math.random() < 0.5 ? '#4f8a2e' : '#79b03a', gravity: 90, drag: 2.5 });
+    }
+  }
+
+  /** A lamp shot: its glass bursts in glints */
+  glass(x: number, y: number) {
+    for (let k = 0; k < 16; k++) {
+      const a = rand(0, Math.PI * 2);
+      const v = rand(60, 220);
+      this.add({ kind: 'gold', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, life: rand(0.5, 0.9), size: rand(2.5, 4), color: Math.random() < 0.5 ? '#e8f4ff' : '#ffe2a0', gravity: 500, drag: 1 });
+    }
+  }
+
+  /** The fountain shot: a splash */
+  splash(x: number, y: number) {
+    for (let k = 0; k < 18; k++) {
+      const a = rand(-Math.PI, 0);
+      const v = rand(80, 260);
+      this.add({ kind: 'bit', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rand(0.4, 0.8), size: rand(3, 5), color: Math.random() < 0.5 ? '#7fd3f0' : '#d6f4ff', gravity: 700, drag: 0.8 });
+    }
+    this.add({ kind: 'ring', x, y, life: 0.5, size: 8, grow: 90, color: '#bfeeff' });
+  }
+
   /** The flashbang: a big ring and a hard shake */
   flashbang(x: number, y: number) {
     this.add({ kind: 'ring', x, y, life: 0.7, size: 20, grow: 1400, color: '#ffffff' });
@@ -390,7 +416,7 @@ export class Pigeons {
         b.z = Math.max(0, b.z - 260 * dt);
         if (!b.z) {
           b.state = 'idle';
-          b.next = now + rand(500, 2000);
+          b.next = now + rand(2000, 5000);
         }
         continue;
       }
@@ -409,15 +435,15 @@ export class Pigeons {
         const d = Math.hypot(dx, dy);
         if (d < 2) {
           b.state = 'idle';
-          b.next = now + rand(600, 3000);
+          b.next = now + rand(3000, 8000);
         } else {
-          b.x += (dx / d) * 28 * dt;
-          b.y += (dy / d) * 28 * dt;
+          b.x += (dx / d) * 18 * dt;
+          b.y += (dy / d) * 18 * dt;
         }
       } else if (now > b.next) {
         b.state = 'walk';
-        b.tx = Math.min(this.area.x1, Math.max(this.area.x0, b.x + rand(-60, 60)));
-        b.ty = Math.min(this.area.y1, Math.max(this.area.y0, b.y + rand(-30, 30)));
+        b.tx = Math.min(this.area.x1, Math.max(this.area.x0, b.x + rand(-30, 30)));
+        b.ty = Math.min(this.area.y1, Math.max(this.area.y0, b.y + rand(-14, 14)));
         b.dir = b.tx < b.x ? -1 : 1;
       }
     }
@@ -476,16 +502,17 @@ export class Pigeons {
       g.beginPath();
       g.ellipse(b.x, b.y + 2, 7, 3, 0, 0, Math.PI * 2);
       g.fill();
+      // Each bird keeps its own sheet, walking or flying: rows 0 and 3 fly to the left and the right,
+      // rows 4 and 7 walk to the left and the right (the middle frame stands still)
+      const sheet = env[b.shade < 0.4 ? 'bird-brown' : b.shade < 0.75 ? 'bird-black' : 'bird-white'];
       if (flying) {
-        // Black birds' flying rows: 0 to the left, 3 to the right
         const f = Math.floor(now / 70 + b.shade * 10) % 3;
-        g.drawImage(env['bird-black'], f * 32, (b.dir < 0 ? 0 : 3) * 32, 32, 32, x, y, size, size);
+        g.drawImage(sheet, f * 32, (b.dir < 0 ? 0 : 3) * 32, 32, 32, x, y, size, size);
       } else {
-        // Pigeon rows: 1 to the right, 3 to the left; the middle frame stands still, the others walk (and peck)
         const walking = b.state === 'walk';
-        const peck = !walking && Math.sin(now / 160 + b.shade * 9) > 0.7;
-        const f = walking ? [0, 1, 2, 1][Math.floor(now / 120 + b.shade * 7) % 4] : peck ? 0 : 1;
-        g.drawImage(env.pigeon, f * 32, (b.dir < 0 ? 3 : 1) * 32, 32, 32, x, y, size, size);
+        const peck = !walking && Math.sin(now / 200 + b.shade * 9) > 0.8;
+        const f = walking ? [0, 1, 2, 1][Math.floor(now / 140 + b.shade * 7) % 4] : peck ? 0 : 1;
+        g.drawImage(sheet, f * 32, (b.dir < 0 ? 4 : 7) * 32, 32, 32, x, y, size, size);
       }
     }
   }
@@ -517,6 +544,15 @@ export class Cat {
     if (this.state === 'gone' || this.state === 'run' || Math.hypot(this.x - x, this.y - y) > r) return;
     this.state = 'run';
     this.dir = this.x < x ? -1 : 1;
+  }
+
+  /** Something hovering over it (a crosshair): it gets up and strolls off, away from it */
+  nudge(x: number, y: number, r: number) {
+    if ((this.state !== 'lie' && this.state !== 'walk') || Math.abs(this.x - x) > r || Math.abs(this.y - 20 - y) > r) return;
+    if (this.state === 'walk' && Math.sign(this.tx - this.x) === Math.sign(this.x - x)) return;
+    this.tx = Math.min(this.x1, Math.max(this.x0, this.x + Math.sign(this.x - x || 1) * rand(140, 280)));
+    this.dir = this.tx < this.x ? -1 : 1;
+    this.state = 'walk';
   }
 
   update(dt: number) {

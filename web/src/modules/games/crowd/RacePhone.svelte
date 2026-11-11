@@ -76,13 +76,13 @@
     <div class="controls">
       <div class="left">
         <HoldButton color="#ff7a3d" disabled={!alive || v.step !== 'race'} onpress={() => (run = true)} onrelease={() => (run = false)}>RUN</HoldButton>
-        <HoldButton color="#2fd27a" size="big" disabled={!alive || v.step !== 'race'} onpress={() => (walk = true)} onrelease={() => (walk = false)}>
+        <HoldButton color="#2fd27a" size="tall" disabled={!alive || v.step !== 'race'} onpress={() => (walk = true)} onrelease={() => (walk = false)}>
           <Footprints size={30} />WALK
         </HoldButton>
       </div>
       <div class="right">
-        <HoldButton color="#ff3b5c" size="small" disabled={!alive || v.step !== 'race' || shots <= 0 || reloading} onpress={fire}>
-          <Crosshair size={22} />{shots <= 0 ? 'NO SHOTS' : reloading ? 'RELOADING' : 'SHOOT'}
+        <HoldButton color="#ff3b5c" size="square" disabled={!alive || v.step !== 'race' || shots <= 0 || reloading} onpress={fire}>
+          <Crosshair size={34} />{shots <= 0 ? 'NO SHOTS' : reloading ? 'RELOADING' : 'SHOOT'}
         </HoldButton>
         <Joystick label="Aim" color={myColor} disabled={!alive || v.step === 'reveal'} onmove={aim} />
       </div>

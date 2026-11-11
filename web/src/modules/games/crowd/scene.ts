@@ -24,7 +24,7 @@ const FILES = [
   'magecity',
   'fountain-anim',
   'water-sparkle-anim',
-  'pigeon',
+  'bird-brown',
   'bird-black',
   'bird-white',
   'cats',
@@ -60,6 +60,7 @@ const CUT = {
   houseB: [23, 0, 144, 192] as Cut,
   housePaneled: [0, 0, 160, 160] as Cut,
   lamp: [7, 4, 18, 80] as Cut,
+  lampOff: [39, 4, 18, 80] as Cut,
   trunk: [100, 13, 25, 64] as Cut,
   canopySummer: [33, 176, 94, 80] as Cut,
   canopySpring: [33, 16, 94, 80] as Cut,
@@ -240,15 +241,27 @@ export function squareGround(env: Env, cases: { x: number; y: number }[]): HTMLC
 
 // ------------------------------------------------------------ things that stand up
 
+/** What a stray shot does to a thing: leaves fall from a tree, a lamp's glass breaks, the fountain splashes */
+export type PropHit = 'leaves' | 'glass' | 'water';
+
 /** Something drawn in depth order with the characters: `y` is where it stands */
 export interface Prop {
   y: number;
   draw(g: CanvasRenderingContext2D, now: number): void;
+  /** A shot at (x, y) lands on it (and what it does), or not */
+  hit?(x: number, y: number): PropHit | null;
+  /** A new round: as it was (a broken lamp is mended) */
+  reset?(): void;
 }
 
 function tree(env: Env, x: number, y: number, spring: boolean, phase: number): Prop {
   return {
     y,
+    hit(hx, hy) {
+      // The leaves: an ellipse over the trunk
+      const cy = y - 44 * S - 40 * S;
+      return ((hx - x) / (47 * S)) ** 2 + ((hy - cy) / (40 * S)) ** 2 < 1 ? 'leaves' : null;
+    },
     draw(g, now) {
       // The shadow, the trunk, and the leaves swaying a pixel in the wind
       g.globalAlpha = 0.5;
@@ -262,12 +275,23 @@ function tree(env: Env, x: number, y: number, spring: boolean, phase: number): P
 }
 
 function lamp(env: Env, x: number, y: number): Prop {
+  let broken = false;
+  const ly = y - 82;
   return {
     y,
+    hit(hx, hy) {
+      if (broken || Math.hypot(hx - x, hy - ly) > 20) return null;
+      broken = true;
+      return 'glass';
+    },
+    reset() {
+      broken = false;
+    },
     draw(g, now) {
-      put(g, env['lamp-post'], CUT.lamp, x, y + 4);
+      // Shot: the light is out
+      put(g, env['lamp-post'], broken ? CUT.lampOff : CUT.lamp, x, y + 4);
+      if (broken) return;
       // A warm glow around the light, breathing a little
-      const ly = y - 82;
       const glow = g.createRadialGradient(x, ly, 0, x, ly, 46);
       glow.addColorStop(0, `rgba(255,210,120,${0.32 + 0.05 * Math.sin(now / 700 + x)})`);
       glow.addColorStop(1, 'rgba(255,210,120,0)');
@@ -284,6 +308,12 @@ function fountain(env: Env, x: number, y: number): Prop {
   const k = 2.1;
   return {
     y,
+    hit(hx, hy) {
+      // The basin, and the tiers above it
+      const basin = ((hx - x) / (30 * k)) ** 2 + ((hy - y) / (16 * k)) ** 2 < 1;
+      const tiers = Math.abs(hx - x) < 18 * k && hy < y && hy > y - 60 * k;
+      return basin || tiers ? 'water' : null;
+    },
     draw(g, now) {
       const frame = Math.floor(now / 260) % 2;
       const c: Cut = [frame * 64, 0, 64, 96];

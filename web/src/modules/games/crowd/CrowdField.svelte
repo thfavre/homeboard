@@ -7,7 +7,7 @@
   import { crowdSound } from './sound.ts';
   import '@fontsource/press-start-2p';
   import { Cat, CloudShadows, Effects, Pigeons } from './effects.ts';
-  import { loadEnv, squareGround, squareProps, streetGround, streetProps, type Env, type Prop } from './scene.ts';
+  import { loadEnv, squareGround, squareProps, streetGround, streetProps, type Env, type Prop, type PropHit } from './scene.ts';
   import { RACE_AREA, SPY_AREA, SMOKE_MS } from '$shared/crowd.ts';
 
   /**
@@ -23,6 +23,8 @@
     soundVolume: number;
     /** When each sniper can shoot again (the reload ring) */
     readyAt: Record<string, number>;
+    /** Shots left of each sniper, shown under their crosshair */
+    shots?: Record<string, number>;
     reloadMs?: number;
     /** Server time the screen is black at the end of a round (it fades out before, and in again on the next round) */
     curtainAt?: number | null;
@@ -40,7 +42,7 @@
     /** Each event as it comes, for the screen around */
     onevent?: (e: CrowdEvent) => void;
   }
-  let { kind, round: _round, curtainAt = null, looks, players, soundVolume, readyAt, reloadMs = 2000, reveal = null, winner = null, startX = 95, finishX = 1480, cases = [], smoke = null, blindUntil = 0, drawFadeMs = 4000, onevent }: Props = $props();
+  let { kind, round: _round, curtainAt = null, looks, players, soundVolume, readyAt, shots = {}, reloadMs = 2000, reveal = null, winner = null, startX = 95, finishX = 1480, cases = [], smoke = null, blindUntil = 0, drawFadeMs = 4000, onevent }: Props = $props();
 
   let canvas: HTMLCanvasElement;
   let wrap: HTMLDivElement;
@@ -68,7 +70,7 @@
   const fx = new Effects();
   const clouds = new CloudShadows();
   // Pigeons on the square, or on the sidewalk and the street of the race
-  const pigeons = untrack(() => new Pigeons(kind === 'spy' ? 14 : 12, kind === 'spy' ? SPY_AREA : { x0: 60, x1: WORLD.w - 60, y0: 30, y1: RACE_AREA.y1 }));
+  const pigeons = untrack(() => new Pigeons(kind === 'spy' ? 6 : 5, kind === 'spy' ? SPY_AREA : { x0: 60, x1: WORLD.w - 60, y0: 120, y1: RACE_AREA.y1 }));
   // A cat lazing on the sidewalk
   const cat = untrack(() => (kind === 'spy' ? new Cat(158, 120, WORLD.w - 120) : new Cat(150, 80, WORLD.w - 80)));
   /** The environment art (null until loaded, or when it cannot be: the places are drawn plain) */
@@ -80,6 +82,9 @@
   void document.fonts?.load(`16px ${PIXEL}`).then(() => (fontReady = true));
   /** Snipers' drawings: points with their time, a gap where the pen was lifted */
   let trails = new Map<string, { x: number; y: number; t: number; gap: boolean }[]>();
+  /** Bullet holes in the ground this round */
+  let holes: { x: number; y: number; r: number }[] = [];
+  const rand = (a: number, b: number) => a + Math.random() * (b - a);
   /** When the current round first showed (it fades in from black) */
   let roundShownAt = 0;
   /** Where each crosshair is drawn: it glides to the server's position */
@@ -89,10 +94,20 @@
   const handle = (e: CrowdEvent, frame: CrowdFrame) => {
     const at = frame.t;
     switch (e.k) {
-      case 'shot':
+      case 'shot': {
         fx.shot(e.x, e.y, e.hit >= 0);
         pigeons.scare(e.x, e.y, 260);
         cat.scare(e.x, e.y, 400);
+        if (e.hit >= 0) break;
+        // Nobody hit: the shot lands on a thing (leaves, glass, water) or leaves a hole in the ground
+        let what: PropHit | null = null;
+        for (const p of standingProps) if ((what = p.hit?.(e.x, e.y) ?? null)) break;
+        if (what === 'leaves') fx.leaves(e.x, e.y);
+        else if (what === 'glass') fx.glass(e.x, e.y);
+        else if (what === 'water') fx.splash(e.x, e.y);
+        else holes.push({ x: e.x, y: e.y, r: rand(0, Math.PI * 2) });
+        break;
+      }
         crowdSound('shot', soundVolume);
         break;
       case 'kill': {
@@ -147,6 +162,8 @@
         locals = [];
         downed = new Map();
         trails = new Map();
+        holes = [];
+        for (const p of standingProps) p.reset?.();
         roundShownAt = serverNow();
       }
       frames.push(f);
@@ -442,15 +459,21 @@
       g.stroke();
     }
     g.globalAlpha = 1;
-    tag(g, name(a.id), 0, r + 26, c, 12);
+    tag(g, name(a.id), 0, r + 26, c, 12, shots[a.id]);
     g.restore();
   }
 
-  /** A name in the pixel font on a dark plate with a border of the player's color and a hard shadow */
-  function tag(g: CanvasRenderingContext2D, text: string, x: number, y: number, c: string, size = 14) {
+  /**
+   * A name in the pixel font on a dark plate with a border of the player's color and a hard shadow.
+   * `ammo`: the shots left, after the name with a little bullet (red when there are none)
+   */
+  function tag(g: CanvasRenderingContext2D, text: string, x: number, y: number, c: string, size = 14, ammo?: number) {
     if (!text) return;
     g.font = `${size}px ${PIXEL}`;
-    const w = Math.round(g.measureText(text).width + size * 1.4);
+    const nameW = g.measureText(text).width;
+    const ammoText = ammo === undefined ? '' : String(ammo);
+    const ammoW = ammoText ? g.measureText(`x${ammoText}`).width + size * 0.8 + 16 : 0;
+    const w = Math.round(nameW + ammoW + size * 1.4);
     const h = Math.round(size * 2);
     const left = Math.round(x - w / 2);
     const top = Math.round(y - h / 2);
@@ -463,12 +486,32 @@
     g.fillRect(left, top + h - 3, w, 3);
     g.fillRect(left, top, 3, h);
     g.fillRect(left + w - 3, top, 3, h);
-    g.textAlign = 'center';
+    g.textAlign = 'left';
     g.textBaseline = 'middle';
+    const tx = left + Math.round(size * 0.7);
     g.fillStyle = '#000';
-    g.fillText(text, x + 2, y + 3);
+    g.fillText(text, tx + 2, y + 3);
     g.fillStyle = '#fff';
-    g.fillText(text, x, y + 1);
+    g.fillText(text, tx, y + 1);
+    if (ammoText) {
+      // A bullet drawn in pixels, then the number
+      const bx = Math.round(tx + nameW + size * 0.8);
+      const by = Math.round(y - size * 0.55);
+      const out = ammo === 0;
+      const tall = Math.round(size * 1.1);
+      // A cartridge: a pointed tip, the body, a darker base; clearly not a digit
+      g.fillStyle = out ? '#ff5a5a' : '#ffc84a';
+      g.fillRect(bx + 3, by, 3, 2);
+      g.fillRect(bx + 1, by + 2, 7, 2);
+      g.fillRect(bx, by + 4, 9, tall - 6);
+      g.fillStyle = out ? '#b02a2a' : '#b8741f';
+      g.fillRect(bx, by + tall - 2, 9, 3);
+      g.fillStyle = '#000';
+      g.fillText(`x${ammoText}`, bx + 14 + 2, y + 3);
+      g.fillStyle = out ? '#ff8080' : '#ffd36b';
+      g.fillText(`x${ammoText}`, bx + 14, y + 1);
+    }
+    g.textAlign = 'center';
     g.textBaseline = 'alphabetic';
   }
 
@@ -549,7 +592,18 @@
       }
       people.push({ i, x, y, anim, dir });
     }
-    // Dust on the ground and the pigeons, under everyone
+    // Bullet holes, dust on the ground and the pigeons, under everyone
+    for (const h of holes) {
+      g.fillStyle = 'rgba(0,0,0,0.55)';
+      g.beginPath();
+      g.ellipse(h.x, h.y, 6, 4, h.r, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      g.fillRect(Math.round(h.x - 7), Math.round(h.y + 3), 3, 2);
+      g.fillRect(Math.round(h.x + 4), Math.round(h.y - 5), 2, 2);
+      g.fillStyle = 'rgba(0,0,0,0.3)';
+      for (let k = 0; k < 4; k++) g.fillRect(Math.round(h.x + Math.cos(h.r + k * 1.6) * 9), Math.round(h.y + Math.sin(h.r + k * 1.6) * 6), 2, 2);
+    }
     fx.draw(g, false, PIXEL);
     pigeons.update(step, people.filter((p) => p.anim !== ANIM.dead));
     pigeons.draw(g, env);
@@ -652,6 +706,11 @@
           shown.x += (a.x - shown.x) * glide;
           shown.y += (a.y - shown.y) * glide;
         }
+      }
+      for (const a of latest.aims) {
+        const at = aimShown.get(a.id)!;
+        pigeons.scare(at.x, at.y + 14, 42);
+        cat.nudge(at.x, at.y, 50);
       }
       if (now >= blindUntil) for (const a of latest.aims) crosshair(g, { ...a, ...aimShown.get(a.id)! }, now);
     }

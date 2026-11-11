@@ -11,8 +11,11 @@ const REVEAL_MS = 7500;
 /** On the start line: this many people a row at most, rows this far apart (world units) */
 const ROW_SIZE = 80;
 const COL_GAP = 20;
-/** Passers-by start walking within this time after the go, one by one */
-const START_SPREAD_MS = 1600;
+/**
+ * Passers-by start walking within this time after the go, one by one: most of them in the first
+ * seconds, a few dawdling, so the crowd gets going little by little instead of all at once
+ */
+const START_SPREAD_MS = 6000;
 
 type Move = 'stop' | 'walk' | 'run';
 
@@ -75,7 +78,7 @@ export const crowdRace: GameFactory = (m) => {
     }).sort(() => Math.random() - 0.5);
     actors = spots.map((p, i) => {
       const a = newActor(i, looks[i], p.x, Math.min(RACE_AREA.y1, p.y), 3);
-      a.next = goAt + rand(0, START_SPREAD_MS);
+      a.next = goAt + Math.random() ** 1.6 * START_SPREAD_MS;
       return a;
     });
     // The players take characters at random

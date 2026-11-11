@@ -12,7 +12,7 @@
     disabled = false,
     size = 'normal',
     children,
-  }: { onpress: () => void; onrelease?: () => void; color?: string; disabled?: boolean; size?: 'normal' | 'big' | 'small'; children: Snippet } = $props();
+  }: { onpress: () => void; onrelease?: () => void; color?: string; disabled?: boolean; size?: 'normal' | 'big' | 'small' | 'tall' | 'square'; children: Snippet } = $props();
 
   let finger = $state<number | null>(null);
 
@@ -86,6 +86,14 @@
   .small {
     min-height: 4rem;
     font-size: 1.15rem;
+  }
+  .tall {
+    min-height: 12rem;
+    font-size: 1.9rem;
+  }
+  .square {
+    aspect-ratio: 1;
+    font-size: 1.6rem;
   }
   .hold.down {
     transform: translateY(0.35rem);
