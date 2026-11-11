@@ -82,6 +82,8 @@
   void document.fonts?.load(`16px ${PIXEL}`).then(() => (fontReady = true));
   /** Snipers' drawings: points with their time, a gap where the pen was lifted */
   let trails = new Map<string, { x: number; y: number; t: number; gap: boolean }[]>();
+  /** When each collected suitcase started to fade away (one collected before this screen opened is just gone) */
+  let caseGoneAt = new Map<number, number>();
   /** Bullet holes in the ground this round */
   let holes: { x: number; y: number; r: number }[] = [];
   const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -126,6 +128,7 @@
         break;
       case 'case':
         if (cases[e.i]) fx.gold(cases[e.i].x, cases[e.i].y);
+        caseGoneAt.set(e.i, performance.now());
         crowdSound('case', soundVolume);
         break;
       case 'gadget':
@@ -153,7 +156,8 @@
     void loadSheets().then((s) => (sheets = s));
     void loadEnv().then((e) => {
       env = e;
-      if (e) standingProps = kind === 'spy' ? squareProps(e) : streetProps(e);
+      // Sorted back to front once: the drawing merges them with the characters by depth
+      if (e) standingProps = (kind === 'spy' ? squareProps(e) : streetProps(e)).sort((a, b) => a.y - b.y);
     });
     const off = onEvent<CrowdFrame>('games', 'crowd', (f) => {
       // A new round: everyone is somewhere else, start over (and fade in from black)
@@ -163,6 +167,7 @@
         downed = new Map();
         trails = new Map();
         holes = [];
+        caseGoneAt = new Map();
         for (const p of standingProps) p.reset?.();
         roundShownAt = serverNow();
       }
@@ -557,7 +562,17 @@
     g.translate(shake.x, shake.y);
 
     g.drawImage(background(), 0, 0, WORLD.w, WORLD.h);
-    if (kind === 'spy') for (const c of cases) suitcase(g, c.x, c.y, c.open, now);
+    // The suitcases: a collected one fades away, rising a little
+    if (kind === 'spy')
+      cases.forEach((c, i) => {
+        if (!c.open) return suitcase(g, c.x, c.y, false, now);
+        const at = caseGoneAt.get(i);
+        const p = at === undefined ? 1 : Math.min(1, (performance.now() - at) / 900);
+        if (p >= 1) return;
+        g.globalAlpha = 1 - p;
+        suitcase(g, c.x, c.y - p * 24, false, now);
+        g.globalAlpha = 1;
+      });
 
     // The two frames around the time drawn
     let f0: CrowdFrame | null = null;
