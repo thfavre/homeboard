@@ -12,6 +12,9 @@
    * owned piece shows Wear instead of a price.
    */
 
+  /** Open on this slot instead of the one browsed last (the wardrobe's shop button) */
+  let { startSlot = null }: { startSlot?: Slot | null } = $props();
+
   const mod = $derived(hb.modules.world as WorldState | undefined);
   const shop = $derived(mod?.shop);
 
@@ -136,6 +139,10 @@
       } catch {
         // A broken draft is just dropped
       }
+      if (startSlot && startSlot !== slot) {
+        slot = startSlot;
+        open = null;
+      }
       firstLoad = false;
       if (body) void build(candidate());
     })();
@@ -204,6 +211,7 @@
       {/each}
     </div>
 
+    <div class="scroll">
     <div class="grid">
       {#each items as i (i.id)}
         <button type="button" class="item" class:on={open?.id === i.id} class:worn={wd?.outfit[slot]?.id === i.id} onclick={() => show(i.id)}>
@@ -222,6 +230,7 @@
           {/if}
         </button>
       {/each}
+    </div>
     </div>
 
     {#if open && openItem}
@@ -269,6 +278,18 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+  }
+  .shop > :global(*) {
+    flex: none;
+  }
+  /* Only the item list scrolls; the padding keeps the picked card's outline visible */
+  .shop > .scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: -0.2rem;
+    padding: 0.2rem;
   }
   .closed {
     display: grid;
@@ -324,15 +345,16 @@
   /* ------------------------------------------------------------ the grid */
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(6.8rem, 1fr));
+    grid-auto-rows: 1fr;
     gap: 0.5rem;
   }
   .item {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.3rem;
-    padding: 0.55rem 0.3rem 0.5rem;
+    gap: 0.15rem;
+    padding: 0.3rem 0.3rem 0.45rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-2);
@@ -346,8 +368,8 @@
   .pic {
     display: grid;
     place-items: center;
-    width: 3.4rem;
-    height: 3.4rem;
+    width: 100%;
+    height: 5.6rem;
   }
   .pic img {
     width: 100%;
@@ -357,7 +379,9 @@
   }
   .iname {
     max-width: 100%;
-    font-size: 0.78rem;
+    /* Always two lines tall, so one-line names do not make shorter cards */
+    min-height: 2.3em;
+    font-size: 0.8rem;
     line-height: 1.15;
     text-align: center;
     overflow: hidden;
@@ -393,10 +417,6 @@
     outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   }
   .sheet {
-    position: sticky;
-    /* Above the guest page's fixed bottom nav */
-    bottom: calc(4rem + env(safe-area-inset-bottom));
-    z-index: 5;
     display: flex;
     flex-direction: column;
     gap: 0.55rem;

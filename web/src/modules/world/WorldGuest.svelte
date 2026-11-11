@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Check, PersonStanding, ShoppingBag } from '@lucide/svelte';
+  import { Check, PersonStanding, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
+  import type { Slot } from '$shared/wardrobe.ts';
   import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, type AvatarChoices, type SheetInfo } from '$shared/world.ts';
   import AvatarPreview from './AvatarPreview.svelte';
   import Picker from './Picker.svelte';
@@ -9,11 +10,14 @@
   import Wardrobe from './Wardrobe.svelte';
 
   /**
-   * The avatar panel: the look editor (body, skin, hair, eyes) and the shop. The server
+   * The avatar panel: the look editor (body, skin, hair, eyes), the wardrobe of owned clothes
+   * and the shop. The server
    * composites a sheet for every look; the preview shows it walking.
    */
 
-  let tab = $state<'look' | 'shop'>('look');
+  let tab = $state<'look' | 'wardrobe' | 'shop'>('look');
+  /** The slot the wardrobe sent the guest shopping for */
+  let shopSlot = $state<Slot | null>(null);
   let choices = $state<AvatarChoices>({ ...DEFAULT_CHOICES });
   let saved = $state<string | null>(null);
   /** The avatar exists: body and skin are set, only hair, face and clothes change */
@@ -117,6 +121,13 @@
     })();
   });
 
+  /** Back from the wardrobe or the shop: redraw, since the clothes may have changed there */
+  function backToLook() {
+    if (tab === 'look') return;
+    tab = 'look';
+    if (!firstLoad) void build($state.snapshot(choices) as AvatarChoices);
+  }
+
   async function save() {
     const c = $state.snapshot(choices) as AvatarChoices;
     const done = await attempt(() => rpc('world', 'save', { choices: c }), 'Saved');
@@ -127,18 +138,26 @@
   }
 </script>
 
+<!-- The wardrobe and the shop fit the screen: only their item list scrolls -->
+<div class="panel" class:fit={tab !== 'look'}>
 <div class="tabs">
-  <button type="button" class="tab" class:on={tab === 'look'} onclick={() => (tab = 'look')}><PersonStanding size={17} />My look</button>
-  <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => (tab = 'shop')}><ShoppingBag size={16} />Shop</button>
+  <button type="button" class="tab" class:on={tab === 'look'} onclick={backToLook}><PersonStanding size={17} />My look</button>
+  <button type="button" class="tab" class:on={tab === 'wardrobe'} onclick={() => (tab = 'wardrobe')}><Shirt size={16} />Wardrobe</button>
+  <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => ((shopSlot = null), (tab = 'shop'))}><ShoppingBag size={16} />Shop</button>
 </div>
 
 {#if tab === 'shop'}
-  <Shop />
+  <Shop startSlot={shopSlot} />
+{:else if tab === 'wardrobe'}
+  <Wardrobe
+    onshop={(s) => {
+      shopSlot = s;
+      tab = 'shop';
+    }}
+  />
 {:else}
   <div class="editor">
     <AvatarPreview {url} {sheet} building={buildingCount > 0} focus={focusHead ? 'head' : null} />
-
-    <Wardrobe onchanged={() => void build($state.snapshot(choices) as AvatarChoices)} />
 
     {#if !created}
       <div class="group">
@@ -179,9 +198,24 @@
     </button>
   </div>
 {/if}
+</div>
 
 <style>
+  /* Exactly the screen between the page header and the bottom nav (the margin cancels part of
+     the page's bottom padding, so the page itself does not scroll) */
+  .fit {
+    --nav-h: calc(4.2rem + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    height: max(30rem, calc(100dvh - var(--header-h, 4rem) - 0.5rem - var(--nav-h) - 0.75rem));
+    margin-bottom: calc(var(--nav-h) + 0.75rem - 6.5rem);
+  }
+  .fit > :global(:last-child) {
+    flex: 1;
+    min-height: 0;
+  }
   .tabs {
+    flex: none;
     display: flex;
     gap: 0.4rem;
     margin-bottom: 1rem;
