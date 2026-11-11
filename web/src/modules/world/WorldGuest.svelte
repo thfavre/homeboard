@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Check, Loader2 } from '@lucide/svelte';
-  import { attempt, rpc } from '$lib/client.svelte.ts';
+  import { attempt, hb, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
   import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, type AvatarChoices, type SheetInfo } from '$shared/world.ts';
   import Picker from './Picker.svelte';
 
@@ -57,9 +57,24 @@
     }
   }
 
+  /** Editing the head zooms the preview onto it until then; a body or skin change zooms out */
+  let headUntil = 0;
+  let lastHead = '';
+  let lastBody = '';
+
+  /** Half-made looks survive leaving the panel (home, a game starting): kept on the phone */
+  const DRAFT_KEY = 'hb.world.draft';
+
   $effect(() => {
     const snapshot = JSON.stringify(choices);
+    const head = JSON.stringify([choices.hair, choices.hairColor, choices.beard, choices.eyes]);
+    const body = JSON.stringify([choices.body, choices.skin]);
     if (firstLoad) return;
+    if (lastHead && head !== lastHead) headUntil = Date.now() + 5500;
+    if (lastBody && body !== lastBody) headUntil = 0;
+    lastHead = head;
+    lastBody = body;
+    storageSet(DRAFT_KEY, snapshot === saved ? null : JSON.stringify({ id: hb.me?.id, choices: JSON.parse(snapshot) }));
     clearTimeout(debounce);
     debounce = setTimeout(() => void build(JSON.parse(snapshot)), 350);
     return () => clearTimeout(debounce);
@@ -72,6 +87,13 @@
         choices = mine;
         saved = JSON.stringify(mine);
       }
+      // A half-made look from last time wins over the saved one, so nothing is lost
+      try {
+        const draft = JSON.parse(storageGet(DRAFT_KEY) ?? 'null');
+        if (draft?.id === hb.me?.id && draft.choices) choices = { ...DEFAULT_CHOICES, ...draft.choices };
+      } catch {
+        // A broken draft is just dropped
+      }
       firstLoad = false;
       void build($state.snapshot(choices) as AvatarChoices);
     })();
@@ -80,7 +102,10 @@
   async function save() {
     const c = $state.snapshot(choices) as AvatarChoices;
     const done = await attempt(() => rpc('world', 'save', { choices: c }), 'Saved');
-    if (done) saved = JSON.stringify(c);
+    if (done) {
+      saved = JSON.stringify(c);
+      storageSet(DRAFT_KEY, null);
+    }
   }
 
   // ------------------------------------------------------------ the live preview
@@ -101,10 +126,14 @@
   $effect(() => {
     if (!canvas) return;
     let raf = 0;
+    let zoom = 0;
+    let last = Date.now();
     const g = canvas.getContext('2d')!;
     const loop = () => {
       raf = requestAnimationFrame(loop);
       const now = Date.now();
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
       g.imageSmoothingEnabled = false;
       g.clearRect(0, 0, canvas!.width, canvas!.height);
       if (!imgReady || !sheet) return;
@@ -114,7 +143,15 @@
       const count = Math.max(1, row.frames - 1);
       const frame = row.frames > 1 ? 1 + (Math.floor(now / 110) % count) : 0;
       const px = sheet.frame;
-      g.drawImage(img, frame * px, row.row * px, px, px, 0, 0, canvas!.width, canvas!.height);
+      // Editing the head glides the view onto it, and out again after a few untouched seconds
+      zoom += ((now < headUntil ? 1 : 0) - zoom) * Math.min(1, dt * 7);
+      const headSize = 34;
+      const headY = Math.max(0, (sheet.body.top ?? 8) - 3);
+      const ease = zoom * zoom * (3 - 2 * zoom);
+      const size = px + (headSize - px) * ease;
+      const sx = ((px - headSize) / 2) * ease;
+      const sy = headY * ease;
+      g.drawImage(img, frame * px + sx, row.row * px + sy, size, size, 0, 0, canvas!.width, canvas!.height);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
