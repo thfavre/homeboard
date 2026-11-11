@@ -237,7 +237,7 @@
       {#each items as i (i.id)}
         <button
           type="button"
-          class="item"
+          class="item {i.tier}"
           class:on={open?.id === i.id}
           class:owned={ownedIs(i.id)}
           class:wearing={wd?.outfit[slot]?.id === i.id}
@@ -363,6 +363,8 @@
   }
   .item {
     position: relative;
+    isolation: isolate;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -387,7 +389,7 @@
     image-rendering: pixelated;
   }
   /* The name sits over the top of the picture, outlined so it reads on any art */
-  .iname {
+  .item > .iname {
     position: absolute;
     top: 0.35rem;
     left: 0.3rem;
@@ -432,12 +434,89 @@
   }
 
   /* ------------------------------------------------------------ the tried-on piece */
-  /* Owned pieces get a light tint of the accent, the worn one a stronger one */
+  /* Epic and legendary cards: a faint wash of their color rising from the bottom, and now and then
+     a thin sheen of light sweeping across, behind the picture and the price */
+  .item.epic {
+    --glow: #b06ae0;
+    --sheen: 8s;
+    --sheen-alpha: 7%;
+  }
+  .item.legendary {
+    --glow: #e8b83e;
+    --sheen: 6s;
+    --sheen-alpha: 13%;
+  }
+  /* Cheap cards lean a little brown, fancy ones a little blue (over the owned tint, if any) */
+  .item.cheap::before,
+  .item.fancy::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--tint) 7%, transparent);
+  }
+  .item.cheap {
+    --tint: #8a5a34;
+  }
+  .item.fancy {
+    --tint: #4f8fe0;
+  }
+  .item.epic::before,
+  .item.legendary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(to top, color-mix(in srgb, var(--glow) 14%, transparent), transparent 55%);
+  }
+  .item.epic::after,
+  .item.legendary::after {
+    content: '';
+    position: absolute;
+    inset: -20% -60%;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      105deg,
+      transparent 42%,
+      color-mix(in srgb, #fff var(--sheen-alpha), transparent) 50%,
+      transparent 58%
+    );
+    transform: translateX(-60%);
+    animation: sheen var(--sheen) ease-in-out infinite;
+  }
+  @keyframes sheen {
+    0%,
+    70% {
+      transform: translateX(-60%);
+    }
+    100% {
+      transform: translateX(60%);
+    }
+  }
+  /* The content stays above the wash and the sheen */
+  .item > :global(*) {
+    position: relative;
+    z-index: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .item::after {
+      animation: none !important;
+      opacity: 0;
+    }
+  }
+  /* Owned pieces get a frame in the accent color (the background stays the rarity's), the worn
+     one a bolder frame */
   .item.owned {
-    background: color-mix(in srgb, var(--accent) 9%, var(--surface-2));
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
   }
   .item.wearing {
-    background: color-mix(in srgb, var(--accent) 22%, var(--surface-2));
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .item.on {
     border-color: var(--accent);
