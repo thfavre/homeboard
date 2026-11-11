@@ -192,6 +192,7 @@ export const crowdRace: GameFactory = (m) => {
     }
     const frame: CrowdFrame = {
       t: now,
+      r: round,
       a: pack(actors),
       aims: [...aims.values()].filter((a) => alive.has(a.id) && step !== 'reveal').map((a) => aimOut(a, step === 'race' && a.shots > 0 && now >= a.readyAt)),
       ev: events,

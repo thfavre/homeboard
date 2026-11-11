@@ -38,12 +38,18 @@
   li {
     display: inline-flex;
     align-items: center;
-    gap: 0.45rem;
-    padding: 0.3rem 0.8rem;
-    border-radius: 999px;
-    background: rgb(8 8 14 / 0.75);
+    gap: 0.5rem;
+    padding: 0.5rem 0.8rem;
+    background: #14131c;
+    border: 0.15rem solid rgb(255 255 255 / 0.3);
+    box-shadow: 0.2rem 0.2rem 0 rgb(0 0 0 / 0.55);
     color: #fff;
-    font-size: 1.05rem;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.7rem;
+    font-weight: 400;
+  }
+  li strong {
+    font-weight: 400;
   }
   .dim {
     color: rgb(255 255 255 / 0.65);

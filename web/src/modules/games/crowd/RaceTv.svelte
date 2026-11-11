@@ -56,7 +56,7 @@
       <div class="players">
         {#each m.players as p (p.id)}
           {@const out = !v.alive.includes(p.id)}
-          <span class="player" class:out style:--c={p.color}>
+          <span class="player pixel" class:out style:--c={p.color}>
             <span class="dot"></span>
             <strong class="truncate">{p.name}</strong>
             <Bullets left={v.shots[p.id] ?? 0} />
@@ -70,6 +70,7 @@
       <CrowdField
         kind="race"
         round={v.round}
+        curtainAt={v.step === 'reveal' && v.round < v.rounds ? v.revealUntil : null}
         looks={v.looks ?? []}
         players={m.players}
         soundVolume={v.soundVolume}
@@ -104,6 +105,16 @@
 {/if}
 
 <style>
+  /* The game's text: the pixel font of the sprites, with a hard shadow, on dark plates */
+  .pixel,
+  .big,
+  .count,
+  .small,
+  .round {
+    font-family: 'Press Start 2P', monospace;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
   .race {
     display: grid;
     grid-template-rows: auto 1fr;
@@ -118,8 +129,7 @@
     min-width: 0;
   }
   .round {
-    font-size: 1.6rem;
-    font-weight: 700;
+    font-size: 1.1rem;
     white-space: nowrap;
   }
   .players {
@@ -134,10 +144,11 @@
     gap: 0.5rem;
     max-width: 16rem;
     padding: 0.3rem 0.8rem;
-    border-radius: 999px;
+    border-radius: 0;
+    box-shadow: 0.2rem 0.2rem 0 rgb(0 0 0 / 0.5);
     background: var(--surface);
     border: 2px solid color-mix(in srgb, var(--c) 70%, transparent);
-    font-size: 1.1rem;
+    font-size: 0.9rem;
     line-height: 1.2;
     white-space: nowrap;
     transition: opacity 0.3s ease;
@@ -177,34 +188,34 @@
     text-align: center;
   }
   .big {
-    font-family: var(--font-display);
-    font-size: 4.2rem;
-    font-weight: 800;
+    font-size: 2.6rem;
+    line-height: 1.3;
     color: #fff;
     text-shadow:
-      0 0.3rem 1.6rem rgb(0 0 0 / 0.8),
-      0 0 0.2rem rgb(0 0 0 / 0.9);
+      0.25rem 0.25rem 0 #000,
+      0 0 2rem rgb(0 0 0 / 0.7);
   }
   .result .big {
     color: var(--c);
   }
   .small {
-    padding: 0.4rem 1.2rem;
-    border-radius: 999px;
-    background: rgb(0 0 0 / 0.6);
+    padding: 0.7rem 1.1rem;
+    background: #14131c;
+    border: 0.2rem solid rgb(255 255 255 / 0.85);
+    box-shadow: 0.3rem 0.3rem 0 rgb(0 0 0 / 0.6);
     color: #fff;
-    font-size: 1.5rem;
-    font-weight: 600;
+    font-size: 0.95rem;
+    line-height: 1.5;
   }
   .count {
     grid-area: 1 / 1;
-    font-size: 11rem;
-    font-weight: 800;
+    font-size: 8rem;
     color: #fff;
-    text-shadow: 0 0.4rem 2rem rgb(0 0 0 / 0.8);
+    text-shadow:
+      0.5rem 0.5rem 0 #000,
+      0 0 3rem rgb(0 0 0 / 0.6);
   }
   .go {
-    font-family: var(--font-display);
     color: #7dff9c;
   }
 </style>

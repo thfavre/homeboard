@@ -1,10 +1,13 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { AIM_RADIUS, ANIM, CASE_RADIUS, SMOKE_RADIUS, SPRITE_SCALE, WORLD, type CrowdAim, type CrowdEvent, type CrowdFrame, type Dir } from '$shared/crowd.ts';
   import type { GamePlayer } from '$shared/games.ts';
   import { onEvent, serverNow } from '$lib/client.svelte.ts';
   import { drawCharacter, loadSheets, type Sheets } from './sprites.ts';
   import { crowdSound } from './sound.ts';
+  import '@fontsource/press-start-2p';
+  import { CloudShadows, Effects, Pigeons } from './effects.ts';
+  import { RACE_AREA, SPY_AREA, SMOKE_MS } from '$shared/crowd.ts';
 
   /**
    * The crowd on the TV: the server sends where everyone is 20 times a second, this draws it smoothly (a
@@ -20,6 +23,8 @@
     /** When each sniper can shoot again (the reload ring) */
     readyAt: Record<string, number>;
     reloadMs?: number;
+    /** Server time the screen is black at the end of a round (it fades out before, and in again on the next round) */
+    curtainAt?: number | null;
     /** Who was who: player to character (race reveal), the spy's character (spy reveal) */
     reveal?: Record<string, number> | null;
     winner?: string | null;
@@ -34,7 +39,7 @@
     /** Each event as it comes, for the screen around */
     onevent?: (e: CrowdEvent) => void;
   }
-  let { kind, round, looks, players, soundVolume, readyAt, reloadMs = 2000, reveal = null, winner = null, startX = 95, finishX = 1480, cases = [], smoke = null, blindUntil = 0, drawFadeMs = 4000, onevent }: Props = $props();
+  let { kind, round: _round, curtainAt = null, looks, players, soundVolume, readyAt, reloadMs = 2000, reveal = null, winner = null, startX = 95, finishX = 1480, cases = [], smoke = null, blindUntil = 0, drawFadeMs = 4000, onevent }: Props = $props();
 
   let canvas: HTMLCanvasElement;
   let wrap: HTMLDivElement;
@@ -59,10 +64,18 @@
   /** Players taken out this round, by character (their name shows over the body) */
   let downed = new Map<number, string>();
   /** Effects: shots, hits, sparkles */
-  let effects: { k: string; x: number; y: number; at: number; color?: string }[] = [];
+  const fx = new Effects();
+  const clouds = new CloudShadows();
+  // Pigeons on the square, or on the sidewalk and the street of the race
+  const pigeons = untrack(() => new Pigeons(kind === 'spy' ? 14 : 12, kind === 'spy' ? SPY_AREA : { x0: 60, x1: WORLD.w - 60, y0: 30, y1: RACE_AREA.y1 }));
+  /** The pixel font of the game's text, once it is loaded (the canvas cannot wait for it) */
+  const PIXEL = '"Press Start 2P", monospace';
+  let fontReady = $state(false);
+  void document.fonts?.load(`16px ${PIXEL}`).then(() => (fontReady = true));
   /** Snipers' drawings: points with their time, a gap where the pen was lifted */
   let trails = new Map<string, { x: number; y: number; t: number; gap: boolean }[]>();
-  let lastRound = -1;
+  /** When the current round first showed (it fades in from black) */
+  let roundShownAt = 0;
   /** Where each crosshair is drawn: it glides to the server's position */
   const aimShown = new Map<string, { x: number; y: number }>();
   let lastDraw = 0;
@@ -71,13 +84,14 @@
     const at = frame.t;
     switch (e.k) {
       case 'shot':
-        effects.push({ k: 'shot', x: e.x, y: e.y, at, color: color(e.by) });
+        fx.shot(e.x, e.y, e.hit >= 0);
+        pigeons.scare(e.x, e.y, 260);
         crowdSound('shot', soundVolume);
         break;
       case 'kill': {
         const x = frame.a[e.actor * 4];
         const y = frame.a[e.actor * 4 + 1];
-        effects.push({ k: 'hit', x, y: y - 50, at, color: e.victim ? '#ff3040' : '#ffb0a0' });
+        fx.fall(x, y, !!e.victim);
         if (e.victim) {
           downed.set(e.actor, e.victim);
           crowdSound('hit', soundVolume);
@@ -89,17 +103,23 @@
         crowdSound('go', soundVolume);
         break;
       case 'case':
-        if (cases[e.i]) effects.push({ k: 'case', x: cases[e.i].x, y: cases[e.i].y, at });
+        if (cases[e.i]) fx.gold(cases[e.i].x, cases[e.i].y);
         crowdSound('case', soundVolume);
         break;
       case 'gadget':
-        if (e.g === 'flashbang') crowdSound('flashbang', soundVolume);
-        else if (e.g === 'smoke') crowdSound('smoke', soundVolume);
-        else {
+        if (e.g === 'flashbang') {
+          crowdSound('flashbang', soundVolume);
+          fx.flashbang(e.x, e.y - 40);
+          pigeons.scare(e.x, e.y, 2000);
+        } else if (e.g === 'smoke') {
+          crowdSound('smoke', soundVolume);
+          fx.smoke(e.x, e.y, SMOKE_MS);
+          pigeons.scare(e.x, e.y, 300);
+        } else {
           // The decoy falls as if shot: a shot sound from nowhere
           crowdSound('shot', soundVolume);
           crowdSound('fall', soundVolume * 0.8);
-          effects.push({ k: 'hit', x: e.x, y: e.y - 50, at, color: '#ffb0a0' });
+          fx.fall(e.x, e.y, false);
         }
         break;
     }
@@ -110,6 +130,14 @@
     let raf = 0;
     void loadSheets().then((s) => (sheets = s));
     const off = onEvent<CrowdFrame>('games', 'crowd', (f) => {
+      // A new round: everyone is somewhere else, start over (and fade in from black)
+      if (frames.length && frames[frames.length - 1].r !== f.r) {
+        frames = [];
+        locals = [];
+        downed = new Map();
+        trails = new Map();
+        roundShownAt = serverNow();
+      }
       frames.push(f);
       if (frames.length > 40) frames = frames.slice(-20);
       for (const e of f.ev) handle(e, f);
@@ -143,7 +171,7 @@
   }
 
   function background(): HTMLCanvasElement {
-    const key = `${kind}:${startX}:${finishX}`;
+    const key = `${kind}:${startX}:${finishX}:${fontReady}`;
     if (bg && bgKind === key) return bg;
     const c = document.createElement('canvas');
     const k = 1.5;
@@ -215,20 +243,20 @@
     }
     // Words on the ground
     g.save();
-    g.font = '700 46px system-ui, sans-serif';
+    g.font = `40px ${PIXEL}`;
     g.textAlign = 'center';
     g.fillStyle = 'rgba(255,255,255,0.12)';
     g.translate(finishX + 82, (WORLD.h + 114) / 2);
     g.rotate(-Math.PI / 2);
-    g.fillText('F I N I S H', 0, 16);
+    g.fillText('FINISH', 0, 16);
     g.restore();
     g.save();
-    g.font = '700 34px system-ui, sans-serif';
+    g.font = `28px ${PIXEL}`;
     g.textAlign = 'center';
     g.fillStyle = 'rgba(255,255,255,0.1)';
     g.translate(startX - 34, (WORLD.h + 114) / 2);
     g.rotate(-Math.PI / 2);
-    g.fillText('S T A R T', 0, 12);
+    g.fillText('START', 0, 12);
     g.restore();
   }
 
@@ -398,25 +426,34 @@
       g.stroke();
     }
     g.globalAlpha = 1;
-    tag(g, name(a.id), 0, r + 30, c, 20);
+    tag(g, name(a.id), 0, r + 26, c, 12);
     g.restore();
   }
 
-  /** A name on a dark pill */
-  function tag(g: CanvasRenderingContext2D, text: string, x: number, y: number, c: string, size = 22) {
+  /** A name in the pixel font on a dark plate with a border of the player's color and a hard shadow */
+  function tag(g: CanvasRenderingContext2D, text: string, x: number, y: number, c: string, size = 14) {
     if (!text) return;
-    g.font = `700 ${size}px system-ui, sans-serif`;
-    const w = g.measureText(text).width + size;
-    g.fillStyle = 'rgba(10,10,16,0.78)';
-    g.beginPath();
-    g.roundRect(x - w / 2, y - size * 0.85, w, size * 1.4, size * 0.7);
-    g.fill();
-    g.strokeStyle = c;
-    g.lineWidth = 2.5;
-    g.stroke();
-    g.fillStyle = '#fff';
+    g.font = `${size}px ${PIXEL}`;
+    const w = Math.round(g.measureText(text).width + size * 1.4);
+    const h = Math.round(size * 2);
+    const left = Math.round(x - w / 2);
+    const top = Math.round(y - h / 2);
+    g.fillStyle = 'rgba(0,0,0,0.45)';
+    g.fillRect(left + 4, top + 4, w, h);
+    g.fillStyle = '#14131c';
+    g.fillRect(left, top, w, h);
+    g.fillStyle = c;
+    g.fillRect(left, top, w, 3);
+    g.fillRect(left, top + h - 3, w, 3);
+    g.fillRect(left, top, 3, h);
+    g.fillRect(left + w - 3, top, 3, h);
     g.textAlign = 'center';
-    g.fillText(text, x, y + size * 0.3);
+    g.textBaseline = 'middle';
+    g.fillStyle = '#000';
+    g.fillText(text, x + 2, y + 3);
+    g.fillStyle = '#fff';
+    g.fillText(text, x, y + 1);
+    g.textBaseline = 'alphabetic';
   }
 
   function smokeCloud(g: CanvasRenderingContext2D, s: { x: number; y: number; until: number }, now: number) {
@@ -425,30 +462,15 @@
     const a = Math.max(0, Math.min(1, age / 500, left / 1200));
     if (a <= 0) return;
     const grow = Math.min(1, age / 700);
-    // A thick core nobody can see through, then puffs rolling around it
-    const core = g.createRadialGradient(s.x, s.y, 0, s.x, s.y, SMOKE_RADIUS * grow);
-    core.addColorStop(0, `rgba(170,172,180,${0.97 * a})`);
-    core.addColorStop(0.7, `rgba(165,167,176,${0.9 * a})`);
-    core.addColorStop(1, 'rgba(160,162,170,0)');
+    // The heart of the cloud, so nobody can be seen inside even between the puffs (they make the look)
+    const core = g.createRadialGradient(s.x, s.y, 0, s.x, s.y, SMOKE_RADIUS * 0.8 * grow);
+    core.addColorStop(0, `rgba(190,192,200,${0.92 * a})`);
+    core.addColorStop(0.75, `rgba(185,187,196,${0.75 * a})`);
+    core.addColorStop(1, 'rgba(180,182,190,0)');
     g.fillStyle = core;
     g.beginPath();
-    g.ellipse(s.x, s.y, SMOKE_RADIUS * grow, SMOKE_RADIUS * grow * 0.85, 0, 0, Math.PI * 2);
+    g.ellipse(s.x, s.y, SMOKE_RADIUS * 0.8 * grow, SMOKE_RADIUS * 0.7 * grow, 0, 0, Math.PI * 2);
     g.fill();
-    for (let k = 0; k < 26; k++) {
-      const ang = k * 2.4 + now / (2600 + k * 90);
-      const d = SMOKE_RADIUS * grow * (0.15 + 0.7 * ((k * 37) % 10) / 10);
-      const x = s.x + Math.cos(ang) * d;
-      const y = s.y + Math.sin(ang) * d * 0.75;
-      const rad = (70 + ((k * 53) % 50)) * grow;
-      const grad = g.createRadialGradient(x, y, 0, x, y, rad);
-      const shade = 150 + ((k * 29) % 50);
-      grad.addColorStop(0, `rgba(${shade},${shade},${shade + 8},${0.55 * a})`);
-      grad.addColorStop(1, `rgba(${shade},${shade},${shade + 8},0)`);
-      g.fillStyle = grad;
-      g.beginPath();
-      g.arc(x, y, rad, 0, Math.PI * 2);
-      g.fill();
-    }
   }
 
   function draw() {
@@ -468,15 +490,12 @@
     g.imageSmoothingEnabled = false;
     const now = serverNow();
     const t = now - DELAY_MS;
-
-    if (round !== lastRound) {
-      lastRound = round;
-      locals = [];
-      downed = new Map();
-      trails = new Map();
-      effects = [];
-      frames = frames.filter((f) => f.t >= now - 200);
-    }
+    const step = Math.min(0.1, Math.max(0, (now - lastDraw) / 1000));
+    fx.update(step);
+    clouds.update(step);
+    // A shot shakes the whole field a little
+    const shake = fx.offset();
+    g.translate(shake.x, shake.y);
 
     g.drawImage(background(), 0, 0, WORLD.w, WORLD.h);
     if (kind === 'spy') for (const c of cases) suitcase(g, c.x, c.y, c.open, now);
@@ -514,6 +533,10 @@
       }
       people.push({ i, x, y, anim, dir });
     }
+    // Dust on the ground and the pigeons, under everyone
+    fx.draw(g, false, PIXEL);
+    pigeons.update(step, people.filter((p) => p.anim !== ANIM.dead));
+    pigeons.draw(g);
     // The fallen first (on the ground), then from the back to the front
     people.sort((a, b) => (a.anim === ANIM.dead ? 0 : 1) - (b.anim === ANIM.dead ? 0 : 1) || a.y - b.y);
 
@@ -552,6 +575,11 @@
       drawCharacter(g, sheets, img, p.x, p.y, { anim: p.anim, dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, (look * 47) % 360);
     }
 
+    // Smoke, the flashes and sparks over everyone, then the cloud shadows drifting over the whole place
+    if (kind === 'spy' && smoke) smokeCloud(g, smoke, now);
+    fx.draw(g, true, PIXEL);
+    clouds.draw(g);
+
     // Names over the players shown (taken out, or everyone at the reveal)
     const tall = 64 * SPRITE_SCALE;
     for (const p of people) {
@@ -559,45 +587,7 @@
       if (!who) continue;
       const dead = p.anim === ANIM.dead;
       const label = kind === 'spy' && reveal ? `Spy: ${name(who)}` : name(who);
-      tag(g, label + (winner === who ? '  WINS' : ''), p.x, dead ? p.y - 40 : p.y - tall - 6, color(who), winner === who ? 30 : 24);
-    }
-
-    if (kind === 'spy' && smoke) smokeCloud(g, smoke, now);
-
-    // Effects
-    effects = effects.filter((e) => now - e.at < 900);
-    for (const e of effects) {
-      const p = (now - e.at) / 900;
-      if (p < 0) continue;
-      if (e.k === 'shot') {
-        g.strokeStyle = `rgba(255,255,255,${1 - p})`;
-        g.lineWidth = 6 * (1 - p);
-        g.beginPath();
-        g.arc(e.x, e.y, 10 + p * 60, 0, Math.PI * 2);
-        g.stroke();
-        if (p < 0.15) {
-          g.fillStyle = `rgba(255,250,220,${1 - p / 0.15})`;
-          g.beginPath();
-          g.arc(e.x, e.y, 16, 0, Math.PI * 2);
-          g.fill();
-        }
-      } else if (e.k === 'hit') {
-        for (let s = 0; s < 10; s++) {
-          const ang = (s / 10) * Math.PI * 2 + s;
-          const d = 8 + p * (40 + (s % 3) * 14);
-          g.fillStyle = e.color ?? '#f33';
-          g.globalAlpha = 1 - p;
-          g.fillRect(e.x + Math.cos(ang) * d - 3, e.y + Math.sin(ang) * d + p * p * 40 - 3, 6, 6);
-        }
-        g.globalAlpha = 1;
-      } else if (e.k === 'case') {
-        for (let s = 0; s < 14; s++) {
-          const ang = (s / 14) * Math.PI * 2;
-          const d = 20 + p * 90;
-          g.fillStyle = `rgba(255,215,90,${1 - p})`;
-          g.fillRect(e.x + Math.cos(ang) * d - 3, e.y - 10 + Math.sin(ang) * d - 3, 6, 6);
-        }
-      }
+      tag(g, label + (winner === who ? '  WINS' : ''), p.x, dead ? p.y - 40 : p.y - tall - 6, color(who), winner === who ? 20 : 15);
     }
 
     // The snipers' drawings, fading
@@ -624,9 +614,8 @@
     // Crosshairs: they glide to where the newest frame has them (quick, but no jump at each frame), hidden
     // while the snipers are blinded
     const latest = frames[frames.length - 1];
-    const dt = Math.min(0.1, Math.max(0, (now - lastDraw) / 1000));
     lastDraw = now;
-    const glide = 1 - Math.exp(-dt * 22);
+    const glide = 1 - Math.exp(-step * 22);
     if (latest) {
       for (const a of latest.aims) {
         const shown = aimShown.get(a.id);
@@ -643,8 +632,35 @@
     if (now < blindUntil) {
       const left = blindUntil - now;
       g.fillStyle = `rgba(255,253,245,${Math.min(1, left / 1800)})`;
-      g.fillRect(0, 0, WORLD.w, WORLD.h);
+      g.fillRect(-20, -20, WORLD.w + 40, WORLD.h + 40);
     }
+    // A soft vignette: the eye goes to the middle, the edges feel like a scene
+    g.drawImage(vignette(), -20, -20, WORLD.w + 40, WORLD.h + 40);
+    // Between two rounds: fade to black, and in again on the new one
+    const CURTAIN_MS = 700;
+    const out = curtainAt ? Math.min(1, Math.max(0, 1 - (curtainAt - now) / CURTAIN_MS)) : 0;
+    const back = Math.max(0, 1 - (now - roundShownAt) / CURTAIN_MS);
+    const black = Math.max(out, back);
+    if (black > 0) {
+      g.fillStyle = `rgba(6,6,12,${black})`;
+      g.fillRect(-20, -20, WORLD.w + 40, WORLD.h + 40);
+    }
+  }
+
+  let vignetteCanvas: HTMLCanvasElement | null = null;
+  function vignette(): HTMLCanvasElement {
+    if (vignetteCanvas) return vignetteCanvas;
+    const c = document.createElement('canvas');
+    c.width = 400;
+    c.height = 225;
+    const v = c.getContext('2d')!;
+    const grad = v.createRadialGradient(200, 112, 70, 200, 112, 240);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,10,0.42)');
+    v.fillStyle = grad;
+    v.fillRect(0, 0, 400, 225);
+    vignetteCanvas = c;
+    return c;
   }
 </script>
 

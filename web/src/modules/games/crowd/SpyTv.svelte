@@ -69,16 +69,16 @@
   <div class="spy">
     <div class="bar">
       <span class="round mono">Round {v.round}<span class="faint">/{v.rounds}</span></span>
-      <span class="chip spy-chip" style:--c={spy?.color}>Spy <strong>{spy?.name}</strong></span>
-      <span class="chip clock" class:hurry={v.step === 'hunt' && left < 20_000}>
+      <span class="chip pixel spy-chip" style:--c={spy?.color}>Spy <strong>{spy?.name}</strong></span>
+      <span class="chip pixel clock" class:hurry={v.step === 'hunt' && left < 20_000}>
         <Timer size="1.2rem" />
         <span class="mono">{v.step === 'pick' ? '-' : clock(v.step === 'hunt' ? left : 0)}</span>
       </span>
-      <span class="chip cases">
+      <span class="chip pixel cases">
         {#each v.cases as c, i (i)}<span class="case" class:open={c.open}><Briefcase size="1.3rem" /></span>{/each}
         <span class="dim">{opened}/{v.needed}</span>
       </span>
-      <span class="chip gadget">
+      <span class="chip pixel gadget">
         {#if v.gadget.used}
           {@const Icon = GADGET_ICONS[v.gadget.used]}
           <Icon size="1.1rem" /> {SPY_GADGETS.find((g) => g.id === v.gadget.used)?.name} used
@@ -89,7 +89,7 @@
       <span class="spacer"></span>
       <div class="snipers">
         {#each m.players.filter((p) => p.id !== v.spy) as p (p.id)}
-          <span class="sniper" style:--c={p.color}>
+          <span class="sniper pixel" style:--c={p.color}>
             <span class="dot"></span>
             <strong class="truncate">{p.name}</strong>
             <Bullets left={v.shots[p.id] ?? 0} size="0.9rem" />
@@ -103,6 +103,7 @@
       <CrowdField
         kind="spy"
         round={v.round}
+        curtainAt={v.step === 'reveal' && v.round < v.rounds ? v.until : null}
         looks={v.looks ?? []}
         players={m.players}
         soundVolume={v.soundVolume}
@@ -145,6 +146,17 @@
 {/if}
 
 <style>
+  /* The game's text: the pixel font of the sprites, with a hard shadow, on dark plates */
+  .pixel,
+  .big,
+  .count,
+  .small,
+  .word,
+  .round {
+    font-family: 'Press Start 2P', monospace;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
   .spy {
     display: grid;
     grid-template-rows: auto 1fr;
@@ -160,8 +172,7 @@
     min-width: 0;
   }
   .round {
-    font-size: 1.6rem;
-    font-weight: 700;
+    font-size: 1.1rem;
     white-space: nowrap;
   }
   .chip {
@@ -169,18 +180,19 @@
     align-items: center;
     gap: 0.45rem;
     padding: 0.3rem 0.9rem;
-    border-radius: 999px;
+    border-radius: 0;
+    box-shadow: 0.2rem 0.2rem 0 rgb(0 0 0 / 0.5);
     background: var(--surface);
     border: 1px solid var(--border);
-    font-size: 1.15rem;
+    font-size: 0.9rem;
     white-space: nowrap;
   }
   .spy-chip {
     border: 2px solid var(--c);
   }
   .clock .mono {
-    font-size: 1.4rem;
-    font-weight: 700;
+    font-family: inherit;
+    font-size: 1rem;
   }
   .clock.hurry {
     color: var(--danger, #ff5a5a);
@@ -208,10 +220,11 @@
     gap: 0.4rem;
     max-width: 14rem;
     padding: 0.25rem 0.7rem;
-    border-radius: 999px;
+    border-radius: 0;
+    box-shadow: 0.2rem 0.2rem 0 rgb(0 0 0 / 0.5);
     background: var(--surface);
     border: 2px solid color-mix(in srgb, var(--c) 70%, transparent);
-    font-size: 1rem;
+    font-size: 0.9rem;
   }
   .dot {
     width: 0.7rem;
@@ -242,37 +255,37 @@
     text-align: center;
   }
   .big {
-    font-family: var(--font-display);
-    font-size: 4.2rem;
-    font-weight: 800;
+    font-size: 2.6rem;
+    line-height: 1.3;
     color: #fff;
     text-shadow:
-      0 0.3rem 1.6rem rgb(0 0 0 / 0.8),
-      0 0 0.2rem rgb(0 0 0 / 0.9);
+      0.25rem 0.25rem 0 #000,
+      0 0 2rem rgb(0 0 0 / 0.7);
   }
   .small {
-    padding: 0.4rem 1.2rem;
-    border-radius: 999px;
-    background: rgb(0 0 0 / 0.6);
+    padding: 0.7rem 1.1rem;
+    background: #14131c;
+    border: 0.2rem solid rgb(255 255 255 / 0.85);
+    box-shadow: 0.3rem 0.3rem 0 rgb(0 0 0 / 0.6);
     color: #fff;
-    font-size: 1.5rem;
-    font-weight: 600;
+    font-size: 0.95rem;
+    line-height: 1.5;
   }
   .count {
-    font-size: 11rem;
-    font-weight: 800;
+    font-size: 8rem;
     color: #fff;
-    text-shadow: 0 0.4rem 2rem rgb(0 0 0 / 0.8);
+    text-shadow:
+      0.5rem 0.5rem 0 #000,
+      0 0 3rem rgb(0 0 0 / 0.6);
   }
   .go {
-    font-family: var(--font-display);
     color: #ff6b6b;
   }
   .word {
-    font-family: var(--font-display);
-    font-size: 6rem;
-    font-weight: 800;
+    font-size: 4rem;
     color: #fff;
-    text-shadow: 0 0 2rem rgb(255 255 255 / 0.8), 0 0.3rem 1rem rgb(0 0 0 / 0.7);
+    text-shadow:
+      0.35rem 0.35rem 0 #000,
+      0 0 2rem rgb(255 255 255 / 0.7);
   }
 </style>

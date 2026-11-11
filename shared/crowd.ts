@@ -75,6 +75,8 @@ export type CrowdEvent =
  */
 export interface CrowdFrame {
   t: number;
+  /** The round: the TV never blends two frames of different rounds (everyone goes back to the start) */
+  r: number;
   a: number[];
   aims: CrowdAim[];
   ev: CrowdEvent[];

@@ -90,11 +90,15 @@ function frameOf(info: SheetInfo, p: Pose): { row: RowInfo; frame: number } | nu
       return { row: hurt, frame: Math.min(hurt.frames - 1, k) };
     }
     case ANIM.win: {
-      const jump = get('jump') ?? get('emote');
-      if (!jump) return null;
-      // Jumps, with a little rest on the ground between two
-      const k = Math.floor((p.since + p.phase) / 120) % (jump.frames + 3);
-      return { row: jump, frame: Math.min(jump.frames - 1, k) };
+      // A loop: a jump (all its frames), then the arms up (the emote), then again
+      const jump = get('jump');
+      const cheer = get('emote') ?? get('happy');
+      if (!jump) return cheer ? { row: cheer, frame: Math.floor(p.since / 180) % cheer.frames } : null;
+      const jumpMs = jump.frames * 110;
+      const cheerMs = cheer ? cheer.frames * 2 * 160 : 0;
+      const at = p.since % (jumpMs + cheerMs);
+      if (at < jumpMs) return { row: jump, frame: Math.floor(at / 110) };
+      return { row: cheer!, frame: Math.floor((at - jumpMs) / 160) % cheer!.frames };
     }
     case ANIM.cheer: {
       const row = get('emote');

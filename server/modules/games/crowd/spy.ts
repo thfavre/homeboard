@@ -243,6 +243,7 @@ export const spyHunt: GameFactory = (m) => {
     const blind = now < blindUntil;
     const frame: CrowdFrame = {
       t: now,
+      r: round,
       a: pack(actors),
       aims: step === 'reveal' ? [] : [...aims.values()].map((a) => aimOut(a, step === 'hunt' && !blind && a.shots > 0 && now >= a.readyAt)),
       ev: events,
