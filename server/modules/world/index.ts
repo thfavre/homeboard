@@ -1,10 +1,11 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type LookPart, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { CATALOG, TIERS, itemById, validOutfit, validWorn, type Outfit, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, TIERS, itemById, piecesOf, validOutfit, validWorn, type Outfit, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -257,13 +258,16 @@ export default defineModule<WorldSettings>({
     const iconsDir = ctx.mediaDir('icons');
     const drawingIcons = new Map<string, Promise<void>>();
     async function iconUrl(item: WardrobeItem, color = item.colors[0]): Promise<string> {
-      // Named by item and color, so a catalog change of the first color draws a new picture
-      const name = `${item.id}--${color}`;
+      // Named by item, color and the layers drawn, so a catalog change (a new first color, an
+      // added trim) draws a new picture
+      const pieces = piecesOf(item, color);
+      const layers = createHash('sha1').update(JSON.stringify(pieces)).digest('hex').slice(0, 8);
+      const name = `${item.id}--${color.replace('+', '-')}--${layers}`;
       const file = join(iconsDir, `${name}.png`);
       if (!existsSync(file)) {
         let p = drawingIcons.get(name);
         if (!p) {
-          p = composer.icon(item.def, color, item.bodies?.[0] ?? 'male').then((png) => writeFileSync(file, png));
+          p = composer.icon(pieces, item.bodies?.[0] ?? 'male').then((png) => writeFileSync(file, png));
           drawingIcons.set(name, p);
           p.catch(() => drawingIcons.delete(name));
         }
