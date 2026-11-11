@@ -121,6 +121,26 @@ export function drawSnips(g: CanvasRenderingContext2D, x: number, headY: number,
   g.stroke();
 }
 
+/** The barber cutting: the scissors snapping along the cut line by the head (the cut hair is the TV's, from the old look's pixels) */
+export function drawCut(g: CanvasRenderingContext2D, cutX: number, headY: number, now: number): void {
+  const open = Math.abs(Math.sin(now / 90)) * 0.55;
+  // Pointing down along the cut, riding up and down the hair
+  const sx = cutX;
+  const sy = headY - 10 + Math.sin(now / 260) * 5;
+  g.strokeStyle = '#e3e7ec';
+  g.lineWidth = 1.5;
+  g.beginPath();
+  for (const s of [-1, 1]) {
+    g.moveTo(sx, sy);
+    g.lineTo(sx + 10 * Math.sin(open * s), sy + 10 * Math.cos(open * s));
+  }
+  g.stroke();
+  g.beginPath();
+  g.arc(sx - 2, sy - 3, 2, 0, Math.PI * 2);
+  g.arc(sx + 2, sy - 3, 2, 0, Math.PI * 2);
+  g.stroke();
+}
+
 /** The back of the clothes shop: a rail with clothes in many colors */
 function clothesRack(g: CanvasRenderingContext2D, x: number, y: number, w: number): void {
   g.fillStyle = 'rgba(70,45,28,0.75)';

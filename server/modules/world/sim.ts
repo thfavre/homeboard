@@ -27,6 +27,8 @@ const ARRIVE = 6;
 const QUEUE_GAP = 36;
 /** How far from a door a character fades in or out of it */
 const DOOR_FADE = 26;
+/** Time inside after the look changes: the TV shows it changing (the barber's cut, the curtain) */
+const CHANGE_MS = 2200;
 
 type Doing =
   | { kind: 'idle'; until: number }
@@ -457,7 +459,8 @@ export class TownSim {
       case 'enter':
         if (this.walkTo(w, p.door.x, p.door.y, WALK_UPS, dt)) {
           const stay = rand(o.insideMs[0], o.insideMs[1]);
-          Object.assign(d, { phase: 'inside', until: now + stay, dressAt: now + stay * 0.55 });
+          const dressAt = now + stay * 0.35;
+          Object.assign(d, { phase: 'inside', until: Math.max(now + stay, dressAt + CHANGE_MS), dressAt });
         }
         break;
       case 'inside':
