@@ -2,11 +2,12 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { WORLD } from '$shared/crowd.ts';
-  import { FRAME_STRIDE, TOWN, TOWN_AREA, WANIM, type TownFrame, type WorldState } from '$shared/world.ts';
+  import { FRAME_STRIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
+  import { drawShop, drawSnips, drawSwish, insideFeet } from './shops.ts';
 
   /**
    * The town on the TV: the crowd games' square (same LPC environment art, same renderer), lived in
@@ -28,6 +29,11 @@
 
   /** Per character: distance walked, when its anim started, a breathing offset */
   const locals = new Map<string, { dist: number; anim: number; since: number; phase: number; lx: number; ly: number }>();
+  /** Per character: the last sheet drawn (kept until a new one has loaded) and its URL */
+  const shown = new Map<string, { url: string; img: HTMLImageElement | null }>();
+  /** When a character's look changed while it was inside a shop (the curtain is drawn across) */
+  const swishes = new Map<string, number>();
+  const SWISH_MS = 900;
   const pigeons = untrack(() => new Pigeons(3, TOWN_AREA));
   let lastDraw = 0;
 
@@ -210,6 +216,13 @@
       }
     }
 
+    const byId = new Map(world?.characters.map((c) => [c.id, c]) ?? []);
+    const sheets = asSheets(world?.sheet ?? null);
+
+    // The ones inside a shop are seen through its window, on the wall behind everyone else
+    const inside = people.filter((p) => p.anim === WANIM.inside);
+    for (let i = people.length - 1; i >= 0; i--) if (people[i].anim === WANIM.inside) people.splice(i, 1);
+
     // The birds fly off on their own when someone walks up to them
     pigeons.update(step, people.filter((p) => p.anim !== WANIM.sleep));
     if (!env) pigeons.draw(g, null);
@@ -221,6 +234,8 @@
     g.fillStyle = 'rgba(0,0,0,0.28)';
     g.beginPath();
     for (const p of people) {
+      // Half through a shop door: no shadow
+      if (p.alpha < 0.6) continue;
       if (p.anim === WANIM.sleep) {
         const s = sleepSide(p.x);
         g.moveTo(p.x + s * 30 + 30, p.y + 2);
@@ -232,8 +247,21 @@
     }
     g.fill();
 
-    const byId = new Map(world?.characters.map((c) => [c.id, c]) ?? []);
-    const sheets = asSheets(world?.sheet ?? null);
+    /** The sheet to draw: the character's own, the previous one while a new look loads */
+    const imageOf = (id: string, inShop: boolean): HTMLImageElement | undefined => {
+      const c = byId.get(id);
+      if (!c) return undefined;
+      let s = shown.get(id);
+      if (!s) shown.set(id, (s = { url: c.url, img: null }));
+      else if (s.url !== c.url) {
+        // A new look: behind a curtain if it comes while inside a shop
+        if (inShop && s.img) swishes.set(id, now);
+        s.url = c.url;
+      }
+      const img = sheetImage(c.url);
+      if (img) s.img = img;
+      return s.img ?? undefined;
+    };
     const drawPerson = (p: Person) => {
       let l = locals.get(p.id);
       if (!l) locals.set(p.id, (l = { dist: 0, anim: -1, since: now, phase: Math.random() * 3000, lx: p.x, ly: p.y }));
@@ -244,8 +272,7 @@
         l.anim = p.anim;
         l.since = now;
       }
-      const c = byId.get(p.id);
-      const img = (c && sheetImage(c.url)) ?? undefined;
+      const img = imageOf(p.id, p.anim === WANIM.inside);
       g.globalAlpha = p.alpha;
       if (p.anim === WANIM.sleep) {
         // Asleep on their side: the side-view idle turned flat (the breathing keeps playing),
@@ -262,6 +289,21 @@
       }
       g.globalAlpha = 1;
     };
+
+    // The shops, with whoever is inside seen through the window
+    const tall = world?.sheet ? (world.sheet.feet - world.sheet.body.top) * 1.35 : 64;
+    for (const place of Object.values(TOWN_PLACES)) {
+      const here = inside.filter((p) => p.x >= place.window.x && p.x <= place.window.x + place.window.w);
+      drawShop(g, place, now, (gg) => {
+        for (const p of here) {
+          const feet = insideFeet(place);
+          drawPerson({ ...p, y: feet });
+          if (place.id === 'barber') drawSnips(gg, p.x, feet - tall + 6, now, 'rgba(58,40,30,0.9)');
+          const at = swishes.get(p.id);
+          if (at !== undefined && now - at < SWISH_MS) drawSwish(gg, place, p.x, (now - at) / SWISH_MS);
+        }
+      });
+    }
 
     // The characters, the things that stand up, the birds and the cat, back to front together
     let pi = 0;
@@ -288,7 +330,11 @@
 
     // Names and sleep bubbles over everything. The head's top comes from the measured sheet, so
     // the name hangs just over the hair.
-    const tall = world?.sheet ? (world.sheet.feet - world.sheet.body.top) * 1.35 : 64;
+    for (const p of inside) {
+      const c = byId.get(p.id);
+      const place = placeAt(p.x);
+      if (c && place) nameTag(g, c.name, p.x, place.window.y + place.window.h + 14, p.alpha);
+    }
     for (const p of people) {
       const c = byId.get(p.id);
       const s = sleepSide(p.x);
@@ -307,6 +353,9 @@
       g.fillText('Create your avatar on your phone to move in', TOWN.w / 2, 462);
     }
   }
+
+  /** The shop whose window this x is in */
+  const placeAt = (x: number): TownPlace | undefined => Object.values(TOWN_PLACES).find((pl) => x >= pl.window.x && x <= pl.window.x + pl.window.w);
 
   /** Which way a sleeper lies: body toward the middle of the town */
   const sleepSide = (x: number) => (x < TOWN.w / 2 ? 1 : -1);
