@@ -177,7 +177,7 @@
       <span class="faint small">You earn them by being in the town</span>
     </div>
 
-    <AvatarPreview {url} {sheet} building={buildingCount > 0} focus={FOCUS[slot]} />
+    <AvatarPreview {url} {sheet} building={buildingCount > 0} focus={FOCUS[slot]} facing={slot === 'back' ? 'up' : 'down'} />
 
     <div class="slots">
       {#each slots as s (s.id)}
@@ -210,7 +210,7 @@
           {:else if ownedIs(i.id)}
             <span class="itag owned-tag"><Check size={12} />Owned</span>
           {:else}
-            <span class="itag price {i.tier}">{shop.prices[i.tier]} <Coins size={11} /></span>
+            <span class="itag price {i.tier}">{shop.prices[i.tier]} <Coins size={13} /></span>
           {/if}
         </button>
       {/each}
@@ -358,8 +358,9 @@
   .itag {
     display: inline-flex;
     align-items: center;
-    gap: 0.2rem;
-    font-size: 0.74rem;
+    gap: 0.25rem;
+    font-size: 0.86rem;
+    font-weight: 600;
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;
   }

@@ -14,11 +14,14 @@
     sheet,
     building = false,
     focus = null,
+    facing = 'down',
   }: {
     url: string | null;
     sheet: SheetInfo | null;
     building?: boolean;
     focus?: Focus;
+    /** 'up' shows the back (capes, wings): the character turns around pose by pose */
+    facing?: 'down' | 'up';
   } = $props();
 
   /** The square of the frame to show for a focus (full frame when null) */
@@ -70,6 +73,9 @@
     if (!canvas) return;
     let raf = 0;
     let view: { x: number; y: number; size: number } | null = null;
+    // Turning happens pose by pose (front, side, back), like the character really turning
+    let pose = 0;
+    let turnedAt = 0;
     let last = Date.now();
     const g = canvas.getContext('2d')!;
     const loop = () => {
@@ -80,8 +86,14 @@
       g.imageSmoothingEnabled = false;
       g.clearRect(0, 0, canvas!.width, canvas!.height);
       if (!imgReady || !sheet) return;
-      // Walking toward the camera, steady: turning around was found annoying
-      const row = sheet.rows.walkDown ?? sheet.rows.walk;
+      // Walking steadily toward the camera (or away from it while trying on back pieces)
+      const poses = [sheet.rows.walkDown ?? sheet.rows.walk, sheet.rows.walkLeft, sheet.rows.walkUp];
+      const wanted = facing === 'up' && poses[2] ? 2 : 0;
+      if (pose !== wanted && now - turnedAt > 170) {
+        pose += Math.sign(wanted - pose);
+        turnedAt = now;
+      }
+      const row = poses[pose] ?? poses[0];
       if (!row) return;
       const count = Math.max(1, row.frames - 1);
       const frame = row.frames > 1 ? 1 + (Math.floor(now / 110) % count) : 0;
