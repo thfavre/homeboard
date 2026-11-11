@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import { fade, fly, scale } from 'svelte/transition';
   import { Trophy } from '@lucide/svelte';
   import type { CrowdRaceView } from '$shared/crowd.ts';
@@ -8,7 +7,7 @@
   import CrowdField from './CrowdField.svelte';
   import Bullets from './Bullets.svelte';
   import KillFeed from './KillFeed.svelte';
-  import { crowdMusic, crowdSound } from './sound.ts';
+  import { crowdSound } from './sound.ts';
 
   /** Crowd Race on the TV: the street, the players with their shots and rounds won, the count down and the result of each round */
   let { m }: { m: MatchState } = $props();
@@ -16,16 +15,9 @@
   const now = new Now(100);
   const player = (id: string | null) => m.players.find((p) => p.id === id);
 
-  // The music plays from the first round to the result
-  $effect(() => {
-    if (!v) return;
-    if (m.phase === 'play') crowdMusic.play('race', v.musicVolume);
-    else crowdMusic.stop();
-  });
-  onDestroy(() => crowdMusic.stop());
 
   /** Count down: a beep on each of the last 3 seconds */
-  const count = $derived(v && v.step === 'ready' ? Math.ceil((v.goAt - now.value) / 1000) : null);
+  const count = $derived(v && v.step === 'ready' ? Math.max(1, Math.ceil((v.goAt - now.value) / 1000)) : null);
   let beeped = -1;
   $effect(() => {
     if (count !== null && count >= 1 && count <= 3 && count !== beeped) {
@@ -47,8 +39,6 @@
     switch (v.why) {
       case 'crossed':
         return { big: `${w?.name} wins the round!`, small: 'First across the line', color: w?.color };
-      case 'last':
-        return { big: `${w?.name} wins the round!`, small: 'Last one standing', color: w?.color };
       case 'npc':
         return { big: 'A passer-by won', small: 'Nobody gets the round' };
       case 'none':

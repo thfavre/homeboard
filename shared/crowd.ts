@@ -21,19 +21,26 @@ export type AnimId = (typeof ANIM)[keyof typeof ANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
 export type Dir = 0 | 1 | 2 | 3;
 
-/** Walking speed of everyone (world units a second); running is a multiple of it */
-export const CROWD_SPEEDS = [
-  { id: 'slow', name: 'Slow', ups: 46 },
-  { id: 'normal', name: 'Normal', ups: 60 },
-  { id: 'fast', name: 'Fast', ups: 80 },
-] as const;
-export type CrowdSpeed = (typeof CROWD_SPEEDS)[number]['id'];
-export const crowdSpeed = (id: unknown) => CROWD_SPEEDS.find((s) => s.id === id) ?? CROWD_SPEEDS[1];
-export const RUN_FACTORS = [1.5, 2, 2.5, 3] as const;
+/**
+ * Walking speed of everyone at 100% (world units a second). The race: about 40 s to the line nonstop, and
+ * with their stops the passers-by get there after about a minute and a quarter. The spy game: quicker.
+ */
+export const RACE_WALK_UPS = 34;
+export const SPY_WALK_UPS = 60;
+/** The walking speed of a setting in % (everyone, players and passers-by) */
+export const walkSpeed = (percent: number, base: number) => base * Math.max(0.1, (Number(percent) || 100) / 100);
+/** About how long a race round lasts at a walking speed in %: when the first passer-by gets to the line */
+export const raceRoundSec = (percent: number) => Math.round((75 * 100) / Math.max(1, percent));
+/** Settings the host can pick: walking speed in %, running speed in times walking, passers-by (race, spy) */
+export const CROWD_LIMITS = { walk: [25, 300], run: [1.1, 4], raceNpcs: [0, 1000], spyNpcs: [0, 500] } as const;
 
-/** Crosshair speed at full stick (world units a second); the stick is curved for fine aiming near the middle */
-export const AIM_SPEED = 1150;
-export const AIM_CURVE = 1.7;
+/**
+ * Crosshair speed at full stick (world units a second: the width of the screen in about 2.5 s). The stick
+ * is curved for fine aiming near the middle, and the crosshair eases into its speed (EASE: how quickly, a second).
+ */
+export const AIM_SPEED = 640;
+export const AIM_CURVE = 2.2;
+export const AIM_EASE = 10;
 /** A crosshair's radius on the TV (world units) */
 export const AIM_RADIUS = 34;
 
@@ -109,10 +116,9 @@ export interface CrowdRaceView {
   totalKills: Record<string, number>;
   /** Round result: the winner (null: a passer-by got there first, or nobody) and why */
   winner: string | null;
-  why: 'crossed' | 'npc' | 'last' | 'none' | 'time' | null;
+  why: 'crossed' | 'npc' | 'none' | 'time' | null;
   /** From the reveal on: the character of each player */
   reveal?: Record<string, number>;
-  musicVolume: number;
   soundVolume: number;
 }
 
@@ -170,7 +176,6 @@ export interface SpyView {
   /** From the reveal on: the spy's character */
   reveal?: number;
   drawFadeMs: number;
-  musicVolume: number;
   soundVolume: number;
 }
 

@@ -8,7 +8,8 @@ import {
   SPY_GADGETS,
   SPY_POINTS,
   SUIT_LOOKS,
-  crowdSpeed,
+  SPY_WALK_UPS,
+  walkSpeed,
   type CrowdEvent,
   type CrowdFrame,
   type CrowdKill,
@@ -35,7 +36,7 @@ const DECOY_MIN_DIST = 320;
  */
 export const spyHunt: GameFactory = (m) => {
   const s = m.settings;
-  const walk = crowdSpeed(s.spySpeed).ups;
+  const walk = walkSpeed(s.spyWalk, SPY_WALK_UPS);
   const rounds = Math.max(1, s.spyRounds);
   const huntMs = Math.max(1, s.spyMinutes) * 60_000;
   const reloadMs = Math.max(0, s.spyReloadSec) * 1000;
@@ -85,7 +86,7 @@ export const spyHunt: GameFactory = (m) => {
     blindUntil = 0;
     push = { x: 0, y: 0 };
     cases = SPY_CASES.map((c) => ({ ...c, open: false, at: null }));
-    const n = Math.max(6, s.spyNpcs + 1);
+    const n = Math.max(1, s.spyNpcs + 1);
     looks = dealLooks(n, Math.min(SUIT_LOOKS, Math.max(1, s.spyLooks)));
     actors = looks.map((look, i) => {
       const a = newActor(i, look, rand(SPY_AREA.x0, SPY_AREA.x1), rand(SPY_AREA.y0, SPY_AREA.y1), pick([0, 1, 2, 3] as const));
@@ -122,7 +123,7 @@ export const spyHunt: GameFactory = (m) => {
       a.dir = 2;
     }
     for (const a of aims.values()) {
-      a.sx = a.sy = 0;
+      a.sx = a.sy = a.vx = a.vy = 0;
       a.draw = false;
     }
     events.push({ k: 'end' });
@@ -387,7 +388,6 @@ export const spyHunt: GameFactory = (m) => {
         shooter,
         ...(step === 'reveal' && spyActor ? { reveal: spyActor.i } : {}),
         drawFadeMs: Math.max(1, s.spyDrawFadeSec) * 1000,
-        musicVolume: s.sniperMusic,
         soundVolume: s.sniperSounds,
       };
     },

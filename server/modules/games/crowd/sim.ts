@@ -1,4 +1,4 @@
-import { AIM_CURVE, AIM_SPEED, ANIM, BODY, SPRITE_SCALE, WORLD, type CrowdAim, type Dir } from '../../../../shared/crowd.ts';
+import { AIM_CURVE, AIM_EASE, AIM_SPEED, ANIM, BODY, SPRITE_SCALE, WORLD, type CrowdAim, type Dir } from '../../../../shared/crowd.ts';
 import { clamp, num } from '../../../core/util.ts';
 
 /** Server ticks a second: the crowd moves and a frame goes to the TV each tick */
@@ -29,6 +29,9 @@ export interface Aim {
   y: number;
   sx: number;
   sy: number;
+  /** Its speed now: it eases to what the stick asks, so it starts and stops smoothly */
+  vx: number;
+  vy: number;
   shots: number;
   /** Server time it can shoot again (reload, or the round not started) */
   readyAt: number;
@@ -56,7 +59,7 @@ export function newActor(i: number, look: number, x: number, y: number, dir: Dir
 }
 
 export function newAim(id: string, readyAt: number, shots: number): Aim {
-  return { id, x: rand(WORLD.w * 0.3, WORLD.w * 0.7), y: rand(WORLD.h * 0.4, WORLD.h * 0.65), sx: 0, sy: 0, shots, readyAt, draw: false };
+  return { id, x: rand(WORLD.w * 0.3, WORLD.w * 0.7), y: rand(WORLD.h * 0.4, WORLD.h * 0.65), sx: 0, sy: 0, vx: 0, vy: 0, shots, readyAt, draw: false };
 }
 
 /** A stick from a phone: x and y between -1 and 1, inside the circle */
@@ -71,13 +74,19 @@ export function stick(args: any): { x: number; y: number } {
   return { x, y };
 }
 
-/** Move a crosshair by its stick for `dt` seconds: slow near the middle of the stick for fine aiming */
+/** Move a crosshair by its stick for `dt` seconds: slow near the middle of the stick for fine aiming, eased */
 export function moveAim(a: Aim, dt: number): void {
   const len = Math.hypot(a.sx, a.sy);
-  if (len < 0.04) return;
-  const speed = AIM_SPEED * len ** AIM_CURVE;
-  a.x = clamp(a.x + (a.sx / len) * speed * dt, 0, WORLD.w);
-  a.y = clamp(a.y + (a.sy / len) * speed * dt, 0, WORLD.h);
+  const speed = len < 0.06 ? 0 : AIM_SPEED * len ** AIM_CURVE;
+  const tx = len ? (a.sx / len) * speed : 0;
+  const ty = len ? (a.sy / len) * speed : 0;
+  const k = Math.min(1, dt * AIM_EASE);
+  a.vx += (tx - a.vx) * k;
+  a.vy += (ty - a.vy) * k;
+  // Let go: it stops (no slow drift onto someone else)
+  if (!speed && Math.hypot(a.vx, a.vy) < 15) a.vx = a.vy = 0;
+  a.x = clamp(a.x + a.vx * dt, 0, WORLD.w);
+  a.y = clamp(a.y + a.vy * dt, 0, WORLD.h);
 }
 
 /** The character a shot at (x, y) hits: the one in front (lowest on the screen) whose body is there */

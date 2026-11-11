@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Minus, Plus } from '@lucide/svelte';
-  import { CROWD_SPEEDS, RUN_FACTORS, SPY_GADGETS, type SpyGadget } from '$shared/crowd.ts';
+  import { CROWD_LIMITS, SPY_GADGETS, raceRoundSec, type SpyGadget } from '$shared/crowd.ts';
   import type { GamesSettings } from '$shared/games.ts';
   import { rpc, attempt } from '$lib/client.svelte.ts';
   import Toggle from '$lib/ui/Toggle.svelte';
@@ -9,10 +9,11 @@
   let { game, settings: st }: { game: 'crowd' | 'spy'; settings: GamesSettings } = $props();
   const set = (patch: Partial<GamesSettings>) => attempt(() => rpc('games', 'setSettings', patch));
 
-  type NumKey = 'crowdNpcs' | 'crowdShots' | 'crowdReloadSec' | 'crowdRounds' | 'spyNpcs' | 'spyShots' | 'spyReloadSec' | 'spyRounds' | 'spyMinutes' | 'spyNeeded' | 'spyCollectMin' | 'spyCollectMax' | 'spyLooks' | 'spyDrawFadeSec';
+  type NumKey = 'crowdShots' | 'crowdReloadSec' | 'crowdRounds' | 'spyShots' | 'spyReloadSec' | 'spyRounds' | 'spyMinutes' | 'spyNeeded' | 'spyCollectMin' | 'spyCollectMax' | 'spyLooks' | 'spyDrawFadeSec';
+  type SliderKey = 'crowdNpcs' | 'crowdWalk' | 'crowdRun' | 'spyNpcs' | 'spyWalk' | 'sniperMusic' | 'sniperSounds';
   // A slider shows its value while it moves, and saves when it is let go
-  let drag = $state<{ sniperMusic?: number; sniperSounds?: number }>({});
-  async function saveSlider(key: 'sniperMusic' | 'sniperSounds', v: number) {
+  let drag = $state<Partial<Record<SliderKey, number>>>({});
+  async function saveSlider(key: SliderKey, v: number) {
     await set({ [key]: v });
     delete drag[key];
   }
@@ -34,27 +35,16 @@
   </div>
 {/snippet}
 
-{#snippet speed(key: 'crowdSpeed' | 'spySpeed')}
-  <div class="line wrap">
-    <span class="label">Walking speed <span class="faint small">Everyone walks at this pace, the players and the passers-by</span></span>
-    <div class="choices">
-      {#each CROWD_SPEEDS as sp (sp.id)}
-        <button class="chip" class:active={st[key] === sp.id} onclick={() => set({ [key]: sp.id })}>{sp.name}</button>
-      {/each}
-    </div>
-  </div>
-{/snippet}
-
-{#snippet slider(label: string, hint: string, key: 'sniperMusic' | 'sniperSounds')}
+{#snippet slider(label: string, hint: string, key: SliderKey, min: number, max: number, step: number, show: (v: number) => string)}
   {@const v = drag[key] ?? st[key]}
   <div class="line wrap">
-    <span class="label"><span>{label} <strong class="mono value">{v ? `${v}%` : 'off'}</strong></span> <span class="faint small">{hint}</span></span>
+    <span class="label"><span>{label} <strong class="mono value">{show(v)}</strong></span> <span class="faint small">{hint}</span></span>
     <input
       class="range"
       type="range"
-      min="0"
-      max="100"
-      step="5"
+      {min}
+      {max}
+      {step}
       value={v}
       aria-label={label}
       oninput={(e) => (drag[key] = Number(e.currentTarget.value))}
@@ -66,16 +56,9 @@
 {#if game === 'crowd'}
   <h4 class="group">Race</h4>
   {@render stepper('Rounds', '1 to 7. Most rounds won wins the game', 'crowdRounds', 1, 7)}
-  {@render stepper('Passers-by', 'People in the crowd on top of the players, 10 to 80', 'crowdNpcs', 10, 80, 5)}
-  {@render speed('crowdSpeed')}
-  <div class="line wrap">
-    <span class="label">Running speed <span class="faint small">Times the walking speed. Nobody but the players runs, so it shows</span></span>
-    <div class="choices">
-      {#each RUN_FACTORS as f (f)}
-        <button class="chip" class:active={st.crowdRun === f} onclick={() => set({ crowdRun: f })}>x{f}</button>
-      {/each}
-    </div>
-  </div>
+  {@render slider('Passers-by', 'People in the crowd on top of the players. A big crowd lines up in rows behind the start', 'crowdNpcs', CROWD_LIMITS.raceNpcs[0], CROWD_LIMITS.raceNpcs[1], 5, (v) => `${v}`)}
+  {@render slider('Walking speed', 'Everyone walks at this pace, the players and the passers-by', 'crowdWalk', CROWD_LIMITS.walk[0], CROWD_LIMITS.walk[1], 5, (v) => `${v}% · rounds of about ${raceRoundSec(v)}s`)}
+  {@render slider('Running speed', 'Times the walking speed. Nobody but the players runs, so it shows', 'crowdRun', CROWD_LIMITS.run[0], CROWD_LIMITS.run[1], 0.1, (v) => `x${v.toFixed(1)}`)}
   <h4 class="group">Sniper</h4>
   {@render stepper('Shots per player', 'Each round, 1 to 5', 'crowdShots', 1, 5)}
   {@render stepper('Reload', 'Seconds between two shots, 0 to 10', 'crowdReloadSec', 0, 10, 1, 's')}
@@ -83,8 +66,8 @@
   <h4 class="group">Rounds</h4>
   {@render stepper('Rounds', '1 to 10. A new spy each round, every player in turn', 'spyRounds', 1, 10)}
   {@render stepper('Length of a round', 'Minutes the snipers have to find the spy', 'spyMinutes', 1, 10, 1, ' min')}
-  {@render stepper('Passers-by', 'People wandering on the square, 10 to 80', 'spyNpcs', 10, 80, 5)}
-  {@render speed('spySpeed')}
+  {@render slider('Passers-by', 'People wandering on the square', 'spyNpcs', CROWD_LIMITS.spyNpcs[0], CROWD_LIMITS.spyNpcs[1], 5, (v) => `${v}`)}
+  {@render slider('Walking speed', 'Everyone walks at this pace, the spy and the passers-by', 'spyWalk', CROWD_LIMITS.walk[0], CROWD_LIMITS.walk[1], 5, (v) => `${v}%`)}
   {@render stepper('Suit colors', '1: everyone looks the same (hardest), up to 6', 'spyLooks', 1, 6)}
   <h4 class="group">Spy</h4>
   {@render stepper('Suitcases to open', 'Of the 4 in the corners', 'spyNeeded', 1, 4)}
@@ -106,9 +89,9 @@
 {/if}
 
 <h4 class="group">Sound and lights</h4>
-<p class="faint small">Shared by Crowd Race and Spy Hunt. The music pauses Spotify during the game.</p>
-{@render slider('Music', 'On the TV, 0 = no music (Spotify keeps playing)', 'sniperMusic')}
-{@render slider('Sound effects', 'Shots, gadgets, count down... on the TV, 0 = silent', 'sniperSounds')}
+<p class="faint small">Shared by Crowd Race and Spy Hunt.</p>
+{@render slider('Spotify volume', 'The music keeps playing during the game at this volume, then goes back to how it was. 0: silent', 'sniperMusic', 0, 100, 5, (v) => (v ? `${v}%` : 'off'))}
+{@render slider('Sound effects', 'Shots, gadgets, count down... on the TV. 0: silent', 'sniperSounds', 0, 100, 5, (v) => (v ? `${v}%` : 'off'))}
 <div class="line">
   <span class="label">Light flashes <span class="faint small">A white flash on each shot, red on a kill, and the gadgets on the WLED lights. They go back to what they were showing right after</span></span>
   <Toggle checked={st.sniperLights} onchange={(v) => set({ sniperLights: v })} label="Light flashes" />

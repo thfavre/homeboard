@@ -63,6 +63,9 @@
   /** Snipers' drawings: points with their time, a gap where the pen was lifted */
   let trails = new Map<string, { x: number; y: number; t: number; gap: boolean }[]>();
   let lastRound = -1;
+  /** Where each crosshair is drawn: it glides to the server's position */
+  const aimShown = new Map<string, { x: number; y: number }>();
+  let lastDraw = 0;
 
   const handle = (e: CrowdEvent, frame: CrowdFrame) => {
     const at = frame.t;
@@ -517,13 +520,17 @@
     const revealed = new Map<number, string>();
     if (reveal) for (const [id, i] of Object.entries(reveal)) revealed.set(i, id);
 
-    // Shadows, and a ring under the players shown
+    // Shadows, all in one path (a big crowd draws much faster that way), then a ring under the players shown
+    g.fillStyle = 'rgba(0,0,0,0.28)';
+    g.beginPath();
     for (const p of people) {
       if (p.anim === ANIM.dead) continue;
-      g.fillStyle = 'rgba(0,0,0,0.28)';
-      g.beginPath();
+      g.moveTo(p.x + 15, p.y);
       g.ellipse(p.x, p.y, 15, 5, 0, 0, Math.PI * 2);
-      g.fill();
+    }
+    g.fill();
+    for (const p of people) {
+      if (p.anim === ANIM.dead) continue;
       const who = revealed.get(p.i);
       if (who) {
         const pulse = 0.6 + 0.4 * Math.sin(now / 200);
@@ -614,9 +621,23 @@
     }
     g.globalAlpha = 1;
 
-    // Crosshairs, from the newest frame (they should feel quick), hidden while the snipers are blinded
+    // Crosshairs: they glide to where the newest frame has them (quick, but no jump at each frame), hidden
+    // while the snipers are blinded
     const latest = frames[frames.length - 1];
-    if (latest && now >= blindUntil) for (const a of latest.aims) crosshair(g, a, now);
+    const dt = Math.min(0.1, Math.max(0, (now - lastDraw) / 1000));
+    lastDraw = now;
+    const glide = 1 - Math.exp(-dt * 22);
+    if (latest) {
+      for (const a of latest.aims) {
+        const shown = aimShown.get(a.id);
+        if (!shown || Math.hypot(a.x - shown.x, a.y - shown.y) > 400) aimShown.set(a.id, { x: a.x, y: a.y });
+        else {
+          shown.x += (a.x - shown.x) * glide;
+          shown.y += (a.y - shown.y) * glide;
+        }
+      }
+      if (now >= blindUntil) for (const a of latest.aims) crosshair(g, { ...a, ...aimShown.get(a.id)! }, now);
+    }
 
     // The flashbang: everything white, clearing slowly
     if (now < blindUntil) {

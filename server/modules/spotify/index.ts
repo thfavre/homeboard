@@ -64,6 +64,11 @@ export interface MusicApi {
   /** Pause it if it is playing. True when it was paused here (resume it later). */
   pause(): Promise<boolean>;
   resume(): Promise<void>;
+  /**
+   * Hold the music at this volume (0 to 100) while a game plays, until `level(null)` puts it back as it
+   * was. Sounds that lower the music still lower it from there.
+   */
+  level(percent: number | null): void;
 }
 
 /**
@@ -263,10 +268,12 @@ export default defineModule<SpotifySettings>({
     // sent, then checked against what Spotify reports and sent again until it matches.
 
     /**
-     * While sounds play: the normal volume to come back to, and each playing sound with
-     * the volume it asks for. The music follows the lowest one.
+     * While sounds play (or a game holds the volume): the normal volume to come back to, and each playing
+     * sound with the volume it asks for. The music follows the lowest one. `applied`: the volume sent.
      */
-    let duck: { original: number; plays: Map<string, number>; applied: number; failsafe: NodeJS.Timeout } | null = null;
+    let duck: { original: number; plays: Map<string, number>; applied: number; failsafe: NodeJS.Timeout | null } | null = null;
+    /** A game holds the music at this volume (null: none), from the start to the end of the game */
+    let gameLevel: number | null = null;
 
     // Settings saved before there was one setting per source
     {
@@ -312,42 +319,59 @@ export default defineModule<SpotifySettings>({
 
     const endDuck = () => {
       if (!duck) return;
-      clearTimeout(duck.failsafe);
+      if (duck.failsafe) clearTimeout(duck.failsafe);
       restoreTo = duck.original;
       restoreTries = 0;
       duck = null;
       void restore().then(() => setTimeout(poll, VOLUME_SETTLE_MS + 200));
     };
 
-    /** Lower the music to the lowest level asked by the sounds playing */
+    /** The volume the music should have now: the game's level (or the normal one), lowered by the sounds playing */
     const applyDuck = () => {
-      if (!duck || !duck.plays.size) return;
-      const percent = Math.min(...duck.plays.values());
-      if (percent === duck.applied) return;
-      duck.applied = percent;
-      setVolume(Math.round((duck.original * percent) / 100)).catch((err) => ctx.log.warn('Could not lower the music:', (err as Error).message));
+      if (!duck) return;
+      const base = gameLevel ?? duck.original;
+      const percent = duck.plays.size ? Math.min(...duck.plays.values()) : 100;
+      const v = Math.round((base * percent) / 100);
+      if (v === duck.applied) return;
+      duck.applied = v;
+      setVolume(v).catch((err) => ctx.log.warn('Could not change the music volume:', (err as Error).message));
+    };
+
+    /** Nothing lowers the music any more: back to normal, unless a game still holds it */
+    const settleDuck = () => {
+      if (!duck || duck.plays.size) return;
+      if (gameLevel === null) endDuck();
+      else applyDuck();
+    };
+
+    /** Start following the sounds and the game from the current volume (false: no music playing) */
+    const startDuck = (): boolean => {
+      if (duck) return true;
+      // If the previous restore is still on its way, that is the real normal volume
+      const original = restoreTo ?? volume;
+      if (!connected() || !now?.isPlaying || original === null) return false;
+      duck = { original, plays: new Map(), applied: original, failsafe: null };
+      restoreTo = null;
+      return true;
     };
 
     ctx.bus.on('soundboard:play', ({ id, source }: { id: string; source?: DuckSource }) => {
       const setting = ctx.settings.get().ducking[source ?? 'soundboard'];
-      if (!setting?.on) return;
-      if (!duck) {
-        // If the previous restore is still on its way, that is the real normal volume
-        const original = restoreTo ?? volume;
-        if (!connected() || !now?.isPlaying || original === null) return;
-        duck = { original, plays: new Map(), applied: 100, failsafe: setTimeout(endDuck, DUCK_MAX_MS) };
-        restoreTo = null;
-      }
+      if (!setting?.on || !startDuck() || !duck) return;
       duck.plays.set(id, setting.percent);
-      clearTimeout(duck.failsafe);
-      duck.failsafe = setTimeout(endDuck, DUCK_MAX_MS);
+      // A sound whose end never comes stops lowering the music after a while
+      if (duck.failsafe) clearTimeout(duck.failsafe);
+      duck.failsafe = setTimeout(() => {
+        duck?.plays.clear();
+        settleDuck();
+      }, DUCK_MAX_MS);
       applyDuck();
     });
 
     ctx.bus.on('soundboard:ended', ({ id }: { id: string }) => {
       if (!duck || !duck.plays.delete(id)) return;
       // A short pause so back-to-back sounds do not make the music pump
-      if (!duck.plays.size) setTimeout(() => duck && !duck.plays.size && endDuck(), 400);
+      if (!duck.plays.size) setTimeout(settleDuck, 400);
       // Another sound is still playing: follow its level
       else applyDuck();
     });
@@ -496,6 +520,16 @@ export default defineModule<SpotifySettings>({
       },
       resume: async () => {
         if (connected() && ctx.enabled()) await control('PUT', '/me/player/play');
+      },
+      level: (percent) => {
+        if (percent === null) {
+          if (gameLevel === null) return;
+          gameLevel = null;
+          settleDuck();
+          return;
+        }
+        gameLevel = Math.round(Math.min(100, Math.max(0, percent)));
+        if (ctx.enabled() && startDuck()) applyDuck();
       },
     });
     ctx.onAdmin('play', () => control('PUT', '/me/player/play'));

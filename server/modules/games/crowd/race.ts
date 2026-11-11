@@ -1,4 +1,4 @@
-import { ANIM, RACE_AREA, RACE_LOOKS, crowdSpeed, type CrowdEvent, type CrowdFrame, type CrowdKill, type CrowdRaceView } from '../../../../shared/crowd.ts';
+import { ANIM, RACE_AREA, RACE_LOOKS, RACE_WALK_UPS, walkSpeed, type CrowdEvent, type CrowdFrame, type CrowdKill, type CrowdRaceView } from '../../../../shared/crowd.ts';
 import type { GameFactory } from '../engine.ts';
 import { TICK_MS, aimOut, dealLooks, hitTest, moveAim, newActor, newAim, pack, rand, stick, type Actor, type Aim } from './sim.ts';
 
@@ -8,6 +8,9 @@ const FINISH_X = 1480;
 /** Everyone waits on the start line this long (the count down), and the reveal lasts this long */
 const READY_MS = 4500;
 const REVEAL_MS = 7500;
+/** On the start line: this many people a row at most, rows this far apart (world units) */
+const ROW_SIZE = 80;
+const COL_GAP = 20;
 /** Passers-by start walking within this time after the go, one by one */
 const START_SPREAD_MS = 1600;
 
@@ -17,16 +20,18 @@ type Move = 'stop' | 'walk' | 'run';
  * Crowd Race: every player is one of the people on the start line, and nobody knows who. Everyone walks to
  * the finish line at the same pace; passers-by stop now and then, players stop when they let go of WALK, and
  * can RUN (nobody else does). Each player also has a sniper with a few shots. The first to cross wins the
- * round, unless a passer-by gets there first; the last player standing wins it too.
+ * round, unless a passer-by gets there first. Even the last player standing still has to cross the line.
  */
 export const crowdRace: GameFactory = (m) => {
   const s = m.settings;
-  const walk = crowdSpeed(s.crowdSpeed).ups;
+  const walk = walkSpeed(s.crowdWalk, RACE_WALK_UPS);
   const run = walk * (Number(s.crowdRun) || 2);
   const rounds = Math.max(1, s.crowdRounds);
   const reloadMs = Math.max(0, s.crowdReloadSec) * 1000;
   // Longest a race can last: the time to walk there, and a lot more
-  const maxRaceMs = ((FINISH_X - START_X) / walk) * 1000 * 2.5;
+  const maxRaceMs = ((FINISH_X - START_X) / walk) * 1000 * 4;
+  /** The start line of this round (further right for a big crowd) */
+  let startX = START_X;
   const ids = m.players.map((p) => p.id);
   const colorOf = (id: string) => m.players.find((p) => p.id === id)?.color;
 
@@ -48,8 +53,6 @@ export const crowdRace: GameFactory = (m) => {
   let over = false;
   let last = Date.now();
 
-  const actorOf = (id: string) => actors.find((a) => a.player === id);
-
   const newRound = () => {
     const now = Date.now();
     round += 1;
@@ -58,12 +61,20 @@ export const crowdRace: GameFactory = (m) => {
     kills = [];
     winner = null;
     why = null;
-    const n = Math.max(ids.length + 4, s.crowdNpcs + ids.length);
+    const n = Math.max(ids.length, s.crowdNpcs + ids.length);
     looks = dealLooks(n, RACE_LOOKS);
-    // Everyone gets a row of their own on the start line, slightly staggered
-    const rows = Array.from({ length: n }, (_, k) => RACE_AREA.y0 + ((RACE_AREA.y1 - RACE_AREA.y0) * (k + 0.5)) / n + rand(-4, 4)).sort(() => Math.random() - 0.5);
-    actors = rows.map((y, i) => {
-      const a = newActor(i, looks[i], START_X - rand(0, 34), y, 3);
+    // Everyone gets a place of their own on the start line, slightly staggered. A big crowd lines up in a
+    // few rows behind it, and the start line moves right so they all fit on the screen
+    const cols = Math.max(1, Math.ceil(n / ROW_SIZE));
+    const perCol = Math.ceil(n / cols);
+    startX = START_X + Math.max(0, cols - 2) * COL_GAP;
+    const spots = Array.from({ length: n }, (_, k) => {
+      const col = Math.floor(k / perCol);
+      const row = k % perCol;
+      return { x: startX - col * COL_GAP - rand(0, cols > 1 ? 10 : 34), y: RACE_AREA.y0 + ((RACE_AREA.y1 - RACE_AREA.y0) * (row + (col % 2 ? 0.75 : 0.25) + 0.25)) / perCol + rand(-4, 4) };
+    }).sort(() => Math.random() - 0.5);
+    actors = spots.map((p, i) => {
+      const a = newActor(i, looks[i], p.x, Math.min(RACE_AREA.y1, p.y), 3);
       a.next = goAt + rand(0, START_SPREAD_MS);
       return a;
     });
@@ -100,7 +111,7 @@ export const crowdRace: GameFactory = (m) => {
       a.anim = a === by && winner ? ANIM.win : ANIM.idle;
       a.dir = 2;
     }
-    for (const a of aims.values()) a.sx = a.sy = 0;
+    for (const a of aims.values()) a.sx = a.sy = a.vx = a.vy = 0;
     events.push({ k: 'end' });
     if (winner) m.flash('win', { color: colorOf(winner) });
     m.publish();
@@ -124,15 +135,18 @@ export const crowdRace: GameFactory = (m) => {
     });
   };
 
-  /** Passers-by: walk a few seconds, stop a moment (now and then a long one), and so on */
+  /**
+   * Passers-by: walk a couple of seconds, stop about as long (now and then a long while), and so on. They
+   * walk about half the time: the first of them gets to the line after about 75 s (see raceRoundSec).
+   */
   const think = (a: Actor, now: number) => {
     if (now < a.next) return;
     if (a.moving) {
       a.moving = false;
-      a.next = now + (Math.random() < 0.12 ? rand(2400, 4200) : rand(450, 1900));
+      a.next = now + (Math.random() < 0.15 ? rand(3500, 6000) : rand(1000, 3500));
     } else {
       a.moving = true;
-      a.next = now + rand(1700, 5600);
+      a.next = now + rand(1200, 3500);
     }
   };
 
@@ -206,9 +220,8 @@ export const crowdRace: GameFactory = (m) => {
         moves.set(target.player, 'stop');
         if (target.player !== id) totalKills[id] += 1;
         m.flash('kill');
-        // The last one standing wins the round; nobody left: nobody does
-        if (alive.size === 1) endRound(actorOf([...alive][0]) ?? null, 'last');
-        else if (alive.size === 0) endRound(null, 'none');
+        // Nobody left: nobody wins. The last one standing still has to beat the passers-by to the line
+        if (alive.size === 0) endRound(null, 'none');
       }
     }
     m.publish();
@@ -259,7 +272,7 @@ export const crowdRace: GameFactory = (m) => {
         rounds,
         goAt,
         revealUntil,
-        startX: START_X,
+        startX,
         finishX: FINISH_X,
         ...(role === 'tv' ? { looks } : {}),
         shots,
@@ -272,7 +285,6 @@ export const crowdRace: GameFactory = (m) => {
         winner,
         why,
         ...(step === 'reveal' ? { reveal: Object.fromEntries(actors.filter((a) => a.player).map((a) => [a.player!, a.i])) } : {}),
-        musicVolume: s.sniperMusic,
         soundVolume: s.sniperSounds,
       };
     },

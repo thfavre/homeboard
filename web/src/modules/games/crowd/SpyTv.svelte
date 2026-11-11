@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import { fade, fly, scale } from 'svelte/transition';
   import { Briefcase, Timer, Trophy, Zap, CloudFog, Shuffle } from '@lucide/svelte';
   import { SPY_GADGETS, type CrowdEvent, type SpyView } from '$shared/crowd.ts';
@@ -8,7 +7,7 @@
   import CrowdField from './CrowdField.svelte';
   import Bullets from './Bullets.svelte';
   import KillFeed from './KillFeed.svelte';
-  import { crowdMusic, crowdSound } from './sound.ts';
+  import { crowdSound } from './sound.ts';
 
   /** Spy Hunt on the TV: the square, the clock, the suitcases left, the snipers' shots, the spy's gadget */
   let { m }: { m: MatchState } = $props();
@@ -19,12 +18,6 @@
   const opened = $derived(v?.cases.filter((c) => c.open).length ?? 0);
   const GADGET_ICONS = { flashbang: Zap, smoke: CloudFog, decoy: Shuffle } as const;
 
-  $effect(() => {
-    if (!v) return;
-    if (m.phase === 'play') crowdMusic.play('spy', v.musicVolume);
-    else crowdMusic.stop();
-  });
-  onDestroy(() => crowdMusic.stop());
 
   const left = $derived(v ? Math.max(0, v.until - now.value) : 0);
   const clock = (ms: number) => {

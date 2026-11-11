@@ -22,8 +22,6 @@
   const alive = $derived(!!v?.alive.includes(me));
   const shots = $derived(v?.shots[me] ?? 0);
   const reloading = $derived(!!v && (v.readyAt[me] ?? 0) > now.value && v.step === 'race');
-  const shotBy = $derived(v?.kills.find((k) => k.victim === me)?.by ?? null);
-  const nameOf = (id: string | null) => m.players.find((p) => p.id === id)?.name ?? 'Someone';
 
   let walk = $state(false);
   let run = $state(false);
@@ -57,18 +55,6 @@
     if (wasAlive && !alive && v?.step === 'race') navigator.vibrate?.([200, 80, 200]);
     wasAlive = alive;
   });
-
-  const status = $derived.by(() => {
-    if (!v) return { big: '', small: '' };
-    if (v.step === 'ready') return { big: 'Get ready', small: 'When it starts, press WALK and look who moves on the TV' };
-    if (v.step === 'reveal') {
-      if (v.winner === me) return { big: 'You won the round!', small: v.why === 'last' ? 'Last one standing' : 'First across the line' };
-      if (v.winner) return { big: `${nameOf(v.winner)} won it`, small: 'Look at the TV: who was who?' };
-      return { big: v.why === 'npc' ? 'A passer-by won' : 'Nobody won', small: 'Look at the TV: who was who?' };
-    }
-    if (!alive) return { big: 'You are out', small: shotBy === me ? 'You shot yourself' : `${nameOf(shotBy)} shot you. Back next round` };
-    return { big: run ? 'Running!' : walk ? 'Walking' : 'Standing still', small: run ? 'Fast, but nobody else runs...' : 'Hold WALK. Stop now and then, like the others' };
-  });
 </script>
 
 {#if v}
@@ -77,11 +63,11 @@
       <span class="pill mono">Round {v.round}/{v.rounds}</span>
       <span class="pill"><Bullets left={shots} /></span>
       <span class="pill"><Trophy size={16} /> {v.points[me] ?? 0}</span>
+      {#if !alive && v.step === 'race'}<span class="pill out">Out</span>{/if}
     </div>
 
-    <div class="status" class:out={!alive && v.step === 'race'}>
-      <strong>{status.big}</strong>
-      <span>{status.small}</span>
+    <!-- No text here: the game is on the TV. Only how a shot went, for a moment -->
+    <div class="status">
       {#if feedback}
         {#key feedback.key}<span class="feedback {feedback.tone}">{feedback.text}</span>{/key}
       {/if}
@@ -131,20 +117,13 @@
     justify-items: center;
     gap: 0.35rem;
     text-align: center;
-    min-height: 7rem;
+    min-height: 3rem;
   }
-  .status strong {
-    font-family: var(--font-display);
-    font-size: 2rem;
-    line-height: 1.1;
-  }
-  .status span {
-    color: var(--text-dim);
-    font-size: 0.95rem;
-    max-width: 22rem;
-  }
-  .status.out strong {
+  .out {
     color: var(--danger, #ff5a5a);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
   .feedback {
     margin-top: 0.3rem;

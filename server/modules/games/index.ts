@@ -54,7 +54,7 @@ import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
 import { lightParty } from './party/index.ts';
 import { crowdRace } from './crowd/race.ts';
 import { spyHunt } from './crowd/spy.ts';
-import { CROWD_SPEEDS, RUN_FACTORS, SPY_GADGETS } from '../../../shared/crowd.ts';
+import { CROWD_LIMITS, SPY_GADGETS } from '../../../shared/crowd.ts';
 import { PARTY_MINIS, cleanPartyOptions } from '../../../shared/party.ts';
 
 /** Songs a new party starts with: well known, well rated maps with charts from Easy or Normal to Expert */
@@ -144,7 +144,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmHolds: true, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'tv', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {}, crowdNpcs: 30, crowdSpeed: 'normal', crowdRun: 2, crowdShots: 1, crowdReloadSec: 2, crowdRounds: 3, spyNpcs: 30, spySpeed: 'normal', spyShots: 3, spyReloadSec: 2, spyRounds: 3, spyMinutes: 3, spyNeeded: 4, spyCollectMin: 2, spyCollectMax: 5, spyLooks: 3, spyDrawFadeSec: 4, spyGadgets: SPY_GADGETS.map((g) => g.id), sniperMusic: 60, sniperSounds: 80, sniperLights: true },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmHolds: true, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'tv', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {}, crowdNpcs: 30, crowdWalk: 100, crowdRun: 2, crowdShots: 1, crowdReloadSec: 2, crowdRounds: 3, spyNpcs: 30, spyWalk: 100, spyShots: 3, spyReloadSec: 2, spyRounds: 3, spyMinutes: 3, spyNeeded: 4, spyCollectMin: 2, spyCollectMax: 5, spyLooks: 3, spyDrawFadeSec: 4, spyGadgets: SPY_GADGETS.map((g) => g.id), sniperMusic: 35, sniperSounds: 80, sniperLights: true },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -196,6 +196,14 @@ export default defineModule<GamesSettings>({
 
     // ------------------------------------------------------------ the Rhythm Rain song
 
+    // Crowd Race and Spy Hunt's first speeds had names: now a % of the normal walking speed
+    {
+      const old = ctx.settings.get() as GamesSettings & { crowdSpeed?: string; spySpeed?: string };
+      const pct = (id: string | undefined) => (id === 'slow' ? 75 : id === 'fast' ? 135 : 100);
+      if (old.crowdSpeed !== undefined || old.spySpeed !== undefined) {
+        ctx.settings.update({ crowdWalk: pct(old.crowdSpeed), spyWalk: pct(old.spySpeed), crowdSpeed: undefined, spySpeed: undefined } as Partial<GamesSettings>);
+      }
+    }
     // Light Party's first settings, now in partyOptions
     {
       const old = ctx.settings.get() as GamesSettings & { partyCountSec?: number; partyStackBlocks?: number };
@@ -339,9 +347,12 @@ export default defineModule<GamesSettings>({
     /** A game with its own sound pauses the Spotify music while it is played */
     const music = () => ctx.use<MusicApi>('music');
     const pauseMusic = (m: Match) => {
+      // Crowd Race and Spy Hunt keep the music on, at the volume the host picked for them
+      if (m.game === 'crowd' || m.game === 'spy') {
+        music()?.level(ctx.settings.get().sniperMusic);
+        return;
+      }
       if (!gameInfo(m.game)?.pausesMusic) return;
-      // Crowd Race and Spy Hunt play their own music, unless the host turned it off
-      if ((m.game === 'crowd' || m.game === 'spy') && ctx.settings.get().sniperMusic <= 0) return;
       void music()
         ?.pause()
         .then((paused) => {
@@ -371,8 +382,11 @@ export default defineModule<GamesSettings>({
       for (const t of m.timers) clearTimeout(t);
       matches.delete(m.id);
       resumeMusic(m);
-      // Crowd Race and Spy Hunt keep a copy of the lights for their flashes: not any more
-      if (m.game === 'crowd' || m.game === 'spy') lights()?.watch(false);
+      // Crowd Race and Spy Hunt: the lights are not copied for their flashes any more, the music goes back to its volume
+      if (m.game === 'crowd' || m.game === 'spy') {
+        lights()?.watch(false);
+        music()?.level(null);
+      }
       if (m.usesLights) {
         dimLight(m);
         void lights()?.release();
@@ -626,6 +640,7 @@ export default defineModule<GamesSettings>({
       m.result = { winners: outcome.winners, lines: outcome.lines, payouts, headline };
       m.phase = 'result';
       resumeMusic(m);
+      if (m.game === 'crowd' || m.game === 'spy') music()?.level(null);
       const prize = startPerk(m, outcome);
       if (m.usesLights) {
         m.usesLights = false;
@@ -1150,14 +1165,14 @@ export default defineModule<GamesSettings>({
         partyRounds: args?.partyRounds !== undefined ? Math.round(clamp(num(args.partyRounds, 3), 1, PARTY_MINIS.length)) : s.partyRounds,
         partyMinis: Array.isArray(args?.partyMinis) ? PARTY_MINIS.map((g) => g.id).filter((id) => args.partyMinis.includes(id)) : s.partyMinis,
         partyOptions: args?.partyOptions !== undefined ? cleanPartyOptions(args.partyOptions) : s.partyOptions,
-        crowdNpcs: int('crowdNpcs', 10, 80),
-        crowdSpeed: CROWD_SPEEDS.some((x) => x.id === args?.crowdSpeed) ? args.crowdSpeed : s.crowdSpeed,
-        crowdRun: RUN_FACTORS.includes(args?.crowdRun) ? args.crowdRun : s.crowdRun,
+        crowdNpcs: int('crowdNpcs', ...CROWD_LIMITS.raceNpcs),
+        crowdWalk: int('crowdWalk', ...CROWD_LIMITS.walk),
+        crowdRun: args?.crowdRun !== undefined ? Math.round(clamp(num(args.crowdRun, s.crowdRun), ...CROWD_LIMITS.run) * 10) / 10 : s.crowdRun,
         crowdShots: int('crowdShots', 1, 5),
         crowdReloadSec: int('crowdReloadSec', 0, 10),
         crowdRounds: int('crowdRounds', 1, 7),
-        spyNpcs: int('spyNpcs', 10, 80),
-        spySpeed: CROWD_SPEEDS.some((x) => x.id === args?.spySpeed) ? args.spySpeed : s.spySpeed,
+        spyNpcs: int('spyNpcs', ...CROWD_LIMITS.spyNpcs),
+        spyWalk: int('spyWalk', ...CROWD_LIMITS.walk),
         spyShots: int('spyShots', 1, 10),
         spyReloadSec: int('spyReloadSec', 0, 10),
         spyRounds: int('spyRounds', 1, 10),
