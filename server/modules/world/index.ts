@@ -42,6 +42,9 @@ interface WorldSettings {
   /** Otherwise it is wrapped up within this range (seconds), unless it cannot be cut short */
   wrapMinSec: number;
   wrapMaxSec: number;
+  /** Wandering or a bench is dropped within this range (seconds) when a shop calls */
+  quickMinSec: number;
+  quickMaxSec: number;
 }
 
 const LOOK_KEY: Record<LookPart, 'lookHair' | 'lookHairColor' | 'lookBeard' | 'lookEyes'> = {
@@ -129,6 +132,8 @@ export default defineModule<WorldSettings>({
     finishWithinSec: 20,
     wrapMinSec: 2,
     wrapMaxSec: 10,
+    quickMinSec: 1,
+    quickMaxSec: 3,
   },
 
   setup(ctx) {
@@ -275,6 +280,8 @@ export default defineModule<WorldSettings>({
           finishWithinSec: s.finishWithinSec,
           wrapMinSec: s.wrapMinSec,
           wrapMaxSec: s.wrapMaxSec,
+          quickMinSec: s.quickMinSec,
+          quickMaxSec: s.quickMaxSec,
           wallets: guests.map((g) => ({ id: g.id, name: g.name, color: g.color, balance: wallets[g.id] ?? 0 })),
         };
       }
@@ -511,6 +518,7 @@ export default defineModule<WorldSettings>({
         insideMs: sec(s.visitMinSec, s.visitMaxSec),
         finishWithinMs: s.finishWithinSec * 1000,
         wrapUpMs: sec(s.wrapMinSec, s.wrapMaxSec),
+        quickStopMs: sec(s.quickMinSec, s.quickMaxSec),
       });
       ctx.emit('tv', 'frame', frame);
     }, 1000 / FRAME_HZ);
@@ -550,6 +558,8 @@ export default defineModule<WorldSettings>({
         finishWithinSec: secs(args.finishWithinSec, s.finishWithinSec, 300),
         wrapMinSec: secs(args.wrapMinSec, s.wrapMinSec, 120),
         wrapMaxSec: secs(args.wrapMaxSec, s.wrapMaxSec, 120),
+        quickMinSec: secs(args.quickMinSec, s.quickMinSec, 30),
+        quickMaxSec: secs(args.quickMaxSec, s.quickMaxSec, 30),
       });
       ctx.publish();
     });

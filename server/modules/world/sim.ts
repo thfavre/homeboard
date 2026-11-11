@@ -79,11 +79,14 @@ interface Walker {
  * How an activity ends, for a character with a shop to go to. `left` is how long it would still take
  * on its own (ms). `wrapUp` ends it early and naturally within `ms` (standing up from the bench,
  * stopping a walk); an activity without it cannot be cut short, and the trip waits until it is over.
- * A new activity declares its rule here; going to sleep and cheering respect it too.
+ * `quickStop` marks a casual activity (wandering, a bench) that is dropped within a moment for a
+ * trip, however long it had left. A new activity declares its rule here; going to sleep and cheering
+ * respect it too.
  */
 interface Rule<D extends Doing> {
   left(d: D, w: Walker, now: number): number;
   wrapUp?(d: D, w: Walker, now: number, ms: number): void;
+  quickStop?(d: D, w: Walker, now: number, ms: number): void;
 }
 type Rules = { [K in Doing['kind']]: Rule<Extract<Doing, { kind: K }>> };
 
@@ -104,7 +107,9 @@ export interface TownOptions {
   fadeAfterMs: number;
   /** How long a character stays inside a shop (ms, a random time in the range) */
   insideMs: [number, number];
-  /** An activity ending on its own within this is finished before going to the shop */
+  /** Wandering or sitting on a bench is dropped within a random time in this range (ms) */
+  quickStopMs: [number, number];
+  /** Another activity ending on its own within this is finished before going to the shop */
   finishWithinMs: number;
   /** A longer one is wrapped up within a random time in this range, if it can be cut short */
   wrapUpMs: [number, number];
@@ -125,6 +130,11 @@ const walkMs = (w: Walker, x: number, y: number) => (Math.hypot(x - w.x, y - w.y
 /** A walk ends naturally anywhere: stop, look around for a moment */
 const stopWalking = (_d: Doing, w: Walker, now: number, ms: number) => {
   w.doing = { kind: 'idle', until: now + Math.min(ms, rand(400, 1200)) };
+};
+
+/** Stop where you are and stand there for `ms` (the moment before heading off) */
+const pauseFor = (_d: Doing, w: Walker, now: number, ms: number) => {
+  w.doing = { kind: 'idle', until: now + ms };
 };
 
 /** Something with an end time ends a little sooner */
@@ -168,11 +178,12 @@ export class TownSim {
 
   private rules: Rules = {
     idle: { left: (d, _w, now) => d.until - now, wrapUp: sooner },
-    wander: { left: (d, w) => walkMs(w, d.tx, d.ty), wrapUp: stopWalking },
-    goBench: { left: (d, w) => walkMs(w, BENCHES[d.bench]?.x ?? w.x, BENCHES[d.bench]?.y ?? w.y), wrapUp: stopWalking },
+    // Wandering and benches are casual: dropped within a moment when a shop calls
+    wander: { left: (d, w) => walkMs(w, d.tx, d.ty), wrapUp: stopWalking, quickStop: pauseFor },
+    goBench: { left: (d, w) => walkMs(w, BENCHES[d.bench]?.x ?? w.x, BENCHES[d.bench]?.y ?? w.y), wrapUp: stopWalking, quickStop: pauseFor },
     goPet: { left: (_d, w) => walkMs(w, this.cat.x, this.cat.y), wrapUp: stopWalking },
     // Sitting and petting end whenever: get up a little sooner
-    sit: { left: (d, _w, now) => d.until - now, wrapUp: sooner },
+    sit: { left: (d, _w, now) => d.until - now, wrapUp: sooner, quickStop: sooner },
     pet: { left: (d, _w, now) => d.until - now, wrapUp: sooner },
     // Never cut short: a cheer is over in a moment, a sleeper wakes when the guest is back, a visit runs its course
     cheer: { left: (d, _w, now) => d.until - now },
@@ -393,9 +404,10 @@ export class TownSim {
   // ------------------------------------------------------------ shop visits
 
   /**
-   * A character with a shop to go to: an activity about to end on its own is finished, a longer one
-   * wraps up early if it can be cut short, otherwise the trip waits. The trip itself starts from
-   * idle, between two activities (see step).
+   * A character with a shop to go to: wandering or a bench is dropped within a moment; another
+   * activity about to end on its own is finished, a longer one wraps up early if it can be cut
+   * short, otherwise the trip waits. The trip itself starts from idle, between two activities
+   * (see step).
    */
   private plan(w: Walker, now: number, o: TownOptions): void {
     if (!w.errands.length || w.doing.kind === 'visit' || w.wrapped === w.doing) return;
@@ -404,6 +416,7 @@ export class TownSim {
     w.wrapped = d;
     // Standing around: a moment to notice, and off
     if (d.kind === 'idle') return rule.wrapUp!(d, w, now, rand(300, 1200));
+    if (rule.quickStop) return rule.quickStop(d, w, now, rand(o.quickStopMs[0], o.quickStopMs[1]));
     if (rule.left(d, w, now) < o.finishWithinMs || !rule.wrapUp) return;
     rule.wrapUp(d, w, now, rand(o.wrapUpMs[0], o.wrapUpMs[1]));
   }

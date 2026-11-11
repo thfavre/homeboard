@@ -107,8 +107,19 @@
       </label>
     </div>
     <p class="faint small">How long a character stays in the shop, a random time in this range.</p>
+    <div class="pair">
+      <label class="field">
+        <span>Stop wandering or a bench within (seconds)</span>
+        <input class="input" type="number" min="0" max="30" step="0.5" value={mod.quickMinSec} onchange={(e) => setSeconds('quickMinSec', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>to (seconds)</span>
+        <input class="input" type="number" min="0" max="30" step="0.5" value={mod.quickMaxSec} onchange={(e) => setSeconds('quickMaxSec', e.currentTarget.value)} />
+      </label>
+    </div>
+    <p class="faint small">A character just walking around or sitting on a bench drops it within this range and heads to the shop.</p>
     <label class="field">
-      <span>Finish first if it ends within (seconds)</span>
+      <span>Other activities: finish first if they end within (seconds)</span>
       <input class="input" type="number" min="0" max="300" value={mod.finishWithinSec} onchange={(e) => setSeconds('finishWithinSec', e.currentTarget.value)} />
     </label>
     <div class="pair">
@@ -122,8 +133,8 @@
       </label>
     </div>
     <p class="faint small">
-      What the character is doing (sitting on a bench, petting the cat, walking) is finished first if it ends soon, otherwise it ends early within this range.
-      A visit or a cheer is never cut short, and a sleeper goes once the guest is back.
+      Any other activity (petting the cat, walking to it) is finished first if it ends soon, otherwise it ends early within this range. A visit or a cheer
+      is never cut short, and a sleeper goes once the guest is back.
     </p>
   </Section>
 

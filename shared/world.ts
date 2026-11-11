@@ -243,5 +243,7 @@ export interface WorldState {
   finishWithinSec?: number;
   wrapMinSec?: number;
   wrapMaxSec?: number;
+  quickMinSec?: number;
+  quickMaxSec?: number;
   wallets?: { id: string; name: string; color: string; balance: number }[];
 }
