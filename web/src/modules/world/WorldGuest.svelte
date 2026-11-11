@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fly } from 'svelte/transition';
   import { Check, PersonStanding, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
   import type { Slot } from '$shared/wardrobe.ts';
@@ -16,6 +17,13 @@
    */
 
   let tab = $state<'look' | 'wardrobe' | 'shop'>('look');
+  /** The new tab slides in from the right when going right, from the left when going back */
+  const ORDER = ['look', 'wardrobe', 'shop'];
+  let slideFrom = $state(0);
+  function go(next: typeof tab) {
+    slideFrom = Math.sign(ORDER.indexOf(next) - ORDER.indexOf(tab)) * 40;
+    tab = next;
+  }
   /** The slot the wardrobe sent the guest shopping for */
   let shopSlot = $state<Slot | null>(null);
   let choices = $state<AvatarChoices>({ ...DEFAULT_CHOICES });
@@ -124,7 +132,7 @@
   /** Back from the wardrobe or the shop: redraw, since the clothes may have changed there */
   function backToLook() {
     if (tab === 'look') return;
-    tab = 'look';
+    go('look');
     if (!firstLoad) void build($state.snapshot(choices) as AvatarChoices);
   }
 
@@ -142,17 +150,19 @@
 <div class="panel" class:fit={tab !== 'look'}>
 <div class="tabs">
   <button type="button" class="tab" class:on={tab === 'look'} onclick={backToLook}><PersonStanding size={17} />My look</button>
-  <button type="button" class="tab" class:on={tab === 'wardrobe'} onclick={() => (tab = 'wardrobe')}><Shirt size={16} />Wardrobe</button>
-  <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => ((shopSlot = null), (tab = 'shop'))}><ShoppingBag size={16} />Shop</button>
+  <button type="button" class="tab" class:on={tab === 'wardrobe'} onclick={() => tab !== 'wardrobe' && go('wardrobe')}><Shirt size={16} />Wardrobe</button>
+  <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => tab !== 'shop' && ((shopSlot = null), go('shop'))}><ShoppingBag size={16} />Shop</button>
 </div>
 
+{#key tab}
+<div class="pane" in:fly={{ x: slideFrom, duration: 220 }}>
 {#if tab === 'shop'}
   <Shop startSlot={shopSlot} />
 {:else if tab === 'wardrobe'}
   <Wardrobe
     onshop={(s) => {
       shopSlot = s;
-      tab = 'shop';
+      go('shop');
     }}
   />
 {:else}
@@ -199,6 +209,8 @@
   </div>
 {/if}
 </div>
+{/key}
+</div>
 
 <style>
   /* Exactly the screen between the page header and the bottom nav (the margin cancels part of
@@ -210,7 +222,13 @@
     height: max(30rem, calc(100dvh - var(--header-h, 4rem) - 0.5rem - var(--nav-h) - 0.75rem));
     margin-bottom: calc(var(--nav-h) + 0.75rem - 6.5rem);
   }
-  .fit > :global(:last-child) {
+  .fit > .pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .fit > .pane > :global(*) {
     flex: 1;
     min-height: 0;
   }

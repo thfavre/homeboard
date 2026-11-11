@@ -106,6 +106,10 @@
       {/if}
       <span class="spacer"></span>
       {#if !hb.connected}<span class="pill danger">Offline</span>{/if}
+      {#if featureModule?.guest?.header && !takeover}
+        {@const Extra = featureModule.guest.header}
+        <Extra />
+      {/if}
       {#if hb.core.economyEnabled}
         <Balance amount={hb.me.balance} onclick={() => go('earn')} />
       {/if}
