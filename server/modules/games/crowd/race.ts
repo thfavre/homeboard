@@ -114,9 +114,10 @@ export const crowdRace: GameFactory = (m) => {
     if (winner) points[winner] += 1;
     for (const a of actors) {
       if (!a.alive) continue;
-      // Everyone stops and turns to the room; the winner jumps for joy
+      // The crowd freezes where it was, still facing the line; only the players turn to the room, and the
+      // winner jumps for joy
       a.anim = a === by && winner ? ANIM.win : ANIM.idle;
-      a.dir = 2;
+      if (a.player) a.dir = 2;
     }
     for (const a of aims.values()) a.sx = a.sy = a.vx = a.vy = 0;
     events.push({ k: 'end' });
