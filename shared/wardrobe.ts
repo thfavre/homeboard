@@ -140,6 +140,7 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'shoes', name: 'Shoes', slot: 'feet', def: 'feet/shoes/feet_shoes_basic', tier: 'cheap', colors: CLOTH },
   { id: 'ankle_socks', name: 'Ankle socks', slot: 'feet', def: 'feet/socks/feet_socks_ankle', tier: 'cheap', colors: CLOTH },
   { id: 'high_socks', name: 'High socks', slot: 'feet', def: 'feet/socks/feet_socks_high', tier: 'cheap', colors: CLOTH },
+  { id: 'tabi_socks', name: 'Tabi socks', slot: 'feet', def: 'feet/socks/feet_socks_tabi', tier: 'cheap', colors: startingWith('brown', CLOTH) },
   { id: 'dress_shoes', name: 'Dress shoes', slot: 'feet', def: 'feet/shoes/feet_shoes_revised', tier: 'common', colors: CLOTH },
   { id: 'sneakers', name: 'Sneakers', slot: 'feet', def: 'feet/shoes/feet_shoes_sara', tier: 'common', colors: CLOTH },
   { id: 'ghillies', name: 'Ghillies', slot: 'feet', def: 'feet/shoes/feet_shoes_ghillies', tier: 'common', colors: CLOTH },
