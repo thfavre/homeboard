@@ -400,6 +400,7 @@
     gap: 0.5rem;
   }
   .piece {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -420,7 +421,7 @@
     display: grid;
     place-items: center;
     width: 100%;
-    height: 5.6rem;
+    height: 7.2rem;
   }
   .pic img {
     width: 100%;
@@ -428,13 +429,25 @@
     object-fit: contain;
     image-rendering: pixelated;
   }
+  /* The name sits over the top of the picture, outlined so it reads on any art */
   .pname {
-    max-width: 100%;
-    /* Always two lines tall, so one-line names do not make shorter cards */
-    min-height: 2.3em;
+    position: absolute;
+    top: 0.35rem;
+    left: 0.3rem;
+    right: 0.3rem;
+    z-index: 1;
+    pointer-events: none;
     font-size: 0.8rem;
+    font-weight: 700;
     line-height: 1.15;
     text-align: center;
+    color: #fff;
+    text-shadow:
+      -1px -1px 0 #000,
+      1px -1px 0 #000,
+      -1px 1px 0 #000,
+      1px 1px 0 #000,
+      0 0 3px #000;
     overflow: hidden;
     display: -webkit-box;
     -webkit-line-clamp: 2;
