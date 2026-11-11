@@ -136,10 +136,12 @@ export const spyHunt: GameFactory = (m) => {
     else if (why === 'shot' && by) points[by] += SPY_POINTS.kill;
     else if (why === 'time') for (const id of snipers()) points[id] += SPY_POINTS.time;
     smoke = null;
+    // Everyone freezes where they are, facing where they were going; only the spy turns to the room (and
+    // jumps for joy when they got away)
     for (const a of actors) {
       if (!a.alive) continue;
       a.anim = a === spyActor && why !== 'time' ? ANIM.win : ANIM.idle;
-      a.dir = 2;
+      if (a === spyActor) a.dir = 2;
     }
     for (const a of aims.values()) {
       a.sx = a.sy = a.vx = a.vy = 0;
