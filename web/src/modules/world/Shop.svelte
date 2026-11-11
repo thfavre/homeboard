@@ -23,8 +23,10 @@
   let slot = $state<Slot>('top');
   /** The piece opened in the detail view (null: the grid) */
   let open = $state<WornItem | null>(null);
-  /** The swatch picked while browsing this slot: the next items open in it too (reset per slot) */
+  /** The swatch picked while browsing this slot: the next items open in it too (reset per slot).
+   *  Only for clothes, where one color across pieces makes sense; hats, wings and glasses differ */
   let pickedColor = $state<string | null>(null);
+  const KEEPS_COLOR: Slot[] = ['top', 'bottom', 'feet'];
   /** Item pictures by id, fetched per slot and kept */
   let icons = $state<Record<string, string>>({});
   let url = $state<string | null>(null);
@@ -72,7 +74,7 @@
     if (!item) return;
     const worn = wd?.outfit[slot];
     const color =
-      pickedColor && item.colors.includes(pickedColor)
+      pickedColor && KEEPS_COLOR.includes(slot) && item.colors.includes(pickedColor)
         ? pickedColor
         : worn?.id === id
           ? worn.color
