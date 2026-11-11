@@ -4,19 +4,54 @@
 
   /**
    * The live avatar preview of the editor and the shop: the composited sheet walking toward the
-   * camera. `focusHead` glides the view onto the head (editing hair, trying on a hat).
+   * camera. `focus` glides the view onto a body part (the head while editing hair or browsing
+   * hats, the legs for bottoms, the feet for shoes).
    */
+  type Focus = 'head' | 'torso' | 'legs' | 'feet' | null;
+
   let {
     url,
     sheet,
     building = false,
-    focusHead = false,
+    focus = null,
   }: {
     url: string | null;
     sheet: SheetInfo | null;
     building?: boolean;
-    focusHead?: boolean;
+    focus?: Focus;
   } = $props();
+
+  /** The square of the frame to show for a focus (full frame when null) */
+  function viewOf(which: Focus, s: SheetInfo): { x: number; y: number; size: number } {
+    const px = s.frame;
+    const top = Math.max(0, (s.body.top ?? 8) - 3);
+    const feet = s.feet ?? px - 4;
+    const height = Math.max(1, feet - top);
+    let size = px;
+    let y = 0;
+    switch (which) {
+      case 'head':
+        // Roomy enough that a tall wizard hat and the face both fit
+        size = 40;
+        y = top;
+        break;
+      case 'torso':
+        size = 40;
+        y = top + height * 0.18;
+        break;
+      case 'legs':
+        size = 40;
+        y = top + height * 0.45;
+        break;
+      case 'feet':
+        size = 36;
+        y = feet - 28;
+        break;
+      default:
+        return { x: 0, y: 0, size: px };
+    }
+    return { x: (px - size) / 2, y: Math.max(0, Math.min(px - size, y)), size };
+  }
 
   let canvas = $state<HTMLCanvasElement>();
   const img = new Image();
@@ -34,7 +69,7 @@
   $effect(() => {
     if (!canvas) return;
     let raf = 0;
-    let zoom = 0;
+    let view: { x: number; y: number; size: number } | null = null;
     let last = Date.now();
     const g = canvas.getContext('2d')!;
     const loop = () => {
@@ -51,15 +86,14 @@
       const count = Math.max(1, row.frames - 1);
       const frame = row.frames > 1 ? 1 + (Math.floor(now / 110) % count) : 0;
       const px = sheet.frame;
-      // The view glides onto the head and out again
-      zoom += ((focusHead ? 1 : 0) - zoom) * Math.min(1, dt * 7);
-      const headSize = 34;
-      const headY = Math.max(0, (sheet.body.top ?? 8) - 3);
-      const ease = zoom * zoom * (3 - 2 * zoom);
-      const size = px + (headSize - px) * ease;
-      const sx = ((px - headSize) / 2) * ease;
-      const sy = headY * ease;
-      g.drawImage(img, frame * px + sx, row.row * px + sy, size, size, 0, 0, canvas!.width, canvas!.height);
+      // The view glides toward the focused body part (or back out to the whole character)
+      const target = viewOf(focus, sheet);
+      if (!view) view = { x: 0, y: 0, size: px };
+      const k = Math.min(1, dt * 7);
+      view.x += (target.x - view.x) * k;
+      view.y += (target.y - view.y) * k;
+      view.size += (target.size - view.size) * k;
+      g.drawImage(img, frame * px + view.x, row.row * px + view.y, view.size, view.size, 0, 0, canvas!.width, canvas!.height);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);

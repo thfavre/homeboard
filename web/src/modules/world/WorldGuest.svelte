@@ -136,7 +136,7 @@
   <Shop />
 {:else}
   <div class="editor">
-    <AvatarPreview {url} {sheet} building={buildingCount > 0} {focusHead} />
+    <AvatarPreview {url} {sheet} building={buildingCount > 0} focus={focusHead ? 'head' : null} />
 
     <Wardrobe onchanged={() => void build($state.snapshot(choices) as AvatarChoices)} />
 

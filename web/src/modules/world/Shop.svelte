@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Check, ChevronLeft, Coins, ShoppingBag, X } from '@lucide/svelte';
+  import { Check, Coins, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
   import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
@@ -28,6 +28,17 @@
   let firstLoad = $state(true);
 
   const slots = $derived(SLOTS.filter((s) => s.id !== 'dress' || body === 'female'));
+  /** Where the preview zooms while browsing a slot */
+  const FOCUS: Record<Slot, 'head' | 'torso' | 'legs' | 'feet' | null> = {
+    hat: 'head',
+    face: 'head',
+    neck: 'torso',
+    top: 'torso',
+    bottom: 'legs',
+    feet: 'feet',
+    dress: null,
+    back: null,
+  };
   const items = $derived(CATALOG.filter((i) => i.slot === slot && (!i.bodies || (body && i.bodies.includes(body)))));
   const openItem = $derived(open ? (CATALOG.find((i) => i.id === open!.id) ?? null) : null);
 
@@ -166,18 +177,64 @@
       <span class="faint small">You earn them by being in the town</span>
     </div>
 
-    {#if open && openItem}
-      <button type="button" class="back" onclick={() => (open = null)}>
-        <ChevronLeft size={18} />
-        All {SLOTS.find((s) => s.id === slot)?.name.toLowerCase()}
-      </button>
-    {/if}
+    <AvatarPreview {url} {sheet} building={buildingCount > 0} focus={FOCUS[slot]} />
 
-    <AvatarPreview {url} {sheet} building={buildingCount > 0} focusHead={!!open && (slot === 'hat' || slot === 'face' || slot === 'neck')} />
+    <div class="slots">
+      {#each slots as s (s.id)}
+        <button
+          type="button"
+          class="slot"
+          class:on={slot === s.id}
+          onclick={() => {
+            slot = s.id;
+            open = null;
+          }}
+        >
+          {s.name}
+          {#if wd?.outfit[s.id]}<span class="worn-dot"></span>{/if}
+        </button>
+      {/each}
+    </div>
+
+    <div class="grid">
+      {#each items as i (i.id)}
+        <button type="button" class="item" class:on={open?.id === i.id} class:worn={wd?.outfit[slot]?.id === i.id} onclick={() => show(i.id)}>
+          <span class="pic">
+            {#if icons[i.id]}
+              <img src={icons[i.id]} alt={i.name} loading="lazy" />
+            {/if}
+          </span>
+          <span class="iname">{i.name}</span>
+          {#if wd?.outfit[slot]?.id === i.id}
+            <span class="itag worn-tag">Worn</span>
+          {:else if ownedIs(i.id)}
+            <span class="itag owned-tag"><Check size={12} />Owned</span>
+          {:else}
+            <span class="itag price {i.tier}">{shop.prices[i.tier]} <Coins size={11} /></span>
+          {/if}
+        </button>
+      {/each}
+    </div>
 
     {#if open && openItem}
-      <div class="group">
-        <span class="label">Color <span class="pickname">{colorName(open.color)}</span></span>
+      <div class="sheet">
+        <div class="deal">
+          <div class="what">
+            <span class="name">{openItem.name}</span>
+            <span class="tier {openItem.tier}">{TIER_NAMES[openItem.tier]}</span>
+          </div>
+          {#if isWorn}
+            <button type="button" class="btn" onclick={takeOff}><X size={18} />Take off</button>
+          {:else if isOwned}
+            <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={wear}><Check size={18} />Wear</button>
+          {:else}
+            <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={buy}>
+              <ShoppingBag size={18} />
+              Buy for {price} {shop.currencyName}
+            </button>
+          {/if}
+          <button type="button" class="close" aria-label="Close" onclick={() => (open = null)}><X size={16} /></button>
+        </div>
         <div class="colors">
           {#each openItem.colors as c (c)}
             <button
@@ -191,52 +248,6 @@
             ></button>
           {/each}
         </div>
-      </div>
-
-      <div class="deal card">
-        <div class="what">
-          <span class="name">{openItem.name}</span>
-          <span class="tier {openItem.tier}">{TIER_NAMES[openItem.tier]}</span>
-        </div>
-        {#if isWorn}
-          <button type="button" class="btn" onclick={takeOff}><X size={18} />Take off</button>
-        {:else if isOwned}
-          <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={wear}><Check size={18} />Wear</button>
-        {:else}
-          <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={buy}>
-            <ShoppingBag size={18} />
-            Buy for {price} {shop.currencyName}
-          </button>
-        {/if}
-      </div>
-    {:else}
-      <div class="slots">
-        {#each slots as s (s.id)}
-          <button type="button" class="slot" class:on={slot === s.id} onclick={() => (slot = s.id)}>
-            {s.name}
-            {#if wd?.outfit[s.id]}<span class="worn-dot"></span>{/if}
-          </button>
-        {/each}
-      </div>
-
-      <div class="grid">
-        {#each items as i (i.id)}
-          <button type="button" class="item" class:worn={wd?.outfit[slot]?.id === i.id} onclick={() => show(i.id)}>
-            <span class="pic">
-              {#if icons[i.id]}
-                <img src={icons[i.id]} alt={i.name} loading="lazy" />
-              {/if}
-            </span>
-            <span class="iname">{i.name}</span>
-            {#if wd?.outfit[slot]?.id === i.id}
-              <span class="itag worn-tag">Worn</span>
-            {:else if ownedIs(i.id)}
-              <span class="itag owned-tag"><Check size={12} />Owned</span>
-            {:else}
-              <span class="itag price {i.tier}">{shop.prices[i.tier]} <Coins size={11} /></span>
-            {/if}
-          </button>
-        {/each}
       </div>
     {/if}
   </div>
@@ -364,47 +375,47 @@
     color: #d9a732;
   }
 
-  /* ------------------------------------------------------------ the detail */
-  .back {
-    align-self: flex-start;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    margin: -0.3rem 0 -0.4rem;
-    padding: 0.3rem 0.5rem 0.3rem 0.2rem;
-    border: none;
-    background: none;
-    color: var(--text-dim);
-    font-size: 0.9rem;
-    font-weight: 600;
+  /* ------------------------------------------------------------ the tried-on piece */
+  .item.on {
+    border-color: var(--accent);
+    outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   }
-  .group {
+  .sheet {
+    position: sticky;
+    /* Above the guest page's fixed bottom nav */
+    bottom: calc(4rem + env(safe-area-inset-bottom));
+    z-index: 5;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.55rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid var(--border-strong, var(--border));
+    border-radius: var(--radius);
+    background:
+      linear-gradient(var(--surface-2), var(--surface-2)),
+      var(--bg);
+    box-shadow: var(--shadow);
   }
-  .label {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    font-size: 0.82rem;
-    font-weight: 600;
+  .close {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
     color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .pickname {
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--text);
-    font-size: 0.9rem;
   }
   .colors {
     display: flex;
-    flex-wrap: wrap;
     gap: 0.45rem;
+    overflow-x: auto;
+    padding: 0.15rem 0.1rem 0.25rem;
   }
   .swatch {
+    flex: none;
     position: relative;
     width: 2.1rem;
     height: 2.1rem;
@@ -430,11 +441,10 @@
   .deal {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.8rem;
-    padding: 0.7rem 0.8rem;
+    gap: 0.6rem;
   }
   .what {
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
