@@ -95,9 +95,9 @@
       case 'party':
         return st.partyLight ? `on ${lightName(st.partyLight)}, ${Math.min(st.partyRounds, st.partyMinis.length)} of ${plural(st.partyMinis.length, 'mini game')}` : 'needs a light';
       case 'crowd':
-        return `${plural(st.crowdRounds, 'round')}, ${st.crowdNpcs} passers-by, ${plural(st.crowdShots, 'shot')} each`;
+        return `${plural(st.crowdRounds, 'round')}, ${st.crowdNpcs} passers-by, ${st.crowdShots ? plural(st.crowdShots, 'shot') : 'unlimited shots'} each`;
       case 'spy':
-        return `${plural(st.spyRounds, 'round')} of ${st.spyMinutes} min, ${plural(st.spyShots, 'shot')} per sniper, ${st.spyNeeded} of 4 suitcases`;
+        return `${plural(st.spyRounds, 'round')} of ${st.spyMinutes} min, ${st.spyShots ? plural(st.spyShots, 'shot') : 'unlimited shots'} per sniper, ${st.spyNeeded} of 4 suitcases`;
       default:
         return '';
     }

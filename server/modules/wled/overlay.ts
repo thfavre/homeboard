@@ -22,7 +22,7 @@ interface Running {
   color: Rgb;
 }
 
-const DEFAULT_MS: Record<LightFlash, number> = { shot: 260, kill: 1150, flashbang: 3200, smoke: 8000, gold: 700, win: 1900 };
+const DEFAULT_MS: Record<LightFlash, number> = { shot: 200, kill: 1150, flashbang: 3200, smoke: 8000, gold: 700, win: 1900 };
 
 const hexRgb = (hex: string | undefined, fallback: Rgb): Rgb => {
   const n = parseInt(String(hex ?? '').replace('#', '').slice(0, 6), 16);
@@ -39,8 +39,8 @@ function shade(e: Running, t: number, i: number, n: number): { a: number; rgb: R
   const p = t / e.ms;
   switch (e.kind) {
     case 'shot': {
-      // White, not at full power: a small flash
-      return { a: 0.55 * (1 - p) ** 2, rgb: [255, 255, 255] };
+      // A soft white glint, far from full power: a shot is frequent, it should not dazzle
+      return { a: 0.3 * (1 - p) ** 2, rgb: [255, 250, 235] };
     }
     case 'kill': {
       // Red at once, held a moment, then fading back over the rest

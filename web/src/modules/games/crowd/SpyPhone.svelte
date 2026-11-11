@@ -142,8 +142,8 @@
       </div>
       <div class="controls">
         <div class="left">
-          <HoldButton color="#ff3b5c" size="big" disabled={v.step !== 'hunt' || shots <= 0 || reloading || blind} onpress={fire}>
-            <Crosshair size={28} />{shots <= 0 ? 'NO SHOTS' : reloading ? 'RELOADING' : 'SHOOT'}
+          <HoldButton color="#ff3b5c" size="big" disabled={v.step !== 'hunt' || shots === 0 || reloading || blind} onpress={fire}>
+            <Crosshair size={28} />{shots === 0 ? 'NO SHOTS' : reloading ? 'RELOADING' : 'SHOOT'}
           </HoldButton>
           <HoldButton color="#3d8bff" size="small" disabled={v.step !== 'hunt' || blind} onpress={() => draw(true)} onrelease={() => draw(false)}>
             <Pencil size={20} />DRAW

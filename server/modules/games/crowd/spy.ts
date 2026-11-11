@@ -10,6 +10,8 @@ import {
   SPY_POINTS,
   SUIT_LOOKS,
   SPY_WALK_UPS,
+  shotsOf,
+  shotsOut,
   walkSpeed,
   type CrowdEvent,
   type CrowdFrame,
@@ -115,7 +117,7 @@ export const spyHunt: GameFactory = (m) => {
     const held = new Map(aims);
     aims.clear();
     for (const id of snipers()) {
-      const a = newAim(id, until, Math.max(1, s.spyShots));
+      const a = newAim(id, until, shotsOf(s.spyShots));
       const old = held.get(id);
       if (old) Object.assign(a, { sx: old.sx, sy: old.sy, heard: old.heard });
       aims.set(id, a);
@@ -283,9 +285,9 @@ export const spyHunt: GameFactory = (m) => {
   const fire = (id: string) => {
     const now = Date.now();
     const a = aims.get(id);
-    if (!a || step !== 'hunt') return { hit: null, shots: a?.shots ?? 0 };
-    if (now < blindUntil) return { hit: null, shots: a.shots, blind: true };
-    if (a.shots <= 0 || now < a.readyAt) return { hit: null, shots: a.shots, wait: Math.max(0, a.readyAt - now) };
+    if (!a || step !== 'hunt') return { hit: null, shots: shotsOut(a?.shots ?? 0) };
+    if (now < blindUntil) return { hit: null, shots: shotsOut(a.shots), blind: true };
+    if (a.shots <= 0 || now < a.readyAt) return { hit: null, shots: shotsOut(a.shots), wait: Math.max(0, a.readyAt - now) };
     a.shots -= 1;
     a.readyAt = now + reloadMs;
     const target = hitTest(actors, a.x, a.y);
@@ -299,13 +301,13 @@ export const spyHunt: GameFactory = (m) => {
       if (target === spyActor) {
         m.flash('kill');
         endRound('shot', id);
-        return { hit: 'spy', shots: a.shots };
+        return { hit: 'spy', shots: shotsOut(a.shots) };
       }
     }
     // Every sniper out of shots and the spy still walking: the spy gets away
     if ([...aims.values()].every((x) => x.shots <= 0)) endRound('ammo');
     m.publish();
-    return { hit: target ? 'npc' : 'miss', shots: a.shots };
+    return { hit: target ? 'npc' : 'miss', shots: shotsOut(a.shots) };
   };
 
   const useGadget = () => {
@@ -395,7 +397,7 @@ export const spyHunt: GameFactory = (m) => {
       const shots: Record<string, number> = {};
       for (const a of aims.values()) {
         readyAt[a.id] = a.readyAt;
-        shots[a.id] = a.shots;
+        shots[a.id] = shotsOut(a.shots);
       }
       return {
         step,

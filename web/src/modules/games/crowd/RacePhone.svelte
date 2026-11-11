@@ -83,8 +83,8 @@
         </HoldButton>
       </div>
       <div class="right">
-        <HoldButton color="#ff3b5c" size="square" disabled={!alive || v.step !== 'race' || shots <= 0 || reloading} onpress={fire}>
-          <Crosshair size={34} />{shots <= 0 ? 'NO SHOTS' : reloading ? 'RELOADING' : 'SHOOT'}
+        <HoldButton color="#ff3b5c" size="square" disabled={!alive || v.step !== 'race' || shots === 0 || reloading} onpress={fire}>
+          <Crosshair size={34} />{shots === 0 ? 'NO SHOTS' : reloading ? 'RELOADING' : 'SHOOT'}
         </HoldButton>
         <Joystick label="Aim" color={myColor} disabled={!alive || v.step === 'reveal'} onmove={aim} />
       </div>

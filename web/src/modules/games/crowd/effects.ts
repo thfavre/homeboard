@@ -117,7 +117,7 @@ export class Effects {
 
   /** A shot: the flash at the crosshair, a ring, and dust and sparks where it lands */
   shot(x: number, y: number, hit: boolean) {
-    this.add({ kind: 'flash', x, y, life: 0.09, size: 46 });
+    this.add({ kind: 'flash', x, y, life: 0.08, size: 30, alpha: 0.75 });
     this.add({ kind: 'ring', x, y, life: 0.45, size: 12, grow: 150, color: '#ffffff' });
     for (let k = 0; k < 10; k++) {
       const a = rand(0, Math.PI * 2);
@@ -253,7 +253,7 @@ export class Effects {
           break;
         }
         case 'flash': {
-          const a = 1 - t;
+          const a = (1 - t) * p.alpha;
           const r = p.size * (0.6 + t);
           const grad = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
           grad.addColorStop(0, `rgba(255,255,240,${a})`);

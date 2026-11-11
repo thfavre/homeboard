@@ -1,10 +1,12 @@
 <script lang="ts">
-  /** Shots left, as little bullets (a number past 5) */
+  /** Shots left, as little bullets (a number past 5, an infinity sign when unlimited: -1) */
   let { left, size = '1rem' }: { left: number; size?: string } = $props();
 </script>
 
 <span class="bullets" style:--s={size} aria-label={`${left} ${left === 1 ? 'shot' : 'shots'} left`}>
-  {#if left > 5}
+  {#if left < 0}
+    <svg viewBox="0 0 8 20" aria-hidden="true"><path d="M4 0 C7 3 7 6 7 8 V18 H1 V8 C1 6 1 3 4 0 Z" /></svg><span class="mono inf">&infin;</span>
+  {:else if left > 5}
     <svg viewBox="0 0 8 20" aria-hidden="true"><path d="M4 0 C7 3 7 6 7 8 V18 H1 V8 C1 6 1 3 4 0 Z" /></svg><span class="mono">{left}</span>
   {:else if left > 0}
     {#each { length: left } as _, i (i)}<svg viewBox="0 0 8 20" aria-hidden="true"><path d="M4 0 C7 3 7 6 7 8 V18 H1 V8 C1 6 1 3 4 0 Z" /></svg>{/each}
@@ -28,6 +30,11 @@
   .mono {
     margin-left: 0.2rem;
     font-weight: 700;
+  }
+  .inf {
+    font-family: system-ui, sans-serif;
+    font-size: 1.2em;
+    line-height: 1;
   }
   .none {
     font-size: 0.7em;

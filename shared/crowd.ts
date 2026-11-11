@@ -32,7 +32,12 @@ export const walkSpeed = (percent: number, base: number) => base * Math.max(0.1,
 /** About how long a race round lasts at a walking speed in %: when the first passer-by gets to the line */
 export const raceRoundSec = (percent: number) => Math.round((75 * 100) / Math.max(1, percent));
 /** Settings the host can pick: walking speed in %, running speed in times walking, passers-by (race, spy) */
-export const CROWD_LIMITS = { walk: [25, 300], run: [1.1, 4], raceNpcs: [0, 1000], spyNpcs: [0, 500] } as const;
+export const CROWD_LIMITS = { walk: [25, 300], run: [1.1, 4], raceNpcs: [0, 1000], spyNpcs: [0, 500], shots: [1, 500] } as const;
+/** Shots setting for "as many as you like" (saved as 0), and how the views send it (-1: JSON has no Infinity) */
+export const UNLIMITED_SHOTS = 0;
+export const shotsOut = (n: number) => (Number.isFinite(n) ? n : -1);
+/** The shots of a setting: 0 is unlimited */
+export const shotsOf = (setting: number) => (setting > 0 ? setting : Infinity);
 
 /**
  * Crosshair speed at full stick (world units a second: the width of the screen in about 2.5 s). The stick

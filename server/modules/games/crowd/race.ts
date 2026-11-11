@@ -1,4 +1,4 @@
-import { ANIM, RACE_AREA, RACE_LOOKS, RACE_WALK_UPS, walkSpeed, type CrowdEvent, type CrowdFrame, type CrowdKill, type CrowdRaceView } from '../../../../shared/crowd.ts';
+import { ANIM, RACE_AREA, RACE_LOOKS, RACE_WALK_UPS, shotsOf, shotsOut, walkSpeed, type CrowdEvent, type CrowdFrame, type CrowdKill, type CrowdRaceView } from '../../../../shared/crowd.ts';
 import type { GameFactory } from '../engine.ts';
 import { HOLD_EXPIRE_MS, TICK_MS, aimOut, dealLooks, hitTest, moveAim, newActor, newAim, pack, rand, stick, type Actor, type Aim } from './sim.ts';
 
@@ -90,7 +90,7 @@ export const crowdRace: GameFactory = (m) => {
       alive.add(id);
       moves.set(id, { m: 'stop', at: 0 });
       const old = aims.get(id);
-      const a = newAim(id, goAt, Math.max(1, s.crowdShots));
+      const a = newAim(id, goAt, shotsOf(s.crowdShots));
       // The crosshair stays where it was from one round to the next, and a stick still held keeps pushing it
       if (old) {
         a.x = old.x;
@@ -213,8 +213,8 @@ export const crowdRace: GameFactory = (m) => {
   const fire = (id: string) => {
     const now = Date.now();
     const a = aims.get(id);
-    if (!a || step !== 'race' || !alive.has(id)) return { hit: null, shots: a?.shots ?? 0 };
-    if (a.shots <= 0 || now < a.readyAt) return { hit: null, shots: a.shots, wait: Math.max(0, a.readyAt - now) };
+    if (!a || step !== 'race' || !alive.has(id)) return { hit: null, shots: shotsOut(a?.shots ?? 0) };
+    if (a.shots <= 0 || now < a.readyAt) return { hit: null, shots: shotsOut(a.shots), wait: Math.max(0, a.readyAt - now) };
     a.shots -= 1;
     a.readyAt = now + reloadMs;
     const target = hitTest(actors, a.x, a.y);
@@ -235,7 +235,7 @@ export const crowdRace: GameFactory = (m) => {
       }
     }
     m.publish();
-    return { hit: target ? (target.player ? (target.player === id ? 'self' : 'player') : 'npc') : 'miss', shots: a.shots };
+    return { hit: target ? (target.player ? (target.player === id ? 'self' : 'player') : 'npc') : 'miss', shots: shotsOut(a.shots) };
   };
 
   return {
@@ -274,7 +274,7 @@ export const crowdRace: GameFactory = (m) => {
       const shots: Record<string, number> = {};
       for (const a of aims.values()) {
         readyAt[a.id] = a.readyAt;
-        shots[a.id] = a.shots;
+        shots[a.id] = shotsOut(a.shots);
       }
       return {
         step,

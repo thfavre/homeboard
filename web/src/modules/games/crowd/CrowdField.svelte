@@ -476,7 +476,7 @@
     if (!text) return;
     g.font = `${size}px ${PIXEL}`;
     const nameW = g.measureText(text).width;
-    const ammoText = ammo === undefined ? '' : String(ammo);
+    const ammoText = ammo === undefined ? '' : ammo < 0 ? '\u221e' : String(ammo);
     const ammoW = ammoText ? g.measureText(`x${ammoText}`).width + size * 0.8 + 16 : 0;
     const w = Math.round(nameW + ammoW + size * 1.4);
     const h = Math.round(size * 2);
