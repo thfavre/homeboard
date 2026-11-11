@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { Check, Coins, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
-  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
+  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, splitColor, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
 
@@ -71,6 +71,9 @@
   };
   const items = $derived(CATALOG.filter((i) => i.slot === slot && (!i.bodies || (body && i.bodies.includes(body)))));
   const openItem = $derived(open ? (CATALOG.find((i) => i.id === open!.id) ?? null) : null);
+  /** The opened piece's colors: one-color ids, and two-color ones ("navy+gold") */
+  const singles = $derived(openItem?.colors.filter((c) => !splitColor(c)[1]) ?? []);
+  const pairs = $derived(openItem?.colors.filter((c) => !!splitColor(c)[1]) ?? []);
 
   const ownedIs = (id: string, color?: string) => (wd?.owned ?? []).some((o) => o.id === id && (color === undefined || o.color === color));
   const isOwned = $derived(!!open && ownedIs(open.id, open.color));
@@ -280,22 +283,35 @@
           {/if}
           <button type="button" class="close" aria-label="Close" onclick={() => (open = null)}><X size={16} /></button>
         </div>
-        <div class="colors">
-          {#each openItem.colors as c (c)}
-            <button
-              type="button"
-              class="swatch"
-              class:on={open.color === c}
-              class:dot={ownedIs(openItem.id, c)}
-              style:background={COLOR_HEX[c] ?? '#888'}
-              aria-label={colorName(c)}
-              onclick={() => {
-                open = { id: openItem.id, color: c };
-                pickedColor = c;
-              }}
-            ></button>
-          {/each}
-        </div>
+        {#snippet swatch(c: string)}
+          <button
+            type="button"
+            class="swatch"
+            class:on={open?.color === c}
+            class:dot={ownedIs(openItem!.id, c)}
+            style:background={COLOR_HEX[c] ?? '#888'}
+            aria-label={colorName(c)}
+            title={colorName(c)}
+            onclick={() => {
+              open = { id: openItem!.id, color: c };
+              pickedColor = c;
+            }}
+          ></button>
+        {/snippet}
+        <span class="cname">{colorName(open.color)}</span>
+        <!-- One-color swatches, then the two-color ones (the second color for the trim, feather or
+             second material) on their own row, so they never hide at the end of a long scroll -->
+        {#if singles.length}
+          <div class="colors">
+            {#each singles as c (c)}{@render swatch(c)}{/each}
+          </div>
+        {/if}
+        {#if pairs.length}
+          <div class="colors pairs">
+            {#if singles.length}<span class="rowlabel">Two colors</span>{/if}
+            {#each pairs as c (c)}{@render swatch(c)}{/each}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -560,6 +576,23 @@
     border-radius: 50%;
     border: 2px solid var(--border);
     padding: 0;
+  }
+  .colors.pairs {
+    align-items: center;
+  }
+  .rowlabel {
+    flex: none;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  /* The name of the color tried on, above the swatches */
+  .cname {
+    margin-bottom: -0.3rem;
+    font-size: 0.82rem;
+    color: var(--text-dim);
   }
   .swatch.on {
     border-color: var(--accent);

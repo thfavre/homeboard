@@ -309,11 +309,11 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'dragon_wings', name: 'Dragon wings', slot: 'back', def: 'body/wings/wings_lizard_alt', tier: 'legendary', colors: SCALE },
 ];
 
-// Two-color swatches: the first color over the second, split on the diagonal
+// Two-color swatches: split corner to corner, the first color top left, the second bottom right
 for (const item of CATALOG) {
   for (const id of item.colors) {
     const [main, accent] = splitColor(id);
-    if (accent && !COLOR_HEX[id]) COLOR_HEX[id] = `linear-gradient(135deg, ${COLOR_HEX[main] ?? '#888'} 50%, ${COLOR_HEX[accent] ?? '#888'} 50%)`;
+    if (accent && !COLOR_HEX[id]) COLOR_HEX[id] = `linear-gradient(to bottom right, ${COLOR_HEX[main] ?? '#888'} 50%, ${COLOR_HEX[accent] ?? '#888'} 50%)`;
   }
 }
 
