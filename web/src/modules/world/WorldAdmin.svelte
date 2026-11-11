@@ -1,12 +1,18 @@
 <script lang="ts">
   import { attempt, hb, rpc } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
+  import Toggle from '$lib/ui/Toggle.svelte';
   import { TIERS, TIER_NAMES } from '$shared/wardrobe.ts';
   import type { WorldState } from '$shared/world.ts';
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
 
-  function setOption(key: string, value: string | number) {
+  function setSeconds(key: string, value: string) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n >= 0) setOption(key, n);
+  }
+
+  function setOption(key: string, value: string | number | boolean) {
     attempt(() => rpc('world', 'setOptions', { [key]: value }));
   }
 
@@ -69,6 +75,48 @@
     <p class="faint small">A sleeper gone for this much longer fades away, so the town never clutters up.</p>
   </Section>
 
+  <Section title="Shop visits">
+    <div class="line">
+      <div>
+        <strong>Walk to the shops</strong>
+        <p class="faint small">
+          A guest who changes clothes on the phone sees the new look at once; their character walks to the clothes shop, tries it on behind the window and
+          comes out in it. Hair and beard go to the barber. Eye color shows at once. Off: the town changes on the spot.
+        </p>
+      </div>
+      <Toggle checked={!!mod.shopVisits} label="Walk to the shops" onchange={(v) => setOption('shopVisits', v)} />
+    </div>
+    <div class="pair">
+      <label class="field">
+        <span>Inside from (seconds)</span>
+        <input class="input" type="number" min="0" max="60" step="0.5" value={mod.visitMinSec} onchange={(e) => setSeconds('visitMinSec', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>to (seconds)</span>
+        <input class="input" type="number" min="0" max="60" step="0.5" value={mod.visitMaxSec} onchange={(e) => setSeconds('visitMaxSec', e.currentTarget.value)} />
+      </label>
+    </div>
+    <p class="faint small">How long a character stays in the shop, a random time in this range.</p>
+    <label class="field">
+      <span>Finish first if it ends within (seconds)</span>
+      <input class="input" type="number" min="0" max="300" value={mod.finishWithinSec} onchange={(e) => setSeconds('finishWithinSec', e.currentTarget.value)} />
+    </label>
+    <div class="pair">
+      <label class="field">
+        <span>Else wrap up within (seconds)</span>
+        <input class="input" type="number" min="0" max="120" value={mod.wrapMinSec} onchange={(e) => setSeconds('wrapMinSec', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>to (seconds)</span>
+        <input class="input" type="number" min="0" max="120" value={mod.wrapMaxSec} onchange={(e) => setSeconds('wrapMaxSec', e.currentTarget.value)} />
+      </label>
+    </div>
+    <p class="faint small">
+      What the character is doing (sitting on a bench, petting the cat, walking) is finished first if it ends soon, otherwise it ends early within this range.
+      A visit or a cheer is never cut short, and a sleeper goes once the guest is back.
+    </p>
+  </Section>
+
   <Section title="Money">
     {#if !mod.wallets?.length}
       <p class="faint small">Nobody has joined yet.</p>
@@ -110,6 +158,20 @@
   .prices {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+    gap: 0.5rem;
+  }
+  .line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .line p {
+    margin: 0.2rem 0 0;
+  }
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
   }
   .wallets {
