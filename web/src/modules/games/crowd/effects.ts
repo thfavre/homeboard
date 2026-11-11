@@ -490,10 +490,29 @@ export class Pigeons {
     }
   }
 
+  /** The birds on the ground, to draw in depth order with the characters and the things standing up */
+  groundItems(env: Env): { y: number; draw(g: CanvasRenderingContext2D): void }[] {
+    const now = performance.now();
+    return this.birds.filter((b) => !(b.state === 'land' && now < b.next) && b.state !== 'fly' && b.z <= 0).map((b) => ({ y: b.y, draw: (g: CanvasRenderingContext2D) => this.drawBird(g, env, b, now) }));
+  }
+
+  /** The birds in the air (flying off, coming to land): over everything on the ground, roofs and trees included */
+  drawAir(g: CanvasRenderingContext2D, env: Env | null) {
+    if (!env) return;
+    const now = performance.now();
+    for (const b of this.birds) if (!(b.state === 'land' && now < b.next) && (b.state === 'fly' || b.z > 0)) this.drawBird(g, env, b, now);
+  }
+
   private drawSprites(g: CanvasRenderingContext2D, env: Env, now: number) {
-    const size = 32 * SPRITE_SCALE;
     for (const b of this.birds) {
       if (b.state === 'land' && now < b.next) continue;
+      this.drawBird(g, env, b, now);
+    }
+  }
+
+  private drawBird(g: CanvasRenderingContext2D, env: Env, b: Pigeon, now: number) {
+    const size = 32 * SPRITE_SCALE;
+    {
       const flying = b.state === 'fly' || b.z > 0;
       const x = Math.round(b.x - size / 2);
       const y = Math.round(b.y - b.z - size + 6);
@@ -582,6 +601,12 @@ export class Cat {
       this.dir = this.tx < this.x ? -1 : 1;
       this.state = 'walk';
     }
+  }
+
+  /** The cat, to draw in depth order with the characters and the things standing up (null: not around) */
+  item(env: Env | null): { y: number; draw(g: CanvasRenderingContext2D): void } | null {
+    if (!env || this.state === 'gone') return null;
+    return { y: this.y, draw: (g) => this.draw(g, env) };
   }
 
   draw(g: CanvasRenderingContext2D, env: Env | null) {

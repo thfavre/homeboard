@@ -252,6 +252,8 @@ export interface Prop {
   hit?(x: number, y: number): PropHit | null;
   /** A new round: as it was (a broken lamp is mended) */
   reset?(): void;
+  /** Drawn on the ground before anyone (a tree's shadow): people walk over it, not under it */
+  ground?(g: CanvasRenderingContext2D, now: number): void;
 }
 
 function tree(env: Env, x: number, y: number, spring: boolean, phase: number): Prop {
@@ -262,11 +264,13 @@ function tree(env: Env, x: number, y: number, spring: boolean, phase: number): P
       const cy = y - 44 * S - 40 * S;
       return ((hx - x) / (47 * S)) ** 2 + ((hy - cy) / (40 * S)) ** 2 < 1 ? 'leaves' : null;
     },
-    draw(g, now) {
-      // The shadow, the trunk, and the leaves swaying a pixel in the wind
+    ground(g) {
       g.globalAlpha = 0.5;
       put(g, env['tree-shadows'], CUT.treeShadow, x + 6, y + 14);
       g.globalAlpha = 1;
+    },
+    draw(g, now) {
+      // The trunk, and the leaves swaying a pixel in the wind
       put(g, env['tree-trunks'], CUT.trunk, x, y + 4);
       const sway = Math.round(Math.sin(now / 1400 + phase) * 1.3) * S;
       put(g, env['tree-canopies'], spring ? CUT.canopySpring : CUT.canopySummer, x, y - 44 * S, S, sway);

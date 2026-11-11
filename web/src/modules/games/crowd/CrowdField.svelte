@@ -562,16 +562,23 @@
     g.translate(shake.x, shake.y);
 
     g.drawImage(background(), 0, 0, WORLD.w, WORLD.h);
-    // The suitcases: a collected one fades away, rising a little
+    // Shadows of the things standing up, on the ground under everyone
+    for (const p of standingProps) p.ground?.(g, now);
+    // The suitcases, sorted with everyone further down: a collected one fades away, rising a little
+    const caseItems: { y: number; draw(g: CanvasRenderingContext2D): void }[] = [];
     if (kind === 'spy')
       cases.forEach((c, i) => {
-        if (!c.open) return suitcase(g, c.x, c.y, false, now);
         const at = caseGoneAt.get(i);
-        const p = at === undefined ? 1 : Math.min(1, (performance.now() - at) / 900);
+        const p = !c.open ? 0 : at === undefined ? 1 : Math.min(1, (performance.now() - at) / 900);
         if (p >= 1) return;
-        g.globalAlpha = 1 - p;
-        suitcase(g, c.x, c.y - p * 24, false, now);
-        g.globalAlpha = 1;
+        caseItems.push({
+          y: c.y + 12,
+          draw(g) {
+            g.globalAlpha = 1 - p;
+            suitcase(g, c.x, c.y - p * 24, false, now);
+            g.globalAlpha = 1;
+          },
+        });
       });
 
     // The two frames around the time drawn
@@ -621,9 +628,9 @@
     }
     fx.draw(g, false, PIXEL);
     pigeons.update(step, people.filter((p) => p.anim !== ANIM.dead));
-    pigeons.draw(g, env);
     cat.update(step);
-    cat.draw(g, env);
+    // Without the art, the plain drawn birds stay on the ground layer
+    if (!env) pigeons.draw(g, null);
     // The fallen first (on the ground), then from the back to the front
     people.sort((a, b) => (a.anim === ANIM.dead ? 0 : 1) - (b.anim === ANIM.dead ? 0 : 1) || a.y - b.y);
 
@@ -666,13 +673,17 @@
     let pi = 0;
     while (pi < people.length && people[pi].anim === ANIM.dead) drawPerson(people[pi++]);
     let qi = 0;
-    const standing = standingProps;
+    // The things standing up, the suitcases, the birds on the ground and the cat, back to front
+    const catItem = cat.item(env);
+    const standing = [...standingProps, ...caseItems, ...(env ? pigeons.groundItems(env) : []), ...(catItem ? [catItem] : [])].sort((a, b) => a.y - b.y);
     while (pi < people.length || qi < standing.length) {
       if (qi < standing.length && (pi >= people.length || standing[qi].y <= people[pi].y)) standing[qi++].draw(g, now);
       else drawPerson(people[pi++]);
     }
 
-    // Smoke, the flashes and sparks over everyone, then the cloud shadows drifting over the whole place
+    // Birds in the air over everything on the ground (roofs and trees too), then the smoke, the flashes and
+    // sparks over everyone, and the cloud shadows drifting over the whole place
+    pigeons.drawAir(g, env);
     if (kind === 'spy' && smoke) smokeCloud(g, smoke, now);
     fx.draw(g, true, PIXEL);
     clouds.draw(g);

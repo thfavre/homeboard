@@ -208,6 +208,25 @@ export interface SpyView {
   soundVolume: number;
 }
 
+/** The recommended settings of each game (the defaults of a new install, and what "Reset" puts back) */
+export const CROWD_DEFAULTS = { crowdNpcs: 30, crowdWalk: 100, crowdRun: 2, crowdShots: 1, crowdReloadSec: 2, crowdRounds: 3 };
+export const SPY_DEFAULTS = {
+  spyNpcs: 30,
+  spyWalk: 100,
+  spyShots: 3,
+  spyReloadSec: 2,
+  spyRounds: 3,
+  spyMinutes: 3,
+  spyNeeded: 4,
+  spyCollectMin: 2,
+  spyCollectMax: 5,
+  spyLooks: 3,
+  spyDrawFadeSec: 4,
+  spyGadgets: SPY_GADGETS.map((g) => g.id) as SpyGadget[],
+};
+/** Shared by both games: the Spotify volume during them, the sounds, the light flashes */
+export const SNIPER_DEFAULTS = { sniperMusic: 35, sniperSounds: 80, sniperLights: true };
+
 /** Points of a Spy Hunt round */
 export const SPY_POINTS = { escape: 3, kill: 2, time: 1 };
 
