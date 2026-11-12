@@ -229,7 +229,6 @@
           }}
         >
           {s.name}
-          {#if wd?.outfit[s.id]}<span class="worn-dot"></span>{/if}
         </button>
       {/each}
     </div>
@@ -345,15 +344,6 @@
   .slot.on {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
-  }
-  .worn-dot {
-    position: absolute;
-    top: 0.22rem;
-    right: 0.22rem;
-    width: 0.35rem;
-    height: 0.35rem;
-    border-radius: 50%;
-    background: var(--accent);
   }
 
   /* ------------------------------------------------------------ the grid */
