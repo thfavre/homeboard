@@ -7,7 +7,7 @@
   import { loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
-  import { drawCut, drawShop, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
+  import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
 
   /**
@@ -406,6 +406,8 @@
     if (dark > 0.02) {
       g.fillStyle = `rgba(14,16,42,${0.34 * dark})`;
       g.fillRect(0, 0, TOWN.w, TOWN.h);
+      // The shops stay lit inside
+      for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
     }
 
     // Names and sleep bubbles over everything. The head's top comes from the measured sheet, so

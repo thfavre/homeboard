@@ -72,6 +72,23 @@ export function drawShop(g: CanvasRenderingContext2D, p: TownPlace, now: number,
   }
 }
 
+/** In the evening, after the night veil: the shop window's light, and the light it spills on the pavement */
+export function drawShopLight(g: CanvasRenderingContext2D, p: TownPlace, dark: number): void {
+  const { x, y, w, h } = p.window;
+  g.fillStyle = `rgba(255,214,150,${0.2 * dark})`;
+  g.fillRect(x, y, w, h);
+  const spill = g.createLinearGradient(0, y + h, 0, y + h + 40);
+  spill.addColorStop(0, `rgba(255,205,130,${0.14 * dark})`);
+  spill.addColorStop(1, 'rgba(255,205,130,0)');
+  g.fillStyle = spill;
+  g.beginPath();
+  g.moveTo(x, y + h + 4);
+  g.lineTo(x + w, y + h + 4);
+  g.lineTo(x + w + 14, y + h + 40);
+  g.lineTo(x - 14, y + h + 40);
+  g.fill();
+}
+
 let pole: HTMLCanvasElement | null = null;
 function poleCanvas(): HTMLCanvasElement {
   if (!pole) {
