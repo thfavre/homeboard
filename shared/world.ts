@@ -131,7 +131,7 @@ export const DAIS_FOOT = hallPoint(HALL_ART.dais[0].x, 0).x;
 /** Where the throne's legs stand, and where the King's feet land on it (the seat is high: the feet rest on its footstool) */
 export const THRONE = hallPoint(HALL_ART.throne.x, HALL_ART.throne.y);
 export const THRONE_SEAT = { x: THRONE.x - 1, y: THRONE.y - 13 * SPRITE_SCALE };
-/** Where a King who cannot sit (worn art without sit sheets) stands: on the dais, before the throne and its footstool */
+/** Where the King stands until the court opens: on the dais, before the throne and its footstool, facing the hall */
 export const THRONE_STAND = { x: THRONE.x - 58, y: THRONE.y - 2 };
 
 /** How many rows of people there can be on each side of the carpet, and how many places a row has inside the hall */

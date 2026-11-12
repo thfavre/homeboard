@@ -33,6 +33,13 @@ const LOOK_AHEAD = 16;
 const PERSONAL_SPACE = 34;
 /** Close enough to a target to be there */
 const ARRIVE = 6;
+/** Room kept between a character's feet and what stands on the square, when a place to stand is picked next to it */
+const STAND_CLEAR = 5;
+/** Walking but less than this far from where it was this long ago: a character is stuck */
+const STUCK_DIST = 14;
+const STUCK_MS = 2500;
+/** A stuck character whose walk matters goes straight through what is in the way for this long */
+const THROUGH_MS = 3000;
 /** Room between two characters queueing at a shop door */
 const QUEUE_GAP = 36;
 /** How far from a door a character fades in or out of it */
@@ -117,12 +124,16 @@ interface Walker {
   fading: boolean;
   /** The worn art has no sitting sheets: stays off benches and away from the cat */
   noSit: boolean;
-  /** The worn art has no cheering sheets: a King in it does not raise his hands */
-  noCheer: boolean;
   /** Shops to go to, in order (see RosterEntry.errands) */
   errands: PlaceId[];
   /** The activity already asked to wrap up for a trip (it is asked once) */
   wrapped: Doing | null;
+  /** Where it was, and when, the last time it got somewhere (see unstick) */
+  anchor: { x: number; y: number; at: number };
+  /** Until then it walks straight through what stands on the square (it was stuck) */
+  through: number;
+  /** The side it is going around something on (1 or -1; 0: nothing in the way) */
+  turn: number;
 }
 
 /**
@@ -164,9 +175,8 @@ export interface RosterEntry {
   online: boolean;
   /** How long they have been away (ms; 0 while online) */
   awayMs: number;
-  /** See Walker.noSit and Walker.noCheer */
+  /** See Walker.noSit */
   noSit?: boolean;
-  noCheer?: boolean;
   /** Shops the character has to visit to look like on the phone (the latest look counts, so one trip each) */
   errands?: PlaceId[];
 }
@@ -222,19 +232,37 @@ function obstacleAt(x: number, y: number, margin = 0): (typeof OBSTACLES)[number
   return OBSTACLES.find((o) => ((x - o.x) / (o.rx + margin)) ** 2 + ((y - o.y) / (o.ry + margin)) ** 2 < 1);
 }
 
+/**
+ * Where a character can stand to be at a point: the point itself, or when it lies inside something
+ * on the square (a place by the cat, next to a tree), the nearest spot just outside it
+ */
+function standable(x: number, y: number): { x: number; y: number } {
+  const o = obstacleAt(x, y, STAND_CLEAR);
+  if (!o) return { x, y };
+  const nx = (x - o.x) / (o.rx + STAND_CLEAR);
+  const ny = (y - o.y) / (o.ry + STAND_CLEAR);
+  const d = Math.hypot(nx, ny);
+  // Dead in the middle: out to the front
+  const [ux, uy] = d ? [nx / d, ny / d] : [0, 1];
+  return { x: o.x + ux * (o.rx + STAND_CLEAR + 1), y: o.y + uy * (o.ry + STAND_CLEAR + 1) };
+}
+
 function blocked(x: number, y: number, margin = 0): boolean {
   return !!obstacleAt(x, y, margin);
 }
 
-/** Push a character out of the obstacle it walked into, to its edge */
+/**
+ * Push a character out of the obstacle it walked into: to just outside its edge, where its next
+ * step sees the obstacle ahead and goes around (right on the edge it would walk straight back in)
+ */
 function keepOut(a: { x: number; y: number }): void {
   for (const o of OBSTACLES) {
     const nx = (a.x - o.x) / o.rx;
     const ny = (a.y - o.y) / o.ry;
     const d = Math.hypot(nx, ny);
     if (d >= 1 || d === 0) continue;
-    a.x = o.x + (nx / d) * o.rx;
-    a.y = o.y + (ny / d) * o.ry;
+    a.x = o.x + (nx / d) * (o.rx + 1);
+    a.y = o.y + (ny / d) * (o.ry + 1);
   }
 }
 
@@ -319,12 +347,11 @@ export class TownSim {
         if (shouldSleep) continue;
         const from = this.ceremony || Math.random() < 0.5 ? -20 : TOWN.w + 20;
         const spot = randSpot();
-        w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, noCheer: !!r.noCheer, errands: [], wrapped: null };
+        w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, errands: [], wrapped: null, anchor: { x: from, y: spot.y, at: now }, through: 0, turn: 0 };
         this.walkers.set(r.id, w);
         continue;
       }
       w.noSit = !!r.noSit;
-      w.noCheer = !!r.noCheer;
       w.errands = errands;
       // An outfit change mid-sit (or mid-pet) would show missing art: stand up
       if (w.noSit && (w.doing.kind === 'sit' || w.doing.kind === 'goBench' || w.doing.kind === 'pet' || w.doing.kind === 'goPet')) {
@@ -363,6 +390,7 @@ export class TownSim {
       }
       this.plan(w, now, o);
       this.step(w, now, dt, o);
+      this.unstick(w, now);
       if (w.fading) {
         w.alpha = Math.max(0, w.alpha - dt / 3);
         if (w.alpha === 0) this.walkers.delete(id);
@@ -407,11 +435,12 @@ export class TownSim {
       case 'goPray':
         return WANIM.walk;
       // The King before the throne: standing until all are there, his hands up to open the court,
-      // a step back to the seat, seated (worn art without sit sheets: he stays standing)
+      // a step back to the seat, seated. Whatever he wears: a piece without art for these poses is
+      // just not drawn while they last.
       case 'throne':
         if (d.stage === 'hail') return now < d.until ? WANIM.cheer : WANIM.idle;
         if (d.stage === 'seat') return WANIM.walk;
-        return d.stage === 'sit' && !w.noSit ? WANIM.sit : WANIM.idle;
+        return d.stage === 'sit' ? WANIM.sit : WANIM.idle;
       // The others: standing in their place until the court opens, then on their knees (worn art
       // without sit sheets: they stay standing)
       case 'pray':
@@ -433,6 +462,8 @@ export class TownSim {
 
   /** Walk toward a point, around what stands in the way; true when there */
   private walkTo(w: Walker, tx: number, ty: number, speed: number, dt: number): boolean {
+    // A target inside something on the square can never be reached: the nearest spot beside it then
+    ({ x: tx, y: ty } = standable(tx, ty));
     const dx = tx - w.x;
     const dy = ty - w.y;
     const d = Math.hypot(dx, dy);
@@ -443,21 +474,47 @@ export class TownSim {
     // Something just ahead: turn aside, a little more each try, to the side leading away from it
     const reach = Math.min(LOOK_AHEAD, d);
     const ahead = (x: number, y: number) => obstacleAt(w.x + x * reach, w.y + y * reach);
-    const o = blocked(w.x, w.y) ? undefined : ahead(ux, uy);
+    // (not a character that was stuck: it goes straight through for a moment)
+    const o = this.last < w.through || blocked(w.x, w.y) ? undefined : ahead(ux, uy);
     if (o) {
       const base = Math.atan2(uy, ux);
-      for (let k = 1; k <= 8; k++) {
-        const free = [base + (k * Math.PI) / 12, base - (k * Math.PI) / 12].map((a) => [Math.cos(a), Math.sin(a)]).filter(([x, y]) => !ahead(x, y));
+      const turned = (side: number, k: number) => [Math.cos(base + (side * k * Math.PI) / 12), Math.sin(base + (side * k * Math.PI) / 12)];
+      const away = ([x, y]: number[]) => Math.hypot(w.x + x * reach - o.x, w.y + y * reach - o.y);
+      // Still going around it: on the same side as before (changing sides every step gets nowhere)
+      let way: number[] | undefined;
+      for (let k = 1; w.turn && !way && k <= 8; k++) if (!ahead(...(turned(w.turn, k) as [number, number]))) way = turned(w.turn, k);
+      for (let k = 1; !way && k <= 8; k++) {
+        const free = [1, -1].filter((side) => !ahead(...(turned(side, k) as [number, number])));
         if (!free.length) continue;
-        const away = ([x, y]: number[]) => Math.hypot(w.x + x * reach - o.x, w.y + y * reach - o.y);
-        [ux, uy] = free.sort((a, b) => away(b) - away(a))[0];
-        break;
+        w.turn = free.sort((a, b) => away(turned(b, k)) - away(turned(a, k)))[0];
+        way = turned(w.turn, k);
       }
+      if (way) [ux, uy] = way;
+    } else {
+      w.turn = 0;
     }
     w.x += ux * step;
     w.y += uy * step;
     w.dir = Math.abs(ux) > Math.abs(uy) ? (ux > 0 ? 3 : 1) : uy > 0 ? 2 : 0;
     return false;
+  }
+
+  /**
+   * A character walking without getting anywhere (something in the way it cannot get around, or
+   * others pushing back): a casual walk is dropped for something else; a walk that matters (the
+   * ceremony, a shop, bed) goes straight through what is in the way for a moment
+   */
+  private unstick(w: Walker, now: number): void {
+    const walking = this.animOf(w, now) === WANIM.walk;
+    if (!walking || Math.hypot(w.x - w.anchor.x, w.y - w.anchor.y) > STUCK_DIST) {
+      w.anchor = { x: w.x, y: w.y, at: now };
+      return;
+    }
+    if (now - w.anchor.at < STUCK_MS) return;
+    w.anchor.at = now;
+    const k = w.doing.kind;
+    if (k === 'wander' || k === 'goBench' || k === 'goPet') w.doing = idle(now, 300, 1200);
+    else w.through = now + THROUGH_MS;
   }
 
   private step(w: Walker, now: number, dt: number, o: TownOptions): void {
@@ -495,7 +552,9 @@ export class TownSim {
                 all.filter((o) => (o.doing.kind === 'sit' || o.doing.kind === 'goBench') && o.doing.bench === b.i).length < ACTIVITIES.bench.capacity,
             );
         const petters = all.filter((o) => o.doing.kind === 'pet' || o.doing.kind === 'goPet').length;
-        const catInSight = !w.noSit && petters < ACTIVITIES.petCat.capacity && Math.hypot(this.cat.x - w.x, this.cat.y - w.y) < ACTIVITIES.petCat.radius;
+        // (a cat that stopped in the fountain or under a tree is out of reach)
+        const catInSight =
+          !w.noSit && petters < ACTIVITIES.petCat.capacity && Math.hypot(this.cat.x - w.x, this.cat.y - w.y) < ACTIVITIES.petCat.radius && !blocked(this.cat.x, this.cat.y, STAND_CLEAR);
         if (roll < 0.14 && benches.length) {
           const b = benches[Math.floor(Math.random() * benches.length)];
           w.doing = { kind: 'goBench', bench: b.i };
@@ -522,12 +581,15 @@ export class TownSim {
         }
         break;
       }
-      case 'goPet':
-        if (this.walkTo(w, this.cat.x - 26, this.cat.y, WALK_UPS, dt)) {
+      case 'goPet': {
+        // Beside the cat: on its left, or on its right when something stands there (the cat by a tree)
+        const side = blocked(this.cat.x - 26, this.cat.y, STAND_CLEAR) ? 26 : -26;
+        if (this.walkTo(w, this.cat.x + side, this.cat.y, WALK_UPS, dt)) {
           w.dir = this.cat.x > w.x ? 3 : 1;
           w.doing = { kind: 'pet', until: now + rand(3500, 7000) };
         }
         break;
+      }
       case 'pet':
         if (now >= d.until) w.doing = { kind: 'idle', until: now + rand(800, 2500) };
         break;
@@ -568,14 +630,14 @@ export class TownSim {
           else if (!d.until) d.until = now + rand(2200, 3400);
           else if (now >= d.until) w.doing = { kind: 'descend' };
         } else if (d.stage === 'stand' && this.ceremony?.phase === 'court') {
-          // The court opens: both hands up (worn art without cheering sheets: straight to the seat)
-          Object.assign(d, w.noCheer ? { stage: 'seat' } : { stage: 'hail', until: now + HAIL_MS });
+          // The court opens: both hands up
+          Object.assign(d, { stage: 'hail', until: now + HAIL_MS });
         } else if (d.stage === 'hail' && now >= d.until) {
           d.stage = 'seat';
         } else if (d.stage === 'seat') {
-          // A step back onto the throne (worn art without sit sheets: the King stays standing before it)
-          if (w.noSit || this.walkTo(w, THRONE_SEAT.x, THRONE_SEAT.y, WALK_UPS, dt)) {
-            if (!w.noSit) Object.assign(w, THRONE_SEAT);
+          // A step back onto the throne
+          if (this.walkTo(w, THRONE_SEAT.x, THRONE_SEAT.y, WALK_UPS, dt)) {
+            Object.assign(w, THRONE_SEAT);
             w.dir = 1;
             Object.assign(d, { stage: 'sit', until: 0 });
           }
@@ -923,7 +985,7 @@ export class TownSim {
       }
     }
     // Pushed into the fountain: back out to its edge
-    for (const w of list) keepOut(w);
+    for (const w of list) if (this.last >= w.through) keepOut(w);
   }
 
   private stepCat(now: number, dt: number): void {

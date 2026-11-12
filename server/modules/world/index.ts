@@ -860,7 +860,7 @@ export default defineModule<WorldSettings>({
             setTown(g.id, { choices: a.choices, outfit: a.outfit ?? {} });
             errands = [];
           }
-          return { id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), ...wornLimits(g.id), errands };
+          return { id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), noSit: wornLimits(g.id).noSit, errands };
         });
       const sec = (a: number, b: number): [number, number] => [Math.min(a, b) * 1000, Math.max(a, b) * 1000];
       const frame = sim.tick(roster, {
