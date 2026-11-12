@@ -944,11 +944,34 @@ export default defineModule<WorldSettings>({
         return price;
       };
       check();
+      // What the King cannot wear comes off with the crown (a dress or skirt unfit for the throne, a
+      // head the crown does not sit on): what is left is the look they started with there, the white
+      // underwear under a bare slot. Both on the phone and in the town, at once.
+      const fit = (o: Outfit): Outfit => {
+        const out = { ...o };
+        for (const k of ['bottom', 'dress', 'costume'] as const) if (out[k] && notForTheKing(itemById(out[k]!.id))) delete out[k];
+        return out;
+      };
+      const town = townOf(a);
+      const crownedA: StoredAvatar = { ...a, outfit: fit(a.outfit ?? {}), town: { ...town, outfit: fit(town.outfit) } };
+      const takenOff = [...new Set([...Object.values(a.outfit ?? {}), ...Object.values(town.outfit)].map((w) => w.id))]
+        .filter((id) => notForTheKing(itemById(id)))
+        .map((id) => itemById(id)!.name);
       // The crowned look is drawn before the title changes hands, so the new King shows up crowned
-      const look = crownedOf(a);
+      const look = crownedOf(crownedA);
       await composite(look.choices, look.outfit).catch(() => null);
+      if (takenOff.length) {
+        await composite(a.choices, crownedA.outfit!).catch(() => null);
+        if (a.town) await composite(crownedA.town!.choices, crownedA.town!.outfit).catch(() => null);
+      }
       if (kingId() === guest.id) throw new HbError('You are the King already');
       const price = check();
+      if (takenOff.length) {
+        a.outfit = crownedA.outfit;
+        a.hash = choicesHash(a.choices, a.outfit!);
+        if (a.town) a.town = { ...crownedA.town!, hash: choicesHash(crownedA.town!.choices, crownedA.town!.outfit) };
+        dressing.delete(guest.id);
+      }
       const before = kingId();
       wallets[guest.id] = (wallets[guest.id] ?? 0) - price;
       // The King who loses the title gets part of what they paid back
@@ -970,6 +993,7 @@ export default defineModule<WorldSettings>({
       }
       ctx.publish();
       ctx.activity(old ? `{name} took the crown from ${old.name} and is the new King of the town` : '{name} is the first King of the town', { guest });
+      if (takenOff.length) ctx.toast(guest, { text: `The King takes off the ${takenOff.join(' and the ')}: not fit for the throne`, kind: 'info' });
       // A moment for the TV to load the crowned look, then the new King celebrates
       setTimeout(() => cheer(guest.id), 1500);
       return { balance: wallets[guest.id] };
