@@ -1,10 +1,11 @@
-import { BENCHES, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, WANIM, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
+import { BENCHES, PRAY_SPOTS, THRONE_OBSTACLE, THRONE_SEAT, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, WANIM, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
 
 /**
  * The life of the town: characters wander the ground band, stop for a while, sit on benches, pet
  * the cat; a guest away for too long walks to the edge, lies down to sleep and slowly fades out.
  * When a guest changes their look on the phone, the character walks to the shop for it (clothes or
- * barber) and comes out in the new look. The module ticks it and sends the frames to the TV.
+ * barber) and comes out in the new look. The King now and then sits on the throne, and while they
+ * do, others come and kneel before it to pray. The module ticks it and sends the frames to the TV.
  */
 
 const WALK_UPS = 42;
@@ -18,7 +19,12 @@ const CAT_UPS = 26;
 const ACTIVITIES = {
   petCat: { radius: 300, capacity: 1 },
   bench: { radius: 540, capacity: 1 },
+  pray: { radius: 760, capacity: PRAY_SPOTS.length },
 };
+/** Everything in the way on the square: the fountain, the trees, the lamp posts, the throne */
+const OBSTACLES = [...TOWN_OBSTACLES, THRONE_OBSTACLE];
+/** How far ahead a walker looks for something in the way */
+const LOOK_AHEAD = 16;
 /** Two standing characters this close push each other apart (nobody stands on anyone) */
 const PERSONAL_SPACE = 34;
 /** Close enough to a target to be there */
@@ -40,6 +46,10 @@ type Doing =
   | { kind: 'goSleep'; tx: number; ty: number }
   | { kind: 'sleep' }
   | { kind: 'cheer'; until: number }
+  | { kind: 'goThrone' }
+  | { kind: 'throne'; until: number }
+  | { kind: 'goPray'; spot: number }
+  | { kind: 'pray'; spot: number; until: number; ending: boolean }
   | Visit;
 
 /**
@@ -76,14 +86,31 @@ interface Walker {
 }
 
 /**
- * How an activity ends, for a character with a shop to go to. `left` is how long it would still take
- * on its own (ms). `wrapUp` ends it early and naturally within `ms` (standing up from the bench,
- * stopping a walk); an activity without it cannot be cut short, and the trip waits until it is over.
- * `quickStop` marks a casual activity (wandering, a bench) that is dropped within a moment for a
- * trip, however long it had left. A new activity declares its rule here; going to sleep and cheering
- * respect it too.
+ * How important an activity is. A call for a character (a shop trip, the King's turn on the throne)
+ * only interrupts what is less important than itself; an activity of the same priority or higher is
+ * carried on, and the call waits until the character is between two activities.
+ */
+const PRIORITY = {
+  /** Standing around, wandering, a bench */
+  casual: 0,
+  /** Something chosen for a while: petting the cat, the throne, praying, a cheer */
+  activity: 1,
+  /** A trip to a shop for the look on the phone */
+  errand: 2,
+  /** Asleep while the guest is away */
+  rest: 3,
+} as const;
+
+/**
+ * How an activity ends, for a character called away (see PRIORITY and plan). `left` is how long it
+ * would still take on its own (ms). `wrapUp` ends it early and naturally within `ms` (standing up
+ * from the bench, stopping a walk); an activity without it cannot be cut short, and the call waits
+ * until it is over. `quickStop` marks a casual activity (wandering, a bench) that is dropped within a
+ * moment for a call, however long it had left. A new activity declares its rule here; going to sleep
+ * and cheering respect it too.
  */
 interface Rule<D extends Doing> {
+  priority: number;
   left(d: D, w: Walker, now: number): number;
   wrapUp?(d: D, w: Walker, now: number, ms: number): void;
   quickStop?(d: D, w: Walker, now: number, ms: number): void;
@@ -113,6 +140,13 @@ export interface TownOptions {
   finishWithinMs: number;
   /** A longer one is wrapped up within a random time in this range, if it can be cut short */
   wrapUpMs: [number, number];
+  /** The guest holding the King's title (null: nobody, or the title is off) */
+  king: string | null;
+  /** About this long between two turns of the King on the throne (ms, give or take a third) */
+  throneEveryMs: number;
+  /** How long the King sits there, and how long a visit to pray lasts (ms, a random time in each range) */
+  throneMs: [number, number];
+  prayMs: [number, number];
 }
 
 export interface TownHooks {
@@ -142,14 +176,18 @@ const sooner = (d: { until: number }, _w: Walker, now: number, ms: number) => {
   d.until = Math.min(d.until, now + ms);
 };
 
-/** Inside an obstacle on the square (the fountain, a tree, a lamp post) */
+/** The obstacle on the square a point is inside (the fountain, a tree, a lamp post, the throne) */
+function obstacleAt(x: number, y: number, margin = 0): (typeof OBSTACLES)[number] | undefined {
+  return OBSTACLES.find((o) => ((x - o.x) / (o.rx + margin)) ** 2 + ((y - o.y) / (o.ry + margin)) ** 2 < 1);
+}
+
 function blocked(x: number, y: number, margin = 0): boolean {
-  return TOWN_OBSTACLES.some((o) => ((x - o.x) / (o.rx + margin)) ** 2 + ((y - o.y) / (o.ry + margin)) ** 2 < 1);
+  return !!obstacleAt(x, y, margin);
 }
 
 /** Push a character out of the obstacle it walked into, to its edge */
 function keepOut(a: { x: number; y: number }): void {
-  for (const o of TOWN_OBSTACLES) {
+  for (const o of OBSTACLES) {
     const nx = (a.x - o.x) / o.rx;
     const ny = (a.y - o.y) / o.ry;
     const d = Math.hypot(nx, ny);
@@ -173,23 +211,30 @@ export class TownSim {
   private walkers = new Map<string, Walker>();
   private cat = { x: 500, y: 760, dir: 3 as WDir, doing: { kind: 'idle', until: 0 } as Doing, petted: false };
   private last = Date.now();
+  /** The King the throne is kept for, and when they next go sit on it */
+  private king: string | null = null;
+  private nextThrone = 0;
 
   constructor(private hooks: TownHooks) {}
 
   private rules: Rules = {
-    idle: { left: (d, _w, now) => d.until - now, wrapUp: sooner },
-    // Wandering and benches are casual: dropped within a moment when a shop calls
-    wander: { left: (d, w) => walkMs(w, d.tx, d.ty), wrapUp: stopWalking, quickStop: pauseFor },
-    goBench: { left: (d, w) => walkMs(w, BENCHES[d.bench]?.x ?? w.x, BENCHES[d.bench]?.y ?? w.y), wrapUp: stopWalking, quickStop: pauseFor },
-    goPet: { left: (_d, w) => walkMs(w, this.cat.x, this.cat.y), wrapUp: stopWalking },
-    // Sitting and petting end whenever: get up a little sooner
-    sit: { left: (d, _w, now) => d.until - now, wrapUp: sooner, quickStop: sooner },
-    pet: { left: (d, _w, now) => d.until - now, wrapUp: sooner },
+    idle: { priority: PRIORITY.casual, left: (d, _w, now) => d.until - now, wrapUp: sooner },
+    // Wandering and benches are casual: dropped within a moment when something calls
+    wander: { priority: PRIORITY.casual, left: (d, w) => walkMs(w, d.tx, d.ty), wrapUp: stopWalking, quickStop: pauseFor },
+    goBench: { priority: PRIORITY.casual, left: (d, w) => walkMs(w, BENCHES[d.bench]?.x ?? w.x, BENCHES[d.bench]?.y ?? w.y), wrapUp: stopWalking, quickStop: pauseFor },
+    sit: { priority: PRIORITY.casual, left: (d, _w, now) => d.until - now, wrapUp: sooner, quickStop: sooner },
+    // Petting, the throne and praying end whenever: get up a little sooner, or stop on the way there
+    goPet: { priority: PRIORITY.activity, left: (_d, w) => walkMs(w, this.cat.x, this.cat.y), wrapUp: stopWalking },
+    pet: { priority: PRIORITY.activity, left: (d, _w, now) => d.until - now, wrapUp: sooner },
+    goThrone: { priority: PRIORITY.activity, left: (_d, w) => walkMs(w, THRONE_SEAT.x, THRONE_SEAT.y), wrapUp: stopWalking },
+    throne: { priority: PRIORITY.activity, left: (d, _w, now) => d.until - now, wrapUp: sooner },
+    goPray: { priority: PRIORITY.activity, left: (d, w) => walkMs(w, PRAY_SPOTS[d.spot].x, PRAY_SPOTS[d.spot].y), wrapUp: stopWalking },
+    pray: { priority: PRIORITY.activity, left: (d, _w, now) => d.until - now, wrapUp: sooner },
     // Never cut short: a cheer is over in a moment, a sleeper wakes when the guest is back, a visit runs its course
-    cheer: { left: (d, _w, now) => d.until - now },
-    goSleep: { left: () => Infinity },
-    sleep: { left: () => Infinity },
-    visit: { left: () => Infinity },
+    cheer: { priority: PRIORITY.activity, left: (d, _w, now) => d.until - now },
+    visit: { priority: PRIORITY.errand, left: () => Infinity },
+    goSleep: { priority: PRIORITY.rest, left: () => Infinity },
+    sleep: { priority: PRIORITY.rest, left: () => Infinity },
   };
 
   /** The rule of what a character is doing now */
@@ -209,6 +254,11 @@ export class TownSim {
     const now = Date.now();
     const dt = Math.min(0.25, (now - this.last) / 1000);
     this.last = now;
+    // A new King (or none): they first go sit on the throne a little after taking the title
+    if (o.king !== this.king) {
+      this.king = o.king;
+      this.nextThrone = now + Math.min(o.throneEveryMs, rand(15_000, 30_000));
+    }
 
     const seen = new Set<string>();
     for (const r of roster) {
@@ -234,6 +284,8 @@ export class TownSim {
       if (w.noSit && (w.doing.kind === 'sit' || w.doing.kind === 'goBench' || w.doing.kind === 'pet' || w.doing.kind === 'goPet')) {
         w.doing = { kind: 'idle', until: now + 400 };
       }
+      // The title went to someone else: off the throne
+      if (w.id !== this.king && (w.doing.kind === 'throne' || w.doing.kind === 'goThrone')) w.doing = idle(now, 400, 1200);
       // Off to sleep, unless busy with something that cannot be cut short (a shop visit is finished first)
       if (shouldSleep && w.doing.kind !== 'sleep' && w.doing.kind !== 'goSleep' && this.rule(w).wrapUp) {
         // Walk to the nearest edge of the town and lie down there
@@ -292,7 +344,14 @@ export class TownSim {
       case 'goBench':
       case 'goPet':
       case 'goSleep':
+      case 'goThrone':
+      case 'goPray':
         return WANIM.walk;
+      // Worn art without sit sheets: the King stands before the throne, the faithful pray standing
+      case 'throne':
+        return w.noSit ? WANIM.idle : WANIM.sit;
+      case 'pray':
+        return w.noSit ? WANIM.idle : WANIM.pray;
       case 'visit':
         return this.walking(w, d) ? WANIM.walk : WANIM.idle;
       case 'sit':
@@ -308,16 +367,32 @@ export class TownSim {
     }
   }
 
-  /** Walk toward a point; true when there */
+  /** Walk toward a point, around what stands in the way; true when there */
   private walkTo(w: Walker, tx: number, ty: number, speed: number, dt: number): boolean {
     const dx = tx - w.x;
     const dy = ty - w.y;
     const d = Math.hypot(dx, dy);
     if (d < ARRIVE) return true;
     const step = Math.min(d, speed * dt);
-    w.x += (dx / d) * step;
-    w.y += (dy / d) * step;
-    w.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 3 : 1) : dy > 0 ? 2 : 0;
+    let ux = dx / d;
+    let uy = dy / d;
+    // Something just ahead: turn aside, a little more each try, to the side leading away from it
+    const reach = Math.min(LOOK_AHEAD, d);
+    const ahead = (x: number, y: number) => obstacleAt(w.x + x * reach, w.y + y * reach);
+    const o = blocked(w.x, w.y) ? undefined : ahead(ux, uy);
+    if (o) {
+      const base = Math.atan2(uy, ux);
+      for (let k = 1; k <= 8; k++) {
+        const free = [base + (k * Math.PI) / 12, base - (k * Math.PI) / 12].map((a) => [Math.cos(a), Math.sin(a)]).filter(([x, y]) => !ahead(x, y));
+        if (!free.length) continue;
+        const away = ([x, y]: number[]) => Math.hypot(w.x + x * reach - o.x, w.y + y * reach - o.y);
+        [ux, uy] = free.sort((a, b) => away(b) - away(a))[0];
+        break;
+      }
+    }
+    w.x += ux * step;
+    w.y += uy * step;
+    w.dir = Math.abs(ux) > Math.abs(uy) ? (ux > 0 ? 3 : 1) : uy > 0 ? 2 : 0;
     return false;
   }
 
@@ -338,6 +413,17 @@ export class TownSim {
         // Between two activities: off to the shop first
         if (w.errands.length) {
           w.doing = { kind: 'visit', place: w.errands[0], phase: 'go', seat: -1, since: 0, until: 0, dressAt: 0, dressed: false };
+          break;
+        }
+        // The King's turn on the throne
+        if (this.throneDue(w, now)) {
+          w.doing = { kind: 'goThrone' };
+          break;
+        }
+        // The King sits on the throne: come and pray before it, while there is room
+        const spot = this.praySpot(w);
+        if (spot >= 0 && Math.random() < 0.4) {
+          w.doing = { kind: 'goPray', spot };
           break;
         }
         const roll = Math.random();
@@ -398,21 +484,101 @@ export class TownSim {
         break;
       case 'sleep':
         break;
+      case 'goThrone':
+        if (this.walkTo(w, THRONE_SEAT.x, THRONE_SEAT.y, WALK_UPS, dt)) {
+          w.x = THRONE_SEAT.x;
+          w.y = THRONE_SEAT.y;
+          w.dir = 2;
+          w.doing = { kind: 'throne', until: now + rand(o.throneMs[0], o.throneMs[1]) };
+        }
+        break;
+      case 'throne':
+        if (now >= d.until) {
+          this.nextThrone = now + o.throneEveryMs * rand(0.67, 1.33);
+          // Down from the throne and off somewhere
+          const t = randSpot();
+          w.doing = { kind: 'wander', tx: t.x, ty: t.y };
+        }
+        break;
+      case 'goPray': {
+        // The King got up meanwhile: nothing to pray for anymore
+        if (!this.onThrone()) {
+          w.doing = idle(now, 300, 1200);
+          break;
+        }
+        const s = PRAY_SPOTS[d.spot];
+        if (this.walkTo(w, s.x, s.y, WALK_UPS, dt)) {
+          w.x = s.x;
+          w.y = s.y;
+          w.dir = 0;
+          w.doing = { kind: 'pray', spot: d.spot, until: now + rand(o.prayMs[0], o.prayMs[1]), ending: false };
+        }
+        break;
+      }
+      case 'pray':
+        // The King got up: the faithful get up too, one after the other
+        if (!d.ending && !this.onThrone()) {
+          d.ending = true;
+          d.until = Math.min(d.until, now + rand(500, 2500));
+        }
+        if (now >= d.until) {
+          // Off the carpet, so the next ones find room
+          const t = randSpot();
+          w.doing = { kind: 'wander', tx: t.x, ty: t.y };
+        }
+        break;
     }
+  }
+
+  // ------------------------------------------------------------ the throne
+
+  /** The King's turn to go sit on the throne has come */
+  private throneDue(w: Walker, now: number): boolean {
+    return w.id === this.king && now >= this.nextThrone;
+  }
+
+  /** The King, if sitting on the throne right now */
+  private onThrone(): Walker | undefined {
+    for (const w of this.walkers.values()) if (w.doing.kind === 'throne') return w;
+    return undefined;
+  }
+
+  /** The free place before the throne nearest to this character, while the King sits there and it is in sight (-1: none) */
+  private praySpot(w: Walker): number {
+    if (w.id === this.king || !this.onThrone() || Math.hypot(THRONE_SEAT.x - w.x, THRONE_SEAT.y - w.y) > ACTIVITIES.pray.radius) return -1;
+    const taken = new Set<number>();
+    for (const o of this.walkers.values()) if (o.doing.kind === 'goPray' || o.doing.kind === 'pray') taken.add(o.doing.spot);
+    if (taken.size >= ACTIVITIES.pray.capacity) return -1;
+    let best = -1;
+    for (let i = 0; i < PRAY_SPOTS.length; i++) {
+      if (taken.has(i)) continue;
+      const s = PRAY_SPOTS[i];
+      if (best < 0 || Math.hypot(s.x - w.x, s.y - w.y) < Math.hypot(PRAY_SPOTS[best].x - w.x, PRAY_SPOTS[best].y - w.y)) best = i;
+    }
+    return best;
   }
 
   // ------------------------------------------------------------ shop visits
 
+  /** How important what calls this character away is (a shop trip, the King's turn on the throne), or null when nothing does */
+  private callOf(w: Walker, now: number): number | null {
+    if (w.errands.length) return PRIORITY.errand;
+    if (this.throneDue(w, now)) return PRIORITY.activity;
+    return null;
+  }
+
   /**
-   * A character with a shop to go to: wandering or a bench is dropped within a moment; another
-   * activity about to end on its own is finished, a longer one wraps up early if it can be cut
-   * short, otherwise the trip waits. The trip itself starts from idle, between two activities
-   * (see step).
+   * A character called away (a shop to go to, the throne): what is as important as the call, or
+   * more, is carried on. Below it, wandering or a bench is dropped within a moment; another activity
+   * about to end on its own is finished, a longer one wraps up early if it can be cut short,
+   * otherwise the call waits. What was called for starts from idle, between two activities (see step).
    */
   private plan(w: Walker, now: number, o: TownOptions): void {
-    if (!w.errands.length || w.doing.kind === 'visit' || w.wrapped === w.doing) return;
+    const call = this.callOf(w, now);
+    if (call === null || w.wrapped === w.doing) return;
     const d = w.doing;
     const rule = this.rule(w);
+    if (rule.priority >= call) return;
     w.wrapped = d;
     // Standing around: a moment to notice, and off
     if (d.kind === 'idle') return rule.wrapUp!(d, w, now, rand(300, 1200));
@@ -523,12 +689,14 @@ export class TownSim {
 
   /** Push standing characters apart so nobody overlaps anyone */
   private separate(): void {
-    // Not the ones sitting, lying or crouching, nor on a shop's steps (going in, inside, coming out)
+    // Not the ones sitting, lying, crouching or kneeling, nor on a shop's steps (going in, inside, coming out)
     const list = [...this.walkers.values()].filter(
       (w) =>
         w.doing.kind !== 'sit' &&
         w.doing.kind !== 'sleep' &&
         w.doing.kind !== 'pet' &&
+        w.doing.kind !== 'throne' &&
+        w.doing.kind !== 'pray' &&
         !(w.doing.kind === 'visit' && (w.doing.phase === 'enter' || w.doing.phase === 'inside' || w.doing.phase === 'exit')),
     );
     for (let i = 0; i < list.length; i++) {
@@ -546,6 +714,8 @@ export class TownSim {
         b.y = clampY(b.y + (dy / 2.2) * push);
       }
     }
+    // Pushed into the fountain or the throne: back out to its edge
+    for (const w of list) keepOut(w);
   }
 
   private stepCat(now: number, dt: number): void {
