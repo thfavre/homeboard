@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Ban, Shirt, ShoppingBag } from '@lucide/svelte';
+  import { Ban, Ellipsis, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, onEvent, rpc } from '$lib/client.svelte.ts';
+  import { choose } from '$lib/dialog.svelte.ts';
   import { COLOR_HEX, SLOTS, colorName, itemById, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine } from '$shared/world.ts';
+  import OutfitThumb from './OutfitThumb.svelte';
   import type { PreviewView } from './preview.ts';
 
   /**
@@ -11,6 +13,7 @@
    * glance (one tile per slot, showing what is worn there) and picks the slot; below it, the
    * pieces owned for that slot. Tap a piece to wear it (Nothing leaves the slot empty); a piece
    * owned in several colors turns into a square per color to pick from. Buying happens in the shop.
+   * Above the strip, a few saved outfits put a whole look back on in one tap.
    */
 
   let { onshop, view }: { onshop?: (slot: Slot) => void; view: PreviewView } = $props();
@@ -134,6 +137,69 @@
     };
   });
 
+  // ------------------------------------------------------------ saved outfits
+
+  /** The same outfit gives the same key, whatever order its slots came in */
+  const outfitKey = (o: Outfit) =>
+    JSON.stringify(
+      Object.entries(o)
+        .filter(([, w]) => w)
+        .sort(([a], [b]) => a.localeCompare(b)),
+    );
+  const wornKey = $derived(wd ? outfitKey(wd.outfit) : '');
+
+  /** Pictures of the saved outfits, by outfit key */
+  let thumbs = $state<Record<string, { url: string; sheet: SheetInfo }>>({});
+  const asking = new Set<string>();
+  $effect(() => {
+    for (const o of wd?.saved ?? []) {
+      if (!o) continue;
+      const key = outfitKey(o);
+      if (thumbs[key] || asking.has(key)) continue;
+      asking.add(key);
+      rpc<{ url: string; sheet: SheetInfo }>('world', 'preview', { outfit: $state.snapshot(o) })
+        .then((r) => (thumbs = { ...thumbs, [key]: r }))
+        .catch(() => asking.delete(key));
+    }
+  });
+
+  async function saveOutfit(i: number) {
+    if (busy) return;
+    busy = true;
+    const done = await attempt(() => rpc<WardrobeMine>('world', 'saveOutfit', { slot: i }), 'Outfit saved');
+    busy = false;
+    if (done) wd = done;
+  }
+
+  async function putOn(i: number) {
+    const o = wd?.saved[i];
+    if (busy || !o || outfitKey(o) === wornKey) return;
+    busy = true;
+    void build($state.snapshot(o) as Outfit);
+    const done = await attempt(() => rpc<WardrobeMine>('world', 'applyOutfit', { slot: i }));
+    busy = false;
+    if (done) wd = done;
+    else if (wd) void build($state.snapshot(wd.outfit) as Outfit);
+  }
+
+  /** A filled slot: save over it or empty it, both asked first */
+  async function manage(i: number) {
+    const what = await choose({
+      title: `Outfit ${i + 1}`,
+      options: [
+        { label: 'Save what I wear here', value: 'save' as const, kind: 'primary' },
+        { label: 'Clear this outfit', value: 'clear' as const, kind: 'danger' },
+      ],
+    });
+    if (what === 'save') void saveOutfit(i);
+    if (what === 'clear') {
+      busy = true;
+      const done = await attempt(() => rpc<WardrobeMine>('world', 'clearOutfit', { slot: i }));
+      busy = false;
+      if (done) wd = done;
+    }
+  }
+
   // ------------------------------------------------------------ actions
 
   async function apply(outfit: Outfit) {
@@ -202,6 +268,28 @@
   </div>
 {:else}
   <div class="wardrobe">
+    <div class="saved">
+      {#each wd?.saved ?? [] as o, i (i)}
+        {#if o}
+          {@const t = thumbs[outfitKey(o)]}
+          {@const on = outfitKey(o) === wornKey}
+          <div class="outfit-slot" class:on>
+            <button type="button" class="apply" disabled={busy} aria-label={on ? `Outfit ${i + 1}, worn` : `Wear outfit ${i + 1}`} onclick={() => putOn(i)}>
+              <span class="onum">{i + 1}</span>
+              <span class="thumb">
+                {#if t}<OutfitThumb url={t.url} sheet={t.sheet} />{/if}
+              </span>
+            </button>
+            <button type="button" class="more" disabled={busy} aria-label={`Change outfit ${i + 1}`} onclick={() => manage(i)}><Ellipsis size={16} /></button>
+          </div>
+        {:else}
+          <button type="button" class="outfit-slot empty-slot" disabled={busy} aria-label={`Save what I wear as outfit ${i + 1}`} onclick={() => saveOutfit(i)}>
+            <Plus size={15} />Save look
+          </button>
+        {/if}
+      {/each}
+    </div>
+
     <span class="label">Wearing</span>
     <div class="outfit" role="tablist" aria-label="Slots">
       {#each slots as s (s.id)}
@@ -315,6 +403,80 @@
   .empty p {
     margin: 0;
     max-width: 18rem;
+  }
+
+  /* ------------------------------------------------------------ saved outfits */
+  .saved {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+  }
+  .outfit-slot {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    height: 2.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+  }
+  .outfit-slot.on {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
+  }
+  .apply {
+    flex: 1;
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+  }
+  .onum {
+    position: absolute;
+    top: 0.2rem;
+    left: 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .outfit-slot.on .onum {
+    color: var(--accent);
+  }
+  .thumb {
+    width: 2.4rem;
+    height: 2.4rem;
+  }
+  .more {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-dim);
+  }
+  .empty-slot {
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 0 0.3rem;
+    border-style: dashed;
+    background: none;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   /* ------------------------------------------------------------ the outfit strip */
