@@ -5,7 +5,7 @@ import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type LookPart, type PlaceId, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { CATALOG, TIERS, itemById, piecesOf, validOutfit, validWorn, type Outfit, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, TIERS, itemById, piecesOf, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -100,7 +100,12 @@ interface WorldData {
   wallets?: Record<string, number>;
   /** Bought pieces per guest, each an item in one color, kept forever */
   owned?: Record<string, WornItem[]>;
+  /** Saved outfits per guest, one per slot (null: an empty slot), put back on in one tap */
+  saved?: Record<string, (Outfit | null)[]>;
 }
+
+/** How many outfits a guest can save */
+const SAVED_SLOTS = 3;
 
 /** Frames to the TV per second (the TV interpolates between them) */
 const FRAME_HZ = 10;
@@ -144,6 +149,7 @@ export default defineModule<WorldSettings>({
     // Fields that came with the shop (a world.json from before has none)
     const wallets = (store.data.wallets ??= {});
     const owned = (store.data.owned ??= {});
+    const saved = (store.data.saved ??= {});
     const composer = new Composer(new LpcFiles());
     for (const [file, cr] of Object.entries(store.data.credits)) composer.credits.set(file, cr);
     const sheetsDir = ctx.mediaDir('sheets');
@@ -410,6 +416,28 @@ export default defineModule<WorldSettings>({
 
     // ------------------------------------------------------------ the shop
 
+    /**
+     * The part of an outfit this guest can wear now: a saved outfit may hold a piece the catalog
+     * dropped or changed, or one that no longer fits; such pieces fall off instead of failing it all
+     */
+    const wearable = (guestId: string, outfit: Outfit): Outfit => {
+      const body = store.data.avatars[guestId]?.choices.body;
+      if (!body) return {};
+      const mineOwned = owned[guestId] ?? [];
+      const out: Outfit = {};
+      for (const [slot, w] of Object.entries(outfit)) {
+        const worn = validWorn(w, body);
+        if (!worn || worn.item.slot !== slot) continue;
+        if (!mineOwned.some((o) => o.id === worn.id && o.color === worn.color)) continue;
+        out[slot as Slot] = { id: worn.id, color: worn.color };
+      }
+      if (out.dress) {
+        delete out.top;
+        delete out.bottom;
+      }
+      return out;
+    };
+
     // Only pieces the catalog still has: the phone sends the outfit back with one slot changed, and
     // a piece gone from the catalog would get every change refused
     const mine = (guestId: string): WardrobeMine => {
@@ -418,6 +446,10 @@ export default defineModule<WorldSettings>({
         balance: wallets[guestId] ?? 0,
         owned: (owned[guestId] ?? []).filter((o) => validWorn(o)),
         outfit: a ? outfitFor(guestId, a.choices.body) : {},
+        saved: Array.from({ length: SAVED_SLOTS }, (_, i) => {
+          const o = saved[guestId]?.[i];
+          return o ? wearable(guestId, o) : null;
+        }),
       };
     };
 
@@ -505,25 +537,61 @@ export default defineModule<WorldSettings>({
       return mine(guest.id);
     });
 
+    /** Put on a whole outfit; the town character changes at the clothes shop */
+    async function wearOutfit(guestId: string, outfit: Outfit) {
+      const stored = store.data.avatars[guestId];
+      if (!stored) throw new HbError('Make your look first');
+      const mineOwned = owned[guestId] ?? [];
+      for (const w of Object.values(outfit)) {
+        if (!mineOwned.some((o) => o.id === w.id && o.color === w.color)) throw new HbError('You do not own that yet');
+      }
+      const hash = choicesHash(stored.choices, outfit);
+      await composite(stored.choices, outfit);
+      // The town character keeps its clothes until it has been to the clothes shop
+      pinTown(stored);
+      stored.outfit = outfit;
+      stored.hash = hash;
+      store.save();
+      ctx.publish();
+      return { ...mine(guestId), url: ctx.mediaUrl(`sheets/${hash}.png`) };
+    }
+
     ctx.onGuest('wear', (args, guest) =>
       oneAtATime(guest.id, async () => {
         const stored = store.data.avatars[guest.id];
         if (!stored) throw new HbError('Make your look first');
         const outfit = validOutfit(args?.outfit, stored.choices.body);
         if (!outfit) throw new HbError('That outfit does not exist');
-        const mineOwned = owned[guest.id] ?? [];
-        for (const w of Object.values(outfit)) {
-          if (!mineOwned.some((o) => o.id === w.id && o.color === w.color)) throw new HbError('You do not own that yet');
-        }
-        const hash = choicesHash(stored.choices, outfit);
-        await composite(stored.choices, outfit);
-        // The town character keeps its clothes until it has been to the clothes shop
-        pinTown(stored);
-        stored.outfit = outfit;
-        stored.hash = hash;
+        return wearOutfit(guest.id, outfit);
+      }),
+    );
+
+    /** The saved-outfit slot an RPC names */
+    const savedSlot = (v: unknown): number => {
+      const i = Number(v);
+      if (!Number.isInteger(i) || i < 0 || i >= SAVED_SLOTS) throw new HbError('No such outfit slot');
+      return i;
+    };
+
+    // Saved outfits: the worn outfit into a slot (over what was there), a saved outfit put back on
+    ctx.onGuest('saveOutfit', (args, guest) =>
+      oneAtATime(guest.id, async () => {
+        const stored = store.data.avatars[guest.id];
+        if (!stored) throw new HbError('Make your look first');
+        const i = savedSlot(args?.slot);
+        const list = (saved[guest.id] ??= []);
+        while (list.length < SAVED_SLOTS) list.push(null);
+        list[i] = { ...stored.outfit };
         store.save();
-        ctx.publish();
-        return { ...mine(guest.id), url: ctx.mediaUrl(`sheets/${hash}.png`) };
+        return mine(guest.id);
+      }),
+    );
+
+    ctx.onGuest('applyOutfit', (args, guest) =>
+      oneAtATime(guest.id, async () => {
+        const o = saved[guest.id]?.[savedSlot(args?.slot)];
+        if (!o) throw new HbError('Nothing saved there');
+        return wearOutfit(guest.id, wearable(guest.id, o));
       }),
     );
 
@@ -637,9 +705,10 @@ export default defineModule<WorldSettings>({
     ctx.onSessionReset(() => {
       store.data.avatars = {};
       dressing.clear();
-      // In place: wallets and owned alias these objects
+      // In place: wallets, owned and saved alias these objects
       for (const k of Object.keys(wallets)) delete wallets[k];
       for (const k of Object.keys(owned)) delete owned[k];
+      for (const k of Object.keys(saved)) delete saved[k];
       for (const k of Object.keys(sheetInfos)) delete sheetInfos[k];
       store.save();
       // Open pages (the header, the shop) show the emptied wallet at once instead of the old balance
