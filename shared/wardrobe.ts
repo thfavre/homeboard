@@ -148,7 +148,7 @@ export const COLOR_HEX: Record<string, string> = {
   dark: '#2b2a33',
   // skin tones of the costume heads
   bright_green: '#3f9a2f', dark_green: '#155a1c', pale_green: '#6e8a5c', zombie: '#b3a47e', zombie_green: '#5f9a85',
-  light: '#e8b08f', amber: '#d9935c', jack: '#e0761f',
+  light: '#e8b08f', amber: '#d9935c', jack: '#e0761f', skin: '#d9a07a',
   pirate: '#a08a4a', gold_red: '#c2242c', silver_blue: '#3c6cd0', bronze_green: '#2f9a3e', copper_orange: '#e0761f',
   steel_purple: '#8a3fc0', brass_yellow: '#e8c22a',
 };
@@ -303,6 +303,10 @@ export const CATALOG: WardrobeItem[] = [
   // ------------------------------------------------------------ face
   { id: 'small_eyepatch', name: 'Small eyepatch', slot: 'face', def: 'headwear/accessories/eyepatch/facial_eyepatch_small_left', tier: 'cheap', colors: CLOTH },
   { id: 'earring', name: 'Earring', slot: 'face', def: 'headwear/accessories/earrings/facial_earring_left', tier: 'cheap', colors: startingWith('gold', METAL) },
+  // Ears are drawn in the wearer's own skin (or the costume's): their one color is "skin"
+  { id: 'big_ears', name: 'Big ears', slot: 'face', def: 'head/ears/head_ears_big', tier: 'common', colors: ['skin'] },
+  { id: 'elf_ears', name: 'Elf ears', slot: 'face', def: 'head/ears/head_ears_elven', tier: 'fancy', colors: ['skin'] },
+  { id: 'long_ears', name: 'Long ears', slot: 'face', def: 'head/ears/head_ears_long', tier: 'fancy', colors: ['skin'] },
   { id: 'glasses', name: 'Glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses', tier: 'common', colors: FRAME },
   { id: 'round_glasses', name: 'Round glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses_round', tier: 'common', colors: FRAME },
   { id: 'nerd_glasses', name: 'Nerd glasses', slot: 'face', def: 'headwear/accessories/glasses/facial_glasses_nerd', tier: 'common', colors: FRAME },
