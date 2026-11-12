@@ -342,7 +342,10 @@
     <section class="closet">
       <div class="chead">
         <span class="ctitle">My {slotName.toLowerCase()}<span class="faint">{pieces.length ? ` · ${pieces.length}` : ''}</span></span>
-        <button type="button" class="shoplink" onclick={() => onshop?.(slot)}><ShoppingBag size={15} />Buy more</button>
+        <!-- A locked slot is not in the shop yet -->
+        {#if !lockedNow(slot)}
+          <button type="button" class="shoplink" onclick={() => onshop?.(slot)}><ShoppingBag size={15} />Buy more</button>
+        {/if}
       </div>
       {#if pieces.length}
         <div class="scroll">

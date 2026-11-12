@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Check, Coins, Crown, Lock, ShoppingBag, X } from '@lucide/svelte';
+  import { Check, Coins, Crown, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
-  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, isLockedSlot, slotsFor, splitColor, unlockProgress, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
+  import { CATALOG, COLOR_HEX, TIER_NAMES, colorName, isLockedSlot, slotsFor, splitColor, unlockProgress, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
   import KingCard from './KingCard.svelte';
@@ -56,11 +56,9 @@
   let buildingCount = $state(0);
   let firstLoad = $state(true);
 
-  const slots = $derived(slotsFor(body));
-  /** How far the guest is from the locked slots (they can be browsed and tried on, not bought) */
-  const progress = $derived(body && shop ? unlockProgress(wd?.owned ?? [], body, shop.unlockPieces) : null);
-  const locked = $derived(isLockedSlot(slot) && !progress?.unlocked);
-  const slotName = (id: Slot) => SLOTS.find((s) => s.id === id)?.name ?? id;
+  /** Locked slots stay out of the shop until they open (the wardrobe tells what opens them) */
+  const unlocked = $derived(!!body && !!shop && unlockProgress(wd?.owned ?? [], body, shop.unlockPieces).unlocked);
+  const slots = $derived(slotsFor(body).filter((s) => unlocked || !isLockedSlot(s.id)));
   /** Where the preview zooms while browsing a slot */
   const FOCUS: Record<Slot, 'head' | 'torso' | 'legs' | 'feet' | null> = {
     hat: 'head',
@@ -186,7 +184,7 @@
       try {
         const draft = JSON.parse(storageGet(DRAFT_KEY) ?? 'null');
         if (draft?.id === hb.me?.id) {
-          if (SLOTS.some((s) => s.id === draft.slot)) slot = draft.slot;
+          if (slots.some((s) => s.id === draft.slot)) slot = draft.slot;
           // The catalog may have changed since: only a piece that still exists, in a color it still has
           const piece = validWorn(draft.open, body ?? undefined);
           if (piece && piece.item.slot === slot) open = { id: piece.id, color: piece.color };
@@ -194,7 +192,7 @@
       } catch {
         // A broken draft is just dropped
       }
-      if (startSlot && startSlot !== slot) {
+      if (startSlot && startSlot !== slot && slots.some((s) => s.id === startSlot)) {
         slot = startSlot;
         open = null;
       }
@@ -264,14 +262,13 @@
           type="button"
           class="slot"
           class:on={!kingTab && slot === s.id}
-          class:locked={isLockedSlot(s.id) && !progress?.unlocked}
           onclick={() => {
             slot = s.id;
             open = null;
             kingTab = false;
           }}
         >
-          {#if isLockedSlot(s.id) && !progress?.unlocked}<Lock size={13} />{/if}{s.name}
+          {s.name}
         </button>
       {/each}
       {#if mod?.king?.on}
@@ -293,21 +290,6 @@
     {#if kingTab}
       <KingCard balance={wd?.balance ?? null} />
     {:else}
-    {#if locked && progress && shop}
-      <div class="lockcard">
-        <Lock size={18} />
-        <div>
-          <strong>{slotName(slot)} opens later</strong>
-          <p class="faint small">
-            Own a piece in every slot and {shop.unlockPieces} pieces in all to buy here. Try things on meanwhile.
-          </p>
-          <div class="needs">
-            <span class="need" class:done={progress.pieces >= shop.unlockPieces}>{Math.min(progress.pieces, shop.unlockPieces)}/{shop.unlockPieces} pieces</span>
-            {#each progress.missing as m (m)}<span class="need">{slotName(m)}</span>{/each}
-          </div>
-        </div>
-      </div>
-    {/if}
     <div class="grid">
       {#each items as i (i.id)}
         <button
@@ -348,8 +330,6 @@
             <span class="wearing"><Check size={16} />Wearing</span>
           {:else if isOwned}
             <button type="button" class="btn primary" disabled={buildingCount > 0 || busy} onclick={wear}><Check size={18} />Wear</button>
-          {:else if locked}
-            <span class="wearing locked"><Lock size={16} />Locked</span>
           {:else}
             <button type="button" class="btn primary" disabled={buildingCount > 0 || busy} onclick={buy}>
               <ShoppingBag size={18} />
@@ -431,49 +411,6 @@
   .slot.on {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
-  }
-  .slot.locked {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    color: var(--text-dim);
-  }
-  /* What a locked slot still needs: the piece count, then each slot without a piece */
-  .lockcard {
-    display: flex;
-    gap: 0.6rem;
-    margin-bottom: 0.6rem;
-    padding: 0.7rem 0.8rem;
-    border: 1px dashed var(--border-strong, var(--border));
-    border-radius: var(--radius);
-    background: var(--surface);
-    color: var(--text-dim);
-  }
-  .lockcard strong {
-    color: var(--text);
-  }
-  .lockcard p {
-    margin: 0.15rem 0 0.45rem;
-  }
-  .needs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-  }
-  .need {
-    padding: 0.1rem 0.45rem;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .need.done {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .wearing.locked {
-    color: var(--text-dim);
   }
   .slot.king {
     display: inline-flex;
