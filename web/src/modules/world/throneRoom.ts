@@ -45,6 +45,8 @@ const CUSHION_SWAP: Record<string, string> = { '#6a1d16': RED.dark, '#7b2008': R
 const RUG = { x: 0, y: 96, tile: 32 };
 /** The throne with the red cushions, seen from the side and facing left (its finials stick out above its 64 px) */
 const THRONE_CUT = [96, 80, 32, 80] as const;
+/** In that cut: the armrest on our side, which passes in front of whoever sits there (the back post, the seat and the legs stay behind) */
+const THRONE_NEAR = { x: 0, y: 47, w: 26, h: 9 };
 /** A small round tree in a porcelain pot (the planters sheet) */
 const TOPIARY = [64, 0, 32, 80] as const;
 /** The floor: two tones of diamond tiles (32 px), laid as a chessboard */
@@ -676,7 +678,7 @@ export function drawHallWall(g: G, now: number): void {
   });
 }
 
-/** What stands up in the hall, drawn in depth order with the characters: the throne (just behind whoever sits on it, so the King is seen on it) and the braziers */
+/** What stands up in the hall, drawn in depth order with the characters: the throne (in two parts, its near armrest in front of whoever sits on it) and the braziers */
 export function hallProps(art: HallArt): Prop[] {
   const up = A.dais.length * A.rise;
   const w = art.throne.width;
@@ -698,6 +700,12 @@ export function hallProps(art: HallArt): Prop[] {
         g.drawImage(art.throne, 0, 0, w, h, left, top, Math.round(w * S), Math.round(h * S));
         footstool(g, feet.x - 21 * S, feet.y);
       },
+    },
+    {
+      // Just in front of the King: the armrest on our side, across his lap
+      y: THRONE_SEAT.y + 2,
+      draw: (g) =>
+        g.drawImage(art.throne, THRONE_NEAR.x, THRONE_NEAR.y, THRONE_NEAR.w, THRONE_NEAR.h, left + Math.round(THRONE_NEAR.x * S), top + Math.round(THRONE_NEAR.y * S), Math.round(THRONE_NEAR.w * S), Math.round(THRONE_NEAR.h * S)),
     },
   ];
   // Behind the throne, along the back edge of the top step: a row of banners on poles, the middle one the tallest
