@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Check, Coins, Crown, ShoppingBag, X } from '@lucide/svelte';
-  import { attempt, hb, onEvent, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
+  import { Check, Coins, Crown, Lock, ShoppingBag, X } from '@lucide/svelte';
+  import { attempt, hb, onEvent, rpc, storageGet, storageSet, toast } from '$lib/client.svelte.ts';
   import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
@@ -18,6 +18,8 @@
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
   const shop = $derived(mod?.shop);
+  /** The King keeps the crown: while this guest holds the title, hats can be bought but not worn */
+  const crowned = $derived(!!hb.me && mod?.king?.id === hb.me.id);
 
   let wd = $state<WardrobeMine | null>(null);
   let body = $state<'male' | 'female' | null>(null);
@@ -219,7 +221,9 @@
       if (!bought) return;
       wd = bought;
       void loadColored();
-      await putOn(piece, at);
+      // The King's new hat waits in the wardrobe: the crown stays on
+      if (crowned && at === 'hat') toast({ text: 'Bought. It waits in your wardrobe: the King keeps the crown', kind: 'success' });
+      else await putOn(piece, at);
     } finally {
       busy = false;
     }
@@ -324,6 +328,8 @@
           </div>
           {#if isWorn}
             <span class="wearing"><Check size={16} />Wearing</span>
+          {:else if isOwned && crowned && slot === 'hat'}
+            <span class="wearing crown-stays"><Lock size={15} />The King keeps the crown</span>
           {:else if isOwned}
             <button type="button" class="btn primary" disabled={buildingCount > 0 || busy} onclick={wear}><Check size={18} />Wear</button>
           {:else}
@@ -656,6 +662,10 @@
     padding: 0 0.4rem;
     font-weight: 600;
     color: var(--accent);
+  }
+  .crown-stays {
+    font-size: 0.85rem;
+    color: var(--warning);
   }
   .tier {
     font-size: 0.78rem;

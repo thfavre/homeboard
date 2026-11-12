@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { Ban, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
+  import { onMount, untrack } from 'svelte';
+  import { Ban, Crown, Lock, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
   import { COLOR_HEX, SLOTS, colorName, itemById, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
-  import type { SheetInfo, WardrobeMine } from '$shared/world.ts';
+  import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import OutfitThumb from './OutfitThumb.svelte';
   import type { PreviewView } from './preview.ts';
 
@@ -17,6 +17,12 @@
    */
 
   let { onshop, view }: { onshop?: (slot: Slot) => void; view: PreviewView } = $props();
+
+  /**
+   * The King keeps the crown: while this guest holds the title the hat slot is locked (the server
+   * refuses a change too), shows the crown, and says why
+   */
+  const crowned = $derived(!!hb.me && (hb.modules.world as WorldState | undefined)?.king?.id === hb.me.id);
 
   let wd = $state<WardrobeMine | null>(null);
   let body = $state<'male' | 'female' | null>(null);
@@ -75,6 +81,8 @@
   });
   const pieces = $derived(closet.get(slot) ?? []);
   const worn = $derived(wd?.outfit[slot] ?? null);
+  /** The hat slot is open and locked: its pieces show under a crown that says why */
+  const hatLocked = $derived(crowned && slot === 'hat');
   const ownedCount = $derived((wd?.owned ?? []).length);
   /** Saved outfits only show once the closet is big enough to need them: less to learn at first */
   const OUTFITS_FROM = 7;
@@ -129,16 +137,26 @@
       const first = slots.find((s) => wd?.outfit[s.id]) ?? slots.find((s) => closet.has(s.id));
       if (first) slot = first.id;
       loaded = true;
-      if (body && wd) void build($state.snapshot(wd.outfit) as Outfit);
       rpc<Record<string, string>>('world', 'ownedIcons')
         .then((urls) => (colored = urls))
         .catch(() => {});
-      for (const s of closet.keys()) {
+      // The hats too, even with none owned: the crown's picture is among them
+      for (const s of new Set<Slot>([...closet.keys(), 'hat'])) {
         rpc<Record<string, string>>('world', 'icons', { slot: s })
           .then((urls) => (icons = { ...icons, ...urls }))
           .catch(() => {});
       }
     })();
+  });
+
+  // The preview shows what is worn, from the moment the wardrobe is loaded. It is drawn again when
+  // the title comes or goes: the crown with it
+  $effect(() => {
+    void crowned;
+    if (!loaded) return;
+    untrack(() => {
+      if (body && wd) void build($state.snapshot(wd.outfit) as Outfit);
+    });
   });
 
   onMount(() => {
@@ -318,14 +336,21 @@
           onclick={() => (slot = s.id)}
         >
           <span class="spic">
-            {#if w && pictureOf(w.id, w.color)}
+            {#if crowned && s.id === 'hat'}
+              <!-- The King's crown, whatever is worn under it -->
+              {#if icons.crown}<img src={icons.crown} alt="Crown" />{:else}<Crown size={26} />{/if}
+            {:else if w && pictureOf(w.id, w.color)}
               <img src={pictureOf(w.id, w.color)} alt="" />
             {:else}
               <span class="blank"></span>
             {/if}
           </span>
           <span class="sname">{s.name}</span>
-          {#if count}<span class="count">{count}</span>{/if}
+          {#if crowned && s.id === 'hat'}
+            <span class="count lock"><Lock size={12} /></span>
+          {:else if count}
+            <span class="count">{count}</span>
+          {/if}
         </button>
       {/each}
     </div>
@@ -335,9 +360,10 @@
         <span class="ctitle">My {slotName.toLowerCase()}<span class="faint">{pieces.length ? ` · ${pieces.length}` : ''}</span></span>
         <button type="button" class="shoplink" onclick={() => onshop?.(slot)}><ShoppingBag size={15} />Buy more</button>
       </div>
-      {#if pieces.length}
-        <div class="scroll">
-        <div class="grid">
+      {#if pieces.length || hatLocked}
+        <!-- The King's hats stay in sight under the crown, out of reach -->
+        <div class="scroll" class:shut={hatLocked}>
+        <div class="grid" inert={hatLocked}>
           <!-- Nothing: the slot left empty -->
           <button type="button" class="piece" class:worn={!worn} disabled={busy} onclick={() => ((picking = null), worn && takeOff())}>
             <span class="pic"><Ban size={30} strokeWidth={1.5} /></span>
@@ -386,6 +412,13 @@
             </div>
           {/each}
         </div>
+        {#if hatLocked}
+          <div class="locked">
+            <span class="lmark"><Crown size={46} /></span>
+            <strong>The King keeps the crown</strong>
+            <p>You cannot change your hat while you are the King.</p>
+          </div>
+        {/if}
         </div>
       {:else}
         <p class="faint none-yet">Nothing here yet. The shop has some.</p>
@@ -529,6 +562,49 @@
     font-weight: 700;
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;
+  }
+
+  /* The King's hat slot: a lock where the count is, and the reason in place of the pieces */
+  .count.lock {
+    color: var(--warning);
+  }
+  .spic :global(svg) {
+    color: var(--warning);
+  }
+  /* The locked hats: dimmed and out of reach, the crown and the reason over them */
+  .scroll.shut {
+    position: relative;
+    overflow: hidden;
+    min-height: 10.5rem;
+  }
+  .shut .grid {
+    opacity: 0.55;
+    filter: grayscale(0.5);
+  }
+  .locked {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 0.2rem;
+    padding: 0.8rem;
+    text-align: center;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--bg) 78%, transparent), color-mix(in srgb, var(--bg) 15%, transparent));
+  }
+  .locked strong {
+    font-size: 1.02rem;
+  }
+  .locked p {
+    margin: 0;
+    font-size: 0.86rem;
+    color: var(--text-dim);
+  }
+  .lmark {
+    display: grid;
+    margin-bottom: 0.15rem;
+    color: var(--warning);
   }
 
   .label {
