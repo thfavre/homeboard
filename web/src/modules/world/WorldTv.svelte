@@ -8,6 +8,7 @@
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawSnips, drawSwish, insideFeet } from './shops.ts';
+  import { crownMark, drawCarpet, drawPraying, loadThrone, throneProp, type ThroneArt } from './throne.ts';
 
   /**
    * The town on the TV: the crowd games' square (same LPC environment art, same renderer), lived in
@@ -21,6 +22,7 @@
   let canvas: HTMLCanvasElement;
   let wrap: HTMLDivElement;
   let env: Env | null = null;
+  let throne: ThroneArt | null = null;
   let standingProps: Prop[] = [];
 
   /** Frames kept to draw between, a little in the past */
@@ -71,6 +73,7 @@
       env = e;
       if (e) standingProps = squareProps(e).sort((a, b) => a.y - b.y);
     });
+    void loadThrone().then((t) => (throne = t));
     const off = onEvent<TownFrame>('world', 'frame', (f) => {
       frames.push(f);
       if (frames.length > 30) frames = frames.slice(-15);
@@ -96,18 +99,26 @@
     return 1;
   }
 
-  /** A name over a head, like a game nametag */
-  function nameTag(g: CanvasRenderingContext2D, text: string, x: number, y: number, alpha: number): void {
+  /** A name over a head, like a game nametag; the King's is gold, with a crown before the name */
+  function nameTag(g: CanvasRenderingContext2D, text: string, x: number, y: number, alpha: number, king = false): void {
     g.font = '600 15px system-ui, sans-serif';
-    const w = g.measureText(text).width + 16;
-    g.fillStyle = `rgba(10,10,18,${0.55 * alpha})`;
+    const crown = king ? 18 : 0;
+    const w = g.measureText(text).width + 16 + crown;
+    g.fillStyle = king ? `rgba(206,158,38,${0.92 * alpha})` : `rgba(10,10,18,${0.55 * alpha})`;
     g.beginPath();
     g.roundRect(x - w / 2, y - 11, w, 22, 6);
     g.fill();
-    g.fillStyle = `rgba(255,255,255,${0.92 * alpha})`;
+    if (king) {
+      g.strokeStyle = `rgba(255,232,150,${0.9 * alpha})`;
+      g.lineWidth = 1.5;
+      g.stroke();
+      g.fillStyle = `rgba(70,40,6,${0.95 * alpha})`;
+      crownMark(g, x - w / 2 + 15, y + 5, 6);
+    }
+    g.fillStyle = king ? `rgba(48,26,4,${alpha})` : `rgba(255,255,255,${0.92 * alpha})`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText(text, x, y);
+    g.fillText(text, x + crown / 2, y);
     g.textBaseline = 'alphabetic';
   }
 
@@ -155,7 +166,7 @@
   let bg: HTMLCanvasElement | null = null;
   let bgKey = '';
   function background(): HTMLCanvasElement {
-    const key = `${!!env}`;
+    const key = `${!!env}${!!throne}`;
     if (bg && bgKey === key) return bg;
     if (env) {
       const c = document.createElement('canvas');
@@ -165,6 +176,7 @@
       g.imageSmoothingEnabled = false;
       const ground = squareGround(env);
       g.drawImage(ground, 0, 0, ground.width * 1.35, ground.height * 1.35);
+      if (throne) drawCarpet(g, throne);
       bg = c;
     } else {
       // Until the art is there: plain stone
@@ -319,7 +331,7 @@
         // The clock runs slow for a sleeper, so the idle breathing is calm
         drawCharacter(g, sheets, img, 0, 0, { anim: gameAnim(WANIM.idle), dir: s === 1 ? 1 : 3, dist: 0, since: now - l.since, now: now / 2.5, phase: l.phase / 2.5 }, hue(p.id));
         g.restore();
-      } else {
+      } else if (!(p.anim === WANIM.pray && img && infoOf(img) && drawPraying(g, img, infoOf(img)!, p.x, p.y, now - l.since, l.phase))) {
         drawCharacter(g, sheets, img, p.x, p.y, { anim: gameAnim(p.anim), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id));
       }
       g.globalAlpha = 1;
@@ -385,6 +397,7 @@
     const cat = frames[frames.length - 1]?.cat;
     const standing = [
       ...standingProps,
+      ...(throne ? [throneProp(throne)] : []),
       ...(env ? pigeons.groundItems(env) : []),
       ...(cat && env ? [{ y: cat.y, draw: (gg: CanvasRenderingContext2D) => drawCat(gg, cat, now) }] : []),
     ].sort((a, b) => a.y - b.y);
@@ -407,12 +420,14 @@
     for (const p of inside) {
       const c = byId.get(p.id);
       const place = placeAt(p.x);
-      if (c && place) nameTag(g, c.name, p.x, place.window.y + place.window.h + 14, p.alpha);
+      if (c && place) nameTag(g, c.name, p.x, place.window.y + place.window.h + 14, p.alpha, p.id === world?.king?.id);
     }
     for (const p of people) {
       const c = byId.get(p.id);
       const s = sleepSide(p.x);
-      if (c) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - tallOf(shown.get(p.id)?.img) - 14, p.alpha);
+      // Kneeling: the name comes down with the head
+      const tall = tallOf(shown.get(p.id)?.img) * (p.anim === WANIM.pray ? 0.66 : 1);
+      if (c) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - tall - 14, p.alpha, p.id === world?.king?.id);
       if (p.anim === WANIM.sleep) drawZzz(g, p.x + s * 58, p.y - 4, now, p.alpha);
     }
 
