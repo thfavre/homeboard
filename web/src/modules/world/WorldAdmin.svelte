@@ -2,10 +2,12 @@
   import { attempt, hb, rpc } from '$lib/client.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
+  import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { TIERS, TIER_NAMES } from '$shared/wardrobe.ts';
   import { LOOK_PARTS, LOOK_PART_NAMES, type WorldState } from '$shared/world.ts';
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
+  const kingName = $derived(mod?.king?.id ? (mod.characters.find((c) => c.id === mod.king!.id)?.name ?? null) : null);
 
   function setSeconds(key: string, value: string) {
     const n = Number(value);
@@ -138,6 +140,85 @@
     </p>
   </Section>
 
+  <Section title="The King">
+    <div class="line">
+      <div>
+        <strong>King's title</strong>
+        <p class="faint small">
+          One guest at a time is the King: their character wears a crown and a gold nametag, now and then sits on the throne below the fountain, and the
+          others come to pray before it. Anyone can take the title from the shop on their phone.
+        </p>
+      </div>
+      <Toggle checked={!!mod.king?.on} label="King's title" onchange={(v) => setOption('king', v)} />
+    </div>
+    <div class="current">
+      <span class="who">
+        {#if kingName}
+          <strong>{kingName}</strong> is the King
+        {:else}
+          Nobody is the King
+        {/if}
+      </span>
+      <span class="bal">Next price {mod.king?.price ?? 0} {mod.shop?.currencyName}</span>
+    </div>
+    <div class="buttons">
+      <TwoStepButton class="small" disabled={!mod.king?.id} onconfirm={() => attempt(() => rpc('world', 'removeKing'), 'Title removed')}>
+        Remove the title
+        {#snippet armed()}Tap again to remove{/snippet}
+      </TwoStepButton>
+      <TwoStepButton class="small" disabled={!mod.kingSales} onconfirm={() => attempt(() => rpc('world', 'resetKingPrice'), 'Price reset')}>
+        Reset the price
+        {#snippet armed()}Tap again to reset{/snippet}
+      </TwoStepButton>
+    </div>
+    <p class="faint small">
+      The title changed hands {mod.kingSales ?? 0} {mod.kingSales === 1 ? 'time' : 'times'}. Removing it leaves the price as it is; resetting brings it back to
+      the first price.
+    </p>
+    <div class="pair">
+      <label class="field">
+        <span>First price</span>
+        <input class="input" type="number" min="0" value={mod.kingBase} onchange={(e) => setAmount('kingBase', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>More each time</span>
+        <input class="input" type="number" min="0" value={mod.kingStep} onchange={(e) => setAmount('kingStep', e.currentTarget.value)} />
+      </label>
+    </div>
+    <label class="field">
+      <span>The old King gets back (percent of what they paid)</span>
+      <input class="input" type="number" min="0" max="100" value={mod.kingRefundPct} onchange={(e) => setAmount('kingRefundPct', e.currentTarget.value)} />
+    </label>
+    <label class="field">
+      <span>Sits on the throne about every (minutes)</span>
+      <input class="input" type="number" min="0.5" max="120" step="0.5" value={mod.throneEveryMin} onchange={(e) => setSeconds('throneEveryMin', e.currentTarget.value)} />
+    </label>
+    <div class="pair">
+      <label class="field">
+        <span>Sits from (seconds)</span>
+        <input class="input" type="number" min="0" max="900" value={mod.throneMinSec} onchange={(e) => setSeconds('throneMinSec', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>to (seconds)</span>
+        <input class="input" type="number" min="0" max="900" value={mod.throneMaxSec} onchange={(e) => setSeconds('throneMaxSec', e.currentTarget.value)} />
+      </label>
+    </div>
+    <div class="pair">
+      <label class="field">
+        <span>Others pray from (seconds)</span>
+        <input class="input" type="number" min="0" max="300" value={mod.prayMinSec} onchange={(e) => setSeconds('prayMinSec', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>to (seconds)</span>
+        <input class="input" type="number" min="0" max="300" value={mod.prayMaxSec} onchange={(e) => setSeconds('prayMaxSec', e.currentTarget.value)} />
+      </label>
+    </div>
+    <p class="faint small">
+      While the King sits, characters nearby may come and kneel before the throne (eight at most), then get up and leave; all get up when the King does.
+      Walking around or a bench is dropped for the King's turn on the throne, other activities are finished first.
+    </p>
+  </Section>
+
   <Section title="Money">
     {#if !mod.wallets?.length}
       <p class="faint small">Nobody has joined yet.</p>
@@ -193,6 +274,21 @@
   .pair {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .current {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+  }
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
   }
   .wallets {
