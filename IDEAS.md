@@ -13,6 +13,7 @@
   - The city feels alive: characters never stand on top of each other, they stop to pet a cat, birds fly away when someone walks too close
   - Done so far: the avatar editor and the living town (phase 1); the shop and wardrobe on the phone with its own currency, tier prices and host grants (phase 2). Still open from the decisions: shops as places in the town, the King buyout, earning through activities
   - Later maybe: an activity where two characters walk up to each other and chat for a bit (speech bubbles?); the cat as "smart" as the humans, with its own activity list and vision (stays while petted, X% chance to chase a bird that lands nearby, ...); a billboard in the town that shows the pixel canvas drawing live; a dirt or sand patch that keeps footprints for 10-20 minutes before they fade; exchange between the two currencies; pets/animals that follow you; fishing; couples (one guest sends a request, the other accepts, their avatars then stay closer together and they can try for a kid); babies (pregnant body exists in LPC with all our animations but fewer clothes; no baby sprite, the closest is the child body, so a baby = a small child following the parents)
+  - Shop, next: exchanging Acorns and party coins both ways, at a rate the host sets in admin; a daily deal (one item at a discount for an hour, shown at the top of the shop and announced on the TV)
 -- games ---
 - [x] 1vs1 someone on the TV (like a game show (and put some coins?))
 - [ ] gift for a condition? Like we can see somewhere that doing X gives a gift.
