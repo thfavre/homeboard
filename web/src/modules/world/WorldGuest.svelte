@@ -175,11 +175,14 @@
 
 <!-- The wardrobe and the shop fit the screen: only their item list scrolls -->
 <div class="panel" class:fit={tab !== 'look'}>
+<!-- The wardrobe and the shop come once the character exists: before that there is only the editor -->
+{#if created}
 <div class="tabs">
   <button type="button" class="tab" class:on={tab === 'look'} onclick={backToLook}><PersonStanding size={17} />My look</button>
   <button type="button" class="tab" class:on={tab === 'wardrobe'} onclick={() => tab !== 'wardrobe' && go('wardrobe')}><Shirt size={16} />Wardrobe</button>
   <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => tab !== 'shop' && ((shopSlot = null), go('shop'))}><ShoppingBag size={16} />Shop</button>
 </div>
+{/if}
 
 <!-- Stays put across the tabs: only the character inside changes and zooms -->
 <div class="stage-wrap"><AvatarPreview {...view} /></div>
