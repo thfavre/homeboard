@@ -40,10 +40,12 @@ const ROWS: { key: string; row: number; anim: Anim; dir: number; face?: Face; la
   { key: 'idleUp', row: 13, anim: 'idle', dir: DIR.up },
   { key: 'idleLeft', row: 14, anim: 'idle', dir: DIR.left },
   // The town only. Kneeling with the back to us; then the ceremony in the throne room: seated
-  // facing left (the King on the throne, seen from the side) and kneeling toward the throne
+  // facing left (the King on the throne, seen from the side), kneeling toward the throne, and both
+  // hands up facing left (the King opening the court)
   { key: 'sitUp', row: 15, anim: 'sit', dir: DIR.up },
   { key: 'sitLeft', row: 16, anim: 'sit', dir: DIR.left },
   { key: 'sitRight', row: 17, anim: 'sit', dir: DIR.right },
+  { key: 'emoteLeft', row: 18, anim: 'emote', dir: DIR.left },
 ];
 /** Every row key: a sheet measured without one of them was made before it existed and is redrawn */
 export const ROW_KEYS = ROWS.map((r) => r.key);

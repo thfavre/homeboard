@@ -740,8 +740,8 @@ export function hallProps(art: HallArt): Prop[] {
 
 /**
  * The hall's light, over everything in it: daylight falling in through the windows (fading with the
- * evening), the glow of every fire (stronger in the dark), and once the King sits on the throne
- * (`seated`: for how long, in ms; null: nobody does) a golden light around it, with sparks rising.
+ * evening), the glow of every fire (stronger in the dark), and once the King has opened the court
+ * (`seated`: how long ago, in ms; null: not yet) a golden light around the throne, with sparks rising.
  */
 export function drawHallLight(g: G, now: number, dark: number, seated: number | null): void {
   g.save();
@@ -858,6 +858,18 @@ export function drawEnthroned(g: G, img: HTMLImageElement, info: SheetInfo, x: n
   const row = rowOf(img, info, 'sitLeft', 3);
   if (!row) return false;
   drawFrame(g, img, info, row.row, 2, x, y);
+  return true;
+}
+
+/**
+ * The King before the throne, both hands up to open the court: the arms-up frame of the LPC emote
+ * sheet, facing left. The hands go up, come halfway down once, and up again. False: the sheet has
+ * no such row.
+ */
+export function drawHailing(g: G, img: HTMLImageElement, info: SheetInfo, x: number, y: number, since: number): boolean {
+  const row = rowOf(img, info, 'emoteLeft', 3);
+  if (!row) return false;
+  drawFrame(g, img, info, row.row, since < 220 || (since > 1200 && since < 1450) ? 1 : 2, x, y);
   return true;
 }
 

@@ -134,21 +134,26 @@ export const THRONE_SEAT = { x: THRONE.x - 1, y: THRONE.y - 13 * SPRITE_SCALE };
 /** Where a King who cannot sit (worn art without sit sheets) stands: on the dais, before the throne and its footstool */
 export const THRONE_STAND = { x: THRONE.x - 58, y: THRONE.y - 2 };
 
+/** How many rows of people there can be on each side of the carpet, and how many places a row has inside the hall */
+export const PRAY_ROWS = 3;
+export const PRAY_HALL_COLS = 5;
+
 /**
- * Where everyone kneels, facing the throne: lines along both sides of the carpet, from the foot of
- * the dais back through the hall and out onto the square. The line next to the carpet fills up
- * first, from the throne back, then the ones behind it (each a half step off the one before).
+ * Where everyone kneels, facing the throne: `rows` rows on each side of the carpet (1 to PRAY_ROWS),
+ * each a lane running from the foot of the dais back through the hall and, when the hall is full,
+ * out onto the square. The places come in the order they are given out: the ones nearest the
+ * throne first, so whoever arrives first goes furthest in and nobody has to walk past anyone.
  */
-export const PRAY_SPOTS: { x: number; y: number }[] = (() => {
+export function praySpots(rows: number): { x: number; y: number }[] {
   const out: { x: number; y: number }[] = [];
   const side = ((HALL_ART.carpet.y1 - HALL_ART.carpet.y0) / 2) * SPRITE_SCALE + 30;
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 10; col++) {
+  for (let col = 0; col < PRAY_HALL_COLS * 2; col++) {
+    for (let row = 0; row < Math.max(1, Math.min(PRAY_ROWS, rows)); row++) {
       for (const s of [-1, 1]) {
-        // A little off the lines, so the crowd does not kneel like a drill square
+        // A little off the lines along the lane, so the crowd does not kneel like a drill square
         const k = row * 20 + col * 2 + (s + 1) / 2;
-        const x = Math.round(DAIS_FOOT - 42 - col * 60 - (row % 2) * 30 + ((k * 37) % 9) - 4);
-        const y = Math.round(CARPET_Y + s * (side + row * 56) + ((k * 53) % 7) - 3);
+        const x = Math.round(DAIS_FOOT - 42 - col * 60 - (row % 2) * 24 + ((k * 37) % 9) - 4);
+        const y = Math.round(CARPET_Y + s * (side + row * 56));
         // Not where a lamp post or a tree of the square stands
         if (TOWN_OBSTACLES.some((o) => Math.abs(x - o.x) < o.rx + 26 && Math.abs(y - o.y) < o.ry + 22)) continue;
         out.push({ x, y });
@@ -156,7 +161,7 @@ export const PRAY_SPOTS: { x: number; y: number }[] = (() => {
     }
   }
   return out;
-})();
+}
 
 /**
  * How high above the floor a character at (x, y) stands (world units): the steps of the dais, as a
@@ -336,12 +341,30 @@ export interface KingInfo {
   id: string | null;
   /** When they took it */
   since: number;
-  /** What taking the title costs now */
+  /** What taking the title cost when this was sent; `pricing` says how it moves (see kingPriceAt) */
   price: number;
+  pricing: KingPricing;
   /** The ceremony in the throne room, when it is held on its own: every so many days, at this time (HH:MM). Null: only when the host starts it */
   ceremony: { everyDays: number; time: string } | null;
   /** The monarchy: every reign so far, the oldest first (the last one is still going while its `to` is null) */
   reigns: Reign[];
+}
+
+/**
+ * How the title's price moves: when the title changes hands it goes up to `start` (what was just
+ * paid, times a factor) at `at`, then drops by `dropPerMin` every minute, never below `floor` (the
+ * starting price)
+ */
+export interface KingPricing {
+  start: number;
+  at: number;
+  dropPerMin: number;
+  floor: number;
+}
+
+/** What taking the title costs at a given time (server time) */
+export function kingPriceAt(p: KingPricing, now: number): number {
+  return Math.max(p.floor, Math.round(p.start - p.dropPerMin * Math.max(0, Math.floor((now - p.at) / 60_000))));
 }
 
 /** One reign: who held the title (as they were called then), from when to when, and what they paid for it */
@@ -355,7 +378,7 @@ export interface Reign {
   paid: number;
 }
 
-/** Why a ceremony that is due has not started yet: the King is not in the town (or asleep), a game is on the TV, or no TV is open */
+/** Why a ceremony that is due has not started yet: the King is not in the town, a game is on the TV, or no TV is open */
 export type CeremonyHold = 'king' | 'game' | 'tv';
 
 export interface WorldState {
@@ -379,7 +402,8 @@ export interface WorldState {
   quickMinSec?: number;
   quickMaxSec?: number;
   kingBase?: number;
-  kingStep?: number;
+  kingRise?: number;
+  kingDropPerMin?: number;
   kingRefundPct?: number;
   ceremonyAuto?: boolean;
   ceremonyEveryDays?: number;

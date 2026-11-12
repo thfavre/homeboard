@@ -1,12 +1,13 @@
-import { BENCHES, CARPET_START, CARPET_Y, DAIS_FOOT, PRAY_SPOTS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, WANIM, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
+import { BENCHES, CARPET_START, CARPET_Y, DAIS_FOOT, HALL, PRAY_HALL_COLS, PRAY_ROWS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, WANIM, praySpots, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
 
 /**
  * The life of the town: characters wander the ground band, stop for a while, sit on benches, pet
  * the cat; a guest away for too long walks to the edge, lies down to sleep and slowly fades out.
  * When a guest changes their look on the phone, the character walks to the shop for it (clothes or
  * barber) and comes out in the new look. For the King's ceremony the camera moves over to the
- * throne room off the town's right edge: the King walks up the carpet and sits on the throne, and
- * everyone else comes and kneels before it. The module ticks it and sends the frames to the TV.
+ * throne room off the town's right edge: the King walks up the carpet to the throne, the others
+ * follow and line up along the carpet, and when all are there the King raises his hands, everyone
+ * kneels and the King sits. The module ticks it and sends the frames to the TV.
  */
 
 const WALK_UPS = 42;
@@ -50,21 +51,28 @@ type Doing =
   | { kind: 'sleep' }
   | { kind: 'cheer'; until: number }
   | { kind: 'goThrone'; onCarpet: boolean }
-  | { kind: 'throne'; until: number }
+  | { kind: 'throne'; stage: 'stand' | 'hail' | 'seat' | 'sit'; until: number }
   | { kind: 'descend' }
-  | { kind: 'goPray'; spot: number }
-  | { kind: 'pray'; spot: number; until: number }
+  | { kind: 'goHall' }
+  | { kind: 'goPray'; spot: number; inLane: boolean }
+  | { kind: 'pray'; spot: number; until: number; knelt: boolean }
   | Visit;
 
 /**
- * The King's ceremony. gather: everyone is called and on the way, until the King sits (or it took
- * too long). court: the King on the throne, the others kneeling. leave: everyone gets up and goes
- * back to town, and the camera follows them home.
+ * The King's ceremony. gather: the King is called first and walks to the throne; once he is in
+ * the throne room (`open`) the others are called, and take their places along the carpet in the
+ * order they arrive, standing. court: all are there (or it took too long): the King raises his
+ * hands and sits, the others kneel. leave: everyone gets up and goes back to town, and the camera
+ * follows them home.
  */
 interface Ceremony {
   phase: 'gather' | 'court' | 'leave';
   /** When this phase began */
   since: number;
+  /** When the others were called (0: not yet, the King is still on his way to the throne room) */
+  open: number;
+  /** The places along the carpet, in the order they are given out (see praySpots) */
+  spots: { x: number; y: number }[];
 }
 
 /** How long the camera takes to move over to the throne room, and back to the town */
@@ -72,8 +80,13 @@ const PAN_MS = 9000;
 const PAN_BACK_MS = 11_000;
 /** Once the court is over the camera stays this long, while everyone gets up */
 const LEAVE_PAUSE_MS = 3500;
-/** The court starts without the King on the throne this long after the time everyone has to get going */
-const GATHER_EXTRA_MS = 30_000;
+/** The others are called without the King in the throne room, and the court starts without everyone there, this long after the time they have to get going */
+const KING_WAIT_MS = 20_000;
+const GATHER_EXTRA_MS = 35_000;
+/** How long the King holds his hands up to open the court */
+const HAIL_MS = 2600;
+/** Arriving this close to the hall's open side, a character is given its place along the carpet */
+const DOOR_ZONE = 130;
 /** This close to the end of the court nobody is called anymore: they would arrive as everyone leaves */
 const LAST_CALL_MS = 8000;
 
@@ -104,6 +117,8 @@ interface Walker {
   fading: boolean;
   /** The worn art has no sitting sheets: stays off benches and away from the cat */
   noSit: boolean;
+  /** The worn art has no cheering sheets: a King in it does not raise his hands */
+  noCheer: boolean;
   /** Shops to go to, in order (see RosterEntry.errands) */
   errands: PlaceId[];
   /** The activity already asked to wrap up for a trip (it is asked once) */
@@ -122,10 +137,10 @@ const PRIORITY = {
   activity: 1,
   /** A trip to a shop for the look on the phone */
   errand: 2,
-  /** The King's ceremony: everyone goes, but a shop trip under way is finished first */
-  ceremony: 2,
   /** Asleep while the guest is away */
   rest: 3,
+  /** The King's ceremony: everyone goes, the sleepers too; only a shop trip under way is finished first (it cannot be cut short) */
+  ceremony: 4,
 } as const;
 
 /**
@@ -149,8 +164,9 @@ export interface RosterEntry {
   online: boolean;
   /** How long they have been away (ms; 0 while online) */
   awayMs: number;
-  /** See Walker.noSit */
+  /** See Walker.noSit and Walker.noCheer */
   noSit?: boolean;
+  noCheer?: boolean;
   /** Shops the character has to visit to look like on the phone (the latest look counts, so one trip each) */
   errands?: PlaceId[];
 }
@@ -261,6 +277,7 @@ export class TownSim {
     goThrone: { priority: PRIORITY.ceremony, left: () => Infinity },
     throne: { priority: PRIORITY.ceremony, left: () => Infinity },
     descend: { priority: PRIORITY.ceremony, left: () => Infinity },
+    goHall: { priority: PRIORITY.ceremony, left: () => Infinity },
     goPray: { priority: PRIORITY.ceremony, left: () => Infinity },
     pray: { priority: PRIORITY.ceremony, left: () => Infinity },
     goSleep: { priority: PRIORITY.rest, left: () => Infinity },
@@ -302,11 +319,12 @@ export class TownSim {
         if (shouldSleep) continue;
         const from = this.ceremony || Math.random() < 0.5 ? -20 : TOWN.w + 20;
         const spot = randSpot();
-        w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, errands: [], wrapped: null };
+        w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, noCheer: !!r.noCheer, errands: [], wrapped: null };
         this.walkers.set(r.id, w);
         continue;
       }
       w.noSit = !!r.noSit;
+      w.noCheer = !!r.noCheer;
       w.errands = errands;
       // An outfit change mid-sit (or mid-pet) would show missing art: stand up
       if (w.noSit && (w.doing.kind === 'sit' || w.doing.kind === 'goBench' || w.doing.kind === 'pet' || w.doing.kind === 'goPet')) {
@@ -314,9 +332,16 @@ export class TownSim {
       }
       // The title went to someone else: down from the throne. The new King, kneeling with the others: up, the throne is waiting
       if (w.id !== this.king && (w.doing.kind === 'throne' || w.doing.kind === 'goThrone')) w.doing = this.offThrone(w, now);
-      if (w.id === this.king && (w.doing.kind === 'pray' || w.doing.kind === 'goPray')) w.doing = idle(now, 400, 1200);
-      // Off to sleep, unless busy with something that cannot be cut short (a shop visit is finished first)
-      if (shouldSleep && w.doing.kind !== 'sleep' && w.doing.kind !== 'goSleep' && this.rule(w).wrapUp) {
+      if (w.id === this.king && (w.doing.kind === 'pray' || w.doing.kind === 'goPray' || w.doing.kind === 'goHall')) w.doing = idle(now, 400, 1200);
+      // Called to the ceremony while asleep (or on the way to bed): up again, it comes before sleep
+      if ((w.doing.kind === 'sleep' || w.doing.kind === 'goSleep') && this.summoned(w, now, o)) {
+        w.fading = false;
+        w.alpha = 1;
+        w.doing = idle(now, 500, 1500);
+      }
+      // Off to sleep, unless busy with something that cannot be cut short (a shop visit is finished
+      // first), and never during a ceremony: those away sleep once it is over
+      if (shouldSleep && !this.ceremony && w.doing.kind !== 'sleep' && w.doing.kind !== 'goSleep' && this.rule(w).wrapUp) {
         // Walk to the nearest edge of the town and lie down there (on the right, clear of the way to the throne room's carpet)
         const right = w.x >= TOWN.w / 2;
         let ty = rand(TOWN_AREA.y0 + 40, TOWN_AREA.y1 - 20);
@@ -356,7 +381,7 @@ export class TownSim {
         const p = TOWN_PLACES[d.place];
         a.push(Math.round(p.seats[d.seat]), Math.round(p.window.y + p.window.h), WANIM.inside, this.insideDir(w, d, now), Math.round(w.alpha * 100));
       } else {
-        a.push(Math.round(w.x), Math.round(w.y), this.animOf(w), w.dir, Math.round(w.alpha * this.doorAlpha(w) * 100));
+        a.push(Math.round(w.x), Math.round(w.y), this.animOf(w, now), w.dir, Math.round(w.alpha * this.doorAlpha(w) * 100));
       }
     }
     const someonePets = [...this.walkers.values()].some((w) => w.doing.kind === 'pet');
@@ -369,7 +394,7 @@ export class TownSim {
     };
   }
 
-  private animOf(w: Walker): number {
+  private animOf(w: Walker, now: number): number {
     const d = w.doing;
     switch (d.kind) {
       case 'wander':
@@ -378,13 +403,19 @@ export class TownSim {
       case 'goSleep':
       case 'goThrone':
       case 'descend':
+      case 'goHall':
       case 'goPray':
         return WANIM.walk;
-      // Worn art without sit sheets: the King stands before the throne, the others pray standing
+      // The King before the throne: standing until all are there, his hands up to open the court,
+      // a step back to the seat, seated (worn art without sit sheets: he stays standing)
       case 'throne':
-        return w.noSit ? WANIM.idle : WANIM.sit;
+        if (d.stage === 'hail') return now < d.until ? WANIM.cheer : WANIM.idle;
+        if (d.stage === 'seat') return WANIM.walk;
+        return d.stage === 'sit' && !w.noSit ? WANIM.sit : WANIM.idle;
+      // The others: standing in their place until the court opens, then on their knees (worn art
+      // without sit sheets: they stay standing)
       case 'pray':
-        return w.noSit ? WANIM.idle : WANIM.pray;
+        return d.knelt && !w.noSit ? WANIM.pray : WANIM.idle;
       case 'visit':
         return this.walking(w, d) ? WANIM.walk : WANIM.idle;
       case 'sit':
@@ -443,11 +474,10 @@ export class TownSim {
         break;
       case 'idle': {
         if (now < d.until) break;
-        // Between two activities: the ceremony first (the King to the throne, the others to kneel
-        // while there is room), then the shop
-        const part = this.summoned(w, now, o) ? this.ceremonyPart(w) : null;
-        if (part) {
-          w.doing = part;
+        // Between two activities: the ceremony first (the King to the throne, the others to the
+        // hall), then the shop
+        if (this.summoned(w, now, o)) {
+          w.doing = this.ceremonyPart(w);
           break;
         }
         if (w.errands.length) {
@@ -518,48 +548,89 @@ export class TownSim {
           w.doing = this.offThrone(w, now);
           break;
         }
-        // Onto the carpet first (in a hurry from far away), then up it to the throne at a king's
-        // pace. Worn art without sit sheets: the King stands before the throne instead of sitting.
-        const seat = w.noSit ? THRONE_STAND : THRONE_SEAT;
+        // Onto the carpet first (in a hurry from far away), then up it at a king's pace, to stand
+        // before the throne facing the hall
         if (!d.onCarpet) {
           const cx = Math.max(CARPET_START, Math.min(DAIS_FOOT - 30, w.x));
           if (this.walkTo(w, cx, CARPET_Y, this.pace(w, cx, CARPET_Y), dt)) d.onCarpet = true;
-        } else if (this.walkTo(w, seat.x, seat.y, WALK_UPS, dt)) {
-          w.x = seat.x;
-          w.y = seat.y;
+        } else if (this.walkTo(w, THRONE_STAND.x, THRONE_STAND.y, WALK_UPS, dt)) {
+          w.x = THRONE_STAND.x;
+          w.y = THRONE_STAND.y;
           w.dir = 1;
-          w.doing = { kind: 'throne', until: 0 };
+          w.doing = { kind: 'throne', stage: 'stand', until: 0 };
         }
         break;
       }
       case 'throne':
-        // The court is over: the King gets up after the others
-        if (!d.until && !this.courtOpen()) d.until = now + rand(2200, 3400);
-        if (d.until && now >= d.until) w.doing = { kind: 'descend' };
+        if (!this.courtOpen()) {
+          // The court is over: the King gets up after the others (one who never sat goes straight down)
+          if (d.stage !== 'sit') w.doing = { kind: 'descend' };
+          else if (!d.until) d.until = now + rand(2200, 3400);
+          else if (now >= d.until) w.doing = { kind: 'descend' };
+        } else if (d.stage === 'stand' && this.ceremony?.phase === 'court') {
+          // The court opens: both hands up (worn art without cheering sheets: straight to the seat)
+          Object.assign(d, w.noCheer ? { stage: 'seat' } : { stage: 'hail', until: now + HAIL_MS });
+        } else if (d.stage === 'hail' && now >= d.until) {
+          d.stage = 'seat';
+        } else if (d.stage === 'seat') {
+          // A step back onto the throne (worn art without sit sheets: the King stays standing before it)
+          if (w.noSit || this.walkTo(w, THRONE_SEAT.x, THRONE_SEAT.y, WALK_UPS, dt)) {
+            if (!w.noSit) Object.assign(w, THRONE_SEAT);
+            w.dir = 1;
+            Object.assign(d, { stage: 'sit', until: 0 });
+          }
+        }
         break;
       case 'descend':
         // Down the stairs by the carpet, then off somewhere in town
         if (this.walkTo(w, DAIS_FOOT - 36, CARPET_Y, WALK_UPS, dt)) w.doing = this.backToTown(now);
         break;
+      case 'goHall': {
+        if (!this.courtOpen()) {
+          w.doing = this.backToTown(now);
+          break;
+        }
+        // To the hall's open side: whoever gets there first is given the place nearest the throne
+        const tx = HALL.x0 - DOOR_ZONE + 20;
+        const ty = Math.max(CARPET_Y - 200, Math.min(CARPET_Y + 200, w.y));
+        if (w.x >= HALL.x0 - DOOR_ZONE || this.walkTo(w, tx, ty, this.pace(w, tx, ty), dt)) {
+          const spot = this.freeSpot();
+          // No place left: stand around a while, then look again
+          w.doing = spot >= 0 ? { kind: 'goPray', spot, inLane: false } : idle(now, 3000, 6000);
+        }
+        break;
+      }
       case 'goPray': {
         if (!this.courtOpen()) {
           w.doing = this.backToTown(now);
           break;
         }
-        const s = PRAY_SPOTS[d.spot];
-        if (this.walkTo(w, s.x, s.y, this.pace(w, s.x, s.y), dt)) {
+        const s = this.ceremony!.spots[d.spot];
+        // Into its lane where the hall opens (or behind the place, when that is out on the square),
+        // then along the lane to the place: the ones before went further in, nobody is in the way
+        const entry = Math.min(HALL.x0 + 16, s.x - 40);
+        if (!d.inLane && w.x < entry - ARRIVE) {
+          if (this.walkTo(w, entry, s.y, this.pace(w, entry, s.y), dt)) d.inLane = true;
+          break;
+        }
+        d.inLane = true;
+        if (this.walkTo(w, s.x, s.y, WALK_UPS, dt)) {
           w.x = s.x;
           w.y = s.y;
           w.dir = 3;
-          w.doing = { kind: 'pray', spot: d.spot, until: 0 };
+          w.doing = { kind: 'pray', spot: d.spot, until: 0, knelt: false };
         }
         break;
       }
-      case 'pray':
+      case 'pray': {
+        // Down on the knees once the court opens, the ones nearest the throne first
+        const c = this.ceremony;
+        if (!d.knelt && c?.phase === 'court' && now >= c.since + (DAIS_FOOT - w.x) * 2.5) d.knelt = true;
         // The court is over: everyone gets up, one after the other, and goes back to town
         if (!d.until && !this.courtOpen()) d.until = now + rand(300, 2600);
         if (d.until && now >= d.until) w.doing = this.backToTown(now);
         break;
+      }
     }
   }
 
@@ -575,17 +646,16 @@ export class TownSim {
     return this.ceremony?.phase ?? null;
   }
 
-  /** This guest's character is in the town and awake: the King must be, for a ceremony to start on its own */
-  awake(id: string): boolean {
-    const w = this.walkers.get(id);
-    return !!w && w.doing.kind !== 'sleep' && w.doing.kind !== 'goSleep';
+  /** This guest's character is in the town (asleep or not): the King must be, for a ceremony to start on its own */
+  inTown(id: string): boolean {
+    return this.walkers.has(id);
   }
 
-  /** Start a ceremony: the camera moves over to the throne room and everyone is called. False: one is on already */
+  /** Start a ceremony: the camera moves over to the throne room and the King is called, the others after him. False: one is on already */
   startCeremony(): boolean {
     if (this.ceremony) return false;
     const now = Date.now();
-    this.ceremony = { phase: 'gather', since: now };
+    this.ceremony = { phase: 'gather', since: now, open: 0, spots: [] };
     this.moveCam(1, now, PAN_MS);
     return true;
   }
@@ -595,7 +665,7 @@ export class TownSim {
     const c = this.ceremony;
     if (!c || c.phase === 'leave') return;
     const now = Date.now();
-    this.ceremony = { phase: 'leave', since: now };
+    Object.assign(c, { phase: 'leave', since: now });
     this.moveCam(0, now, PAN_BACK_MS, LEAVE_PAUSE_MS);
   }
 
@@ -606,16 +676,31 @@ export class TownSim {
   }
 
   /**
-   * The ceremony moves on: the court opens once the King sits (without a King, once the camera is
-   * there; with one who does not come, after a while), lasts its time, then everyone leaves
+   * The ceremony moves on. The King goes first: the others are called once he is in the throne
+   * room (at once without a King in town, after a while if he does not come). The court opens when
+   * everyone stands in place and the King before the throne (or after too long), lasts its time,
+   * then everyone leaves.
    */
   private stepCeremony(now: number, o: TownOptions): void {
     const c = this.ceremony;
     if (!c) return;
     const waited = now - c.since;
-    if (c.phase === 'gather' && (this.onThrone() || (this.king ? waited >= o.graceMs + GATHER_EXTRA_MS : waited >= PAN_MS))) this.ceremony = { phase: 'court', since: now };
-    else if (c.phase === 'court' && waited >= o.courtMs) this.endCeremony();
+    if (c.phase === 'court' && waited >= o.courtMs) this.endCeremony();
     else if (c.phase === 'leave' && now >= this.cam.at + this.cam.ms) this.ceremony = null;
+    if (c.phase !== 'gather') return;
+    const king = this.king ? this.walkers.get(this.king) : undefined;
+    const crowd = [...this.walkers.values()].filter((w) => w.id !== this.king);
+    if (!c.open) {
+      const inHall = !!king && (king.doing.kind === 'throne' || (king.doing.kind === 'goThrone' && king.x >= CARPET_START));
+      if (king && !inHall && waited < o.graceMs + KING_WAIT_MS) return;
+      c.open = now;
+      // As many rows on each side of the carpet as it takes to fit everyone inside the hall
+      c.spots = praySpots(Math.min(PRAY_ROWS, Math.ceil(crowd.length / (PRAY_HALL_COLS * 2))));
+      return;
+    }
+    // In place: everyone but those on a trip to a shop (they come after it and kneel as they arrive)
+    const inPlace = crowd.every((w) => w.doing.kind === 'pray' || w.doing.kind === 'visit') && (!king || king.doing.kind === 'throne');
+    if (waited >= PAN_MS && (inPlace || now - c.open >= o.graceMs + GATHER_EXTRA_MS)) Object.assign(c, { phase: 'court', since: now });
   }
 
   /** Send the camera somewhere from where it is now, after a pause */
@@ -635,42 +720,26 @@ export class TownSim {
     return !!this.ceremony && this.ceremony.phase !== 'leave';
   }
 
-  /** The King, if sitting on the throne right now */
-  private onThrone(): Walker | undefined {
-    for (const w of this.walkers.values()) if (w.doing.kind === 'throne') return w;
-    return undefined;
-  }
-
-  /** This character is called to the ceremony, and is not on its way or there yet */
+  /** This character is called to the ceremony (the King from the start, the others once he is in the throne room), and is not on its way or there yet */
   private summoned(w: Walker, now: number, o: TownOptions): boolean {
     const c = this.ceremony;
     if (!c || c.phase === 'leave') return false;
     if (c.phase === 'court' && now >= c.since + o.courtMs - LAST_CALL_MS) return false;
+    if (w.id !== this.king && !c.open) return false;
     const k = w.doing.kind;
-    return k !== 'goThrone' && k !== 'throne' && k !== 'descend' && k !== 'goPray' && k !== 'pray';
+    return k !== 'goThrone' && k !== 'throne' && k !== 'descend' && k !== 'goHall' && k !== 'goPray' && k !== 'pray';
   }
 
-  /** A character's part in the ceremony: the King goes to the throne, the others to a free place to kneel (null: none left) */
-  private ceremonyPart(w: Walker): Doing | null {
-    if (w.id === this.king) return { kind: 'goThrone', onCarpet: false };
-    const spot = this.praySpot(w);
-    return spot >= 0 ? { kind: 'goPray', spot } : null;
+  /** A character's part in the ceremony: the King goes to the throne, the others to the hall for a place along the carpet */
+  private ceremonyPart(w: Walker): Doing {
+    return w.id === this.king ? { kind: 'goThrone', onCarpet: false } : { kind: 'goHall' };
   }
 
-  /** The best free place to kneel for this character: near the throne first, and not too far to walk (-1: none left) */
-  private praySpot(w: Walker): number {
+  /** The free place nearest the throne: the places come in that order (-1: none left) */
+  private freeSpot(): number {
     const taken = new Set<number>();
     for (const o of this.walkers.values()) if (o.doing.kind === 'goPray' || o.doing.kind === 'pray') taken.add(o.doing.spot);
-    let best = -1;
-    let bestCost = Infinity;
-    for (let i = 0; i < PRAY_SPOTS.length; i++) {
-      if (taken.has(i)) continue;
-      const s = PRAY_SPOTS[i];
-      // The spots come in the order they fill up (along the carpet first, from the throne back): the order counts, the walk a little
-      const cost = i * 14 + Math.hypot(s.x - w.x, s.y - w.y) * 0.25;
-      if (cost < bestCost) [best, bestCost] = [i, cost];
-    }
-    return best;
+    return (this.ceremony?.spots ?? []).findIndex((_, i) => !taken.has(i));
   }
 
   /** Walking speed to a point of the ceremony: in a hurry from far away, at a walk for the last stretch */

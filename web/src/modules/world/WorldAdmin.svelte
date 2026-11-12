@@ -6,21 +6,22 @@
   import Toggle from '$lib/ui/Toggle.svelte';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { TIERS, TIER_NAMES } from '$shared/wardrobe.ts';
-  import { LOOK_PARTS, LOOK_PART_NAMES, type CeremonyHold, type WorldState } from '$shared/world.ts';
+  import { LOOK_PARTS, LOOK_PART_NAMES, kingPriceAt, type CeremonyHold, type WorldState } from '$shared/world.ts';
   import Monarchy from './Monarchy.svelte';
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
   const kingName = $derived(mod?.king?.id ? (mod.characters.find((c) => c.id === mod.king!.id)?.name ?? null) : null);
 
-  // The clock, for when the next ceremony is
+  // The clock, for when the next ceremony is and for the crown's price as it drops
   let now = $state(serverNow());
+  const crownPrice = $derived(mod?.king ? kingPriceAt(mod.king.pricing, now) : 0);
   $effect(() => {
     const t = setInterval(() => (now = serverNow()), 15_000);
     return () => clearInterval(t);
   });
 
   const HOLDS: Record<CeremonyHold, string> = {
-    king: 'the King to be in the town and awake',
+    king: 'the King to be in the town',
     game: 'the game on the TV to end',
     tv: 'a TV to be open',
   };
@@ -154,33 +155,40 @@
           Nobody is the King
         {/if}
       </span>
-      <span class="bal">Next price {mod.king?.price ?? 0} {mod.shop?.currencyName}</span>
+      <span class="bal">The crown costs {crownPrice} {mod.shop?.currencyName}</span>
     </div>
     <div class="buttons">
       <TwoStepButton class="small" disabled={!mod.king?.id} onconfirm={() => attempt(() => rpc('world', 'removeKing'), 'Title removed')}>
         Remove the title
         {#snippet armed()}Tap again to remove{/snippet}
       </TwoStepButton>
-      <TwoStepButton class="small" disabled={!mod.kingSales} onconfirm={() => attempt(() => rpc('world', 'resetKingPrice'), 'Price reset')}>
+      <TwoStepButton class="small" disabled={crownPrice <= (mod.kingBase ?? 0)} onconfirm={() => attempt(() => rpc('world', 'resetKingPrice'), 'Price reset')}>
         Reset the price
         {#snippet armed()}Tap again to reset{/snippet}
       </TwoStepButton>
     </div>
     <p class="faint small">
-      The title changed hands {mod.kingSales ?? 0} {mod.kingSales === 1 ? 'time' : 'times'}. Removing it leaves the price as it is; resetting brings it back to
-      the first price.
+      The title changed hands {mod.kingSales ?? 0} {mod.kingSales === 1 ? 'time' : 'times'}. Removing it leaves the price where it is; resetting brings it back
+      to the starting price at once.
     </p>
     <Monarchy />
+    <label class="field">
+      <span>Starting price</span>
+      <input class="input" type="number" min="0" value={mod.kingBase} onchange={(e) => setAmount('kingBase', e.currentTarget.value)} />
+    </label>
     <div class="pair">
       <label class="field">
-        <span>First price</span>
-        <input class="input" type="number" min="0" value={mod.kingBase} onchange={(e) => setAmount('kingBase', e.currentTarget.value)} />
+        <span>Then times the price paid</span>
+        <input class="input" type="number" min="1" max="10" step="0.1" value={mod.kingRise} onchange={(e) => setSeconds('kingRise', e.currentTarget.value)} />
       </label>
       <label class="field">
-        <span>More each time</span>
-        <input class="input" type="number" min="0" value={mod.kingStep} onchange={(e) => setAmount('kingStep', e.currentTarget.value)} />
+        <span>Dropping each minute by</span>
+        <input class="input" type="number" min="0" value={mod.kingDropPerMin} onchange={(e) => setAmount('kingDropPerMin', e.currentTarget.value)} />
       </label>
     </div>
+    <p class="faint small">
+      When someone takes the crown, its price goes up to what they paid times this, then drops every minute, never below the starting price.
+    </p>
     <label class="field">
       <span>The old King gets back (percent of what they paid)</span>
       <input class="input" type="number" min="0" max="100" value={mod.kingRefundPct} onchange={(e) => setAmount('kingRefundPct', e.currentTarget.value)} />
@@ -190,8 +198,9 @@
       <div>
         <strong>Ceremony in the throne room</strong>
         <p class="faint small">
-          The TV's camera moves a third of the screen to the right, over to the throne room: the King walks up the red carpet and sits on the throne, and
-          everyone else comes and kneels before it. Then all go back to town. On: it is held on its own, on the days and at the time below.
+          The TV's camera moves a third of the screen to the right, over to the throne room. The King walks up the red carpet to the throne; once he is
+          in the room the others follow and line up along the carpet. When all are there the King raises his hands, everyone kneels and he sits. Then all go
+          back to town. On: it is held on its own, on the days and at the time below.
         </p>
       </div>
       <Toggle checked={!!mod.ceremonyAuto} label="Hold the ceremony on its own" onchange={(v) => setOption('ceremony', v)} />
@@ -218,8 +227,8 @@
       </label>
     </div>
     <p class="faint small">
-      The court lasts from the moment the King sits. When a ceremony starts, everyone has the time to get going to finish what they are doing: what ends
-      within it is finished, the rest is cut short. A trip to a shop is finished first, and sleepers stay asleep.
+      The court lasts from the moment everyone kneels. Once called, everyone has the time to get going to finish what they are doing: what ends within it
+      is finished, the rest is cut short. Sleepers wake up for it; only a trip to a shop is finished first.
     </p>
     <div class="current">
       <span class="status">{ceremonyStatus}</span>

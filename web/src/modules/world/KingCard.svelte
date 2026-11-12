@@ -1,13 +1,14 @@
 <script lang="ts">
   import { Coins, Crown } from '@lucide/svelte';
-  import { attempt, hb, rpc } from '$lib/client.svelte.ts';
+  import { attempt, hb, rpc, serverNow } from '$lib/client.svelte.ts';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
-  import type { WorldState } from '$shared/world.ts';
+  import { kingPriceAt, type WorldState } from '$shared/world.ts';
   import Monarchy from './Monarchy.svelte';
 
   /**
    * The King's title in the shop: who holds it, one line, and the button to take it. Anyone can,
-   * and its price rises each time it changes hands. Below it, the monarchy: every King so far.
+   * and its price jumps each time it changes hands, then drops again. Below it, the monarchy: every
+   * King so far.
    */
 
   let { balance }: { balance: number | null } = $props();
@@ -16,13 +17,20 @@
   const king = $derived(mod?.king);
   const kingName = $derived(king?.id ? (mod?.characters.find((c) => c.id === king.id)?.name ?? null) : null);
   const mine = $derived(!!king?.id && king.id === hb.me?.id);
-  const short = $derived(!!king && balance !== null && balance < king.price);
+  // The price drops minute by minute: the clock keeps it right between two news from the server
+  let now = $state(serverNow());
+  $effect(() => {
+    const t = setInterval(() => (now = serverNow()), 5000);
+    return () => clearInterval(t);
+  });
+  const price = $derived(king ? kingPriceAt(king.pricing, now) : 0);
+  const short = $derived(!!king && balance !== null && balance < price);
   const money = $derived(mod?.shop?.currencyName ?? '');
 
   async function take() {
     if (!king) return;
-    // The price seen here goes along: if someone was quicker, nothing is paid
-    await attempt(() => rpc('world', 'buyKing', { price: king.price }), 'Long live the King');
+    // The price seen here goes along: if someone was quicker and it went up, nothing is paid
+    await attempt(() => rpc('world', 'buyKing', { price }), 'Long live the King');
   }
 </script>
 
@@ -33,14 +41,14 @@
       <div class="who">
         <span class="title">{mine ? 'You are the King' : kingName ? `${kingName} is the King` : 'The throne is empty'}</span>
         <span class="faint small">
-          {mine ? `Anyone can take your crown for ${king.price} ${money}.` : short ? `The crown costs ${king.price} ${money}: you have ${balance}.` : 'One crown, and it can be yours.'}
+          {mine ? `Anyone can take your crown for ${price} ${money}.` : short ? `The crown costs ${price} ${money}: you have ${balance}.` : 'One crown, and it can be yours.'}
         </span>
       </div>
     </div>
     {#if !mine}
       <TwoStepButton class="primary take" disabled={short} onconfirm={take}>
-        <Crown size={18} />Take the crown for {king.price} {money}
-        {#snippet armed()}<Coins size={18} />Tap again to pay {king.price}{/snippet}
+        <Crown size={18} />Take the crown for {price} {money}
+        {#snippet armed()}<Coins size={18} />Tap again to pay {price}{/snippet}
       </TwoStepButton>
     {/if}
   </div>

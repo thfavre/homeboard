@@ -2,14 +2,14 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, WORLD } from '$shared/crowd.ts';
-  import { FRAME_STRIDE, HALL, HALL_PAN, THRONE_SEAT, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { DAIS_FOOT, FRAME_STRIDE, HALL, HALL_PAN, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
-  import { crownMark, drawEnthroned, drawHallLight, drawHallWall, drawKneeling, hallProps, loadHall, type HallArt } from './throneRoom.ts';
+  import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, hallProps, loadHall, type HallArt } from './throneRoom.ts';
 
   /**
    * The town on the TV: the crowd games' square (same LPC environment art, same renderer), lived in
@@ -70,6 +70,8 @@
   let scratch: CanvasRenderingContext2D[] | null = null;
   const pigeons = untrack(() => new Pigeons(3, TOWN_AREA));
   let lastDraw = 0;
+  /** When the King opened the court (his hands up before the throne): the throne glows from then on, until he comes down from the dais */
+  let courtSince: number | null = null;
 
   onMount(() => {
     let raf = 0;
@@ -353,11 +355,8 @@
       }
       return l;
     };
-    /** For how long the King has been on the throne (ms), once drawn there this frame (seated, or standing before it) */
-    let enthroned: number | null = null;
     const drawPerson = (p: Person, sheet?: HTMLImageElement | null) => {
       const l = poseOf(p);
-      if (p.id === world?.king?.id && p.anim !== WANIM.walk && Math.abs(p.x - THRONE_SEAT.x) < 70 && Math.abs(p.y - THRONE_SEAT.y) < 30) enthroned = now - l.since;
       const img = (sheet !== undefined ? sheet : sheetOf(p.id, false).img) ?? undefined;
       const sheets = sheetsOf(img);
       const info = img ? infoOf(img) : null;
@@ -377,6 +376,8 @@
         // Kneeling toward the throne
       } else if (p.anim === WANIM.sit && p.dir === 1 && img && info && drawEnthroned(g, img, info, p.x, y)) {
         // The King on the throne, seen from the side
+      } else if (p.anim === WANIM.cheer && p.dir === 1 && img && info && drawHailing(g, img, info, p.x, y, now - l.since)) {
+        // The King before the throne, both hands up
       } else {
         drawCharacter(g, sheets, img, p.x, y, { anim: gameAnim(p.anim), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id));
       }
@@ -465,7 +466,11 @@
       for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
     }
     // The throne room has its own light: the windows by day, its fires at any time
-    if (away && hall) drawHallLight(g, now, dark, enthroned);
+    // The throne glows from the moment the King opens the court, until he comes down from the dais
+    const king = people.find((p) => p.id === world?.king?.id);
+    if (!away || !king || king.x < DAIS_FOOT) courtSince = null;
+    else if (courtSince === null && (king.anim === WANIM.cheer || (king.anim === WANIM.sit && king.dir === 1))) courtSince = now;
+    if (away && hall) drawHallLight(g, now, dark, courtSince === null ? null : now - courtSince);
 
     // Names and sleep bubbles over everything. The head's top comes from the measured sheet, so
     // the name hangs just over the hair.

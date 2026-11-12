@@ -81,6 +81,8 @@
   });
   const pieces = $derived(closet.get(slot) ?? []);
   const worn = $derived(wd?.outfit[slot] ?? null);
+  /** The hat slot is open and locked: its pieces show under a crown that says why */
+  const hatLocked = $derived(crowned && slot === 'hat');
   const ownedCount = $derived((wd?.owned ?? []).length);
   /** Saved outfits only show once the closet is big enough to need them: less to learn at first */
   const OUTFITS_FROM = 7;
@@ -358,17 +360,10 @@
         <span class="ctitle">My {slotName.toLowerCase()}<span class="faint">{pieces.length ? ` · ${pieces.length}` : ''}</span></span>
         <button type="button" class="shoplink" onclick={() => onshop?.(slot)}><ShoppingBag size={15} />Buy more</button>
       </div>
-      {#if crowned && slot === 'hat'}
-        <div class="locked">
-          <span class="lcrown"><Crown size={26} /></span>
-          <div>
-            <strong>The King keeps the crown</strong>
-            <p class="faint">No other hat while you hold the title.</p>
-          </div>
-        </div>
-      {:else if pieces.length}
-        <div class="scroll">
-        <div class="grid">
+      {#if pieces.length || hatLocked}
+        <!-- The King's hats stay in sight under the crown, out of reach -->
+        <div class="scroll" class:shut={hatLocked}>
+        <div class="grid" inert={hatLocked}>
           <!-- Nothing: the slot left empty -->
           <button type="button" class="piece" class:worn={!worn} disabled={busy} onclick={() => ((picking = null), worn && takeOff())}>
             <span class="pic"><Ban size={30} strokeWidth={1.5} /></span>
@@ -417,6 +412,13 @@
             </div>
           {/each}
         </div>
+        {#if hatLocked}
+          <div class="locked">
+            <span class="lmark"><Crown size={46} /></span>
+            <strong>The King keeps the crown</strong>
+            <p>You cannot change your hat while you are the King.</p>
+          </div>
+        {/if}
         </div>
       {:else}
         <p class="faint none-yet">Nothing here yet. The shop has some.</p>
@@ -569,27 +571,39 @@
   .spic :global(svg) {
     color: var(--warning);
   }
+  /* The locked hats: dimmed and out of reach, the crown and the reason over them */
+  .scroll.shut {
+    position: relative;
+    overflow: hidden;
+    min-height: 10.5rem;
+  }
+  .shut .grid {
+    opacity: 0.55;
+    filter: grayscale(0.5);
+  }
   .locked {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
     display: grid;
+    place-content: center;
     justify-items: center;
-    gap: 0.35rem;
-    padding: 1.1rem 0.8rem;
-    border: 1px solid color-mix(in srgb, var(--warning) 50%, var(--border));
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--warning) 9%, var(--surface-2));
+    gap: 0.2rem;
+    padding: 0.8rem;
     text-align: center;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--bg) 78%, transparent), color-mix(in srgb, var(--bg) 15%, transparent));
+  }
+  .locked strong {
+    font-size: 1.02rem;
   }
   .locked p {
     margin: 0;
     font-size: 0.86rem;
+    color: var(--text-dim);
   }
-  .lcrown {
+  .lmark {
     display: grid;
-    place-items: center;
-    width: 3rem;
-    height: 3rem;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--warning) 22%, var(--surface));
+    margin-bottom: 0.15rem;
     color: var(--warning);
   }
 

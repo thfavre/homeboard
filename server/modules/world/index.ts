@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, piecesOf, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -47,9 +47,13 @@ interface WorldSettings {
   quickMaxSec: number;
   /** Guests can buy the King's title */
   king: boolean;
-  /** What the title costs the first time, and how much more each time it changes hands */
+  /**
+   * The title's price: when it changes hands it goes up to what was just paid times `kingRise`,
+   * then drops by `kingDropPerMin` every minute, never below the starting price `kingBase`
+   */
   kingBase: number;
-  kingStep: number;
+  kingRise: number;
+  kingDropPerMin: number;
   /** The King who loses the title gets this share of what they paid back (percent) */
   kingRefundPct: number;
   /** The ceremony in the throne room is held on its own: every so many days, at this time of day (HH:MM) */
@@ -140,6 +144,8 @@ interface KingData {
   since: number;
   paid: number;
   sales: number;
+  /** What the price went up to when the title last changed hands, and when: it drops from there (absent: the starting price) */
+  asked?: { amount: number; at: number };
 }
 
 /** The crown the King wears in the town, unless they wear a crown of their own already */
@@ -188,7 +194,8 @@ export default defineModule<WorldSettings>({
     quickMaxSec: 3,
     king: true,
     kingBase: 300,
-    kingStep: 150,
+    kingRise: 1.5,
+    kingDropPerMin: 5,
     kingRefundPct: 50,
     ceremony: true,
     ceremonyEveryDays: 1,
@@ -206,6 +213,8 @@ export default defineModule<WorldSettings>({
     // Came with the King's title, and with the ceremony
     const king = (store.data.king ??= { id: null, since: 0, paid: 0, sales: 0 });
     const held = (store.data.ceremony ??= { last: 0 });
+    // Came with the price that drops: a King crowned before it has the price go up from what they paid
+    if (king.id && king.paid && !king.asked) king.asked = { amount: Math.round(king.paid * Math.max(1, ctx.settings.get().kingRise)), at: king.since };
     // Came with the monarchy. A King crowned before it existed gets their reign written down now
     const reigns = (store.data.reigns ??= []);
     if (king.id && !reigns.some((r) => r.to === null)) {
@@ -382,11 +391,14 @@ export default defineModule<WorldSettings>({
     const crownOn = (guestId: string, outfit: Outfit): Outfit => (guestId === kingId() && outfit.hat?.id !== KING_CROWN.id ? { ...outfit, hat: KING_CROWN } : outfit);
     const sameHat = (a: Outfit, b: Outfit) => a.hat?.id === b.hat?.id && a.hat?.color === b.hat?.color;
 
-    /** What taking the title costs now: it rises each time the title changes hands */
-    const kingPrice = () => {
+    /** How the title's price moves (see the settings): what it went up to and when, how fast it drops, where it stops */
+    const kingPricing = (): KingPricing => {
       const s = ctx.settings.get();
-      return Math.max(0, Math.round(s.kingBase + s.kingStep * king.sales));
+      return { start: king.asked?.amount ?? 0, at: king.asked?.at ?? 0, dropPerMin: Math.max(0, s.kingDropPerMin), floor: Math.max(0, Math.round(s.kingBase)) };
     };
+
+    /** What taking the title costs now */
+    const kingPrice = () => kingPriceAt(kingPricing(), Date.now());
 
     /** The King's look in the town: what the town shows of them, with the crown on (their own crown if they wear one) */
     const crownedOf = (a: StoredAvatar): TownLook => {
@@ -448,10 +460,10 @@ export default defineModule<WorldSettings>({
       return day.getTime();
     };
 
-    /** What keeps a due ceremony from starting: the King is not in the town (or asleep), a game is on the TV, no TV is open */
+    /** What keeps a due ceremony from starting: the King is not in the town (asleep is fine: the ceremony wakes everyone), a game is on the TV, no TV is open */
     const ceremonyHold = (): CeremonyHold | null => {
       const id = kingId();
-      if (!id || !sim.awake(id)) return 'king';
+      if (!id || !sim.inTown(id)) return 'king';
       if (ctx.hub.takeover) return 'game';
       if (!ctx.hub.io.sockets.adapter.rooms.get('role:tv')?.size) return 'tv';
       return null;
@@ -489,7 +501,7 @@ export default defineModule<WorldSettings>({
         characters,
         sheet: store.data.sheet,
         shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices() },
-        king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null, reigns },
+        king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), pricing: kingPricing(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null, reigns },
       };
       if (role === 'admin') {
         const guests = [...ctx.session.guests.values()];
@@ -508,7 +520,8 @@ export default defineModule<WorldSettings>({
           quickMinSec: s.quickMinSec,
           quickMaxSec: s.quickMaxSec,
           kingBase: s.kingBase,
-          kingStep: s.kingStep,
+          kingRise: s.kingRise,
+          kingDropPerMin: s.kingDropPerMin,
           kingRefundPct: s.kingRefundPct,
           ceremonyAuto: s.ceremony,
           ceremonyEveryDays: s.ceremonyEveryDays,
@@ -763,7 +776,7 @@ export default defineModule<WorldSettings>({
         if (!stored) throw new HbError('Make your look first');
         const outfit = validOutfit(args?.outfit, stored.choices.body);
         if (!outfit) throw new HbError('That outfit does not exist');
-        if (guest.id === kingId() && !sameHat(outfit, stored.outfit ?? {})) throw new HbError('The King keeps the crown: your headwear cannot change while you hold the title');
+        if (guest.id === kingId() && !sameHat(outfit, stored.outfit ?? {})) throw new HbError('The King keeps the crown: you cannot change your hat while you are the King');
         return wearOutfit(guest.id, outfit);
       }),
     );
@@ -847,7 +860,7 @@ export default defineModule<WorldSettings>({
             setTown(g.id, { choices: a.choices, outfit: a.outfit ?? {} });
             errands = [];
           }
-          return { id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), noSit: wornLimits(g.id).noSit, errands };
+          return { id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), ...wornLimits(g.id), errands };
         });
       const sec = (a: number, b: number): [number, number] => [Math.min(a, b) * 1000, Math.max(a, b) * 1000];
       const frame = sim.tick(roster, {
@@ -886,8 +899,9 @@ export default defineModule<WorldSettings>({
       if (kingId() === guest.id) throw new HbError('You are the King already');
       const check = () => {
         const price = kingPrice();
-        // The phone showed a price: someone quicker raised it meanwhile, so nobody pays more than they saw
-        if (args?.price !== undefined && Math.round(num(args.price, price)) !== price) throw new HbError(`Someone was quicker: the title now costs ${price}`);
+        // The phone showed a price: someone quicker raised it meanwhile, so nobody pays more than they
+        // saw (the price dropping meanwhile is fine: they pay what it is now)
+        if (args?.price !== undefined && Math.round(num(args.price, price)) < price) throw new HbError(`Someone was quicker: the title now costs ${price}`);
         const balance = wallets[guest.id] ?? 0;
         if (balance < price) throw new HbError(`Not enough ${s.currencyName}: the title costs ${price}, you have ${balance}`, 'NO_MONEY');
         return price;
@@ -904,6 +918,8 @@ export default defineModule<WorldSettings>({
       const back = before ? Math.round((king.paid * Math.max(0, Math.min(100, s.kingRefundPct))) / 100) : 0;
       if (before && back) wallets[before] = (wallets[before] ?? 0) + back;
       Object.assign(king, { id: guest.id, since: Date.now(), paid: price, sales: king.sales + 1 });
+      // The price goes up from what was just paid, and drops from there minute by minute
+      king.asked = { amount: Math.round(price * Math.max(1, s.kingRise)), at: king.since };
       // The monarchy: the old reign ends, the new one begins (only the last reigns are kept)
       endReign();
       reigns.push({ id: guest.id, name: guest.name, color: guest.color, from: king.since, to: null, paid: price });
@@ -953,7 +969,8 @@ export default defineModule<WorldSettings>({
         quickMaxSec: secs(args.quickMaxSec, s.quickMaxSec, 30),
         king: typeof args.king === 'boolean' ? args.king : s.king,
         kingBase: price(args.kingBase, s.kingBase),
-        kingStep: price(args.kingStep, s.kingStep),
+        kingRise: Math.max(1, Math.min(10, Math.round(num(args.kingRise, s.kingRise) * 100) / 100)),
+        kingDropPerMin: price(args.kingDropPerMin, s.kingDropPerMin),
         kingRefundPct: Math.max(0, Math.min(100, Math.round(num(args.kingRefundPct, s.kingRefundPct)))),
         ceremony: typeof args.ceremony === 'boolean' ? args.ceremony : s.ceremony,
         ceremonyEveryDays: Math.max(1, Math.min(365, Math.round(num(args.ceremonyEveryDays, s.ceremonyEveryDays)))),
@@ -975,7 +992,7 @@ export default defineModule<WorldSettings>({
       ctx.publish();
     });
 
-    /** The host takes the title away (the price stays where it is: resetKingPrice brings it back down) */
+    /** The host takes the title away (the price goes on dropping from where it is: resetKingPrice brings it back to the start at once) */
     ctx.onAdmin('removeKing', () => {
       const old = king.id ? ctx.session.guests.get(king.id) : undefined;
       king.id = null;
@@ -988,6 +1005,7 @@ export default defineModule<WorldSettings>({
 
     ctx.onAdmin('resetKingPrice', () => {
       king.sales = 0;
+      delete king.asked;
       store.save();
       ctx.publish();
     });
@@ -1015,6 +1033,7 @@ export default defineModule<WorldSettings>({
       for (const k of Object.keys(saved)) delete saved[k];
       for (const k of Object.keys(sheetInfos)) delete sheetInfos[k];
       Object.assign(king, { id: null, since: 0, paid: 0, sales: 0 });
+      delete king.asked;
       reigns.length = 0;
       sim.reset();
       store.save();
