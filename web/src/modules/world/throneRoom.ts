@@ -854,11 +854,14 @@ export function drawKneeling(g: G, img: HTMLImageElement, info: SheetInfo, x: nu
   return true;
 }
 
+/** How far below the seat point the seated King is drawn (sprite pixels), so he sinks into the cushion */
+const SEAT_DROP = 3;
+
 /** Seated on the throne, seen from the side: the chair frame of the LPC sit sheet, facing left. False: the sheet has no such row */
 export function drawEnthroned(g: G, img: HTMLImageElement, info: SheetInfo, x: number, y: number): boolean {
   const row = rowOf(img, info, 'sitLeft', 3);
   if (!row) return false;
-  drawFrame(g, img, info, row.row, 2, x, y);
+  drawFrame(g, img, info, row.row, 2, x, y + SEAT_DROP * S);
   return true;
 }
 
