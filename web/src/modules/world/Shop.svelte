@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { Check, Coins, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
-  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, splitColor, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
+  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
 
@@ -85,16 +85,16 @@
   const price = $derived(openItem && shop ? shop.prices[openItem.tier] : 0);
 
   /** What the preview shows: the outfit with the opened piece in its slot */
-  function candidate(): Outfit {
+  function candidate(piece: WornItem | null = open, at: Slot = slot): Outfit {
     const out: Outfit = { ...(wd?.outfit ?? {}) };
-    if (!open) return out;
-    out[slot] = { id: open.id, color: open.color };
+    if (!piece) return out;
+    out[at] = { id: piece.id, color: piece.color };
     // A dress replaces top and bottom (and they replace it)
-    if (slot === 'dress') {
+    if (at === 'dress') {
       delete out.top;
       delete out.bottom;
     }
-    if (slot === 'top' || slot === 'bottom') delete out.dress;
+    if (at === 'top' || at === 'bottom') delete out.dress;
     return out;
   }
 
@@ -175,7 +175,9 @@
         const draft = JSON.parse(storageGet(DRAFT_KEY) ?? 'null');
         if (draft?.id === hb.me?.id) {
           if (SLOTS.some((s) => s.id === draft.slot)) slot = draft.slot;
-          if (draft.open?.id) open = draft.open;
+          // The catalog may have changed since: only a piece that still exists, in a color it still has
+          const piece = validWorn(draft.open, body ?? undefined);
+          if (piece && piece.item.slot === slot) open = { id: piece.id, color: piece.color };
         }
       } catch {
         // A broken draft is just dropped
@@ -195,17 +197,19 @@
   // ------------------------------------------------------------ actions
 
   async function buy() {
+    // The piece and its slot as they are now: the guest may browse on while the purchase goes through
     const piece = open;
+    const at = slot;
     if (!piece) return;
     const bought = await attempt(() => rpc<WardrobeMine>('world', 'buy', { id: piece.id, color: piece.color }));
     if (!bought) return;
     wd = bought;
     void loadColored();
-    await wear();
+    await wear(piece, at);
   }
 
-  async function wear() {
-    const done = await attempt(() => rpc<WardrobeMine>('world', 'wear', { outfit: candidate() }), 'On you');
+  async function wear(piece: WornItem | null = open, at: Slot = slot) {
+    const done = await attempt(() => rpc<WardrobeMine>('world', 'wear', { outfit: candidate(piece, at) }), 'On you');
     if (done) wd = done;
   }
 </script>
@@ -278,7 +282,7 @@
           {#if isWorn}
             <span class="wearing"><Check size={16} />Wearing</span>
           {:else if isOwned}
-            <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={wear}><Check size={18} />Wear</button>
+            <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={() => wear()}><Check size={18} />Wear</button>
           {:else}
             <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={buy}>
               <ShoppingBag size={18} />

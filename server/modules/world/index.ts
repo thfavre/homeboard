@@ -91,7 +91,10 @@ const hairKey = (c: AvatarChoices) => `${c.hair}|${c.hairColor}|${c.beard}`;
 
 interface WorldData {
   avatars: Record<string, StoredAvatar>;
+  /** The measurements of the last sheet built: only a fallback for a sheet not measured yet */
   sheet: SheetInfo | null;
+  /** The measurements of every sheet on disk, by its hash: looks differ (a tall hat, a dress without sit art) */
+  sheets?: Record<string, SheetInfo>;
   credits: Record<string, { authors: string[]; license: string; urls: string[]; notes?: string }>;
   /** The town's own money per guest */
   wallets?: Record<string, number>;
@@ -148,6 +151,7 @@ export default defineModule<WorldSettings>({
 
     /** Builds by hash, so the same look is composited once even when asked twice at once */
     const building = new Map<string, Promise<SheetInfo>>();
+    const sheetInfos = (store.data.sheets ??= {});
 
     /** Make sure the sheet of this look (choices plus outfit) is on disk; returns its info */
     const composite = (choices: AvatarChoices, outfit: Outfit): Promise<SheetInfo> => {
@@ -156,9 +160,11 @@ export default defineModule<WorldSettings>({
       if (!p) {
         p = (async () => {
           const file = join(sheetsDir, `${hash}.png`);
-          if (existsSync(file) && store.data.sheet) return store.data.sheet;
+          const known = sheetInfos[hash];
+          if (existsSync(file) && known) return known;
           const built = await composer.build(choices, outfit);
           writeFileSync(file, built.png);
+          sheetInfos[hash] = built.info;
           store.data.sheet = built.info;
           store.data.credits = Object.fromEntries(composer.credits);
           store.save();
@@ -183,8 +189,23 @@ export default defineModule<WorldSettings>({
       for (const f of readdirSync(sheetsDir)) {
         if (f.endsWith('.png') && !used.has(f) && !building.has(f.replace(/\.png$/, ''))) unlinkSync(join(sheetsDir, f));
       }
+      for (const hash of Object.keys(sheetInfos)) if (!used.has(`${hash}.png`) && !building.has(hash)) delete sheetInfos[hash];
+      store.save();
     };
     setInterval(cleanSheets, 10 * 60_000);
+
+    // Sheets made before they were measured one by one: measure them again (they are redrawn once)
+    void (async () => {
+      let changed = false;
+      for (const a of Object.values(store.data.avatars)) {
+        for (const look of [{ choices: a.choices, outfit: a.outfit ?? {}, hash: a.hash }, townOf(a)]) {
+          if (sheetInfos[look.hash]) continue;
+          await composite(look.choices, look.outfit).catch(() => null);
+          changed = true;
+        }
+      }
+      if (changed) ctx.publish();
+    })();
 
     // ------------------------------------------------------------ the town look
 
@@ -261,7 +282,8 @@ export default defineModule<WorldSettings>({
       const characters = Object.entries(store.data.avatars)
         .map(([id, a]) => {
           const guest = ctx.session.guests.get(id);
-          return guest ? { id, name: guest.name, color: guest.color, url: ctx.mediaUrl(`sheets/${townOf(a).hash}.png`) } : null;
+          const hash = townOf(a).hash;
+          return guest ? { id, name: guest.name, color: guest.color, url: ctx.mediaUrl(`sheets/${hash}.png`), sheet: sheetInfos[hash] ?? store.data.sheet ?? undefined } : null;
         })
         .filter((c): c is NonNullable<typeof c> => !!c);
       const s = ctx.settings.get();
@@ -312,52 +334,69 @@ export default defineModule<WorldSettings>({
       return { url: ctx.mediaUrl(`sheets/${hash}.png`), sheet };
     });
 
-    ctx.onGuest('save', async (args, guest) => {
-      const choices = validChoices(args?.choices);
-      if (!choices) throw new HbError('That look does not exist');
-      const before = store.data.avatars[guest.id];
-      // Who you are is set at creation; only hair, face and clothes change later
-      if (before && (before.choices.body !== choices.body || before.choices.skin !== choices.skin)) {
-        throw new HbError('Your body and skin are set: only hair, face and clothes can change');
-      }
-      // Creating the avatar is free; changing it afterwards costs per changed part
-      const cost = before ? lookCost(before.choices, choices, lookPrices()) : 0;
-      const name = ctx.settings.get().currencyName;
-      const afford = () => {
-        const balance = wallets[guest.id] ?? 0;
-        if (balance < cost) throw new HbError(`Not enough ${name}: this costs ${cost}, you have ${balance}`, 'NO_MONEY');
-      };
-      afford();
-      const outfit = outfitFor(guest.id, choices.body);
-      const hash = choicesHash(choices, outfit);
-      await composite(choices, outfit);
-      // Checked again: money may have moved while the sheet was drawn
-      afford();
-      if (cost) {
-        wallets[guest.id] = (wallets[guest.id] ?? 0) - cost;
-        sendWallet(guest.id);
-      }
-      const had = !!before;
-      if (before) pinTown(before);
-      store.data.avatars[guest.id] = { choices, hash, outfit, town: before?.town };
-      // The eyes show in the town at once (see hairKey); hair and beard after a trip to the barber
-      if (before) {
-        const t = townSoon(guest.id, before);
-        if (t.choices.eyes !== choices.eyes) setTown(guest.id, { choices: { ...t.choices, eyes: choices.eyes }, outfit: t.outfit });
-      }
-      if (!had) {
-        // Pocket money to get the first clothes with
-        const start = Math.max(0, Math.round(ctx.settings.get().startMoney));
-        if (start) {
-          wallets[guest.id] = (wallets[guest.id] ?? 0) + start;
+    /**
+     * Changes to one guest's look run one after the other: a save (hair) and a wear (clothes) sent
+     * at once would otherwise each write back what they read before the other one finished
+     */
+    const lookQueue = new Map<string, Promise<unknown>>();
+    const oneAtATime = <T>(guestId: string, fn: () => Promise<T>): Promise<T> => {
+      const run = (lookQueue.get(guestId) ?? Promise.resolve()).then(fn, fn);
+      const tail = run.catch(() => {});
+      lookQueue.set(guestId, tail);
+      void tail.then(() => {
+        if (lookQueue.get(guestId) === tail) lookQueue.delete(guestId);
+      });
+      return run;
+    };
+
+    ctx.onGuest('save', (args, guest) =>
+      oneAtATime(guest.id, async () => {
+        const choices = validChoices(args?.choices);
+        if (!choices) throw new HbError('That look does not exist');
+        const before = store.data.avatars[guest.id];
+        // Who you are is set at creation; only hair, face and clothes change later
+        if (before && (before.choices.body !== choices.body || before.choices.skin !== choices.skin)) {
+          throw new HbError('Your body and skin are set: only hair, face and clothes can change');
+        }
+        // Creating the avatar is free; changing it afterwards costs per changed part
+        const cost = before ? lookCost(before.choices, choices, lookPrices()) : 0;
+        const name = ctx.settings.get().currencyName;
+        const afford = () => {
+          const balance = wallets[guest.id] ?? 0;
+          if (balance < cost) throw new HbError(`Not enough ${name}: this costs ${cost}, you have ${balance}`, 'NO_MONEY');
+        };
+        afford();
+        const outfit = outfitFor(guest.id, choices.body);
+        const hash = choicesHash(choices, outfit);
+        await composite(choices, outfit);
+        // Checked again: money may have moved while the sheet was drawn
+        afford();
+        if (cost) {
+          wallets[guest.id] = (wallets[guest.id] ?? 0) - cost;
           sendWallet(guest.id);
         }
-      }
-      store.save();
-      ctx.publish();
-      if (!had) ctx.activity('{name} moved into the town', { guest });
-      return { url: ctx.mediaUrl(`sheets/${hash}.png`) };
-    });
+        const had = !!before;
+        if (before) pinTown(before);
+        store.data.avatars[guest.id] = { choices, hash, outfit, town: before?.town };
+        // The eyes show in the town at once (see hairKey); hair and beard after a trip to the barber
+        if (before) {
+          const t = townSoon(guest.id, before);
+          if (t.choices.eyes !== choices.eyes) setTown(guest.id, { choices: { ...t.choices, eyes: choices.eyes }, outfit: t.outfit });
+        }
+        if (!had) {
+          // Pocket money to get the first clothes with
+          const start = Math.max(0, Math.round(ctx.settings.get().startMoney));
+          if (start) {
+            wallets[guest.id] = (wallets[guest.id] ?? 0) + start;
+            sendWallet(guest.id);
+          }
+        }
+        store.save();
+        ctx.publish();
+        if (!had) ctx.activity('{name} moved into the town', { guest });
+        return { url: ctx.mediaUrl(`sheets/${hash}.png`) };
+      }),
+    );
 
     // ------------------------------------------------------------ the shop
 
@@ -451,25 +490,27 @@ export default defineModule<WorldSettings>({
       return mine(guest.id);
     });
 
-    ctx.onGuest('wear', async (args, guest) => {
-      const stored = store.data.avatars[guest.id];
-      if (!stored) throw new HbError('Make your look first');
-      const outfit = validOutfit(args?.outfit, stored.choices.body);
-      if (!outfit) throw new HbError('That outfit does not exist');
-      const mineOwned = owned[guest.id] ?? [];
-      for (const w of Object.values(outfit)) {
-        if (!mineOwned.some((o) => o.id === w.id && o.color === w.color)) throw new HbError('You do not own that yet');
-      }
-      const hash = choicesHash(stored.choices, outfit);
-      await composite(stored.choices, outfit);
-      // The town character keeps its clothes until it has been to the clothes shop
-      pinTown(stored);
-      stored.outfit = outfit;
-      stored.hash = hash;
-      store.save();
-      ctx.publish();
-      return { ...mine(guest.id), url: ctx.mediaUrl(`sheets/${hash}.png`) };
-    });
+    ctx.onGuest('wear', (args, guest) =>
+      oneAtATime(guest.id, async () => {
+        const stored = store.data.avatars[guest.id];
+        if (!stored) throw new HbError('Make your look first');
+        const outfit = validOutfit(args?.outfit, stored.choices.body);
+        if (!outfit) throw new HbError('That outfit does not exist');
+        const mineOwned = owned[guest.id] ?? [];
+        for (const w of Object.values(outfit)) {
+          if (!mineOwned.some((o) => o.id === w.id && o.color === w.color)) throw new HbError('You do not own that yet');
+        }
+        const hash = choicesHash(stored.choices, outfit);
+        await composite(stored.choices, outfit);
+        // The town character keeps its clothes until it has been to the clothes shop
+        pinTown(stored);
+        stored.outfit = outfit;
+        stored.hash = hash;
+        store.save();
+        ctx.publish();
+        return { ...mine(guest.id), url: ctx.mediaUrl(`sheets/${hash}.png`) };
+      }),
+    );
 
     // Time in the town pays a small wage: the shop needs money moving without any bookkeeping
     setInterval(() => {
@@ -584,7 +625,10 @@ export default defineModule<WorldSettings>({
       // In place: wallets and owned alias these objects
       for (const k of Object.keys(wallets)) delete wallets[k];
       for (const k of Object.keys(owned)) delete owned[k];
+      for (const k of Object.keys(sheetInfos)) delete sheetInfos[k];
       store.save();
+      // Open pages (the header, the shop) show the emptied wallet at once instead of the old balance
+      ctx.emit('guest', 'wallet', { balance: 0 });
       rmSync(sheetsDir, { recursive: true, force: true });
       ctx.mediaDir('sheets');
       ctx.publish();

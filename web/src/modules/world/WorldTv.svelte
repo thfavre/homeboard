@@ -2,7 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, WORLD } from '$shared/crowd.ts';
-  import { FRAME_STRIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { FRAME_STRIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
@@ -34,6 +34,24 @@
    * look that changed inside a shop the one before and when the change started
    */
   const shown = new Map<string, { url: string; img: HTMLImageElement | null; prev: HTMLImageElement | null; at: number }>();
+  /** The measurements of each loaded sheet (every look has its own: a tall hat, a dress without sit art) */
+  const infos = new WeakMap<HTMLImageElement, SheetInfo>();
+  /** The renderer's view of each measurement, made once */
+  const sheetsCache = new WeakMap<SheetInfo, ReturnType<typeof asSheets>>();
+  /** The measurements of a drawn sheet, or the shared fallback */
+  const infoOf = (img: HTMLImageElement | null | undefined): SheetInfo | null => (img && infos.get(img)) || world?.sheet || null;
+  const sheetsOf = (img: HTMLImageElement | null | undefined) => {
+    const info = infoOf(img);
+    if (!info) return null;
+    let v = sheetsCache.get(info);
+    if (!v) sheetsCache.set(info, (v = asSheets(info)));
+    return v;
+  };
+  /** How tall a character stands in world units (for the name over the head) */
+  const tallOf = (img: HTMLImageElement | null | undefined) => {
+    const info = infoOf(img);
+    return info ? (info.feet - info.body.top) * 1.35 : 64;
+  };
   /** How long the clothes shop's curtain takes, and the barber's cut across the hair */
   const SWISH_MS = 900;
   const CUT_MS = 2500;
@@ -227,7 +245,6 @@
     }
 
     const byId = new Map(world?.characters.map((c) => [c.id, c]) ?? []);
-    const sheets = asSheets(world?.sheet ?? null);
 
     // The ones inside a shop are seen through its window, on the wall behind everyone else
     const inside = people.filter((p) => p.anim === WANIM.inside);
@@ -265,6 +282,7 @@
       if (!c) return s;
       s.url = c.url;
       const img = sheetImage(c.url);
+      if (img && c.sheet && !infos.has(img)) infos.set(img, c.sheet);
       if (img && img !== s.img) {
         // The new look is there: inside a shop it changes before our eyes, from now
         s.prev = inShop ? s.img : null;
@@ -289,6 +307,7 @@
     const drawPerson = (p: Person, sheet?: HTMLImageElement | null) => {
       const l = poseOf(p);
       const img = (sheet !== undefined ? sheet : sheetOf(p.id, false).img) ?? undefined;
+      const sheets = sheetsOf(img);
       g.globalAlpha = p.alpha;
       if (p.anim === WANIM.sleep) {
         // Asleep on their side: the side-view idle turned flat (the breathing keeps playing),
@@ -307,7 +326,6 @@
     };
 
     // The shops, with whoever is inside seen through the window
-    const tall = world?.sheet ? (world.sheet.feet - world.sheet.body.top) * 1.35 : 64;
     for (const place of Object.values(TOWN_PLACES)) {
       const here = inside.filter((p) => p.x >= place.window.x && p.x <= place.window.x + place.window.w);
       drawShop(g, place, now, (gg) => {
@@ -315,11 +333,11 @@
           const q = { ...p, y: insideFeet(place) };
           const s = sheetOf(p.id, true);
           const e = now - s.at;
-          const headY = q.y - tall + 6;
+          const headY = q.y - tallOf(s.img) + 6;
           if (place.id === 'barber') {
             if (s.prev && e < CUT_MS) {
               // The cut: the new hair column after column from the left, the old one still on the right of the scissors
-              const info = world?.sheet;
+              const info = infoOf(s.img);
               const left = Math.max(0, (info?.body.left ?? 20) - 7);
               const right = Math.min(64, (info?.body.right ?? 44) + 7);
               const col = left + Math.floor((e / CUT_MS) * (right - left + 1));
@@ -394,20 +412,10 @@
     for (const p of people) {
       const c = byId.get(p.id);
       const s = sleepSide(p.x);
-      if (c) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - tall - 14, p.alpha);
+      if (c) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - tallOf(shown.get(p.id)?.img) - 14, p.alpha);
       if (p.anim === WANIM.sleep) drawZzz(g, p.x + s * 58, p.y - 4, now, p.alpha);
     }
 
-    // Nobody lives here yet: say how to move in
-    if (!world?.characters.length) {
-      g.textAlign = 'center';
-      g.font = '600 34px system-ui, sans-serif';
-      g.fillStyle = 'rgba(255,255,255,0.85)';
-      g.fillText('The town is empty', TOWN.w / 2, 420);
-      g.font = '400 24px system-ui, sans-serif';
-      g.fillStyle = 'rgba(255,255,255,0.6)';
-      g.fillText('Create your avatar on your phone to move in', TOWN.w / 2, 462);
-    }
   }
 
   /** A sprite of a character drawn alone (feet at the usual spot), to read its pixels */
@@ -423,7 +431,7 @@
     const g = scratch[k];
     g.clearRect(0, 0, size, size);
     g.imageSmoothingEnabled = false;
-    drawCharacter(g, asSheets(world?.sheet ?? null), img, BODY.centerX * SPRITE_SCALE, BODY.feetY * SPRITE_SCALE, pose, 0);
+    drawCharacter(g, sheetsOf(img), img, BODY.centerX * SPRITE_SCALE, BODY.feetY * SPRITE_SCALE, pose, 0);
     return g.getImageData(0, 0, size, size).data;
   }
 

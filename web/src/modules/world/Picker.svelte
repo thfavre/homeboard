@@ -112,6 +112,9 @@
     gap: 0.35rem;
   }
   .pill {
+    /* A block, not the buttons' flex: the name centers and still ends in an ellipsis when too long */
+    display: block;
+    text-align: center;
     min-width: 0;
     padding: 0.5rem 0.2rem;
     border: 1px solid var(--border);

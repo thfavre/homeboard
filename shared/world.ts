@@ -200,6 +200,8 @@ export interface TownCharacter {
   color: string;
   /** The composited sprite sheet */
   url: string;
+  /** Its measurements (rows, where the head and feet are): every look has its own */
+  sheet?: SheetInfo;
 }
 
 /** The parts of a look that cost money to change once the avatar exists (body and skin never change) */
