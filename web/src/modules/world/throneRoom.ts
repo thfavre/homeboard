@@ -45,8 +45,8 @@ const CUSHION_SWAP: Record<string, string> = { '#6a1d16': RED.dark, '#7b2008': R
 const RUG = { x: 0, y: 96, tile: 32 };
 /** The throne with the red cushions, seen from the side and facing left (its finials stick out above its 64 px) */
 const THRONE_CUT = [96, 80, 32, 80] as const;
-/** In that cut: what passes in front of whoever sits there, below the far armrest: the seat's front, the near armrest and the legs (the back and the far armrest stay behind) */
-const THRONE_NEAR = { x: 0, y: 56, w: 26, h: 24 };
+/** In that cut: what passes in front of whoever sits there, from halfway down the seat cushion: its front half, the near armrest and the legs (the back, the far armrest and the cushion's back half stay behind) */
+const THRONE_NEAR = { x: 0, y: 60, w: 26, h: 20 };
 /** A small round tree in a porcelain pot (the planters sheet) */
 const TOPIARY = [64, 0, 32, 80] as const;
 /** The floor: two tones of diamond tiles (32 px), laid as a chessboard */
