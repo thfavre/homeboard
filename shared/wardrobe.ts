@@ -435,15 +435,22 @@ for (const item of CATALOG) {
 
 export const itemById =(id: string): WardrobeItem | undefined => CATALOG.find((i) => i.id === id);
 
+/** Costume heads the crown does not sit on (their ears are in the way); the others wear it on top */
+const CROWNLESS_HEADS = new Set(['pig_head', 'rabbit_head', 'mouse_head']);
+
 /**
- * Skirts and dresses without sit or cheer art: the King's ceremony would leave him in his
- * underwear on the throne, so he cannot put one on while he holds the title. Neck and back pieces
- * just vanish for a moment, so they stay allowed.
+ * Why the King cannot put this piece on while he holds the title, or null if he can. Skirts and
+ * dresses without sit or cheer art would leave him in his underwear on the throne; a few costume
+ * heads cannot wear the crown. Neck and back pieces just vanish for a moment, so they stay allowed.
  */
-/** What the King is told when he tries one */
-export const NOT_FOR_THE_KING = 'Not fit for a King: you could not sit on your throne or greet your court in this';
-export const notForTheKing = (item: WardrobeItem | undefined): boolean =>
-  !!item && (item.slot === 'bottom' || item.slot === 'dress') && !!(item.noSit || item.noCheer);
+export function notForTheKing(item: WardrobeItem | undefined): string | null {
+  if (!item) return null;
+  if ((item.slot === 'bottom' || item.slot === 'dress') && (item.noSit || item.noCheer)) {
+    return 'Not fit for a King: you could not sit on your throne or greet your court in this';
+  }
+  if (item.slot === 'costume' && CROWNLESS_HEADS.has(item.id)) return 'Not fit for a King: the crown does not sit on this head';
+  return null;
+}
 
 /** The costume head an outfit wears, if any */
 export function costumeOf(outfit: Outfit): { item: WardrobeItem; color: string } | null {

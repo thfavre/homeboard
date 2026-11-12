@@ -4,7 +4,7 @@
   import { attempt, hb, onEvent, rpc, storageGet, storageSet, toast } from '$lib/client.svelte.ts';
   import { isNewSlot, markSlotSeen } from './newSlots.svelte.ts';
   import { sideScroll } from '$lib/sideScroll.ts';
-  import { CATALOG, COLOR_HEX, NOT_FOR_THE_KING, SLOTS, TIER_NAMES, colorName, notForTheKing, openSlots, slotsFor, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
+  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, notForTheKing, openSlots, slotsFor, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
   import KingCard from './KingCard.svelte';
@@ -112,7 +112,7 @@
 
   /** A skirt or dress the King can neither buy nor wear (one he already wears is left alone) */
   const kingLocked = (item: { id: string; slot: Slot }) =>
-    crowned && notForTheKing(CATALOG.find((i) => i.id === item.id)) && wd?.outfit[item.slot]?.id !== item.id;
+    crowned && !!notForTheKing(CATALOG.find((i) => i.id === item.id)) && wd?.outfit[item.slot]?.id !== item.id;
 
   /** Open a piece in the color its card shows (every piece starts fresh, whatever was picked before) */
   function show(id: string) {
@@ -120,7 +120,7 @@
     if (!item) return;
     if (kingLocked(item)) {
       open = null;
-      toast({ text: NOT_FOR_THE_KING, kind: 'info' });
+      toast({ text: notForTheKing(item) ?? '', kind: 'info' });
       return;
     }
     open = { id, color: colorOf(id) ?? item.colors[0] };

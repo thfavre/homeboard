@@ -5,7 +5,7 @@ import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { CATALOG, NOT_FOR_THE_KING, TIERS, itemById, notForTheKing, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, TIERS, itemById, notForTheKing, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -395,8 +395,11 @@ export default defineModule<WorldSettings>({
      * they see of themselves on the phone wears the crown, like their character in the town.
      */
     const crownOn = (guestId: string, outfit: Outfit): Outfit => (guestId === kingId() && outfit.hat?.id !== KING_CROWN.id ? { ...outfit, hat: KING_CROWN } : outfit);
-    // A costume head takes the hat off, so it counts as headwear too
-    const sameHat = (a: Outfit, b: Outfit) => (['hat', 'costume'] as const).every((k) => a[k]?.id === b[k]?.id && a[k]?.color === b[k]?.color);
+    /**
+     * The King's hat is not changed: the same one, or none because a costume head took it off (the
+     * crown is drawn on the costume head then)
+     */
+    const sameHat = (a: Outfit, b: Outfit) => (a.costume && !a.hat) || (a.hat?.id === b.hat?.id && a.hat?.color === b.hat?.color);
 
     /** How the title's price moves (see the settings): what it went up to and when, how fast it drops, where it stops */
     const kingPricing = (): KingPricing => {
@@ -743,7 +746,8 @@ export default defineModule<WorldSettings>({
       if (!worn) throw new HbError('The shop does not have that');
       if (worn.item.bodies && !worn.item.bodies.includes(stored.choices.body)) throw new HbError('That does not fit your body');
       if ((owned[guest.id] ?? []).some((o) => o.id === worn.id && o.color === worn.color)) throw new HbError('You own that already');
-      if (guest.id === kingId() && notForTheKing(worn.item)) throw new HbError(NOT_FOR_THE_KING);
+      const unfit = guest.id === kingId() ? notForTheKing(worn.item) : null;
+      if (unfit) throw new HbError(unfit);
       const s = ctx.settings.get();
       if (!openSlots((owned[guest.id] ?? []).filter((o) => validWorn(o)), stored.choices.body, s.unlockPieces, s.secretPieces).includes(worn.item.slot)) {
         throw new HbError('That part of the shop is still locked');
@@ -790,11 +794,12 @@ export default defineModule<WorldSettings>({
         if (!outfit) throw new HbError('That outfit does not exist');
         if (guest.id === kingId() && !sameHat(outfit, stored.outfit ?? {})) throw new HbError('The King keeps the crown: you cannot change your hat while you are the King');
         if (guest.id === kingId()) {
-          // A skirt or dress with no throne art: kept if already worn, never put on
+          // A skirt, dress or costume head unfit for the King: kept if already worn, never put on
           const before = stored.outfit ?? {};
-          for (const k of ['bottom', 'dress'] as const) {
+          for (const k of ['bottom', 'dress', 'costume'] as const) {
             const w = outfit[k];
-            if (w && w.id !== before[k]?.id && notForTheKing(itemById(w.id))) throw new HbError(NOT_FOR_THE_KING);
+            const unfit = w && w.id !== before[k]?.id ? notForTheKing(itemById(w.id)) : null;
+            if (unfit) throw new HbError(unfit);
           }
         }
         return wearOutfit(guest.id, outfit);
@@ -828,14 +833,15 @@ export default defineModule<WorldSettings>({
         if (!o) throw new HbError('Nothing saved there');
         const outfit = wearable(guest.id, o);
         if (guest.id === kingId()) {
-          // The King keeps the crown: the rest of the saved outfit goes on, the headwear stays as it is
-          for (const k of ['hat', 'costume'] as const) {
-            const worn = store.data.avatars[guest.id]?.outfit?.[k];
-            if (worn) outfit[k] = worn;
-            else delete outfit[k];
-          }
-          // A skirt or dress he cannot wear on the throne: what he wears now on the body stays on
+          // The King keeps the crown: the rest of the saved outfit goes on, the hat stays as it is
           const now = store.data.avatars[guest.id]?.outfit ?? {};
+          if (outfit.costume && notForTheKing(itemById(outfit.costume.id))) {
+            if (now.costume) outfit.costume = now.costume;
+            else delete outfit.costume;
+          }
+          if (now.hat && !outfit.costume) outfit.hat = now.hat;
+          else delete outfit.hat;
+          // A skirt or dress he cannot wear on the throne: what he wears now on the body stays on
           const body = ['top', 'bottom', 'dress'] as const;
           if ((['bottom', 'dress'] as const).some((k) => outfit[k] && outfit[k]!.id !== now[k]?.id && notForTheKing(itemById(outfit[k]!.id)))) {
             for (const k of body) {

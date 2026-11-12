@@ -5,7 +5,7 @@
   import { choose } from '$lib/dialog.svelte.ts';
   import { isNewSlot, markSlotSeen } from './newSlots.svelte.ts';
   import { sideScroll } from '$lib/sideScroll.ts';
-  import { COLOR_HEX, NOT_FOR_THE_KING, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, notForTheKing, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
+  import { COLOR_HEX, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, notForTheKing, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import OutfitThumb from './OutfitThumb.svelte';
   import type { PreviewView } from './preview.ts';
@@ -101,9 +101,8 @@
   const pieces = $derived(closet.get(slot) ?? []);
   const worn = $derived(wd?.outfit[slot] ?? null);
   /** The hat slot is open and locked: its pieces show under a crown that says why */
-  /** The King's headwear stays as it is: the hat (the crown) and the costume heads that would take it off */
-  const headSlot = (id: Slot) => id === 'hat' || id === 'costume';
-  const hatLocked = $derived(crowned && headSlot(slot));
+  /** The King's hat stays as it is (costume heads he may wear, the crown goes on top) */
+  const hatLocked = $derived(crowned && slot === 'hat');
   const ownedCount = $derived((wd?.owned ?? []).length);
   /** Saved outfits only show once the closet is big enough to need them: less to learn at first */
   const OUTFITS_FROM = 7;
@@ -294,13 +293,13 @@
   });
 
   /** A skirt or dress the King cannot put on (one he already wears stays usable in its other colors) */
-  const kingLocked = (item: WardrobeItem) => crowned && notForTheKing(item) && worn?.id !== item.id;
+  const kingLocked = (item: WardrobeItem) => crowned && !!notForTheKing(item) && worn?.id !== item.id;
 
   /** One color: wear it. Several: the card turns into a square per owned color */
   function tap(p: { item: WardrobeItem; colors: string[] }) {
     if (kingLocked(p.item)) {
       picking = null;
-      toast({ text: NOT_FOR_THE_KING, kind: 'info' });
+      toast({ text: notForTheKing(p.item) ?? '', kind: 'info' });
       return;
     }
     if (p.colors.length > 1) {
@@ -388,7 +387,7 @@
             {/if}
           </span>
           <span class="sname">{s.name}</span>
-          {#if crowned && headSlot(s.id)}
+          {#if crowned && s.id === 'hat'}
             <span class="count lock"><Lock size={12} /></span>
           {:else if count}
             <span class="count">{count}</span>
@@ -465,7 +464,7 @@
           <div class="locked">
             <span class="lmark"><Crown size={46} /></span>
             <strong>The King keeps the crown</strong>
-            <p>{slot === 'hat' ? 'You cannot change your hat while you are the King.' : 'A costume head would take the crown off.'}</p>
+            <p>You cannot change your hat while you are the King.</p>
           </div>
         {/if}
         </div>
