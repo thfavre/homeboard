@@ -76,6 +76,8 @@
   const pieces = $derived(closet.get(slot) ?? []);
   const worn = $derived(wd?.outfit[slot] ?? null);
   const ownedCount = $derived((wd?.owned ?? []).length);
+  /** Saved outfits only show once the closet is big enough to need them: less to learn at first */
+  const OUTFITS_FROM = 7;
 
   // ------------------------------------------------------------ preview
 
@@ -267,6 +269,7 @@
   </div>
 {:else}
   <div class="wardrobe">
+    {#if ownedCount >= OUTFITS_FROM}
     <div class="saved">
       {#each wd?.saved ?? [] as o, i (i)}
         {#if o}
@@ -285,6 +288,7 @@
         {/if}
       {/each}
     </div>
+    {/if}
 
     <span class="label">Wearing</span>
     <div class="outfit" role="tablist" aria-label="Slots">
