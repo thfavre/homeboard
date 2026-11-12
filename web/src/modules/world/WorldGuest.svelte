@@ -219,7 +219,7 @@
     {/if}
 
     <Picker label="Hair" items={HAIR_STYLES} value={choices.hair} onchange={(id) => (choices.hair = id)} />
-    <Picker label="Hair color" items={hairColorItems} value={choices.hairColor} per={6} onchange={(id) => (choices.hairColor = id)} />
+    <Picker label="Hair color" items={hairColorItems} value={choices.hairColor} onchange={(id) => (choices.hairColor = id)} />
     <Picker label="Facial hair" items={BEARDS} value={choices.beard} onchange={(id) => (choices.beard = id)} />
 
     <div class="group">
