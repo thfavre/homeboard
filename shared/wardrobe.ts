@@ -9,9 +9,10 @@
 // a barbarian helmet), the second material.
 
 /**
- * Where an item is worn; one item per slot. A dress replaces top and bottom. Locked slots open once
- * the guest owns a piece in every other slot their body can wear and enough pieces in all
- * (`slotsUnlocked`).
+ * Where an item is worn; one item per slot. A dress replaces top and bottom, a costume head the
+ * hat. Locked slots open once the guest owns a piece in every other slot their body can wear and
+ * enough pieces in all; the secret slot shows nowhere until the guest owns a piece in every slot,
+ * the locked ones too, and more pieces still (`openSlots`).
  */
 export const SLOTS = [
   { id: 'top', name: 'Tops' },
@@ -24,6 +25,7 @@ export const SLOTS = [
   { id: 'back', name: 'Back' },
   { id: 'arms', name: 'Arms', locked: true },
   { id: 'shoulders', name: 'Shoulders', locked: true },
+  { id: 'costume', name: 'Costumes', secret: true },
 ] as const;
 export type Slot = (typeof SLOTS)[number]['id'];
 
@@ -34,12 +36,23 @@ export const slotsFor = (body: 'male' | 'female' | null) => SLOTS.filter((s) => 
 export function unlockProgress(owned: readonly WornItem[], body: 'male' | 'female', minPieces: number): { unlocked: boolean; missing: Slot[]; pieces: number } {
   const have = new Set(owned.map((o) => itemById(o.id)?.slot));
   const missing = slotsFor(body)
-    .filter((s) => !('locked' in s) && !have.has(s.id))
+    .filter((s) => !('locked' in s) && !('secret' in s) && !have.has(s.id))
     .map((s) => s.id);
   return { unlocked: !missing.length && owned.length >= minPieces, missing, pieces: owned.length };
 }
 
 export const isLockedSlot = (slot: Slot): boolean => SLOTS.some((s) => s.id === slot && 'locked' in s);
+export const isSecretSlot = (slot: Slot): boolean => SLOTS.some((s) => s.id === slot && 'secret' in s);
+
+/** The slots a guest can shop in: the plain ones, the locked ones once open, the secret one once found */
+export function openSlots(owned: readonly WornItem[], body: 'male' | 'female', unlockPieces: number, secretPieces: number): Slot[] {
+  const unlocked = unlockProgress(owned, body, unlockPieces).unlocked;
+  const have = new Set(owned.map((o) => itemById(o.id)?.slot));
+  const found = slotsFor(body).every((s) => 'secret' in s || have.has(s.id)) && owned.length >= secretPieces;
+  return slotsFor(body)
+    .filter((s) => ('secret' in s ? found : 'locked' in s ? unlocked : true))
+    .map((s) => s.id);
+}
 
 export const TIERS = ['cheap', 'common', 'fancy', 'epic', 'legendary'] as const;
 export type Tier = (typeof TIERS)[number];
@@ -281,27 +294,10 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'knight_helmet', name: 'Knight helmet', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_armet', tier: 'epic', colors: startingWith('steel', METAL) },
   { id: 'tiara', name: 'Tiara', slot: 'hat', def: 'headwear/hats/formal/hat_formal_tiara', tier: 'epic', colors: ['tiara_gold', 'tiara_silver', 'tiara_bronze', 'tiara_purple'] },
   { id: 'crown', name: 'Crown', slot: 'hat', def: 'headwear/hats/formal/hat_formal_crown', tier: 'legendary', colors: ['crown_gold', 'crown_red', 'crown_blue', 'crown_gray'] },
+  { id: 'space_helmet', name: 'Space helmet', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_xeon', tier: 'legendary', colors: startingWith('steel', METAL) },
   { id: 'great_helm', name: 'Great helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_greathelm', tier: 'legendary', colors: startingWith('steel', METAL) },
   { id: 'wizard_hat', name: 'Wizard hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_wizard', tier: 'legendary', colors: ['base_black', 'base_brown', 'base_gray', 'base_red', 'base_teal', 'base_yellow'] },
   { id: 'celestial_hat', name: 'Celestial hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_celestial_moon', extras: [{ def: 'headwear/hats/magic/hat_magic_celestial_moon_trim' }], tier: 'legendary', colors: [...CLOTH, 'navy+yellow', 'purple+yellow', 'black+white', 'blue+sky', 'maroon+yellow'] },
-  // Costume heads: the whole head, worn in the hat slot
-  { id: 'pig_head', name: 'Pig head', slot: 'hat', def: 'head/heads/farm/heads_pig', head: { skin: true }, tier: 'fancy', colors: ['light', 'amber', 'fur_tan', 'fur_white', 'fur_black'] },
-  { id: 'rabbit_head', name: 'Rabbit head', slot: 'hat', def: 'head/heads/farm/heads_rabbit', head: { skin: true }, tier: 'fancy', colors: startingWith('fur_white', FUR_SKIN) },
-  { id: 'mouse_head', name: 'Mouse head', slot: 'hat', def: 'head/heads/farm/heads_mouse', head: { skin: true }, tier: 'fancy', colors: startingWith('fur_grey', FUR_SKIN) },
-  { id: 'sheep_head', name: 'Sheep head', slot: 'hat', def: 'head/heads/farm/heads_sheep', head: { skin: true }, tier: 'fancy', colors: startingWith('fur_white', FUR_SKIN) },
-  { id: 'zombie_head', name: 'Zombie head', slot: 'hat', def: 'head/heads/undead/heads_zombie', head: { skin: true }, tier: 'fancy', colors: ['zombie', 'zombie_green', 'pale_green', 'green'] },
-  { id: 'vampire_head', name: 'Vampire head', slot: 'hat', def: 'head/heads/undead/heads_vampire', head: { skin: true, keepHair: true }, tier: 'fancy', colors: ['pale_green', 'zombie', 'fur_white', 'light'] },
-  { id: 'orc_head', name: 'Orc head', slot: 'hat', def: 'head/heads/fantasy/heads_orc_male', head: { skin: true, keepHair: true }, tier: 'fancy', colors: MONSTER },
-  { id: 'goblin_head', name: 'Goblin head', slot: 'hat', def: 'head/heads/fantasy/heads_goblin', head: { skin: true }, tier: 'fancy', colors: startingWith('bright_green', MONSTER) },
-  { id: 'skeleton_head', name: 'Skeleton head', slot: 'hat', def: 'head/heads/undead/heads_skeleton', head: {}, tier: 'epic', colors: ['white', 'tan', 'gray', 'black'] },
-  { id: 'pumpkin_head', name: 'Pumpkin head', slot: 'hat', def: 'head/heads/undead/heads_jack', head: {}, tier: 'epic', colors: ['jack'] },
-  { id: 'frankenstein_head', name: 'Frankenstein head', slot: 'hat', def: 'head/heads/undead/heads_frankenstein', head: { skin: true, keepHair: true }, tier: 'epic', colors: MONSTER },
-  { id: 'wolf_head', name: 'Wolf head', slot: 'hat', def: 'head/heads/beast/heads_wolf_male', head: { skin: true }, tier: 'epic', colors: startingWith('fur_grey', FUR_SKIN) },
-  { id: 'boar_head', name: 'Boar head', slot: 'hat', def: 'head/heads/beast/heads_boarman', head: { skin: true }, tier: 'epic', colors: FUR_SKIN },
-  { id: 'lizard_head', name: 'Lizard head', slot: 'hat', def: 'head/heads/reptile/heads_lizard_male', head: { skin: true }, tier: 'epic', colors: [...MONSTER, 'blue'] },
-  { id: 'troll_head', name: 'Troll head', slot: 'hat', def: 'head/heads/fantasy/heads_troll', head: { skin: true }, tier: 'epic', colors: ['blue', 'pale_green', 'zombie_green', 'green', 'fur_grey'] },
-  { id: 'minotaur_head', name: 'Minotaur head', slot: 'hat', def: 'head/heads/beast/heads_minotaur', head: { skin: true }, tier: 'legendary', colors: FUR_SKIN },
-  { id: 'alien_head', name: 'Alien head', slot: 'hat', def: 'head/heads/reptile/heads_alien', head: { skin: true }, tier: 'legendary', colors: ['bright_green', 'green', 'pale_green', 'zombie_green', 'blue', 'fur_grey'] },
   { id: 'star_wizard_hat', name: 'Star wizard hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_celestial', extras: [{ def: 'headwear/hats/magic/hat_magic_celestial_trim' }], tier: 'legendary', colors: [...CLOTH, 'navy+yellow', 'purple+yellow', 'black+white', 'blue+sky', 'maroon+yellow'] },
 
   // ------------------------------------------------------------ face
@@ -372,6 +368,26 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'mantle', name: 'Mantle', slot: 'shoulders', def: 'arms/shoulders/shoulders_mantal', tier: 'fancy', colors: CLOTH },
   { id: 'epaulets', name: 'Epaulets', slot: 'shoulders', def: 'arms/shoulders/shoulders_epaulets', tier: 'epic', colors: [...startingWith('gold', METAL), ...CLOTH] },
   { id: 'pauldrons', name: 'Pauldrons', slot: 'shoulders', def: 'arms/shoulders/shoulders_pauldrons', tier: 'legendary', colors: startingWith('steel', METAL) },
+
+  // ------------------------------------------------------------ costumes (a secret slot)
+  // Whole heads, drawn instead of the guest's own
+  { id: 'pig_head', name: 'Pig head', slot: 'costume', def: 'head/heads/farm/heads_pig', head: { skin: true }, tier: 'fancy', colors: ['light', 'amber', 'fur_tan', 'fur_white', 'fur_black'] },
+  { id: 'rabbit_head', name: 'Rabbit head', slot: 'costume', def: 'head/heads/farm/heads_rabbit', head: { skin: true }, tier: 'fancy', colors: startingWith('fur_white', FUR_SKIN) },
+  { id: 'mouse_head', name: 'Mouse head', slot: 'costume', def: 'head/heads/farm/heads_mouse', head: { skin: true }, tier: 'fancy', colors: startingWith('fur_grey', FUR_SKIN) },
+  { id: 'sheep_head', name: 'Sheep head', slot: 'costume', def: 'head/heads/farm/heads_sheep', head: { skin: true }, tier: 'fancy', colors: startingWith('fur_white', FUR_SKIN) },
+  { id: 'zombie_head', name: 'Zombie head', slot: 'costume', def: 'head/heads/undead/heads_zombie', head: { skin: true }, tier: 'fancy', colors: ['zombie', 'zombie_green', 'pale_green', 'green'] },
+  { id: 'vampire_head', name: 'Vampire head', slot: 'costume', def: 'head/heads/undead/heads_vampire', head: { skin: true, keepHair: true }, tier: 'fancy', colors: ['pale_green', 'zombie', 'fur_white', 'light'] },
+  { id: 'orc_head', name: 'Orc head', slot: 'costume', def: 'head/heads/fantasy/heads_orc_male', head: { skin: true, keepHair: true }, tier: 'fancy', colors: MONSTER },
+  { id: 'goblin_head', name: 'Goblin head', slot: 'costume', def: 'head/heads/fantasy/heads_goblin', head: { skin: true }, tier: 'fancy', colors: startingWith('bright_green', MONSTER) },
+  { id: 'skeleton_head', name: 'Skeleton head', slot: 'costume', def: 'head/heads/undead/heads_skeleton', head: {}, tier: 'epic', colors: ['white', 'tan', 'gray', 'black'] },
+  { id: 'pumpkin_head', name: 'Pumpkin head', slot: 'costume', def: 'head/heads/undead/heads_jack', head: {}, tier: 'epic', colors: ['jack'] },
+  { id: 'frankenstein_head', name: 'Frankenstein head', slot: 'costume', def: 'head/heads/undead/heads_frankenstein', head: { skin: true, keepHair: true }, tier: 'epic', colors: MONSTER },
+  { id: 'wolf_head', name: 'Wolf head', slot: 'costume', def: 'head/heads/beast/heads_wolf_male', head: { skin: true }, tier: 'epic', colors: startingWith('fur_grey', FUR_SKIN) },
+  { id: 'boar_head', name: 'Boar head', slot: 'costume', def: 'head/heads/beast/heads_boarman', head: { skin: true }, tier: 'epic', colors: FUR_SKIN },
+  { id: 'lizard_head', name: 'Lizard head', slot: 'costume', def: 'head/heads/reptile/heads_lizard_male', head: { skin: true }, tier: 'epic', colors: [...MONSTER, 'blue'] },
+  { id: 'troll_head', name: 'Troll head', slot: 'costume', def: 'head/heads/fantasy/heads_troll', head: { skin: true }, tier: 'epic', colors: ['blue', 'pale_green', 'zombie_green', 'green', 'fur_grey'] },
+  { id: 'minotaur_head', name: 'Minotaur head', slot: 'costume', def: 'head/heads/beast/heads_minotaur', head: { skin: true }, tier: 'legendary', colors: FUR_SKIN },
+  { id: 'alien_head', name: 'Alien head', slot: 'costume', def: 'head/heads/reptile/heads_alien', head: { skin: true }, tier: 'legendary', colors: ['bright_green', 'green', 'pale_green', 'zombie_green', 'blue', 'fur_grey'] },
 ];
 
 // Two-color swatches: split corner to corner, the first color top left, the second bottom right
@@ -386,7 +402,7 @@ export const itemById =(id: string): WardrobeItem | undefined => CATALOG.find((i
 
 /** The costume head an outfit wears, if any */
 export function costumeOf(outfit: Outfit): { item: WardrobeItem; color: string } | null {
-  const w = outfit.hat;
+  const w = outfit.costume;
   const item = w && itemById(w.id);
   return item?.head && w ? { item, color: w.color } : null;
 }

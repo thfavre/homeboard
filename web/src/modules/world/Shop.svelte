@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { Check, Coins, Crown, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
-  import { CATALOG, COLOR_HEX, TIER_NAMES, colorName, isLockedSlot, slotsFor, splitColor, unlockProgress, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
+  import { CATALOG, COLOR_HEX, TIER_NAMES, colorName, openSlots, slotsFor, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
   import KingCard from './KingCard.svelte';
@@ -56,9 +56,10 @@
   let buildingCount = $state(0);
   let firstLoad = $state(true);
 
-  /** Locked slots stay out of the shop until they open (the wardrobe tells what opens them) */
-  const unlocked = $derived(!!body && !!shop && unlockProgress(wd?.owned ?? [], body, shop.unlockPieces).unlocked);
-  const slots = $derived(slotsFor(body).filter((s) => unlocked || !isLockedSlot(s.id)));
+  /** Locked slots stay out of the shop until they open (the wardrobe tells what opens them), the
+   *  secret one until it is found */
+  const open_ = $derived(body && shop ? openSlots(wd?.owned ?? [], body, shop.unlockPieces, shop.secretPieces) : []);
+  const slots = $derived(slotsFor(body).filter((s) => open_.includes(s.id)));
   /** Where the preview zooms while browsing a slot */
   const FOCUS: Record<Slot, 'head' | 'torso' | 'legs' | 'feet' | null> = {
     hat: 'head',
@@ -71,6 +72,7 @@
     back: null,
     arms: 'torso',
     shoulders: 'torso',
+    costume: 'head',
   };
   const items = $derived(CATALOG.filter((i) => i.slot === slot && (!i.bodies || (body && i.bodies.includes(body)))));
   const openItem = $derived(open ? (CATALOG.find((i) => i.id === open!.id) ?? null) : null);
@@ -98,6 +100,9 @@
       delete out.bottom;
     }
     if (at === 'top' || at === 'bottom') delete out.dress;
+    // A costume head replaces the hat (and a hat replaces it)
+    if (at === 'costume') delete out.hat;
+    if (at === 'hat') delete out.costume;
     return out;
   }
 

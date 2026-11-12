@@ -71,6 +71,11 @@
       <input class="input" type="number" min="0" max="1000" value={mod.shop?.unlockPieces ?? 0} onchange={(e) => setAmount('unlockPieces', e.currentTarget.value)} />
     </label>
     <p class="faint small">The locked slots open once a guest owns at least this many pieces, with one in every other slot their body can wear.</p>
+    <label class="field">
+      <span>Pieces to find the secret {SLOTS.filter((s) => 'secret' in s).map((s) => s.name).join(' and ')}</span>
+      <input class="input" type="number" min="0" max="1000" value={mod.shop?.secretPieces ?? 0} onchange={(e) => setAmount('secretPieces', e.currentTarget.value)} />
+    </label>
+    <p class="faint small">A secret slot shows nowhere, not even locked, until a guest owns at least this many pieces with one in every slot, the locked ones too.</p>
     <div class="prices">
       {#each LOOK_PARTS as part (part)}
         <label class="field">

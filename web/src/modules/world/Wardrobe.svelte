@@ -3,7 +3,7 @@
   import { Ban, Lock, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
-  import { COLOR_HEX, SLOTS, colorName, isLockedSlot, itemById, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
+  import { COLOR_HEX, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import OutfitThumb from './OutfitThumb.svelte';
   import type { PreviewView } from './preview.ts';
@@ -52,12 +52,15 @@
     back: null,
     arms: 'torso',
     shoulders: 'torso',
+    costume: 'head',
   };
 
-  const slots = $derived(slotsFor(body));
   const shop = $derived((hb.modules.world as WorldState | undefined)?.shop);
   /** How far the guest is from the locked slots */
   const progress = $derived(body && shop ? unlockProgress(wd?.owned ?? [], body, shop.unlockPieces) : null);
+  /** The secret slot shows only once it is found (no lock, no hint before) */
+  const found = $derived(!!body && !!shop && openSlots(wd?.owned ?? [], body, shop.unlockPieces, shop.secretPieces).includes('costume'));
+  const slots = $derived(slotsFor(body).filter((s) => !isSecretSlot(s.id) || found));
   const lockedNow = (s: Slot) => isLockedSlot(s) && !progress?.unlocked;
   const slotName = $derived(SLOTS.find((s) => s.id === slot)?.name ?? '');
 
@@ -241,6 +244,9 @@
       delete outfit.bottom;
     }
     if (slot === 'top' || slot === 'bottom') delete outfit.dress;
+    // A costume head replaces the hat (and a hat replaces it)
+    if (slot === 'costume') delete outfit.hat;
+    if (slot === 'hat') delete outfit.costume;
     void apply(outfit);
   }
 
