@@ -23,10 +23,6 @@
   let slot = $state<Slot>('top');
   /** The piece opened in the detail view (null: the grid) */
   let open = $state<WornItem | null>(null);
-  /** The swatch picked while browsing this slot: the next items open in it too (reset per slot).
-   *  Only for clothes, where one color across pieces makes sense; hats, wings and glasses differ */
-  let pickedColor = $state<string | null>(null);
-  const KEEPS_COLOR: Slot[] = ['top', 'bottom', 'feet'];
   /** Item pictures by id, fetched per slot and kept */
   let icons = $state<Record<string, string>>({});
   /** Pictures of the owned pieces in their own colors, keyed "id:color" */
@@ -98,15 +94,11 @@
     return out;
   }
 
-  /** Open a piece: in the color picked in this slot (clothes), else the color its card shows */
+  /** Open a piece in the color its card shows (every piece starts fresh, whatever was picked before) */
   function show(id: string) {
     const item = CATALOG.find((i) => i.id === id);
     if (!item) return;
-    const color =
-      pickedColor && KEEPS_COLOR.includes(slot) && item.colors.includes(pickedColor)
-        ? pickedColor
-        : (colorOf(id) ?? item.colors[0]);
-    open = { id, color };
+    open = { id, color: colorOf(id) ?? item.colors[0] };
   }
 
   // ------------------------------------------------------------ pictures and preview
@@ -234,7 +226,6 @@
           onclick={() => {
             slot = s.id;
             open = null;
-            pickedColor = null;
           }}
         >
           {s.name}
@@ -300,10 +291,7 @@
             style:background={COLOR_HEX[c] ?? '#888'}
             aria-label={colorName(c)}
             title={colorName(c)}
-            onclick={() => {
-              open = { id: openItem!.id, color: c };
-              pickedColor = c;
-            }}
+            onclick={() => (open = { id: openItem!.id, color: c })}
           ></button>
         {/snippet}
         <span class="cname">{colorName(open.color)}</span>
