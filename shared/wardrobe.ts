@@ -121,6 +121,9 @@ const CHAIN: ItemExtra[] = [{ def: 'headwear/neck/neck_necklace_simple', color: 
 const MONSTER = ['green', 'bright_green', 'pale_green', 'zombie_green', 'dark_green'] as const;
 const FUR_SKIN = ['fur_brown', 'fur_black', 'fur_grey', 'fur_white', 'fur_tan', 'fur_copper', 'fur_gold'] as const;
 
+/** An extra piece in the item's own color (a visor or crest in the helmet's metal) */
+const SAME = (c: string): string => c;
+
 /** A color list with the item's own color moved first (a red Santa hat, a steel necklace) */
 const startingWith = (color: string, list: readonly string[]): string[] => [color, ...list.filter((c) => c !== color)];
 
@@ -147,6 +150,7 @@ export const COLOR_HEX: Record<string, string> = {
   base_black: '#22282a', base_gray: '#585561', base_red: '#82171c', base_teal: '#156c99', base_yellow: '#d99431',
   dark: '#2b2a33',
   // skin tones of the costume heads
+  monarch: '#e08a1e', pixie: '#7fd4f0', lunar: '#9be0a0',
   bright_green: '#3f9a2f', dark_green: '#155a1c', pale_green: '#6e8a5c', zombie: '#b3a47e', zombie_green: '#5f9a85',
   light: '#e8b08f', amber: '#d9935c', jack: '#e0761f', skin: '#d9a07a',
   pirate: '#a08a4a', gold_red: '#c2242c', silver_blue: '#3c6cd0', bronze_green: '#2f9a3e', copper_orange: '#e0761f',
@@ -294,6 +298,25 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'knight_helmet', name: 'Knight helmet', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_armet', tier: 'epic', colors: startingWith('steel', METAL) },
   { id: 'tiara', name: 'Tiara', slot: 'hat', def: 'headwear/hats/formal/hat_formal_tiara', tier: 'epic', colors: ['tiara_gold', 'tiara_silver', 'tiara_bronze', 'tiara_purple'] },
   { id: 'crown', name: 'Crown', slot: 'hat', def: 'headwear/hats/formal/hat_formal_crown', tier: 'legendary', colors: ['crown_gold', 'crown_red', 'crown_blue', 'crown_gray'] },
+  // Helmets with a visor, a crest, wings, horns or a plume: the extra pieces in the helmet's metal,
+  // or their own color (horns of bone, a red plume); two-color ids color the plume
+  { id: 'open_armet', name: 'Open armet', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_armet_simple', tier: 'fancy', colors: startingWith('steel', METAL) },
+  { id: 'barbuta', name: 'Barbuta', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_barbuta', tier: 'fancy', colors: startingWith('steel', METAL) },
+  { id: 'open_barbuta', name: 'Open barbuta', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_barbuta_simple', tier: 'fancy', colors: startingWith('steel', METAL) },
+  { id: 'flattop_helm', name: 'Flat-top helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_flattop', tier: 'epic', colors: startingWith('steel', METAL) },
+  { id: 'horned_visor_helm', name: 'Horned visor helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_pointed', extras: [{ def: 'headwear/helmets/visors/hat_visor_horned', color: SAME }], tier: 'epic', colors: startingWith('steel', METAL) },
+  { id: 'winged_helm', name: 'Winged helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_pointed', extras: [{ def: 'headwear/helmets/accessories/hat_accessory_wings', color: SAME }], tier: 'epic', colors: startingWith('silver', METAL) },
+  { id: 'horned_spangenhelm', name: 'Horned spangenhelm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_spangenhelm', extras: [{ def: 'headwear/helmets/accessories/hat_accessory_horns_upward', color: 'ceramic' }], tier: 'epic', colors: startingWith('iron', METAL) },
+  { id: 'ram_helm', name: 'Ram helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_barbuta', extras: [{ def: 'headwear/helmets/accessories/hat_accessory_horns_downward', color: 'ceramic' }], tier: 'epic', colors: startingWith('steel', METAL) },
+  { id: 'imp_helm', name: 'Imp helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_bascinet', extras: [{ def: 'headwear/helmets/accessories/hat_accessory_horns_short', color: 'ceramic' }], tier: 'epic', colors: startingWith('iron', METAL) },
+  { id: 'legion_plume_helm', name: 'Legion plume helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_bascinet', extras: [{ def: 'headwear/helmets/accessories/hat_accessory_plumage_legion', color: 'blue' }], tier: 'epic', colors: [...startingWith('steel', METAL), 'steel+red', 'gold+white', 'iron+black', 'silver+purple'] },
+  { id: 'plumed_helm', name: 'Plumed helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_flattop', extras: [{ def: 'headwear/helmets/accessories/hat_accessory_plumage', color: 'red' }], tier: 'legendary', colors: [...startingWith('steel', METAL), 'steel+blue', 'gold+white', 'iron+black', 'silver+yellow'] },
+  { id: 'centurion_helm', name: 'Centurion helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_close', extras: [{ def: 'headwear/helmets/accessories/hat_accessory_plumage_centurion', color: 'red' }], tier: 'legendary', colors: [...startingWith('gold', METAL), 'gold+black', 'steel+blue', 'silver+white', 'bronze+purple'] },
+  { id: 'crested_sugarloaf', name: 'Crested sugarloaf', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_sugarloaf', extras: [{ def: 'headwear/helmets/accessories/hat_accessory_crest', color: SAME }], tier: 'legendary', colors: startingWith('gold', METAL) },
+  { id: 'dark_knight_helm', name: 'Dark knight helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_bascinet', extras: [{ def: 'headwear/helmets/visors/hat_visor_horned', color: SAME }, { def: 'headwear/helmets/accessories/hat_accessory_horns_upward', color: 'black' }], tier: 'legendary', colors: startingWith('iron', METAL) },
+  { id: 'trimmed_cap', name: 'Trimmed cap', slot: 'hat', def: 'headwear/hats/caps/hat_cap_bonnie', extras: [{ def: 'headwear/hats/caps/hat_cap_bonnie_trim', color: 'white' }], tier: 'common', colors: [...startingWith('navy', CLOTH), 'red+white', 'black+red', 'green+yellow', 'white+navy'] },
+  { id: 'commodore_bicorne', name: 'Commodore bicorne', slot: 'hat', def: 'headwear/hats/foreaft/hat_bicorne_foreaft_commodore', extras: [{ def: 'headwear/hats/foreaft/hat_bicorne_foreaft_commodore_trim', color: 'base' }], tier: 'epic', colors: [...startingWith('navy', CLOTH), 'navy+gold', 'black+silver', 'red+gold', 'white+gold'] },
+  { id: 'grand_admiral_hat', name: 'Grand admiral hat', slot: 'hat', def: 'headwear/hats/athwart/hat_bicorne_athwart_admiral', extras: [{ def: 'headwear/hats/athwart/hat_bicorne_athwart_admiral_trim', color: 'base' }, { def: 'headwear/hats/athwart/hat_bicorne_athwart_admiral_cockade', color: 'red' }], tier: 'legendary', colors: startingWith('navy', CLOTH) },
   { id: 'space_helmet', name: 'Space helmet', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_xeon', tier: 'legendary', colors: startingWith('steel', METAL) },
   { id: 'great_helm', name: 'Great helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_greathelm', tier: 'legendary', colors: startingWith('steel', METAL) },
   { id: 'wizard_hat', name: 'Wizard hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_wizard', tier: 'legendary', colors: ['base_black', 'base_brown', 'base_gray', 'base_red', 'base_teal', 'base_yellow'] },
@@ -354,9 +377,14 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'fluffy_tail', name: 'Fluffy tail', slot: 'back', def: 'body/tails/tail_wolf_fluffy', tier: 'epic', colors: FUR },
   { id: 'wolf_tail', name: 'Wolf tail', slot: 'back', def: 'body/tails/tail_wolf', tier: 'epic', colors: FUR },
   { id: 'lizard_tail', name: 'Lizard tail', slot: 'back', def: 'body/tails/tail_lizard_alt', tier: 'epic', colors: SCALE },
-  { id: 'tattered_cape', name: 'Tattered cape', slot: 'back', def: 'torso/cape/cape_tattered', tier: 'epic', colors: CLOTH, noSit: true, noCheer: true },
-  { id: 'cape', name: 'Cape', slot: 'back', def: 'torso/cape/cape_solid', tier: 'epic', colors: CLOTH, noSit: true, noCheer: true },
+  { id: 'tattered_cape', name: 'Tattered cape', slot: 'back', def: 'torso/cape/cape_tattered', tier: 'legendary', colors: CLOTH, noSit: true, noCheer: true },
+  { id: 'cape', name: 'Cape', slot: 'back', def: 'torso/cape/cape_solid', tier: 'legendary', colors: CLOTH, noSit: true, noCheer: true },
   { id: 'trimmed_cape', name: 'Trimmed cape', slot: 'back', def: 'torso/cape/cape_solid', extras: [{ def: 'torso/cape/cape_trim', color: 'brown' }], tier: 'legendary', colors: [...CLOTH, 'red+yellow', 'navy+yellow', 'purple+yellow', 'black+red', 'forest+tan', 'maroon+white'], noSit: true, noCheer: true },
+  // Walking art only: standing shows the walking pose, and the wearer neither sits nor cheers.
+  // Expensive for it.
+  { id: 'butterfly_wings', name: 'Butterfly wings', slot: 'back', def: 'body/wings/monarch/wings_monarch', tier: 'legendary', colors: ['monarch', 'blue', 'pink', 'purple', 'red', 'teal', 'white', 'yellow', 'black', 'gold', 'green'], noSit: true, noCheer: true },
+  { id: 'fairy_wings', name: 'Fairy wings', slot: 'back', def: 'body/wings/pixie/wings_pixie', tier: 'legendary', colors: ['pixie', 'pink', 'lavender', 'sky', 'white', 'gold', 'green', 'purple'], noSit: true, noCheer: true },
+  { id: 'luna_moth_wings', name: 'Luna moth wings', slot: 'back', def: 'body/wings/wings_lunar', tier: 'legendary', colors: ['lunar', 'pale_green', 'sky', 'pink', 'white', 'yellow', 'lavender'], noSit: true, noCheer: true },
   { id: 'angel_wings', name: 'Angel wings', slot: 'back', def: 'body/wings/wings_feathered', tier: 'legendary', colors: WING },
   { id: 'bat_wings', name: 'Bat wings', slot: 'back', def: 'body/wings/wings_bat', tier: 'legendary', colors: WING },
   { id: 'dragon_wings', name: 'Dragon wings', slot: 'back', def: 'body/wings/wings_lizard_alt', tier: 'legendary', colors: SCALE },

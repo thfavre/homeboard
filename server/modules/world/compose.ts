@@ -224,9 +224,20 @@ export class Composer {
     return { zPos: def.layer_1.zPos, dir, swaps: [await this.swapFor(def.recolors.material ? def.recolors : def.recolors.color_1, c.skin)] };
   }
 
-  /** One animation of a layer, colored (null: the layer has no sheet for it; it is left out) */
+  /**
+   * One animation of a layer, colored (null: the layer has no sheet for it; it is left out). Art
+   * drawn only walking (butterfly wings) stands in the first walking frame.
+   */
   private async sheet(layer: Layer, anim: Anim): Promise<PNG | null> {
-    const png = await this.image(`spritesheets/${layer.dir}${anim}${layer.variant ? `/${layer.variant}` : ''}.png`);
+    const file = (a: Anim) => `spritesheets/${layer.dir}${a}${layer.variant ? `/${layer.variant}` : ''}.png`;
+    let png = await this.image(file(anim));
+    if (!png && anim === 'idle') {
+      const walk = await this.image(file('walk'));
+      if (walk) {
+        png = new PNG({ width: FRAME * COLUMNS, height: walk.height });
+        for (let f = 0; f < COLUMNS; f++) over(png, f * FRAME, 0, walk, 0, 0, FRAME, walk.height);
+      }
+    }
     if (png && layer.swaps.length) recolor(png, layer.swaps);
     return png;
   }
