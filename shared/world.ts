@@ -41,12 +41,15 @@ export interface TownPlace {
 }
 
 /**
- * Where the door and a shop window go on each kind of house (sprite pixels: x from the house's left,
- * heights up from its bottom). The window is wider than the house's own, to show the shop's inside.
+ * Where the door and the shop window are on the shop built on each kind of house (sprite pixels: x
+ * from the left of the house's art, heights up from its bottom). The TV builds the shopfronts
+ * (web/src/modules/world/shopfronts.ts) on these same numbers.
  */
-const SHOPFRONTS: Partial<Record<HouseKind, { door: number; doorUp: number; win: { x0: number; x1: number; top: number; bottom: number } }>> = {
-  brickA: { door: 47.5, doorUp: 25, win: { x0: 72, x1: 130, top: 68, bottom: 29 } },
-  brickB: { door: 79.5, doorUp: 4, win: { x0: 10, x1: 57, top: 63, bottom: 24 } },
+export const SHOPFRONTS: Partial<Record<HouseKind, { door: number; doorUp: number; win: { x0: number; x1: number; top: number; bottom: number } }>> = {
+  // The clothes shop: the door on the left at the top of the steps, a wide display window on the right
+  brickA: { door: 42, doorUp: 25, win: { x0: 66, x1: 118, top: 71, bottom: 31 } },
+  // The barber: the window on the left, the door in the house's own doorway
+  brickB: { door: 89, doorUp: 4, win: { x0: 18, x1: 60, top: 60, bottom: 22 } },
 };
 
 /** A shop in the house of this kind nearest to `nearX` (world units) */

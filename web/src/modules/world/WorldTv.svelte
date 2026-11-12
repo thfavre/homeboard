@@ -7,7 +7,8 @@
   import { loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
-  import { drawCut, drawShop, drawSnips, drawSwish, insideFeet } from './shops.ts';
+  import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
+  import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
 
   /**
    * The town on the TV: the crowd games' square (same LPC environment art, same renderer), lived in
@@ -21,6 +22,7 @@
   let canvas: HTMLCanvasElement;
   let wrap: HTMLDivElement;
   let env: Env | null = null;
+  let shopArt: ShopArt | null = null;
   let standingProps: Prop[] = [];
 
   /** Frames kept to draw between, a little in the past */
@@ -67,8 +69,10 @@
 
   onMount(() => {
     let raf = 0;
-    void loadEnv().then((e) => {
+    void Promise.all([loadEnv(), loadShopArt()]).then(([e, a]) => {
       env = e;
+      shopArt = a;
+      setShopArt(e, a);
       if (e) standingProps = squareProps(e).sort((a, b) => a.y - b.y);
     });
     const off = onEvent<TownFrame>('world', 'frame', (f) => {
@@ -155,7 +159,7 @@
   let bg: HTMLCanvasElement | null = null;
   let bgKey = '';
   function background(): HTMLCanvasElement {
-    const key = `${!!env}`;
+    const key = `${!!env}${!!shopArt}`;
     if (bg && bgKey === key) return bg;
     if (env) {
       const c = document.createElement('canvas');
@@ -163,7 +167,7 @@
       c.height = WORLD.h;
       const g = c.getContext('2d')!;
       g.imageSmoothingEnabled = false;
-      const ground = squareGround(env);
+      const ground = squareGround(env, shopArt ? shopSwap(env, shopArt) : undefined);
       g.drawImage(ground, 0, 0, ground.width * 1.35, ground.height * 1.35);
       bg = c;
     } else {
@@ -328,7 +332,9 @@
     // The shops, with whoever is inside seen through the window
     for (const place of Object.values(TOWN_PLACES)) {
       const here = inside.filter((p) => p.x >= place.window.x && p.x <= place.window.x + place.window.w);
-      drawShop(g, place, now, (gg) => {
+      // The door opens for whoever is on its last steps, going in or coming out (only visitors go up there)
+      const busy = people.some((p) => Math.abs(p.x - place.door.x) < 24 && p.y < place.door.y + 46);
+      drawShop(g, place, now, busy, (gg) => {
         for (const p of here) {
           const q = { ...p, y: insideFeet(place) };
           const s = sheetOf(p.id, true);
@@ -400,6 +406,8 @@
     if (dark > 0.02) {
       g.fillStyle = `rgba(14,16,42,${0.34 * dark})`;
       g.fillRect(0, 0, TOWN.w, TOWN.h);
+      // The shops stay lit inside
+      for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
     }
 
     // Names and sleep bubbles over everything. The head's top comes from the measured sheet, so

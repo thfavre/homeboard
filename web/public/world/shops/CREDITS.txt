@@ -1,0 +1,73 @@
+Art of the town's shops on the TV (the clothes shop and the barber, web/src/modules/world/shopfronts.ts)
+Downloaded unchanged except for the file names, from Eliza Wyatt's LPC Revised collection. Each
+entry names the files, the authors, the license and where they come from. Everything here is
+OGA-BY 3.0 (https://static.opengameart.org/OGA-BY-3.0.txt).
+The houses the shops are built on are the square's (see web/public/crowd/env/CREDITS.txt). The
+shopfronts' woodwork, the sign icons (shirt, scissors) and the barber pole are drawn in code for
+Homeboard, in the palettes of these sheets.
+
+LPC Revised, window awnings
+  Files: awnings.png (Structure/Windows/Window Awnings A.png)
+  License: OGA-BY 3.0
+  Authors: Lanea Zimmerman (Sharm), Eliza Wyatt (ElizaWy, DeathsDarling)
+  Notes: original by Lanea Zimmerman, recolors by Eliza Wyatt
+  https://github.com/ElizaWy/LPC/tree/main/Structure/Windows
+  https://opengameart.org/content/lpc-adobe-building-set
+
+LPC Revised, sign backgrounds
+  Files: sign-boards.png (Structure/Signs/Sign Backgrounds A.png)
+  License: OGA-BY 3.0
+  Authors: Lanea Zimmerman (Sharm), Eliza Wyatt (ElizaWy, DeathsDarling)
+  Notes: original by Lanea Zimmerman, recolors by Eliza Wyatt
+  https://github.com/ElizaWy/LPC/tree/main/Structure/Signs
+  https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+
+LPC Revised, 12-panel doors
+  Files: doors.png (Structure/Doors/32x48px Doors/12 Panel Door A.png)
+  License: OGA-BY 3.0
+  Authors: Lanea Zimmerman (Sharm), Eliza Wyatt (ElizaWy, DeathsDarling)
+  Notes: original design and animation by Lanea Zimmerman, recolors by Eliza Wyatt
+  https://github.com/ElizaWy/LPC/tree/main/Structure/Doors
+  https://opengameart.org/content/lpc-animated-doors
+
+LPC Revised, curtains
+  Files: curtains.png (Objects/Wall Items/Curtains.png)
+  License: OGA-BY 3.0
+  Authors: Lanea Zimmerman (Sharm), bluecarrot16, Eliza Wyatt (ElizaWy, DeathsDarling)
+  Notes: original by Lanea Zimmerman and bluecarrot16, expanded and recolored by Eliza Wyatt
+  https://github.com/ElizaWy/LPC/tree/main/Objects/Wall%20Items
+  https://opengameart.org/content/lpc-upholstery
+
+LPC Revised, mirrors
+  Files: mirrors.png (Objects/Wall Items/Mirrors.png)
+  License: OGA-BY 3.0
+  Authors: Eliza Wyatt (ElizaWy, DeathsDarling)
+  https://github.com/ElizaWy/LPC/tree/main/Objects/Wall%20Items
+
+LPC Revised, dress forms
+  Files: dress-forms.png (Objects/Furniture/Sewing & Weaving/Dress Form.png)
+  License: OGA-BY 3.0
+  Authors: bluecarrot16, Eliza Wyatt (ElizaWy, DeathsDarling)
+  Notes: original by bluecarrot16, edited and recolored by Eliza Wyatt
+  https://github.com/ElizaWy/LPC/tree/main/Objects/Furniture/Sewing%20%26%20Weaving
+  https://opengameart.org/content/lpc-tailor
+
+LPC Revised, fabric rolls
+  Files: fabric-rolls.png (Objects/Small Items/Fabric/Fabril Rolls, Mounted.png)
+  License: OGA-BY 3.0
+  Authors: bluecarrot16, Eliza Wyatt (ElizaWy, DeathsDarling)
+  Notes: original by bluecarrot16, edited, cloth texture replaced and recolored by Eliza Wyatt
+  https://github.com/ElizaWy/LPC/tree/main/Objects/Small%20Items/Fabric
+  https://opengameart.org/content/lpc-tailor
+
+LPC Revised, office chair
+  Files: chair.png (Objects/Furniture/Seating/Chair, Office.png)
+  License: OGA-BY 3.0
+  Authors: Eliza Wyatt (ElizaWy, DeathsDarling)
+  https://github.com/ElizaWy/LPC/tree/main/Objects/Furniture/Seating
+
+LPC Revised, striped wallpaper
+  Files: wallpaper.png (Structure/Walls/Striped Wallpaper A.png)
+  License: OGA-BY 3.0
+  Authors: Eliza Wyatt (ElizaWy, DeathsDarling)
+  https://github.com/ElizaWy/LPC/tree/main/Structure/Walls

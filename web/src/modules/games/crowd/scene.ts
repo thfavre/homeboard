@@ -54,7 +54,7 @@ export function loadEnv(): Promise<Env | null> {
 }
 
 /** A part of a sheet: x, y, width, height in its pixels */
-type Cut = [number, number, number, number];
+export type Cut = [number, number, number, number];
 const CUT = {
   houseA: [24, 0, 208, 201] as Cut,
   houseB: [23, 0, 144, 192] as Cut,
@@ -84,16 +84,26 @@ function put(g: CanvasRenderingContext2D, img: HTMLImageElement, c: Cut, x: numb
 const PW = Math.ceil(WORLD.w / S);
 const PH = Math.ceil(WORLD.h / S);
 
+/** A house's art: its sheet and the part of it that is the house (x, y, width, height in its pixels) */
+export function houseArt(env: Env, kind: HouseKind): [HTMLImageElement, Cut] {
+  if (kind === 'brickA') return [env['house-brick-a'], CUT.houseA];
+  if (kind === 'brickB') return [env['house-brick-b'], CUT.houseB];
+  return [env['house-paneled'], CUT.housePaneled];
+}
+
+/**
+ * Something built in place of a house of the row (the town's shops): an image of the same size as the
+ * house's art, or null to keep the house. `x` is the house's left edge (sprite pixels).
+ */
+export type HouseSwap = (kind: HouseKind, x: number) => CanvasImageSource | null;
+
 /** A row of houses along the top, bottom at `bottom` (sprite pixels), cut off by the top of the screen */
-function houses(g: CanvasRenderingContext2D, env: Env, bottom: number, seed: number) {
-  const art: Record<HouseKind, [HTMLImageElement, Cut]> = {
-    brickA: [env['house-brick-a'], CUT.houseA],
-    paneled: [env['house-paneled'], CUT.housePaneled],
-    brickB: [env['house-brick-b'], CUT.houseB],
-  };
+function houses(g: CanvasRenderingContext2D, env: Env, bottom: number, seed: number, swap?: HouseSwap) {
   for (const h of houseRow(seed, PW)) {
-    const [img, c] = art[h.kind];
-    g.drawImage(img, c[0], c[1], c[2], c[3], h.x, bottom - c[3], c[2], c[3]);
+    const [img, c] = houseArt(env, h.kind);
+    const instead = swap?.(h.kind, h.x);
+    if (instead) g.drawImage(instead, h.x, bottom - c[3]);
+    else g.drawImage(img, c[0], c[1], c[2], c[3], h.x, bottom - c[3], c[2], c[3]);
   }
 }
 
@@ -172,8 +182,8 @@ export function streetGround(env: Env, startX: number, finishX: number, font: st
   return c;
 }
 
-/** The spy square: houses, a sidewalk, stone slabs, a light frame of stone around the fountain */
-export function squareGround(env: Env): HTMLCanvasElement {
+/** The spy square (and the town, with its shops swapped in): houses, a sidewalk, stone slabs, a light frame of stone around the fountain */
+export function squareGround(env: Env, swap?: HouseSwap): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = PW;
   c.height = PH;
@@ -197,7 +207,7 @@ export function squareGround(env: Env): HTMLCanvasElement {
       g.drawImage(slabs, col * 32, row * 32, 32, 32, x, y, 32, 32);
     }
   }
-  houses(g, env, SQUARE_HOUSES.bottom, SQUARE_HOUSES.seed);
+  houses(g, env, SQUARE_HOUSES.bottom, SQUARE_HOUSES.seed, swap);
   sidewalk(g, env, SQUARE_HOUSES.bottom, 128);
   return c;
 }
