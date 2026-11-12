@@ -2,7 +2,7 @@ import { hb, storageGet, storageSet } from '$lib/client.svelte.ts';
 import { isLockedSlot, isSecretSlot, type Slot } from '$shared/wardrobe.ts';
 
 /**
- * The slots that open by buying (the locked ones, the secret costumes) are marked "New" in the
+ * The slots that open by buying (the locked ones, the secret costumes) glow in the
  * shop and the wardrobe from the moment they open until the guest first opens them. What was seen
  * is kept on the phone, per guest.
  */

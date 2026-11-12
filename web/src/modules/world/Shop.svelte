@@ -272,6 +272,7 @@
           type="button"
           class="slot"
           class:on={!kingTab && slot === s.id}
+          class:fresh={isNewSlot(s.id, open_)}
           onclick={() => {
             slot = s.id;
             open = null;
@@ -280,7 +281,6 @@
           }}
         >
           {s.name}
-          {#if isNewSlot(s.id, open_)}<span class="new">New</span>{/if}
         </button>
       {/each}
       {#if mod?.king?.on}
@@ -406,6 +406,9 @@
     grid-auto-columns: max-content;
     gap: 0.35rem;
     min-width: 0;
+    /* Room for a glowing tab, which the sideways scroll would otherwise cut */
+    padding: 0.5rem;
+    margin: -0.5rem;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
@@ -426,18 +429,27 @@
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
   }
-  /* A slot that just opened by buying: a small tag until it is first opened */
-  .new {
-    margin-left: 0.35rem;
-    vertical-align: 0.08em;
-    padding: 0.05rem 0.35rem;
-    border-radius: 999px;
-    background: var(--accent);
-    color: var(--accent-contrast);
-    font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    box-shadow: 0 0 0.6rem color-mix(in srgb, var(--accent) 60%, transparent);
+  /* A slot that just opened by buying glows until it is first opened */
+  .fresh {
+    border-color: var(--accent);
+    animation: fresh-glow 1.6s ease-in-out infinite;
+  }
+  @keyframes fresh-glow {
+    0%,
+    100% {
+      box-shadow: 0 0 0.2rem color-mix(in srgb, var(--accent) 45%, transparent);
+    }
+    50% {
+      box-shadow:
+        0 0 0.9rem color-mix(in srgb, var(--accent) 85%, transparent),
+        inset 0 0 0.6rem color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fresh {
+      animation: none;
+      box-shadow: 0 0 0.8rem color-mix(in srgb, var(--accent) 70%, transparent);
+    }
   }
   .slot.king {
     display: inline-flex;

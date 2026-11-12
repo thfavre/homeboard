@@ -365,12 +365,12 @@
           class="slot"
           class:on={slot === s.id}
           class:none={!count}
+          class:fresh={isNewSlot(s.id, openNow)}
           onclick={() => {
             slot = s.id;
             markSlotSeen(s.id);
           }}
         >
-          {#if isNewSlot(s.id, openNow)}<span class="new">New</span>{/if}
           <span class="spic">
             {#if crowned && s.id === 'hat'}
               <!-- The King's crown, whatever is worn under it -->
@@ -421,7 +421,7 @@
             <!-- While picking, the color squares lie over the card, so its size never changes -->
             <div class="cell">
               <button type="button" class="piece" class:worn={worn?.id === p.item.id} class:kinglock={kingLocked(p.item)} disabled={busy} onclick={() => tap(p)}>
-                {#if kingLocked(p.item)}<span class="klock"><Lock size={12} strokeWidth={2.5} /></span>{/if}
+                {#if kingLocked(p.item)}<span class="klock"><Lock size={22} strokeWidth={2.25} /></span>{/if}
                 <!-- One picture per owned color, stacked: the shown one fades in over the others -->
                 <span class="pic stack">
                   {#each p.colors as c (c)}
@@ -567,6 +567,9 @@
     display: grid;
     grid-template-columns: repeat(var(--cols), calc((100% - (var(--shown) - 1) * var(--gap)) / var(--shown)));
     gap: var(--gap);
+    /* Room for a glowing tile, which the sideways scroll would otherwise cut */
+    padding: 0.5rem;
+    margin: -0.5rem;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
@@ -644,19 +647,27 @@
     place-items: center;
     color: var(--warning);
   }
-  /* A slot that just opened by buying: a small tag until it is first opened */
-  .new {
-    position: absolute;
-    top: 0.3rem;
-    left: 0.35rem;
-    padding: 0.05rem 0.35rem;
-    border-radius: 999px;
-    background: var(--accent);
-    color: var(--accent-contrast);
-    font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    box-shadow: 0 0 0.6rem color-mix(in srgb, var(--accent) 60%, transparent);
+  /* A slot that just opened by buying glows until it is first opened */
+  .fresh {
+    border-color: var(--accent);
+    animation: fresh-glow 1.6s ease-in-out infinite;
+  }
+  @keyframes fresh-glow {
+    0%,
+    100% {
+      box-shadow: 0 0 0.2rem color-mix(in srgb, var(--accent) 45%, transparent);
+    }
+    50% {
+      box-shadow:
+        0 0 0.9rem color-mix(in srgb, var(--accent) 85%, transparent),
+        inset 0 0 0.6rem color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fresh {
+      animation: none;
+      box-shadow: 0 0 0.8rem color-mix(in srgb, var(--accent) 70%, transparent);
+    }
   }
   .swapnote {
     display: flex;
@@ -799,19 +810,20 @@
     position: relative;
     display: grid;
   }
-  /* A piece the King cannot put on: dimmed, a small lock in the corner, the reason on a tap */
+  /* A piece the King cannot put on: dimmed, a lock over the middle of the picture, the reason on a tap */
   .piece.kinglock .pic {
     opacity: 0.4;
   }
   .klock {
     position: absolute;
-    top: 0.3rem;
-    right: 0.3rem;
+    top: 38%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     z-index: 1;
     display: grid;
     place-items: center;
-    width: 1.3rem;
-    height: 1.3rem;
+    width: 2.6rem;
+    height: 2.6rem;
     border-radius: 50%;
     background: var(--surface);
     border: 1px solid var(--border);
