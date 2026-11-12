@@ -56,6 +56,17 @@
     return { x: (px - size) / 2, y: Math.max(0, Math.min(px - size, y)), size };
   }
 
+  /** The spinner only shows for a build that takes a while: quick ones would just flicker it */
+  let slow = $state(false);
+  $effect(() => {
+    if (!building) {
+      slow = false;
+      return;
+    }
+    const t = setTimeout(() => (slow = true), 500);
+    return () => clearTimeout(t);
+  });
+
   let canvas = $state<HTMLCanvasElement>();
   /** The drawn sheet: the old one stays on screen until the new one has loaded, so it never blinks */
   let drawn = $state<{ img: HTMLImageElement; sheet: SheetInfo } | null>(null);
@@ -123,7 +134,7 @@
 
 <div class="stage card">
   <canvas bind:this={canvas} width="192" height="192"></canvas>
-  {#if building}
+  {#if building && slow}
     <span class="building"><Loader2 size={18} class="spin" /></span>
   {/if}
 </div>
