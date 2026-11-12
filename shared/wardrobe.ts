@@ -64,6 +64,9 @@ export interface WardrobeItem {
   noSit?: true;
   /** The art has no emote or jump sheet: the wearer does not cheer */
   noCheer?: true;
+  /** A costume head, drawn instead of the guest's head. It takes their hair and beard off unless
+   *  `keepHair`; with `skin` its colors are skin tones and the whole body takes the one worn */
+  head?: { keepHair?: true; skin?: true };
 }
 
 /** An extra layer of an item: a skull on a hat, a trim on a cape */
@@ -101,6 +104,10 @@ const GEM = ['blue', 'green', 'orange', 'purple', 'red', 'yellow'] as const;
  *  float on the belly. In the piece's metal ("gold_red" hangs on gold); gems hang on gold */
 const CHAIN: ItemExtra[] = [{ def: 'headwear/neck/neck_necklace_simple', color: (c) => ((METAL as readonly string[]).includes(c.split('_')[0]) ? c.split('_')[0] : 'gold') }];
 
+/** Skin tones of the costume heads */
+const MONSTER = ['green', 'bright_green', 'pale_green', 'zombie_green', 'dark_green'] as const;
+const FUR_SKIN = ['fur_brown', 'fur_black', 'fur_grey', 'fur_white', 'fur_tan', 'fur_copper', 'fur_gold'] as const;
+
 /** A color list with the item's own color moved first (a red Santa hat, a steel necklace) */
 const startingWith = (color: string, list: readonly string[]): string[] => [color, ...list.filter((c) => c !== color)];
 
@@ -126,6 +133,9 @@ export const COLOR_HEX: Record<string, string> = {
   tiara_gold: '#d9a732', tiara_silver: '#aeb4be', tiara_bronze: '#8c6a1e', tiara_purple: '#7141b2',
   base_black: '#22282a', base_gray: '#585561', base_red: '#82171c', base_teal: '#156c99', base_yellow: '#d99431',
   dark: '#2b2a33',
+  // skin tones of the costume heads
+  bright_green: '#3f9a2f', dark_green: '#155a1c', pale_green: '#6e8a5c', zombie: '#b3a47e', zombie_green: '#5f9a85',
+  light: '#e8b08f', amber: '#d9935c', jack: '#e0761f',
   pirate: '#a08a4a', gold_red: '#c2242c', silver_blue: '#3c6cd0', bronze_green: '#2f9a3e', copper_orange: '#e0761f',
   steel_purple: '#8a3fc0', brass_yellow: '#e8c22a',
 };
@@ -274,6 +284,24 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'great_helm', name: 'Great helm', slot: 'hat', def: 'headwear/helmets/helmets/hat_helmet_greathelm', tier: 'legendary', colors: startingWith('steel', METAL) },
   { id: 'wizard_hat', name: 'Wizard hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_wizard', tier: 'legendary', colors: ['base_black', 'base_brown', 'base_gray', 'base_red', 'base_teal', 'base_yellow'] },
   { id: 'celestial_hat', name: 'Celestial hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_celestial_moon', extras: [{ def: 'headwear/hats/magic/hat_magic_celestial_moon_trim' }], tier: 'legendary', colors: [...CLOTH, 'navy+yellow', 'purple+yellow', 'black+white', 'blue+sky', 'maroon+yellow'] },
+  // Costume heads: the whole head, worn in the hat slot
+  { id: 'pig_head', name: 'Pig head', slot: 'hat', def: 'head/heads/farm/heads_pig', head: { skin: true }, tier: 'fancy', colors: ['light', 'amber', 'fur_tan', 'fur_white', 'fur_black'] },
+  { id: 'rabbit_head', name: 'Rabbit head', slot: 'hat', def: 'head/heads/farm/heads_rabbit', head: { skin: true }, tier: 'fancy', colors: startingWith('fur_white', FUR_SKIN) },
+  { id: 'mouse_head', name: 'Mouse head', slot: 'hat', def: 'head/heads/farm/heads_mouse', head: { skin: true }, tier: 'fancy', colors: startingWith('fur_grey', FUR_SKIN) },
+  { id: 'sheep_head', name: 'Sheep head', slot: 'hat', def: 'head/heads/farm/heads_sheep', head: { skin: true }, tier: 'fancy', colors: startingWith('fur_white', FUR_SKIN) },
+  { id: 'zombie_head', name: 'Zombie head', slot: 'hat', def: 'head/heads/undead/heads_zombie', head: { skin: true }, tier: 'fancy', colors: ['zombie', 'zombie_green', 'pale_green', 'green'] },
+  { id: 'vampire_head', name: 'Vampire head', slot: 'hat', def: 'head/heads/undead/heads_vampire', head: { skin: true, keepHair: true }, tier: 'fancy', colors: ['pale_green', 'zombie', 'fur_white', 'light'] },
+  { id: 'orc_head', name: 'Orc head', slot: 'hat', def: 'head/heads/fantasy/heads_orc_male', head: { skin: true, keepHair: true }, tier: 'fancy', colors: MONSTER },
+  { id: 'goblin_head', name: 'Goblin head', slot: 'hat', def: 'head/heads/fantasy/heads_goblin', head: { skin: true }, tier: 'fancy', colors: startingWith('bright_green', MONSTER) },
+  { id: 'skeleton_head', name: 'Skeleton head', slot: 'hat', def: 'head/heads/undead/heads_skeleton', head: {}, tier: 'epic', colors: ['white', 'tan', 'gray', 'black'] },
+  { id: 'pumpkin_head', name: 'Pumpkin head', slot: 'hat', def: 'head/heads/undead/heads_jack', head: {}, tier: 'epic', colors: ['jack'] },
+  { id: 'frankenstein_head', name: 'Frankenstein head', slot: 'hat', def: 'head/heads/undead/heads_frankenstein', head: { skin: true, keepHair: true }, tier: 'epic', colors: MONSTER },
+  { id: 'wolf_head', name: 'Wolf head', slot: 'hat', def: 'head/heads/beast/heads_wolf_male', head: { skin: true }, tier: 'epic', colors: startingWith('fur_grey', FUR_SKIN) },
+  { id: 'boar_head', name: 'Boar head', slot: 'hat', def: 'head/heads/beast/heads_boarman', head: { skin: true }, tier: 'epic', colors: FUR_SKIN },
+  { id: 'lizard_head', name: 'Lizard head', slot: 'hat', def: 'head/heads/reptile/heads_lizard_male', head: { skin: true }, tier: 'epic', colors: [...MONSTER, 'blue'] },
+  { id: 'troll_head', name: 'Troll head', slot: 'hat', def: 'head/heads/fantasy/heads_troll', head: { skin: true }, tier: 'epic', colors: ['blue', 'pale_green', 'zombie_green', 'green', 'fur_grey'] },
+  { id: 'minotaur_head', name: 'Minotaur head', slot: 'hat', def: 'head/heads/beast/heads_minotaur', head: { skin: true }, tier: 'legendary', colors: FUR_SKIN },
+  { id: 'alien_head', name: 'Alien head', slot: 'hat', def: 'head/heads/reptile/heads_alien', head: { skin: true }, tier: 'legendary', colors: ['bright_green', 'green', 'pale_green', 'zombie_green', 'blue', 'fur_grey'] },
   { id: 'star_wizard_hat', name: 'Star wizard hat', slot: 'hat', def: 'headwear/hats/magic/hat_magic_celestial', extras: [{ def: 'headwear/hats/magic/hat_magic_celestial_trim' }], tier: 'legendary', colors: [...CLOTH, 'navy+yellow', 'purple+yellow', 'black+white', 'blue+sky', 'maroon+yellow'] },
 
   // ------------------------------------------------------------ face
@@ -355,6 +383,13 @@ for (const item of CATALOG) {
 }
 
 export const itemById =(id: string): WardrobeItem | undefined => CATALOG.find((i) => i.id === id);
+
+/** The costume head an outfit wears, if any */
+export function costumeOf(outfit: Outfit): { item: WardrobeItem; color: string } | null {
+  const w = outfit.hat;
+  const item = w && itemById(w.id);
+  return item?.head && w ? { item, color: w.color } : null;
+}
 
 /** One worn or owned piece: a catalog item in one of its colors */
 export interface WornItem {

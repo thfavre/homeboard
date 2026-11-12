@@ -5,7 +5,7 @@ import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type LookPart, type PlaceId, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { CATALOG, TIERS, isLockedSlot, itemById, piecesOf, unlockProgress, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, TIERS, isLockedSlot, itemById, piecesOf, splitColor, unlockProgress, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -574,7 +574,7 @@ export default defineModule<WorldSettings>({
       if (!existsSync(file)) {
         let p = drawingIcons.get(name);
         if (!p) {
-          p = composer.icon(pieces, item.bodies?.[0] ?? 'male').then((png) => writeFileSync(file, png));
+          p = composer.icon(pieces, item.bodies?.[0] ?? 'male', item.head?.skin ? splitColor(color)[0] : undefined).then((png) => writeFileSync(file, png));
           drawingIcons.set(name, p);
           p.catch(() => drawingIcons.delete(name));
         }
