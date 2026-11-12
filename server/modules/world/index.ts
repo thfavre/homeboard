@@ -6,7 +6,7 @@ import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type LookPart, type PlaceId, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, piecesOf, validOutfit, validWorn, type Outfit, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
-import { Composer, choicesHash } from './compose.ts';
+import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
 
@@ -45,6 +45,21 @@ interface WorldSettings {
   /** Wandering or a bench is dropped within this range (seconds) when a shop calls */
   quickMinSec: number;
   quickMaxSec: number;
+  /** Guests can buy the King's title */
+  king: boolean;
+  /** What the title costs the first time, and how much more each time it changes hands */
+  kingBase: number;
+  kingStep: number;
+  /** The King who loses the title gets this share of what they paid back (percent) */
+  kingRefundPct: number;
+  /** About this long between two turns of the King on the throne (minutes) */
+  throneEveryMin: number;
+  /** How long the King sits there (seconds, a random time in the range) */
+  throneMinSec: number;
+  throneMaxSec: number;
+  /** How long a character prays before the throne (seconds, a random time in the range) */
+  prayMinSec: number;
+  prayMaxSec: number;
 }
 
 const LOOK_KEY: Record<LookPart, 'lookHair' | 'lookHairColor' | 'lookBeard' | 'lookEyes'> = {
@@ -100,7 +115,19 @@ interface WorldData {
   wallets?: Record<string, number>;
   /** Bought pieces per guest, each an item in one color, kept forever */
   owned?: Record<string, WornItem[]>;
+  king?: KingData;
 }
+
+/** Who holds the King's title, what they paid for it, and how many times it changed hands */
+interface KingData {
+  id: string | null;
+  since: number;
+  paid: number;
+  sales: number;
+}
+
+/** The crown the King wears in the town, unless they wear a crown of their own already */
+const KING_CROWN: WornItem = { id: 'crown', color: 'crown_gold' };
 
 /** Frames to the TV per second (the TV interpolates between them) */
 const FRAME_HZ = 10;
@@ -137,6 +164,15 @@ export default defineModule<WorldSettings>({
     wrapMaxSec: 10,
     quickMinSec: 1,
     quickMaxSec: 3,
+    king: true,
+    kingBase: 300,
+    kingStep: 150,
+    kingRefundPct: 50,
+    throneEveryMin: 4,
+    throneMinSec: 40,
+    throneMaxSec: 80,
+    prayMinSec: 10,
+    prayMaxSec: 25,
   },
 
   setup(ctx) {
@@ -144,6 +180,8 @@ export default defineModule<WorldSettings>({
     // Fields that came with the shop (a world.json from before has none)
     const wallets = (store.data.wallets ??= {});
     const owned = (store.data.owned ??= {});
+    // Came with the King's title
+    const king = (store.data.king ??= { id: null, since: 0, paid: 0, sales: 0 });
     const composer = new Composer(new LpcFiles());
     for (const [file, cr] of Object.entries(store.data.credits)) composer.credits.set(file, cr);
     const sheetsDir = ctx.mediaDir('sheets');
@@ -152,6 +190,8 @@ export default defineModule<WorldSettings>({
     /** Builds by hash, so the same look is composited once even when asked twice at once */
     const building = new Map<string, Promise<SheetInfo>>();
     const sheetInfos = (store.data.sheets ??= {});
+    /** The measurements have every row a sheet has now (an older sheet lacks the newer rows) */
+    const complete = (info: SheetInfo) => ROW_KEYS.every((k) => k in info.rows);
 
     /** Make sure the sheet of this look (choices plus outfit) is on disk; returns its info */
     const composite = (choices: AvatarChoices, outfit: Outfit): Promise<SheetInfo> => {
@@ -161,7 +201,7 @@ export default defineModule<WorldSettings>({
         p = (async () => {
           const file = join(sheetsDir, `${hash}.png`);
           const known = sheetInfos[hash];
-          if (existsSync(file) && known) return known;
+          if (existsSync(file) && known && complete(known)) return known;
           const built = await composer.build(choices, outfit);
           writeFileSync(file, built.png);
           sheetInfos[hash] = built.info;
@@ -185,6 +225,8 @@ export default defineModule<WorldSettings>({
     const cleanSheets = () => {
       const used = new Set<string>();
       for (const a of Object.values(store.data.avatars)) used.add(`${a.hash}.png`).add(`${townOf(a).hash}.png`);
+      const k = king.id ? store.data.avatars[king.id] : undefined;
+      if (k) used.add(`${crownedOf(k).hash}.png`);
       for (const d of dressing.values()) used.add(`${d.hash}.png`);
       for (const f of readdirSync(sheetsDir)) {
         if (f.endsWith('.png') && !used.has(f) && !building.has(f.replace(/\.png$/, ''))) unlinkSync(join(sheetsDir, f));
@@ -194,12 +236,12 @@ export default defineModule<WorldSettings>({
     };
     setInterval(cleanSheets, 10 * 60_000);
 
-    // Sheets made before they were measured one by one: measure them again (they are redrawn once)
+    // Sheets made before they were measured one by one, or before a row was added (kneeling): drawn and measured again, once
     void (async () => {
       let changed = false;
       for (const a of Object.values(store.data.avatars)) {
         for (const look of [{ choices: a.choices, outfit: a.outfit ?? {}, hash: a.hash }, townOf(a)]) {
-          if (sheetInfos[look.hash]) continue;
+          if (sheetInfos[look.hash] && complete(sheetInfos[look.hash])) continue;
           await composite(look.choices, look.outfit).catch(() => null);
           changed = true;
         }
@@ -278,16 +320,63 @@ export default defineModule<WorldSettings>({
       return Object.fromEntries(LOOK_PARTS.map((p) => [p, s[LOOK_KEY[p]]])) as Record<LookPart, number>;
     };
 
+    // ------------------------------------------------------------ the King
+
+    /** The King, while the title is on and they are still at the party with an avatar */
+    const kingId = (): string | null => {
+      const id = king.id;
+      return id && ctx.settings.get().king && ctx.session.guests.has(id) && store.data.avatars[id] ? id : null;
+    };
+
+    /** What taking the title costs now: it rises each time the title changes hands */
+    const kingPrice = () => {
+      const s = ctx.settings.get();
+      return Math.max(0, Math.round(s.kingBase + s.kingStep * king.sales));
+    };
+
+    /** The King's look in the town: what the town shows of them, with the crown on (their own crown if they wear one) */
+    const crownedOf = (a: StoredAvatar): TownLook => {
+      const t = townOf(a);
+      const outfit = t.outfit.hat?.id === KING_CROWN.id ? t.outfit : { ...t.outfit, hat: KING_CROWN };
+      return { choices: t.choices, outfit, hash: choicesHash(t.choices, outfit) };
+    };
+
+    /** Crowned looks that could not be built: not tried again on every publish */
+    const crownFailed = new Set<string>();
+
+    /** The sheet of the King's crowned look, once it is on disk; until then it is built in the background (null) */
+    const crownedSheet = (a: StoredAvatar): string | null => {
+      const look = crownedOf(a);
+      if (sheetInfos[look.hash] && existsSync(join(sheetsDir, `${look.hash}.png`))) return look.hash;
+      if (!building.has(look.hash) && !crownFailed.has(look.hash)) {
+        composite(look.choices, look.outfit).then(
+          () => ctx.publish(),
+          (err) => {
+            crownFailed.add(look.hash);
+            ctx.log.warn('Crowned look failed:', err);
+          },
+        );
+      }
+      return null;
+    };
+
     ctx.state((role): WorldState | undefined => {
+      const crowned = kingId();
       const characters = Object.entries(store.data.avatars)
         .map(([id, a]) => {
           const guest = ctx.session.guests.get(id);
-          const hash = townOf(a).hash;
+          // The King wears the crown in the town, whether they own one or not
+          const hash = (id === crowned ? crownedSheet(a) : null) ?? townOf(a).hash;
           return guest ? { id, name: guest.name, color: guest.color, url: ctx.mediaUrl(`sheets/${hash}.png`), sheet: sheetInfos[hash] ?? store.data.sheet ?? undefined } : null;
         })
         .filter((c): c is NonNullable<typeof c> => !!c);
       const s = ctx.settings.get();
-      const base: WorldState = { characters, sheet: store.data.sheet, shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices() } };
+      const base: WorldState = {
+        characters,
+        sheet: store.data.sheet,
+        shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices() },
+        king: { on: s.king, id: crowned, since: king.since, price: kingPrice() },
+      };
       if (role === 'admin') {
         const guests = [...ctx.session.guests.values()];
         return {
@@ -304,6 +393,15 @@ export default defineModule<WorldSettings>({
           wrapMaxSec: s.wrapMaxSec,
           quickMinSec: s.quickMinSec,
           quickMaxSec: s.quickMaxSec,
+          kingBase: s.kingBase,
+          kingStep: s.kingStep,
+          kingRefundPct: s.kingRefundPct,
+          throneEveryMin: s.throneEveryMin,
+          throneMinSec: s.throneMinSec,
+          throneMaxSec: s.throneMaxSec,
+          prayMinSec: s.prayMinSec,
+          prayMaxSec: s.prayMaxSec,
+          kingSales: king.sales,
           wallets: guests.map((g) => ({ id: g.id, name: g.name, color: g.color, balance: wallets[g.id] ?? 0 })),
         };
       }
@@ -532,7 +630,7 @@ export default defineModule<WorldSettings>({
     /** Worn art without sit or cheer sheets keeps the character out of those poses (what the town character wears) */
     const wornLimits = (guestId: string): { noSit: boolean; noCheer: boolean } => {
       const a = store.data.avatars[guestId];
-      const items = Object.values(a ? townOf(a).outfit : {}).map((w) => itemById(w.id));
+      const items = Object.values(a ? (guestId === kingId() ? crownedOf(a) : townOf(a)).outfit : {}).map((w) => itemById(w.id));
       return { noSit: items.some((i) => i?.noSit), noCheer: items.some((i) => i?.noCheer) };
     };
 
@@ -560,6 +658,10 @@ export default defineModule<WorldSettings>({
         finishWithinMs: s.finishWithinSec * 1000,
         wrapUpMs: sec(s.wrapMinSec, s.wrapMaxSec),
         quickStopMs: sec(s.quickMinSec, s.quickMaxSec),
+        king: kingId(),
+        throneEveryMs: Math.max(0.1, s.throneEveryMin) * 60_000,
+        throneMs: sec(s.throneMinSec, s.throneMaxSec),
+        prayMs: sec(s.prayMinSec, s.prayMaxSec),
       });
       ctx.emit('tv', 'frame', frame);
     }, 1000 / FRAME_HZ);
@@ -571,6 +673,48 @@ export default defineModule<WorldSettings>({
 
     // Other modules can make a character celebrate (a win, a big purchase)
     ctx.provide('world', { cheer });
+
+    // ------------------------------------------------------------ buying the title
+
+    ctx.onGuest('buyKing', async (args, guest) => {
+      const s = ctx.settings.get();
+      if (!s.king) throw new HbError('The title is not for sale');
+      const a = store.data.avatars[guest.id];
+      if (!a) throw new HbError('Make your look first');
+      if (kingId() === guest.id) throw new HbError('You are the King already');
+      const check = () => {
+        const price = kingPrice();
+        // The phone showed a price: someone quicker raised it meanwhile, so nobody pays more than they saw
+        if (args?.price !== undefined && Math.round(num(args.price, price)) !== price) throw new HbError(`Someone was quicker: the title now costs ${price}`);
+        const balance = wallets[guest.id] ?? 0;
+        if (balance < price) throw new HbError(`Not enough ${s.currencyName}: the title costs ${price}, you have ${balance}`, 'NO_MONEY');
+        return price;
+      };
+      check();
+      // The crowned look is drawn before the title changes hands, so the new King shows up crowned
+      const look = crownedOf(a);
+      await composite(look.choices, look.outfit).catch(() => null);
+      if (kingId() === guest.id) throw new HbError('You are the King already');
+      const price = check();
+      const before = kingId();
+      wallets[guest.id] = (wallets[guest.id] ?? 0) - price;
+      // The King who loses the title gets part of what they paid back
+      const back = before ? Math.round((king.paid * Math.max(0, Math.min(100, s.kingRefundPct))) / 100) : 0;
+      if (before && back) wallets[before] = (wallets[before] ?? 0) + back;
+      Object.assign(king, { id: guest.id, since: Date.now(), paid: price, sales: king.sales + 1 });
+      store.save();
+      sendWallet(guest.id);
+      const old = before ? ctx.session.guests.get(before) : undefined;
+      if (old) {
+        sendWallet(old.id);
+        ctx.toast(old, { text: `${guest.name} took your crown${back ? `: you get ${back} ${s.currencyName} back` : ''}`, kind: 'info' });
+      }
+      ctx.publish();
+      ctx.activity(old ? `{name} took the crown from ${old.name} and is the new King of the town` : '{name} is the first King of the town', { guest });
+      // A moment for the TV to load the crowned look, then the new King celebrates
+      setTimeout(() => cheer(guest.id), 1500);
+      return { balance: wallets[guest.id] };
+    });
 
     // ------------------------------------------------------------ admin
 
@@ -601,7 +745,32 @@ export default defineModule<WorldSettings>({
         wrapMaxSec: secs(args.wrapMaxSec, s.wrapMaxSec, 120),
         quickMinSec: secs(args.quickMinSec, s.quickMinSec, 30),
         quickMaxSec: secs(args.quickMaxSec, s.quickMaxSec, 30),
+        king: typeof args.king === 'boolean' ? args.king : s.king,
+        kingBase: price(args.kingBase, s.kingBase),
+        kingStep: price(args.kingStep, s.kingStep),
+        kingRefundPct: Math.max(0, Math.min(100, Math.round(num(args.kingRefundPct, s.kingRefundPct)))),
+        throneEveryMin: Math.max(0.5, Math.min(120, Math.round(num(args.throneEveryMin, s.throneEveryMin) * 10) / 10)),
+        throneMinSec: secs(args.throneMinSec, s.throneMinSec, 900),
+        throneMaxSec: secs(args.throneMaxSec, s.throneMaxSec, 900),
+        prayMinSec: secs(args.prayMinSec, s.prayMinSec, 300),
+        prayMaxSec: secs(args.prayMaxSec, s.prayMaxSec, 300),
       });
+      ctx.publish();
+    });
+
+    /** The host takes the title away (the price stays where it is: resetKingPrice brings it back down) */
+    ctx.onAdmin('removeKing', () => {
+      const old = king.id ? ctx.session.guests.get(king.id) : undefined;
+      king.id = null;
+      king.paid = 0;
+      store.save();
+      ctx.publish();
+      if (old) ctx.toast(old, { text: 'The host took your crown', kind: 'info' });
+    });
+
+    ctx.onAdmin('resetKingPrice', () => {
+      king.sales = 0;
+      store.save();
       ctx.publish();
     });
 
@@ -626,6 +795,7 @@ export default defineModule<WorldSettings>({
       for (const k of Object.keys(wallets)) delete wallets[k];
       for (const k of Object.keys(owned)) delete owned[k];
       for (const k of Object.keys(sheetInfos)) delete sheetInfos[k];
+      Object.assign(king, { id: null, since: 0, paid: 0, sales: 0 });
       store.save();
       // Open pages (the header, the shop) show the emptied wallet at once instead of the old balance
       ctx.emit('guest', 'wallet', { balance: 0 });
