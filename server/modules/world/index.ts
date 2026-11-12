@@ -194,17 +194,27 @@ export default defineModule<WorldSettings>({
     };
     setInterval(cleanSheets, 10 * 60_000);
 
-    // Sheets made before they were measured one by one: measure them again (they are redrawn once)
+    // Sheets made before they were measured one by one, or named another way (a look saved before
+    // the shop, a catalog change in the layers of a piece): draw them again under today's name
     void (async () => {
       let changed = false;
       for (const a of Object.values(store.data.avatars)) {
-        for (const look of [{ choices: a.choices, outfit: a.outfit ?? {}, hash: a.hash }, townOf(a)]) {
-          if (sheetInfos[look.hash]) continue;
-          await composite(look.choices, look.outfit).catch(() => null);
-          changed = true;
+        for (const look of [a, a.town]) {
+          if (!look) continue;
+          const hash = choicesHash(look.choices, look.outfit ?? {});
+          if (look.hash === hash && sheetInfos[hash]) continue;
+          const built = await composite(look.choices, look.outfit ?? {}).then(() => true, () => false);
+          // Unless the look changed meanwhile (a save or a wear writes its own name)
+          if (built && choicesHash(look.choices, look.outfit ?? {}) === hash) {
+            look.hash = hash;
+            changed = true;
+          }
         }
       }
-      if (changed) ctx.publish();
+      if (changed) {
+        store.save();
+        ctx.publish();
+      }
     })();
 
     // ------------------------------------------------------------ the town look
