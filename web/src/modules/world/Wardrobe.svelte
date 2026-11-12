@@ -222,7 +222,6 @@
             {:else}
               <span class="blank"></span>
             {/if}
-            {#if w}<span class="wcolor" style:background={COLOR_HEX[w.color] ?? '#888'}></span>{/if}
           </span>
           <span class="sname">{s.name}</span>
           {#if count}<span class="count">{count}</span>{/if}
@@ -364,15 +363,6 @@
     height: 1.7rem;
     border: 1.5px dashed var(--border);
     border-radius: 50%;
-  }
-  .wcolor {
-    position: absolute;
-    right: -0.1rem;
-    bottom: 0;
-    width: 0.7rem;
-    height: 0.7rem;
-    border-radius: 50%;
-    border: 1px solid var(--border);
   }
   .sname {
     font-size: 1.05rem;
