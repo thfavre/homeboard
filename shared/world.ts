@@ -340,6 +340,19 @@ export interface KingInfo {
   price: number;
   /** The ceremony in the throne room, when it is held on its own: every so many days, at this time (HH:MM). Null: only when the host starts it */
   ceremony: { everyDays: number; time: string } | null;
+  /** The monarchy: every reign so far, the oldest first (the last one is still going while its `to` is null) */
+  reigns: Reign[];
+}
+
+/** One reign: who held the title (as they were called then), from when to when, and what they paid for it */
+export interface Reign {
+  id: string;
+  name: string;
+  color: string;
+  from: number;
+  /** Null: still reigning */
+  to: number | null;
+  paid: number;
 }
 
 /** Why a ceremony that is due has not started yet: the King is not in the town (or asleep), a game is on the TV, or no TV is open */

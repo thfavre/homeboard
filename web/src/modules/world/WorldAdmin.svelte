@@ -7,6 +7,7 @@
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { TIERS, TIER_NAMES } from '$shared/wardrobe.ts';
   import { LOOK_PARTS, LOOK_PART_NAMES, type CeremonyHold, type WorldState } from '$shared/world.ts';
+  import Monarchy from './Monarchy.svelte';
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
   const kingName = $derived(mod?.king?.id ? (mod.characters.find((c) => c.id === mod.king!.id)?.name ?? null) : null);
@@ -169,6 +170,7 @@
       The title changed hands {mod.kingSales ?? 0} {mod.kingSales === 1 ? 'time' : 'times'}. Removing it leaves the price as it is; resetting brings it back to
       the first price.
     </p>
+    <Monarchy />
     <div class="pair">
       <label class="field">
         <span>First price</span>

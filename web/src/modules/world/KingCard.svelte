@@ -3,24 +3,21 @@
   import { attempt, hb, rpc } from '$lib/client.svelte.ts';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import type { WorldState } from '$shared/world.ts';
+  import Monarchy from './Monarchy.svelte';
 
   /**
-   * The King's title in the shop: who holds it and what taking it costs. The King wears the crown
-   * in the town, and the whole town gathers in the throne room to kneel before them. Anyone can take
-   * the title, and its price rises each time it changes hands.
+   * The King's title in the shop: who holds it, one line, and the button to take it. Anyone can,
+   * and its price rises each time it changes hands. Below it, the monarchy: every King so far.
    */
 
   let { balance }: { balance: number | null } = $props();
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
   const king = $derived(mod?.king);
-  /** When the town gathers before the King, if the ceremony is held on its own */
-  const gathers = $derived(
-    king?.ceremony ? `${king.ceremony.everyDays === 1 ? 'every day' : `every ${king.ceremony.everyDays} days`} at ${king.ceremony.time}` : 'now and then',
-  );
   const kingName = $derived(king?.id ? (mod?.characters.find((c) => c.id === king.id)?.name ?? null) : null);
   const mine = $derived(!!king?.id && king.id === hb.me?.id);
   const short = $derived(!!king && balance !== null && balance < king.price);
+  const money = $derived(mod?.shop?.currencyName ?? '');
 
   async function take() {
     if (!king) return;
@@ -36,26 +33,18 @@
       <div class="who">
         <span class="title">{mine ? 'You are the King' : kingName ? `${kingName} is the King` : 'The throne is empty'}</span>
         <span class="faint small">
-          {mine ? 'Someone can take the title from you at any time.' : kingName ? 'Take the title and the crown is yours.' : 'Be the first King of the town.'}
+          {mine ? `Anyone can take your crown for ${king.price} ${money}.` : short ? `The crown costs ${king.price} ${money}: you have ${balance}.` : 'One crown, and it can be yours.'}
         </span>
       </div>
     </div>
-    <p class="faint small">
-      The King wears the crown in the town, and {gathers} the whole town gathers in the throne room to kneel before the King on the throne. The price
-      rises each time the title changes hands.
-    </p>
     {#if !mine}
       <TwoStepButton class="primary take" disabled={short} onconfirm={take}>
-        <Crown size={18} />Take the title for {king.price} {mod?.shop?.currencyName ?? ''}
+        <Crown size={18} />Take the crown for {king.price} {money}
         {#snippet armed()}<Coins size={18} />Tap again to pay {king.price}{/snippet}
       </TwoStepButton>
-      {#if short}
-        <p class="faint small center">You have {balance} {mod?.shop?.currencyName ?? ''}: not enough yet.</p>
-      {/if}
-    {:else}
-      <p class="next small">Taking it from you now costs {king.price} {mod?.shop?.currencyName ?? ''}.</p>
     {/if}
   </div>
+  <Monarchy />
 {/if}
 
 <style>
@@ -63,6 +52,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.7rem;
+    margin-bottom: 0.7rem;
     padding: 0.9rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -96,17 +86,8 @@
     font-weight: 700;
     font-size: 1.02rem;
   }
-  .card p {
-    margin: 0;
-  }
   .small {
     font-size: 0.84rem;
-  }
-  .center {
-    text-align: center;
-  }
-  .next {
-    color: var(--text-dim);
   }
   .card :global(.take) {
     justify-content: center;

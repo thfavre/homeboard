@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type LookPart, type PlaceId, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, piecesOf, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -125,6 +125,8 @@ interface WorldData {
   /** Saved outfits per guest, one per slot (null: an empty slot), put back on in one tap */
   saved?: Record<string, (Outfit | null)[]>;
   king?: KingData;
+  /** The monarchy: every reign so far, the oldest first (the last one is open while its King reigns) */
+  reigns?: Reign[];
   /** When the last ceremony held on its own started (0: never) */
   ceremony?: { last: number };
 }
@@ -142,6 +144,8 @@ interface KingData {
 
 /** The crown the King wears in the town, unless they wear a crown of their own already */
 const KING_CROWN: WornItem = { id: 'crown', color: 'crown_gold' };
+/** How many reigns the monarchy remembers (the oldest are forgotten) */
+const REIGNS_KEPT = 40;
 
 /** Frames to the TV per second (the TV interpolates between them) */
 const FRAME_HZ = 10;
@@ -202,6 +206,12 @@ export default defineModule<WorldSettings>({
     // Came with the King's title, and with the ceremony
     const king = (store.data.king ??= { id: null, since: 0, paid: 0, sales: 0 });
     const held = (store.data.ceremony ??= { last: 0 });
+    // Came with the monarchy. A King crowned before it existed gets their reign written down now
+    const reigns = (store.data.reigns ??= []);
+    if (king.id && !reigns.some((r) => r.to === null)) {
+      const guest = ctx.session.guests.get(king.id);
+      reigns.push({ id: king.id, name: guest?.name ?? 'A King', color: guest?.color ?? '#d19428', from: king.since, to: null, paid: king.paid });
+    }
     const composer = new Composer(new LpcFiles());
     for (const [file, cr] of Object.entries(store.data.credits)) composer.credits.set(file, cr);
     const sheetsDir = ctx.mediaDir('sheets');
@@ -246,7 +256,8 @@ export default defineModule<WorldSettings>({
       const used = new Set<string>();
       for (const a of Object.values(store.data.avatars)) used.add(`${a.hash}.png`).add(`${townOf(a).hash}.png`);
       const k = king.id ? store.data.avatars[king.id] : undefined;
-      if (k) used.add(`${crownedOf(k).hash}.png`);
+      // The King's crowned looks: the one in the town, and the one they see of themselves on the phone
+      if (k) used.add(`${crownedOf(k).hash}.png`).add(`${choicesHash(k.choices, crownOn(king.id!, k.outfit ?? {}))}.png`);
       for (const d of dressing.values()) used.add(`${d.hash}.png`);
       for (const f of readdirSync(sheetsDir)) {
         if (f.endsWith('.png') && !used.has(f) && !building.has(f.replace(/\.png$/, ''))) unlinkSync(join(sheetsDir, f));
@@ -359,6 +370,18 @@ export default defineModule<WorldSettings>({
       return id && ctx.settings.get().king && ctx.session.guests.has(id) && store.data.avatars[id] ? id : null;
     };
 
+    /** The reign that is going on ends now (the title changes hands, or the host takes it away) */
+    const endReign = () => {
+      for (const r of reigns) if (r.to === null) r.to = Date.now();
+    };
+
+    /**
+     * The King keeps the crown: while a guest holds the title their headwear stays as it is. What
+     * they see of themselves on the phone wears the crown, like their character in the town.
+     */
+    const crownOn = (guestId: string, outfit: Outfit): Outfit => (guestId === kingId() && outfit.hat?.id !== KING_CROWN.id ? { ...outfit, hat: KING_CROWN } : outfit);
+    const sameHat = (a: Outfit, b: Outfit) => a.hat?.id === b.hat?.id && a.hat?.color === b.hat?.color;
+
     /** What taking the title costs now: it rises each time the title changes hands */
     const kingPrice = () => {
       const s = ctx.settings.get();
@@ -466,7 +489,7 @@ export default defineModule<WorldSettings>({
         characters,
         sheet: store.data.sheet,
         shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices() },
-        king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null },
+        king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null, reigns },
       };
       if (role === 'admin') {
         const guests = [...ctx.session.guests.values()];
@@ -519,8 +542,10 @@ export default defineModule<WorldSettings>({
       const choices = args?.choices ? validChoices(args.choices) : (stored?.choices ?? null);
       if (!choices) throw new HbError('That look does not exist');
       // The shop sends a candidate outfit (owning it is not needed to try it on); the editor none
-      const outfit = args?.outfit !== undefined ? validOutfit(args.outfit, choices.body) : outfitFor(guest.id, choices.body);
-      if (!outfit) throw new HbError('That outfit does not exist');
+      const asked = args?.outfit !== undefined ? validOutfit(args.outfit, choices.body) : outfitFor(guest.id, choices.body);
+      if (!asked) throw new HbError('That outfit does not exist');
+      // The King sees the crown on, whatever is tried on under it
+      const outfit = crownOn(guest.id, asked);
       const hash = choicesHash(choices, outfit);
       const sheet = await composite(choices, outfit);
       return { url: ctx.mediaUrl(`sheets/${hash}.png`), sheet };
@@ -738,6 +763,7 @@ export default defineModule<WorldSettings>({
         if (!stored) throw new HbError('Make your look first');
         const outfit = validOutfit(args?.outfit, stored.choices.body);
         if (!outfit) throw new HbError('That outfit does not exist');
+        if (guest.id === kingId() && !sameHat(outfit, stored.outfit ?? {})) throw new HbError('The King keeps the crown: your headwear cannot change while you hold the title');
         return wearOutfit(guest.id, outfit);
       }),
     );
@@ -767,7 +793,14 @@ export default defineModule<WorldSettings>({
       oneAtATime(guest.id, async () => {
         const o = saved[guest.id]?.[savedSlot(args?.slot)];
         if (!o) throw new HbError('Nothing saved there');
-        return wearOutfit(guest.id, wearable(guest.id, o));
+        const outfit = wearable(guest.id, o);
+        if (guest.id === kingId()) {
+          // The King keeps the crown: the rest of the saved outfit goes on, the headwear stays as it is
+          const hat = store.data.avatars[guest.id]?.outfit?.hat;
+          if (hat) outfit.hat = hat;
+          else delete outfit.hat;
+        }
+        return wearOutfit(guest.id, outfit);
       }),
     );
 
@@ -871,6 +904,10 @@ export default defineModule<WorldSettings>({
       const back = before ? Math.round((king.paid * Math.max(0, Math.min(100, s.kingRefundPct))) / 100) : 0;
       if (before && back) wallets[before] = (wallets[before] ?? 0) + back;
       Object.assign(king, { id: guest.id, since: Date.now(), paid: price, sales: king.sales + 1 });
+      // The monarchy: the old reign ends, the new one begins (only the last reigns are kept)
+      endReign();
+      reigns.push({ id: guest.id, name: guest.name, color: guest.color, from: king.since, to: null, paid: price });
+      reigns.splice(0, Math.max(0, reigns.length - REIGNS_KEPT));
       store.save();
       sendWallet(guest.id);
       const old = before ? ctx.session.guests.get(before) : undefined;
@@ -943,6 +980,7 @@ export default defineModule<WorldSettings>({
       const old = king.id ? ctx.session.guests.get(king.id) : undefined;
       king.id = null;
       king.paid = 0;
+      endReign();
       store.save();
       ctx.publish();
       if (old) ctx.toast(old, { text: 'The host took your crown', kind: 'info' });
@@ -977,6 +1015,7 @@ export default defineModule<WorldSettings>({
       for (const k of Object.keys(saved)) delete saved[k];
       for (const k of Object.keys(sheetInfos)) delete sheetInfos[k];
       Object.assign(king, { id: null, since: 0, paid: 0, sales: 0 });
+      reigns.length = 0;
       sim.reset();
       store.save();
       // Open pages (the header, the shop) show the emptied wallet at once instead of the old balance

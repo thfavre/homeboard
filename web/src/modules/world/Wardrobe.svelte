@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { Ban, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
+  import { onMount, untrack } from 'svelte';
+  import { Ban, Crown, Lock, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
   import { COLOR_HEX, SLOTS, colorName, itemById, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
-  import type { SheetInfo, WardrobeMine } from '$shared/world.ts';
+  import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import OutfitThumb from './OutfitThumb.svelte';
   import type { PreviewView } from './preview.ts';
 
@@ -17,6 +17,12 @@
    */
 
   let { onshop, view }: { onshop?: (slot: Slot) => void; view: PreviewView } = $props();
+
+  /**
+   * The King keeps the crown: while this guest holds the title the hat slot is locked (the server
+   * refuses a change too), shows the crown, and says why
+   */
+  const crowned = $derived(!!hb.me && (hb.modules.world as WorldState | undefined)?.king?.id === hb.me.id);
 
   let wd = $state<WardrobeMine | null>(null);
   let body = $state<'male' | 'female' | null>(null);
@@ -129,16 +135,26 @@
       const first = slots.find((s) => wd?.outfit[s.id]) ?? slots.find((s) => closet.has(s.id));
       if (first) slot = first.id;
       loaded = true;
-      if (body && wd) void build($state.snapshot(wd.outfit) as Outfit);
       rpc<Record<string, string>>('world', 'ownedIcons')
         .then((urls) => (colored = urls))
         .catch(() => {});
-      for (const s of closet.keys()) {
+      // The hats too, even with none owned: the crown's picture is among them
+      for (const s of new Set<Slot>([...closet.keys(), 'hat'])) {
         rpc<Record<string, string>>('world', 'icons', { slot: s })
           .then((urls) => (icons = { ...icons, ...urls }))
           .catch(() => {});
       }
     })();
+  });
+
+  // The preview shows what is worn, from the moment the wardrobe is loaded. It is drawn again when
+  // the title comes or goes: the crown with it
+  $effect(() => {
+    void crowned;
+    if (!loaded) return;
+    untrack(() => {
+      if (body && wd) void build($state.snapshot(wd.outfit) as Outfit);
+    });
   });
 
   onMount(() => {
@@ -318,14 +334,21 @@
           onclick={() => (slot = s.id)}
         >
           <span class="spic">
-            {#if w && pictureOf(w.id, w.color)}
+            {#if crowned && s.id === 'hat'}
+              <!-- The King's crown, whatever is worn under it -->
+              {#if icons.crown}<img src={icons.crown} alt="Crown" />{:else}<Crown size={26} />{/if}
+            {:else if w && pictureOf(w.id, w.color)}
               <img src={pictureOf(w.id, w.color)} alt="" />
             {:else}
               <span class="blank"></span>
             {/if}
           </span>
           <span class="sname">{s.name}</span>
-          {#if count}<span class="count">{count}</span>{/if}
+          {#if crowned && s.id === 'hat'}
+            <span class="count lock"><Lock size={12} /></span>
+          {:else if count}
+            <span class="count">{count}</span>
+          {/if}
         </button>
       {/each}
     </div>
@@ -335,7 +358,15 @@
         <span class="ctitle">My {slotName.toLowerCase()}<span class="faint">{pieces.length ? ` · ${pieces.length}` : ''}</span></span>
         <button type="button" class="shoplink" onclick={() => onshop?.(slot)}><ShoppingBag size={15} />Buy more</button>
       </div>
-      {#if pieces.length}
+      {#if crowned && slot === 'hat'}
+        <div class="locked">
+          <span class="lcrown"><Crown size={26} /></span>
+          <div>
+            <strong>The King keeps the crown</strong>
+            <p class="faint">No other hat while you hold the title.</p>
+          </div>
+        </div>
+      {:else if pieces.length}
         <div class="scroll">
         <div class="grid">
           <!-- Nothing: the slot left empty -->
@@ -529,6 +560,37 @@
     font-weight: 700;
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;
+  }
+
+  /* The King's hat slot: a lock where the count is, and the reason in place of the pieces */
+  .count.lock {
+    color: var(--warning);
+  }
+  .spic :global(svg) {
+    color: var(--warning);
+  }
+  .locked {
+    display: grid;
+    justify-items: center;
+    gap: 0.35rem;
+    padding: 1.1rem 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--warning) 50%, var(--border));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--warning) 9%, var(--surface-2));
+    text-align: center;
+  }
+  .locked p {
+    margin: 0;
+    font-size: 0.86rem;
+  }
+  .lcrown {
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--warning) 22%, var(--surface));
+    color: var(--warning);
   }
 
   .label {
