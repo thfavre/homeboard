@@ -16,6 +16,7 @@
   - Shop, next: exchanging Acorns and party coins both ways, at a rate the host sets in admin; a daily deal (one item at a discount for an hour, shown at the top of the shop and announced on the TV)
   - A screen in the town (a billboard, a big TV or a small cinema) showing what is happening at the party live: who is playing a 1vs1 against whom, the score, a quiz running; characters could gather in front of it to watch
   - The King's daily prayer: once a day (time and length set in admin) everyone in the town comes to pray before the King at the throne, a mandatory activity; once it starts characters have X seconds (about 20, set in admin) to finish what they are doing and go, except those busy with another activity of the same priority
+  - More wardrobe slots unlocked as you buy: once a guest owns X pieces (or at least one in every slot), new slots open in the shop and wardrobe, like ears, arms, shoulders (the catalog session found ears, horns and shoulder pieces in the LPC art that need a new slot)
 -- games ---
 - [x] 1vs1 someone on the TV (like a game show (and put some coins?))
 - [ ] gift for a condition? Like we can see somewhere that doing X gives a gift.
