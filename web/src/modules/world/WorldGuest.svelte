@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import { Check, Coins, PersonStanding, Shirt, ShoppingBag, Undo2 } from '@lucide/svelte';
   import { attempt, hb, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
@@ -113,9 +112,21 @@
     return () => clearTimeout(debounce);
   });
 
-  onMount(() => {
+  // Loaded once connected: a panel opened while offline would otherwise take "no answer" for "no
+  // avatar yet" and offer Create, which then pays for a look change back to the defaults
+  let loading = false;
+  $effect(() => {
+    if (!firstLoad || loading || !hb.connected) return;
+    loading = true;
     void (async () => {
-      const mine = await rpc<AvatarChoices | null>('world', 'mine').catch(() => null);
+      let mine: AvatarChoices | null;
+      try {
+        mine = await rpc<AvatarChoices | null>('world', 'mine');
+      } catch {
+        // Tried again on the next connection
+        loading = false;
+        return;
+      }
       if (mine) {
         choices = mine;
         saved = JSON.stringify(mine);
@@ -235,7 +246,7 @@
     </div>
 
     {#if !created}
-      <button type="button" class="btn primary save" disabled={buildingCount > 0} onclick={save}><Check size={18} />Create</button>
+      <button type="button" class="btn primary save" disabled={buildingCount > 0 || firstLoad} onclick={save}><Check size={18} />Create</button>
     {:else if dirty}
       <!-- Changing a look is paid: undo the changes, or pay for them -->
       <div class="deal">

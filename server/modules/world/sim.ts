@@ -413,12 +413,12 @@ export class TownSim {
     if (!w.errands.length || w.doing.kind === 'visit' || w.wrapped === w.doing) return;
     const d = w.doing;
     const rule = this.rule(w);
-    w.wrapped = d;
     // Standing around: a moment to notice, and off
-    if (d.kind === 'idle') return rule.wrapUp!(d, w, now, rand(300, 1200));
-    if (rule.quickStop) return rule.quickStop(d, w, now, rand(o.quickStopMs[0], o.quickStopMs[1]));
-    if (rule.left(d, w, now) < o.finishWithinMs || !rule.wrapUp) return;
-    rule.wrapUp(d, w, now, rand(o.wrapUpMs[0], o.wrapUpMs[1]));
+    if (d.kind === 'idle') rule.wrapUp!(d, w, now, rand(300, 1200));
+    else if (rule.quickStop) rule.quickStop(d, w, now, rand(o.quickStopMs[0], o.quickStopMs[1]));
+    else if (rule.left(d, w, now) >= o.finishWithinMs && rule.wrapUp) rule.wrapUp(d, w, now, rand(o.wrapUpMs[0], o.wrapUpMs[1]));
+    // What it was swapped for (the pause after a walk) already has its time: it is not cut short again
+    w.wrapped = w.doing;
   }
 
   /** The visits of a shop in some phases */

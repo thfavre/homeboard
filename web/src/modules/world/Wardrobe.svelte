@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Ban, Shirt, ShoppingBag } from '@lucide/svelte';
-  import { attempt, onEvent, rpc } from '$lib/client.svelte.ts';
+  import { attempt, hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import { COLOR_HEX, SLOTS, colorName, itemById, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
@@ -105,11 +105,21 @@
     view.facing = slot === 'back' ? 'up' : 'down';
   });
 
-  onMount(() => {
+  // Loaded once connected (opened while offline, "no answer" is not "no avatar yet"); a failed load
+  // is tried again on the next connection
+  let loading = false;
+  $effect(() => {
+    if (loaded || loading || !hb.connected) return;
+    loading = true;
     void (async () => {
-      const mine = await rpc<{ body: 'male' | 'female' } | null>('world', 'mine').catch(() => null);
-      body = mine?.body ?? null;
-      wd = await rpc<WardrobeMine>('world', 'wardrobe').catch(() => null);
+      try {
+        const mine = await rpc<{ body: 'male' | 'female' } | null>('world', 'mine');
+        body = mine?.body ?? null;
+        wd = mine ? await rpc<WardrobeMine>('world', 'wardrobe') : null;
+      } catch {
+        loading = false;
+        return;
+      }
       // Open on the first slot that has something in it
       const first = slots.find((s) => wd?.outfit[s.id]) ?? slots.find((s) => closet.has(s.id));
       if (first) slot = first.id;
@@ -124,6 +134,9 @@
           .catch(() => {});
       }
     })();
+  });
+
+  onMount(() => {
     const timer = setInterval(() => tick++, 3000);
     const off = onEvent<{ balance: number }>('world', 'wallet', (w) => {
       if (wd) wd.balance = w.balance;

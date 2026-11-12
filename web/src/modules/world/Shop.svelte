@@ -157,11 +157,21 @@
     return () => clearTimeout(debounce);
   });
 
-  onMount(() => {
+  // Loaded once connected (opened while offline, "no answer" is not "no avatar yet"); a failed load
+  // is tried again on the next connection
+  let loading = false;
+  $effect(() => {
+    if (!firstLoad || loading || !hb.connected) return;
+    loading = true;
     void (async () => {
-      const mine = await rpc<{ body: 'male' | 'female' } | null>('world', 'mine').catch(() => null);
-      body = mine?.body ?? null;
-      wd = await rpc<WardrobeMine>('world', 'wardrobe').catch(() => null);
+      try {
+        const mine = await rpc<{ body: 'male' | 'female' } | null>('world', 'mine');
+        body = mine?.body ?? null;
+        wd = mine ? await rpc<WardrobeMine>('world', 'wardrobe') : null;
+      } catch {
+        loading = false;
+        return;
+      }
       void loadColored();
       try {
         const draft = JSON.parse(storageGet(DRAFT_KEY) ?? 'null');
@@ -181,26 +191,47 @@
       firstLoad = false;
       if (body) void build(candidate());
     })();
-    return onEvent<{ balance: number }>('world', 'wallet', (w) => {
-      if (wd) wd.balance = w.balance;
-    });
   });
 
+  onMount(() =>
+    onEvent<{ balance: number }>('world', 'wallet', (w) => {
+      if (wd) wd.balance = w.balance;
+    }),
+  );
+
   // ------------------------------------------------------------ actions
+
+  /** A purchase or a wear is on its way: a second tap would buy the piece again (refused) */
+  let busy = $state(false);
 
   async function buy() {
     // The piece and its slot as they are now: the guest may browse on while the purchase goes through
     const piece = open;
     const at = slot;
-    if (!piece) return;
-    const bought = await attempt(() => rpc<WardrobeMine>('world', 'buy', { id: piece.id, color: piece.color }));
-    if (!bought) return;
-    wd = bought;
-    void loadColored();
-    await wear(piece, at);
+    if (!piece || busy) return;
+    busy = true;
+    try {
+      const bought = await attempt(() => rpc<WardrobeMine>('world', 'buy', { id: piece.id, color: piece.color }));
+      if (!bought) return;
+      wd = bought;
+      void loadColored();
+      await putOn(piece, at);
+    } finally {
+      busy = false;
+    }
   }
 
-  async function wear(piece: WornItem | null = open, at: Slot = slot) {
+  async function wear() {
+    if (busy) return;
+    busy = true;
+    try {
+      await putOn(open, slot);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function putOn(piece: WornItem | null, at: Slot) {
     const done = await attempt(() => rpc<WardrobeMine>('world', 'wear', { outfit: candidate(piece, at) }), 'On you');
     if (done) wd = done;
   }
@@ -272,9 +303,9 @@
           {#if isWorn}
             <span class="wearing"><Check size={16} />Wearing</span>
           {:else if isOwned}
-            <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={() => wear()}><Check size={18} />Wear</button>
+            <button type="button" class="btn primary" disabled={buildingCount > 0 || busy} onclick={wear}><Check size={18} />Wear</button>
           {:else}
-            <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={buy}>
+            <button type="button" class="btn primary" disabled={buildingCount > 0 || busy} onclick={buy}>
               <ShoppingBag size={18} />
               Buy for {price} {shop.currencyName}
             </button>
