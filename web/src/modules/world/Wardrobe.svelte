@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Ban, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
+  import { Ban, Lock, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
-  import { COLOR_HEX, SLOTS, colorName, itemById, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
-  import type { SheetInfo, WardrobeMine } from '$shared/world.ts';
+  import { COLOR_HEX, SLOTS, colorName, isLockedSlot, itemById, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
+  import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import OutfitThumb from './OutfitThumb.svelte';
   import type { PreviewView } from './preview.ts';
 
@@ -50,9 +50,15 @@
     feet: 'feet',
     dress: null,
     back: null,
+    arms: 'torso',
+    shoulders: 'torso',
   };
 
-  const slots = $derived(SLOTS.filter((s) => s.id !== 'dress' || body === 'female'));
+  const slots = $derived(slotsFor(body));
+  const shop = $derived((hb.modules.world as WorldState | undefined)?.shop);
+  /** How far the guest is from the locked slots */
+  const progress = $derived(body && shop ? unlockProgress(wd?.owned ?? [], body, shop.unlockPieces) : null);
+  const lockedNow = (s: Slot) => isLockedSlot(s) && !progress?.unlocked;
   const slotName = $derived(SLOTS.find((s) => s.id === slot)?.name ?? '');
 
   /** Owned pieces grouped by item, with the colors owned of each */
@@ -304,7 +310,8 @@
     {/if}
 
     <span class="label">Wearing</span>
-    <div class="outfit" role="tablist" aria-label="Slots">
+    <!-- Two rows at most: five tiles show per row, more scroll sideways -->
+    <div class="outfit" role="tablist" aria-label="Slots" style:--cols={Math.ceil(slots.length / 2)}>
       {#each slots as s (s.id)}
         {@const w = wd?.outfit[s.id]}
         {@const count = closet.get(s.id)?.length ?? 0}
@@ -320,6 +327,8 @@
           <span class="spic">
             {#if w && pictureOf(w.id, w.color)}
               <img src={pictureOf(w.id, w.color)} alt="" />
+            {:else if lockedNow(s.id)}
+              <Lock size={20} />
             {:else}
               <span class="blank"></span>
             {/if}
@@ -387,6 +396,12 @@
           {/each}
         </div>
         </div>
+      {:else if lockedNow(slot) && progress && shop}
+        <p class="faint none-yet">
+          Opens once you own a piece in every slot and {shop.unlockPieces} pieces in all ({Math.min(progress.pieces, shop.unlockPieces)}/{shop.unlockPieces}{progress.missing.length
+            ? `, still missing: ${progress.missing.map((m) => SLOTS.find((x) => x.id === m)?.name.toLowerCase()).join(', ')}`
+            : ''}).
+        </p>
       {:else}
         <p class="faint none-yet">Nothing here yet. The shop has some.</p>
       {/if}
@@ -469,10 +484,33 @@
   }
 
   /* ------------------------------------------------------------ the outfit strip */
+  /* Tiles shown at once: four and a bit on a phone (the next one peeks out, so the row reads as
+     scrollable), five from a tablet up, every tile on a wide screen */
+  .wardrobe {
+    container-type: inline-size;
+  }
   .outfit {
+    --gap: 0.4rem;
+    --shown: 4.35;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.4rem;
+    grid-template-columns: repeat(var(--cols), calc((100% - (var(--shown) - 1) * var(--gap)) / var(--shown)));
+    gap: var(--gap);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .outfit::-webkit-scrollbar {
+    display: none;
+  }
+  @container (min-width: 30rem) {
+    .outfit {
+      --shown: 5;
+    }
+  }
+  @container (min-width: 44rem) {
+    .outfit {
+      --shown: var(--cols);
+    }
   }
   .slot {
     position: relative;
@@ -480,7 +518,7 @@
     flex-direction: column;
     align-items: center;
     gap: 0;
-    padding: 0.15rem 0.2rem 0.3rem;
+    padding: 0.15rem 0.1rem 0.3rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-2);
@@ -518,8 +556,15 @@
     border-radius: 50%;
   }
   .sname {
-    font-size: 1.05rem;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.84rem;
     font-weight: 600;
+  }
+  .spic :global(svg) {
+    color: var(--text-dim);
   }
   .count {
     position: absolute;

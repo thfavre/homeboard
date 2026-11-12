@@ -5,7 +5,7 @@ import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type LookPart, type PlaceId, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { CATALOG, TIERS, itemById, piecesOf, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, TIERS, isLockedSlot, itemById, piecesOf, unlockProgress, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -27,6 +27,8 @@ interface WorldSettings {
   priceFancy: number;
   priceEpic: number;
   priceLegendary: number;
+  /** Pieces a guest must own (with one in every open slot) before the locked slots open */
+  unlockPieces: number;
   /** What changing each part of an existing look costs (the hair style, its color...) */
   lookHair: number;
   lookHairColor: number;
@@ -157,6 +159,7 @@ export default defineModule<WorldSettings>({
     priceFancy: 60,
     priceEpic: 150,
     priceLegendary: 400,
+    unlockPieces: 10,
     lookHair: 30,
     lookHairColor: 20,
     lookBeard: 15,
@@ -391,7 +394,7 @@ export default defineModule<WorldSettings>({
       const base: WorldState = {
         characters,
         sheet: store.data.sheet,
-        shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices() },
+        shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices(), unlockPieces: s.unlockPieces },
         king: { on: s.king, id: crowned, since: king.since, price: kingPrice() },
       };
       if (role === 'admin') {
@@ -621,6 +624,9 @@ export default defineModule<WorldSettings>({
       if (worn.item.bodies && !worn.item.bodies.includes(stored.choices.body)) throw new HbError('That does not fit your body');
       if ((owned[guest.id] ?? []).some((o) => o.id === worn.id && o.color === worn.color)) throw new HbError('You own that already');
       const s = ctx.settings.get();
+      if (isLockedSlot(worn.item.slot) && !unlockProgress((owned[guest.id] ?? []).filter((o) => validWorn(o)), stored.choices.body, s.unlockPieces).unlocked) {
+        throw new HbError('That part of the shop is still locked');
+      }
       const price = s[PRICE_KEY[worn.item.tier]];
       const balance = wallets[guest.id] ?? 0;
       if (balance < price) throw new HbError(`Not enough ${s.currencyName}: this costs ${price}, you have ${balance}`, 'NO_MONEY');
@@ -817,6 +823,7 @@ export default defineModule<WorldSettings>({
         priceFancy: price(args.priceFancy, s.priceFancy),
         priceEpic: price(args.priceEpic, s.priceEpic),
         priceLegendary: price(args.priceLegendary, s.priceLegendary),
+        unlockPieces: Math.max(0, Math.min(1000, Math.round(num(args.unlockPieces, s.unlockPieces)))),
         lookHair: price(args.lookHair, s.lookHair),
         lookHairColor: price(args.lookHairColor, s.lookHairColor),
         lookBeard: price(args.lookBeard, s.lookBeard),

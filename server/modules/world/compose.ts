@@ -127,24 +127,37 @@ export class Composer {
     return buf ? PNG.sync.read(buf) : null;
   }
 
-  /** The palettes of a material (body, cloth, hair, eye) and the base the art is drawn in */
-  private async palette(material: string): Promise<{ base: string; colors: Record<string, string[]> }> {
-    let p = this.palettes.get(material);
+  /** The palettes of a material (body, cloth, hair, eye) and the base the art is drawn in; `set` is
+   *  the palette file (ulpc, or lpcr for art drawn in its ramps) */
+  private async palette(material: string, set = 'ulpc'): Promise<{ base: string; colors: Record<string, string[]> }> {
+    const key = `${material}_${set}`;
+    let p = this.palettes.get(key);
     if (!p) {
       p = (async () => {
         const meta = await this.json(`palette_definitions/${material}/meta_${material}.json`);
-        return { base: meta.base, colors: await this.json(`palette_definitions/${material}/${material}_ulpc.json`) };
+        return { base: meta.base, colors: await this.json(`palette_definitions/${material}/${material}_${set}.json`) };
       })();
-      this.palettes.set(material, p);
-      p.catch(() => this.palettes.delete(material));
+      this.palettes.set(key, p);
+      p.catch(() => this.palettes.delete(key));
     }
     return p;
   }
 
-  private async swapFor(recolor: { material: string; base?: string }, target: string): Promise<Swap> {
+  /**
+   * The color swap from the art's own ramp to the target color. The base may name its palette
+   * ("ulpc.fur_brown", "lpcr.ivory"); a target missing from the material's palette is looked up in the other
+   * materials the art allows (pauldrons drawn in cloth, worn in steel: "metal.ulpc").
+   */
+  private async swapFor(recolor: { material: string; base?: string; palettes?: string[] }, target: string): Promise<Swap> {
     const p = await this.palette(recolor.material);
-    const from = p.colors[recolor.base ?? p.base];
-    const to = p.colors[target];
+    const [set, base] = /^(ulpc|lpcr)\.(.+)$/.exec(recolor.base ?? '')?.slice(1) ?? ['ulpc', recolor.base ?? p.base];
+    const from = (await this.palette(recolor.material, set)).colors[base];
+    let to = p.colors[target];
+    for (const other of recolor.palettes ?? []) {
+      if (to) break;
+      const m = /^(\w+)\.ulpc$/.exec(other);
+      if (m) to = (await this.palette(m[1])).colors[target];
+    }
     if (!from || !to) throw new Error(`No ${recolor.material} color "${target}"`);
     return from.map((c, i) => ({ from: rgb(c), to: rgb(to[Math.min(i, to.length - 1)]) }));
   }
@@ -332,6 +345,9 @@ export function choicesHash(c: AvatarChoices, outfit: Outfit = {}): string {
     const item = w && itemById(w.id);
     return w ? [w.id, w.color, ...(item ? piecesOf(item, w.color) : [])] : null;
   });
+  // Empty slots past the first eight (the slots added later) are left out, so adding a slot keeps
+  // the names of the sheets already drawn
+  while (worn.length > 8 && worn[worn.length - 1] === null) worn.pop();
   return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes, worn])).digest('hex').slice(0, 12);
 }
 

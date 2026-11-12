@@ -255,6 +255,8 @@ export interface ShopInfo {
   currencyName: string;
   prices: Record<Tier, number>;
   look: Record<LookPart, number>;
+  /** Pieces to own (with one in every open slot) before the locked slots open */
+  unlockPieces: number;
 }
 
 /** What a guest owns and wears, fetched per guest (the shared state cannot carry it) */

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Check, Coins, Crown, ShoppingBag, X } from '@lucide/svelte';
+  import { Check, Coins, Crown, Lock, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
-  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
+  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, isLockedSlot, slotsFor, splitColor, unlockProgress, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
   import KingCard from './KingCard.svelte';
@@ -56,7 +56,11 @@
   let buildingCount = $state(0);
   let firstLoad = $state(true);
 
-  const slots = $derived(SLOTS.filter((s) => s.id !== 'dress' || body === 'female'));
+  const slots = $derived(slotsFor(body));
+  /** How far the guest is from the locked slots (they can be browsed and tried on, not bought) */
+  const progress = $derived(body && shop ? unlockProgress(wd?.owned ?? [], body, shop.unlockPieces) : null);
+  const locked = $derived(isLockedSlot(slot) && !progress?.unlocked);
+  const slotName = (id: Slot) => SLOTS.find((s) => s.id === id)?.name ?? id;
   /** Where the preview zooms while browsing a slot */
   const FOCUS: Record<Slot, 'head' | 'torso' | 'legs' | 'feet' | null> = {
     hat: 'head',
@@ -67,6 +71,8 @@
     feet: 'feet',
     dress: null,
     back: null,
+    arms: 'torso',
+    shoulders: 'torso',
   };
   const items = $derived(CATALOG.filter((i) => i.slot === slot && (!i.bodies || (body && i.bodies.includes(body)))));
   const openItem = $derived(open ? (CATALOG.find((i) => i.id === open!.id) ?? null) : null);
@@ -258,13 +264,14 @@
           type="button"
           class="slot"
           class:on={!kingTab && slot === s.id}
+          class:locked={isLockedSlot(s.id) && !progress?.unlocked}
           onclick={() => {
             slot = s.id;
             open = null;
             kingTab = false;
           }}
         >
-          {s.name}
+          {#if isLockedSlot(s.id) && !progress?.unlocked}<Lock size={13} />{/if}{s.name}
         </button>
       {/each}
       {#if mod?.king?.on}
@@ -286,6 +293,21 @@
     {#if kingTab}
       <KingCard balance={wd?.balance ?? null} />
     {:else}
+    {#if locked && progress && shop}
+      <div class="lockcard">
+        <Lock size={18} />
+        <div>
+          <strong>{slotName(slot)} opens later</strong>
+          <p class="faint small">
+            Own a piece in every slot and {shop.unlockPieces} pieces in all to buy here. Try things on meanwhile.
+          </p>
+          <div class="needs">
+            <span class="need" class:done={progress.pieces >= shop.unlockPieces}>{Math.min(progress.pieces, shop.unlockPieces)}/{shop.unlockPieces} pieces</span>
+            {#each progress.missing as m (m)}<span class="need">{slotName(m)}</span>{/each}
+          </div>
+        </div>
+      </div>
+    {/if}
     <div class="grid">
       {#each items as i (i.id)}
         <button
@@ -326,6 +348,8 @@
             <span class="wearing"><Check size={16} />Wearing</span>
           {:else if isOwned}
             <button type="button" class="btn primary" disabled={buildingCount > 0 || busy} onclick={wear}><Check size={18} />Wear</button>
+          {:else if locked}
+            <span class="wearing locked"><Lock size={16} />Locked</span>
           {:else}
             <button type="button" class="btn primary" disabled={buildingCount > 0 || busy} onclick={buy}>
               <ShoppingBag size={18} />
@@ -380,10 +404,20 @@
     padding: 2rem 0;
     color: var(--text-dim);
   }
+  /* Two rows at most, filled column by column; more slots scroll sideways */
   .slots {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-rows: repeat(2, auto);
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
     gap: 0.35rem;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .slots::-webkit-scrollbar {
+    display: none;
   }
   .slot {
     position: relative;
@@ -397,6 +431,49 @@
   .slot.on {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
+  }
+  .slot.locked {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--text-dim);
+  }
+  /* What a locked slot still needs: the piece count, then each slot without a piece */
+  .lockcard {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px dashed var(--border-strong, var(--border));
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-dim);
+  }
+  .lockcard strong {
+    color: var(--text);
+  }
+  .lockcard p {
+    margin: 0.15rem 0 0.45rem;
+  }
+  .needs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+  .need {
+    padding: 0.1rem 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .need.done {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .wearing.locked {
+    color: var(--text-dim);
   }
   .slot.king {
     display: inline-flex;

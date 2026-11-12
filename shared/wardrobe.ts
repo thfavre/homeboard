@@ -8,7 +8,11 @@
 // colors its extra layers (a feather, a trim) or, for art drawn in two materials (leather armor,
 // a barbarian helmet), the second material.
 
-/** Where an item is worn; one item per slot. A dress replaces top and bottom. */
+/**
+ * Where an item is worn; one item per slot. A dress replaces top and bottom. Locked slots open once
+ * the guest owns a piece in every other slot their body can wear and enough pieces in all
+ * (`slotsUnlocked`).
+ */
 export const SLOTS = [
   { id: 'top', name: 'Tops' },
   { id: 'bottom', name: 'Bottoms' },
@@ -18,8 +22,24 @@ export const SLOTS = [
   { id: 'neck', name: 'Neck' },
   { id: 'dress', name: 'Dresses' },
   { id: 'back', name: 'Back' },
+  { id: 'arms', name: 'Arms', locked: true },
+  { id: 'shoulders', name: 'Shoulders', locked: true },
 ] as const;
 export type Slot = (typeof SLOTS)[number]['id'];
+
+/** The slots this body can wear (dresses are only drawn for the female body) */
+export const slotsFor = (body: 'male' | 'female' | null) => SLOTS.filter((s) => s.id !== 'dress' || body === 'female');
+
+/** How far a guest is from the locked slots: the open slots still without a piece, and the pieces owned */
+export function unlockProgress(owned: readonly WornItem[], body: 'male' | 'female', minPieces: number): { unlocked: boolean; missing: Slot[]; pieces: number } {
+  const have = new Set(owned.map((o) => itemById(o.id)?.slot));
+  const missing = slotsFor(body)
+    .filter((s) => !('locked' in s) && !have.has(s.id))
+    .map((s) => s.id);
+  return { unlocked: !missing.length && owned.length >= minPieces, missing, pieces: owned.length };
+}
+
+export const isLockedSlot = (slot: Slot): boolean => SLOTS.some((s) => s.id === slot && 'locked' in s);
 
 export const TIERS = ['cheap', 'common', 'fancy', 'epic', 'legendary'] as const;
 export type Tier = (typeof TIERS)[number];
@@ -51,8 +71,9 @@ export interface ItemExtra {
   /** Sheet definition, like the item's */
   def: string;
   /** Its color when the item is worn in one color; without one it is only drawn in two-color ids
-   *  (a plain kimono, or one with a trim) */
-  color?: string;
+   *  (a plain kimono, or one with a trim). A function picks it from the item's color (a chain in
+   *  the pendant's metal) */
+  color?: string | ((itemColor: string) => string);
 }
 
 /** The LPC cloth palette (every recolorable garment comes in all of these) */
@@ -75,6 +96,10 @@ const SCALE = ['green', 'blue', 'navy', 'red', 'orange', 'gold', 'purple', 'blac
 const AMULET = ['gold_red', 'silver_blue', 'bronze_green', 'copper_orange', 'steel_purple', 'brass_yellow'] as const;
 /** Gem colors of the gem pendants */
 const GEM = ['blue', 'green', 'orange', 'purple', 'red', 'yellow'] as const;
+
+/** The chain a charm, gem or amulet hangs from: the art hangs them below a necklace, and alone they
+ *  float on the belly. In the piece's metal ("gold_red" hangs on gold); gems hang on gold */
+const CHAIN: ItemExtra[] = [{ def: 'headwear/neck/neck_necklace_simple', color: (c) => ((METAL as readonly string[]).includes(c.split('_')[0]) ? c.split('_')[0] : 'gold') }];
 
 /** A color list with the item's own color moved first (a red Santa hat, a steel necklace) */
 const startingWith = (color: string, list: readonly string[]): string[] => [color, ...list.filter((c) => c !== color)];
@@ -128,7 +153,7 @@ export function piecesOf(item: WardrobeItem, color: string): { def: string; colo
   const [, accent] = splitColor(color);
   const out = [{ def: item.def, color }];
   for (const extra of item.extras ?? []) {
-    const c = accent ?? extra.color;
+    const c = accent ?? (typeof extra.color === 'function' ? extra.color(color) : extra.color);
     if (c) out.push({ def: extra.def, color: c });
   }
   return out;
@@ -277,17 +302,17 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'necklace', name: 'Necklace', slot: 'neck', def: 'headwear/neck/neck_necklace_simple', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
   { id: 'chain', name: 'Chain', slot: 'neck', def: 'headwear/neck/neck_necklace_chain', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
   { id: 'pendant', name: 'Pendant', slot: 'neck', def: 'headwear/neck/neck_necklace', tier: 'fancy', colors: [...startingWith('steel', METAL), 'pirate'], noSit: true, noCheer: true },
-  { id: 'ring_charm', name: 'Ring charm', slot: 'neck', def: 'headwear/neck/charms/neck_charm_ring', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
-  { id: 'box_charm', name: 'Box charm', slot: 'neck', def: 'headwear/neck/charms/neck_charm_box', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
-  { id: 'star_charm', name: 'Star charm', slot: 'neck', def: 'headwear/neck/charms/neck_charm_star', tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
-  { id: 'pearl_pendant', name: 'Pearl pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_pearl', tier: 'epic', colors: GEM, noSit: true, noCheer: true },
-  { id: 'round_gem', name: 'Round gem pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_round', tier: 'epic', colors: GEM, noSit: true, noCheer: true },
-  { id: 'square_gem', name: 'Square gem pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_princess', tier: 'epic', colors: GEM, noSit: true, noCheer: true },
-  { id: 'teardrop_gem', name: 'Teardrop gem pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_pear', tier: 'epic', colors: GEM, noSit: true, noCheer: true },
-  { id: 'star_amulet', name: 'Star amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_star', tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
-  { id: 'cross_amulet', name: 'Cross amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_cross', tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
-  { id: 'drop_amulet', name: 'Drop amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_dangle', tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
-  { id: 'spider_amulet', name: 'Spider amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_spider', tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
+  { id: 'ring_charm', name: 'Ring charm', slot: 'neck', def: 'headwear/neck/charms/neck_charm_ring', extras: CHAIN, tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
+  { id: 'box_charm', name: 'Box charm', slot: 'neck', def: 'headwear/neck/charms/neck_charm_box', extras: CHAIN, tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
+  { id: 'star_charm', name: 'Star charm', slot: 'neck', def: 'headwear/neck/charms/neck_charm_star', extras: CHAIN, tier: 'fancy', colors: startingWith('steel', METAL), noSit: true, noCheer: true },
+  { id: 'pearl_pendant', name: 'Pearl pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_pearl', extras: CHAIN, tier: 'epic', colors: GEM, noSit: true, noCheer: true },
+  { id: 'round_gem', name: 'Round gem pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_round', extras: CHAIN, tier: 'epic', colors: GEM, noSit: true, noCheer: true },
+  { id: 'square_gem', name: 'Square gem pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_princess', extras: CHAIN, tier: 'epic', colors: GEM, noSit: true, noCheer: true },
+  { id: 'teardrop_gem', name: 'Teardrop gem pendant', slot: 'neck', def: 'headwear/neck/charms/neck_gem_pear', extras: CHAIN, tier: 'epic', colors: GEM, noSit: true, noCheer: true },
+  { id: 'star_amulet', name: 'Star amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_star', extras: CHAIN, tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
+  { id: 'cross_amulet', name: 'Cross amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_cross', extras: CHAIN, tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
+  { id: 'drop_amulet', name: 'Drop amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_dangle', extras: CHAIN, tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
+  { id: 'spider_amulet', name: 'Spider amulet', slot: 'neck', def: 'headwear/neck/charms/neck_amulet_spider', extras: CHAIN, tier: 'legendary', colors: AMULET, noSit: true, noCheer: true },
 
   // ------------------------------------------------------------ dresses (replace top and bottom)
   { id: 'slit_dress', name: 'Slit dress', slot: 'dress', def: 'torso/dresses/dress_slit', tier: 'fancy', colors: CLOTH, bodies: ['female'], noSit: true, noCheer: true },
@@ -307,6 +332,18 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'angel_wings', name: 'Angel wings', slot: 'back', def: 'body/wings/wings_feathered', tier: 'legendary', colors: WING },
   { id: 'bat_wings', name: 'Bat wings', slot: 'back', def: 'body/wings/wings_bat', tier: 'legendary', colors: WING },
   { id: 'dragon_wings', name: 'Dragon wings', slot: 'back', def: 'body/wings/wings_lizard_alt', tier: 'legendary', colors: SCALE },
+
+  // ------------------------------------------------------------ arms (locked at first)
+  { id: 'cuffs', name: 'Cuffs', slot: 'arms', def: 'arms/wrists/wrists_cuffs', tier: 'cheap', colors: startingWith('white', CLOTH) },
+  { id: 'lace_cuffs', name: 'Lace cuffs', slot: 'arms', def: 'arms/wrists/wrists_cuffs_lace', tier: 'common', colors: startingWith('white', CLOTH) },
+  { id: 'gloves', name: 'Gloves', slot: 'arms', def: 'arms/arms_gloves', tier: 'common', colors: startingWith('steel', METAL) },
+  { id: 'bracers', name: 'Bracers', slot: 'arms', def: 'arms/wrists/arms_bracers', tier: 'fancy', colors: [...startingWith('steel', METAL), 'leather', 'brown'] },
+
+  // ------------------------------------------------------------ shoulders (locked at first)
+  { id: 'bauldron', name: 'Bauldron', slot: 'shoulders', def: 'arms/bauldron', tier: 'common', colors: [...startingWith('leather', CLOTH), ...METAL] },
+  { id: 'mantle', name: 'Mantle', slot: 'shoulders', def: 'arms/shoulders/shoulders_mantal', tier: 'fancy', colors: CLOTH },
+  { id: 'epaulets', name: 'Epaulets', slot: 'shoulders', def: 'arms/shoulders/shoulders_epaulets', tier: 'epic', colors: [...startingWith('gold', METAL), ...CLOTH] },
+  { id: 'pauldrons', name: 'Pauldrons', slot: 'shoulders', def: 'arms/shoulders/shoulders_pauldrons', tier: 'legendary', colors: startingWith('steel', METAL) },
 ];
 
 // Two-color swatches: split corner to corner, the first color top left, the second bottom right
