@@ -58,7 +58,7 @@ type Doing =
   | { kind: 'sleep' }
   | { kind: 'cheer'; until: number }
   | { kind: 'goThrone'; onCarpet: boolean }
-  | { kind: 'throne'; stage: 'stand' | 'hail' | 'seat' | 'sit'; until: number }
+  | { kind: 'throne'; stage: 'stand' | 'hail' | 'seat' | 'sit' | 'rise' | 'cheer'; until: number; next?: number }
   | { kind: 'descend' }
   | { kind: 'goHall' }
   | { kind: 'goPray'; spot: number; inLane: boolean }
@@ -92,6 +92,8 @@ const KING_WAIT_MS = 20_000;
 const GATHER_EXTRA_MS = 35_000;
 /** How long the King holds his hands up to open the court */
 const HAIL_MS = 2600;
+/** Seated, the King gets up to cheer his court this often */
+const CHEER_EVERY_MS = 10000;
 /** Arriving this close to the hall's open side, a character is given its place along the carpet */
 const DOOR_ZONE = 130;
 /** This close to the end of the court nobody is called anymore: they would arrive as everyone leaves */
@@ -435,11 +437,12 @@ export class TownSim {
       case 'goPray':
         return WANIM.walk;
       // The King before the throne: standing until all are there, his hands up to open the court,
-      // a step back to the seat, seated. Whatever he wears: a piece without art for these poses is
+      // a step back to the seat, seated, and up to cheer every few seconds. Whatever he wears: a piece without art for these poses is
       // just not drawn while they last.
       case 'throne':
         if (d.stage === 'hail') return now < d.until ? WANIM.cheer : WANIM.idle;
-        if (d.stage === 'seat') return WANIM.walk;
+        if (d.stage === 'seat' || d.stage === 'rise') return WANIM.walk;
+        if (d.stage === 'cheer') return WANIM.cheer;
         return d.stage === 'sit' ? WANIM.sit : WANIM.idle;
       // The others: standing in their place until the court opens, then on their knees (worn art
       // without sit sheets: they stay standing)
@@ -639,8 +642,19 @@ export class TownSim {
           if (this.walkTo(w, THRONE_SEAT.x, THRONE_SEAT.y, WALK_UPS, dt)) {
             Object.assign(w, THRONE_SEAT);
             w.dir = 1;
-            Object.assign(d, { stage: 'sit', until: 0 });
+            Object.assign(d, { stage: 'sit', until: 0, next: now + CHEER_EVERY_MS });
           }
+        } else if (d.stage === 'sit' && now >= (d.next ?? 0)) {
+          // Now and then up from the seat: a step forward, both hands up again, then back to sit
+          d.stage = 'rise';
+        } else if (d.stage === 'rise') {
+          if (this.walkTo(w, THRONE_STAND.x, THRONE_STAND.y, WALK_UPS, dt)) {
+            Object.assign(w, THRONE_STAND);
+            w.dir = 1;
+            Object.assign(d, { stage: 'cheer', until: now + HAIL_MS });
+          }
+        } else if (d.stage === 'cheer' && now >= d.until) {
+          d.stage = 'seat';
         }
         break;
       case 'descend':

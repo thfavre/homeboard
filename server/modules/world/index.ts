@@ -5,7 +5,7 @@ import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { CATALOG, TIERS, itemById, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, TIERS, itemById, notForTheKing, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -788,6 +788,14 @@ export default defineModule<WorldSettings>({
         const outfit = validOutfit(args?.outfit, stored.choices.body);
         if (!outfit) throw new HbError('That outfit does not exist');
         if (guest.id === kingId() && !sameHat(outfit, stored.outfit ?? {})) throw new HbError('The King keeps the crown: you cannot change your hat while you are the King');
+        if (guest.id === kingId()) {
+          // A skirt or dress with no throne art: kept if already worn, never put on
+          const before = stored.outfit ?? {};
+          for (const k of ['bottom', 'dress'] as const) {
+            const w = outfit[k];
+            if (w && w.id !== before[k]?.id && notForTheKing(itemById(w.id))) throw new HbError('The King cannot wear this: it has no art for sitting on the throne and cheering');
+          }
+        }
         return wearOutfit(guest.id, outfit);
       }),
     );
@@ -824,6 +832,15 @@ export default defineModule<WorldSettings>({
             const worn = store.data.avatars[guest.id]?.outfit?.[k];
             if (worn) outfit[k] = worn;
             else delete outfit[k];
+          }
+          // A skirt or dress he cannot wear on the throne: what he wears now on the body stays on
+          const now = store.data.avatars[guest.id]?.outfit ?? {};
+          const body = ['top', 'bottom', 'dress'] as const;
+          if ((['bottom', 'dress'] as const).some((k) => outfit[k] && outfit[k]!.id !== now[k]?.id && notForTheKing(itemById(outfit[k]!.id)))) {
+            for (const k of body) {
+              if (now[k]) outfit[k] = now[k];
+              else delete outfit[k];
+            }
           }
         }
         return wearOutfit(guest.id, outfit);

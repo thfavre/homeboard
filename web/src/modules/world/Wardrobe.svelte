@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { ArrowLeftRight, Ban, Crown, Lock, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
-  import { attempt, hb, onEvent, rpc } from '$lib/client.svelte.ts';
+  import { attempt, hb, onEvent, rpc, toast } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
-  import { COLOR_HEX, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
+  import { COLOR_HEX, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, notForTheKing, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import OutfitThumb from './OutfitThumb.svelte';
   import type { PreviewView } from './preview.ts';
@@ -290,8 +290,16 @@
     picking = null;
   });
 
+  /** A skirt or dress the King cannot put on (one he already wears stays usable in its other colors) */
+  const kingLocked = (item: WardrobeItem) => crowned && notForTheKing(item) && worn?.id !== item.id;
+
   /** One color: wear it. Several: the card turns into a square per owned color */
   function tap(p: { item: WardrobeItem; colors: string[] }) {
+    if (kingLocked(p.item)) {
+      picking = null;
+      toast({ text: 'The King cannot wear this: it has no art for sitting on the throne and cheering', kind: 'info' });
+      return;
+    }
     if (p.colors.length > 1) {
       picking = p.item.id;
       return;
@@ -406,7 +414,8 @@
           {#each pieces as p (p.item.id)}
             <!-- While picking, the color squares lie over the card, so its size never changes -->
             <div class="cell">
-              <button type="button" class="piece" class:worn={worn?.id === p.item.id} disabled={busy} onclick={() => tap(p)}>
+              <button type="button" class="piece" class:worn={worn?.id === p.item.id} class:kinglock={kingLocked(p.item)} disabled={busy} onclick={() => tap(p)}>
+                {#if kingLocked(p.item)}<span class="klock"><Lock size={12} strokeWidth={2.5} /></span>{/if}
                 <!-- One picture per owned color, stacked: the shown one fades in over the others -->
                 <span class="pic stack">
                   {#each p.colors as c (c)}
@@ -772,6 +781,24 @@
   .cell {
     position: relative;
     display: grid;
+  }
+  /* A piece the King cannot put on: dimmed, a small lock in the corner, the reason on a tap */
+  .piece.kinglock .pic {
+    opacity: 0.4;
+  }
+  .klock {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.3rem;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 1.3rem;
+    height: 1.3rem;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
   }
   /* The color picker laid over a card: one square per owned color */
   .picker {

@@ -435,6 +435,14 @@ for (const item of CATALOG) {
 
 export const itemById =(id: string): WardrobeItem | undefined => CATALOG.find((i) => i.id === id);
 
+/**
+ * Skirts and dresses without sit or cheer art: the King's ceremony would leave him in his
+ * underwear on the throne, so he cannot put one on while he holds the title. Neck and back pieces
+ * just vanish for a moment, so they stay allowed.
+ */
+export const notForTheKing = (item: WardrobeItem | undefined): boolean =>
+  !!item && (item.slot === 'bottom' || item.slot === 'dress') && !!(item.noSit || item.noCheer);
+
 /** The costume head an outfit wears, if any */
 export function costumeOf(outfit: Outfit): { item: WardrobeItem; color: string } | null {
   const w = outfit.costume;
