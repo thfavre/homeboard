@@ -39,7 +39,11 @@ const ROWS: { key: string; row: number; anim: Anim; dir: number; face?: Face; la
   { key: 'walkLeft', row: 12, anim: 'walk', dir: DIR.left },
   { key: 'idleUp', row: 13, anim: 'idle', dir: DIR.up },
   { key: 'idleLeft', row: 14, anim: 'idle', dir: DIR.left },
+  // Kneeling with the back to us: praying before the throne (the town only)
+  { key: 'sitUp', row: 15, anim: 'sit', dir: DIR.up },
 ];
+/** Every row key: a sheet measured without one of them was made before it existed and is redrawn */
+export const ROW_KEYS = ROWS.map((r) => r.key);
 const SHEET_ROWS = Math.max(...ROWS.map((r) => r.row)) + 1;
 
 /** One item of an avatar: a sheet definition, its color, the eye color for heads */

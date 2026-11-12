@@ -81,8 +81,24 @@ export const TOWN_PLACES: Record<PlaceId, TownPlace> = {
   barber: place('barber', 'Barber', 'brickB', 1330, 1),
 };
 
-/** What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat, inside is seen through a shop window) */
-export const WANIM = { idle: 0, walk: 1, sit: 2, sleep: 3, pet: 4, cheer: 5, inside: 6 } as const;
+// ------------------------------------------------------------ the throne
+
+/** The King's throne on the square, below the fountain: where its legs stand (world units) */
+export const THRONE = { x: 800, y: 728 };
+/** Where the King's feet land on the throne */
+export const THRONE_SEAT = { x: THRONE.x, y: THRONE.y + 8 };
+/** The throne is in the way like the fountain: an ellipse around its legs, the seat just in front of it */
+export const THRONE_OBSTACLE = { x: THRONE.x, y: THRONE.y - 6, rx: 28, ry: 11 };
+/** Where the faithful kneel before the throne, facing it: two rows on the carpet, an aisle in the middle */
+export const PRAY_SPOTS: { x: number; y: number }[] = [
+  ...[-92, -42, 42, 92].map((dx) => ({ x: THRONE.x + dx, y: THRONE.y + 62 })),
+  ...[-92, -42, 42, 92].map((dx) => ({ x: THRONE.x + dx, y: THRONE.y + 108 })),
+];
+/** The royal carpet under the throne and the faithful, between the two lamp posts (world units, a whole number of carpet tiles) */
+export const THRONE_CARPET = { x: THRONE.x, y0: THRONE.y - 40, tilesW: 6, tilesH: 4 };
+
+/** What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat, inside is seen through a shop window, pray kneels before the throne) */
+export const WANIM = { idle: 0, walk: 1, sit: 2, sleep: 3, pet: 4, cheer: 5, inside: 6, pray: 7 } as const;
 export type WAnimId = (typeof WANIM)[keyof typeof WANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
 export type WDir = 0 | 1 | 2 | 3;
@@ -233,10 +249,26 @@ export interface WardrobeMine {
   saved: (Outfit | null)[];
 }
 
+/**
+ * The King of the town: one guest at a time holds the title, and anyone can buy it from them. The
+ * price rises each time it changes hands.
+ */
+export interface KingInfo {
+  /** The title can be bought (admin setting) */
+  on: boolean;
+  /** Who holds it (null: nobody yet) */
+  id: string | null;
+  /** When they took it */
+  since: number;
+  /** What taking the title costs now */
+  price: number;
+}
+
 export interface WorldState {
   characters: TownCharacter[];
   sheet: SheetInfo | null;
   shop?: ShopInfo;
+  king?: KingInfo;
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
   /** Admin only */
@@ -252,5 +284,15 @@ export interface WorldState {
   wrapMaxSec?: number;
   quickMinSec?: number;
   quickMaxSec?: number;
+  kingBase?: number;
+  kingStep?: number;
+  kingRefundPct?: number;
+  throneEveryMin?: number;
+  throneMinSec?: number;
+  throneMaxSec?: number;
+  prayMinSec?: number;
+  prayMaxSec?: number;
+  /** Times the title changed hands (the price counts them) */
+  kingSales?: number;
   wallets?: { id: string; name: string; color: string; balance: number }[];
 }
