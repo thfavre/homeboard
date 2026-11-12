@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { Check, Coins, Crown, Lock, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet, toast } from '$lib/client.svelte.ts';
+  import { isNewSlot, markSlotSeen } from './newSlots.svelte.ts';
   import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, openSlots, slotsFor, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
@@ -275,9 +276,11 @@
             slot = s.id;
             open = null;
             kingTab = false;
+            markSlotSeen(s.id);
           }}
         >
           {s.name}
+          {#if isNewSlot(s.id, open_)}<span class="new">New</span>{/if}
         </button>
       {/each}
       {#if mod?.king?.on}
@@ -422,6 +425,19 @@
   .slot.on {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
+  }
+  /* A slot that just opened by buying: a small tag until it is first opened */
+  .new {
+    margin-left: 0.35rem;
+    vertical-align: 0.08em;
+    padding: 0.05rem 0.35rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    box-shadow: 0 0 0.6rem color-mix(in srgb, var(--accent) 60%, transparent);
   }
   .slot.king {
     display: inline-flex;

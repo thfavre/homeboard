@@ -3,6 +3,7 @@
   import { Ban, Crown, Lock, OctagonMinus, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, toast } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
+  import { isNewSlot, markSlotSeen } from './newSlots.svelte.ts';
   import { COLOR_HEX, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, notForTheKing, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import OutfitThumb from './OutfitThumb.svelte';
@@ -68,6 +69,7 @@
   const found = $derived(!!body && !!shop && openSlots(wd?.owned ?? [], body, shop.unlockPieces, shop.secretPieces).includes('costume'));
   const slots = $derived(slotsFor(body).filter((s) => !isSecretSlot(s.id) || found));
   const lockedNow = (s: Slot) => isLockedSlot(s) && !progress?.unlocked;
+  const openNow = $derived(slots.map((s) => s.id).filter((s) => !lockedNow(s)));
   const slotName = $derived(SLOTS.find((s) => s.id === slot)?.name ?? '');
   /** The worn piece that wearing something in this slot would take off: the dress for tops and
    *  bottoms, the costume head for hats */
@@ -297,7 +299,7 @@
   function tap(p: { item: WardrobeItem; colors: string[] }) {
     if (kingLocked(p.item)) {
       picking = null;
-      toast({ text: 'The King cannot wear this: it has no art for sitting on the throne and cheering', kind: 'info' });
+      toast({ text: 'Not fit for a King: you could not sit on your throne or greet your court in this', kind: 'info' });
       return;
     }
     if (p.colors.length > 1) {
@@ -363,8 +365,12 @@
           class="slot"
           class:on={slot === s.id}
           class:none={!count}
-          onclick={() => (slot = s.id)}
+          onclick={() => {
+            slot = s.id;
+            markSlotSeen(s.id);
+          }}
         >
+          {#if isNewSlot(s.id, openNow)}<span class="new">New</span>{/if}
           <span class="spic">
             {#if crowned && s.id === 'hat'}
               <!-- The King's crown, whatever is worn under it -->
@@ -637,6 +643,20 @@
     display: grid;
     place-items: center;
     color: var(--warning);
+  }
+  /* A slot that just opened by buying: a small tag until it is first opened */
+  .new {
+    position: absolute;
+    top: 0.3rem;
+    left: 0.35rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    box-shadow: 0 0 0.6rem color-mix(in srgb, var(--accent) 60%, transparent);
   }
   .swapnote {
     display: flex;

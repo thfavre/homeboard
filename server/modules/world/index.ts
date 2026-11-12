@@ -793,7 +793,7 @@ export default defineModule<WorldSettings>({
           const before = stored.outfit ?? {};
           for (const k of ['bottom', 'dress'] as const) {
             const w = outfit[k];
-            if (w && w.id !== before[k]?.id && notForTheKing(itemById(w.id))) throw new HbError('The King cannot wear this: it has no art for sitting on the throne and cheering');
+            if (w && w.id !== before[k]?.id && notForTheKing(itemById(w.id))) throw new HbError('Not fit for a King: you could not sit on your throne or greet your court in this');
           }
         }
         return wearOutfit(guest.id, outfit);
