@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { ArrowLeftRight, Ban, Crown, Lock, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
+  import { Ban, Crown, Lock, OctagonMinus, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, toast } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
   import { COLOR_HEX, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, notForTheKing, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
@@ -373,6 +373,9 @@
               <img src={pictureOf(w.id, w.color)} alt="" />
             {:else if lockedNow(s.id)}
               <Lock size={20} />
+            {:else if takesOff(s.id)}
+              <!-- Taken by the dress or the costume head: wearing one here takes it off -->
+              <span class="swap" title={`Wearing one takes off the ${takesOff(s.id)}`}><OctagonMinus size={30} strokeWidth={2} /></span>
             {:else}
               <span class="blank"></span>
             {/if}
@@ -382,9 +385,6 @@
             <span class="count lock"><Lock size={12} /></span>
           {:else if count}
             <span class="count">{count}</span>
-          {/if}
-          {#if takesOff(s.id)}
-            <span class="swap" title={`Wearing one takes off the ${takesOff(s.id)}`}><ArrowLeftRight size={12} strokeWidth={2.5} /></span>
           {/if}
         </button>
       {/each}
@@ -399,7 +399,7 @@
         {/if}
       </div>
       {#if takesOff(slot)}
-        <p class="swapnote"><ArrowLeftRight size={14} />Wearing one takes off the {takesOff(slot)}.</p>
+        <p class="swapnote"><OctagonMinus size={14} />Wearing one takes off the {takesOff(slot)}.</p>
       {/if}
       {#if pieces.length || hatLocked}
         <!-- The King's hats stay in sight under the crown, out of reach -->
@@ -634,9 +634,6 @@
   }
   /* On a slot whose pieces would take off the dress or costume head worn */
   .swap {
-    position: absolute;
-    top: 0.25rem;
-    left: 0.3rem;
     display: grid;
     place-items: center;
     color: var(--warning);
