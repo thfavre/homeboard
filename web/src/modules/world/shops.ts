@@ -1,71 +1,85 @@
-import type { TownPlace } from '$shared/world.ts';
+import type { PlaceId, TownPlace } from '$shared/world.ts';
+import { SPRITE_SCALE } from '$shared/crowd.ts';
+import type { Env } from '../games/crowd/scene.ts';
+import { CURTAIN, DOOR_FRAME, drawPole, shopLooks, worldOf, type Front, type ShopArt } from './shopfronts.ts';
 
 /**
- * The town's shops on the TV: a house of the square dressed up as a shop (an awning, a hanging
- * sign, a barber pole), with a shop window where the characters inside are seen, lit, behind the
- * glass. The houses themselves are the square's LPC art; these touches are drawn in its style, in
- * world units, every frame (the window shows who is inside).
+ * The town's shops on the TV, every frame: the room seen through the shop window with whoever is
+ * inside, the glass and the awning in front of them, the door opening for whoever goes in or out, the
+ * barber pole turning. The buildings themselves are built once (shopfronts.ts) and lie in the ground.
  */
 
-/** The colors of each shop: awning stripes, the light inside, the sign */
-const LOOK = {
-  clothes: { stripes: ['#b8433f', '#efe4cf'], light: ['#f4d9a6', '#a77a4c'], wood: '#5b3a24' },
-  barber: { stripes: ['#2f5d9a', '#eef0f2'], light: ['#e6eef2', '#7d8f99'], wood: '#3c3f46' },
-} as const;
+const S = SPRITE_SCALE;
 
 /** Where the feet of a character inside go: below the window, so the glass shows it from the knees up */
 export const insideFeet = (p: TownPlace) => p.window.y + p.window.h + 20;
 
-/** The shop window's inside, the characters in it (drawn by `people`, clipped to the glass), the glass and the frame */
-export function drawShop(g: CanvasRenderingContext2D, p: TownPlace, now: number, people: (g: CanvasRenderingContext2D) => void): void {
+let art: { env: Env; art: ShopArt } | null = null;
+/** The shops' art, once both the square's and the shops' sheets are loaded */
+export function setShopArt(env: Env | null, shopArt: ShopArt | null): void {
+  art = env && shopArt ? { env, art: shopArt } : null;
+}
+
+/** How far each door is open (0 shut, 1 wide open), eased toward whether someone is going through */
+const doors: Record<PlaceId, { open: number; at: number }> = { clothes: { open: 0, at: 0 }, barber: { open: 0, at: 0 } };
+
+/** Draw a sprite-pixel image at a shop's house-art position (x, y), on the square's pixel grid */
+function blit(g: CanvasRenderingContext2D, img: CanvasImageSource, p: TownPlace, f: Front, x: number, y: number, sx: number, sy: number, w: number, h: number): void {
+  const o = worldOf(p, f, x, y);
+  g.drawImage(img, sx, sy, w, h, o.x, o.y, w * S, h * S);
+}
+
+/**
+ * A shop: the room behind the glass and the characters in it (drawn by `people`, clipped to the
+ * glass), then the glass, drapes and awning, the door (open while `doorBusy`), the barber pole.
+ */
+export function drawShop(g: CanvasRenderingContext2D, p: TownPlace, now: number, doorBusy: boolean, people: (g: CanvasRenderingContext2D) => void): void {
   const { x, y, w, h } = p.window;
-  const c = LOOK[p.id];
+  const look = art ? shopLooks(art.env, art.art)[p.id] : null;
 
   g.save();
   g.beginPath();
   g.rect(x, y, w, h);
   g.clip();
-  // A warm lit room, the floor darker
-  const room = g.createLinearGradient(0, y, 0, y + h);
-  room.addColorStop(0, c.light[0]);
-  room.addColorStop(1, c.light[1]);
-  g.fillStyle = room;
-  g.fillRect(x, y, w, h);
-  if (p.id === 'clothes') clothesRack(g, x, y, w);
-  else barberMirror(g, x, y, w, h);
-  people(g);
-  // The glass: a cool tint and two slanted glints
-  g.fillStyle = 'rgba(170,205,235,0.16)';
-  g.fillRect(x, y, w, h);
-  g.fillStyle = 'rgba(255,255,255,0.18)';
-  for (const [o, k] of [
-    [0.18, 7],
-    [0.34, 3],
-  ] as const) {
-    const gx = x + w * o;
-    g.beginPath();
-    g.moveTo(gx, y);
-    g.lineTo(gx + k, y);
-    g.lineTo(gx + k - h * 0.5, y + h);
-    g.lineTo(gx - h * 0.5, y + h);
-    g.fill();
+  if (look) g.drawImage(look.room, x, y, w, h);
+  else {
+    g.fillStyle = '#d9c3a0';
+    g.fillRect(x, y, w, h);
   }
+  people(g);
   g.restore();
+  if (!look) return;
+  const f = look.front;
+  blit(g, look.over, p, f, 0, 0, 0, 0, f.w, f.h);
 
-  // The frame, a mullion per seat, the sill
-  g.fillStyle = c.wood;
-  g.fillRect(x - 3, y - 3, w + 6, 3);
-  g.fillRect(x - 3, y, 3, h);
-  g.fillRect(x + w, y, 3, h);
-  for (let i = 1; i < p.seats.length; i++) g.fillRect(Math.round(x + (w * i) / p.seats.length) - 1, y, 2, h);
-  g.fillStyle = '#c9c2b4';
-  g.fillRect(x - 5, y + h, w + 10, 4);
-  g.fillStyle = 'rgba(0,0,0,0.3)';
-  g.fillRect(x - 5, y + h + 4, w + 10, 2);
+  // The door swings open in a few frames for whoever goes through it, and shut behind them
+  const d = doors[p.id];
+  const dt = Math.min(0.2, Math.max(0, (now - d.at) / 1000));
+  d.at = now;
+  d.open = Math.max(0, Math.min(1, d.open + (doorBusy ? dt : -dt) * 4));
+  const frame = 3 + Math.min(3, Math.round(d.open * 3));
+  const [rx, ry] = DOOR_FRAME.row[p.id];
+  const fr = DOOR_FRAME.inFrame;
+  blit(g, art!.art.doors, p, f, f.door.x - fr.x, f.door.y - fr.y, rx + frame * 64, ry, 64, 96);
 
-  awning(g, x - 8, y - 4, w + 16, c.stripes, now);
-  if (p.id === 'clothes') hangingSign(g, p, now);
-  else barberPole(g, p.door.x - 26, p.door.y - 4, now);
+  if (f.pole) {
+    // The pole's stripes, climbing
+    const c = poleCanvas();
+    const pg = c.getContext('2d')!;
+    pg.clearRect(0, 0, c.width, c.height);
+    drawPole(pg, 1, 6, f.pole.h, Math.floor(now / 110));
+    blit(g, c, p, f, f.pole.x - 1, f.pole.y - 6, 0, 0, c.width, c.height);
+  }
+}
+
+let pole: HTMLCanvasElement | null = null;
+function poleCanvas(): HTMLCanvasElement {
+  if (!pole) {
+    pole = document.createElement('canvas');
+    pole.width = 12;
+    pole.height = 42;
+  }
+  return pole;
 }
 
 /** Who's inside the window, under the glass: a curtain drawn across while the look changes */
@@ -73,13 +87,19 @@ export function drawSwish(g: CanvasRenderingContext2D, p: TownPlace, seatX: numb
   // t from 0 to 1: closes, holds, opens
   const cover = t < 0.35 ? t / 0.35 : t < 0.65 ? 1 : 1 - (t - 0.65) / 0.35;
   const half = p.window.w / p.seats.length / 2;
-  const fold = half * cover;
-  const c = p.id === 'clothes' ? ['#8e2f3a', '#b5434f'] : ['#3c5a86', '#5476a8'];
-  for (const side of [-1, 1]) {
-    const x0 = side < 0 ? seatX - half : seatX + half - fold;
-    for (let k = 0; k < fold; k += 4) {
-      g.fillStyle = (k / 4) % 2 ? c[0] : c[1];
-      g.fillRect(Math.round(x0 + k), p.window.y, Math.min(4, fold - k), p.window.h);
+  const fold = Math.round((half * cover) / S) * S;
+  if (fold > 0) {
+    const curtains = art?.art.curtains;
+    for (const side of [-1, 1]) {
+      const x0 = side < 0 ? seatX - half : seatX + half - fold;
+      if (curtains) {
+        // The folds of a drawn curtain, gathered toward the side it comes from
+        const cw = Math.max(1, Math.round(fold / S));
+        g.drawImage(curtains, CURTAIN[0] + (side < 0 ? CURTAIN[2] - cw : 0), CURTAIN[1], cw, Math.round(p.window.h / S), x0, p.window.y, fold, Math.round(p.window.h / S) * S);
+      } else {
+        g.fillStyle = '#8e2f3a';
+        g.fillRect(x0, p.window.y, fold, p.window.h);
+      }
     }
   }
   // A few sparkles as it opens on the new look
@@ -139,133 +159,4 @@ export function drawCut(g: CanvasRenderingContext2D, cutX: number, headY: number
   g.arc(sx - 2, sy - 3, 2, 0, Math.PI * 2);
   g.arc(sx + 2, sy - 3, 2, 0, Math.PI * 2);
   g.stroke();
-}
-
-/** The back of the clothes shop: a rail with clothes in many colors */
-function clothesRack(g: CanvasRenderingContext2D, x: number, y: number, w: number): void {
-  g.fillStyle = 'rgba(70,45,28,0.75)';
-  g.fillRect(x + 2, y + 9, w - 4, 2);
-  const colors = ['#4f7bb5', '#c24d5c', '#e0b850', '#5d9a6b', '#8a5cad', '#e7e2d6', '#30343b'];
-  for (let i = 0, cx = x + 5; cx < x + w - 8; i++, cx += 9) {
-    g.fillStyle = colors[i % colors.length];
-    g.fillRect(cx, y + 11, 7, 13 + ((i * 5) % 7));
-    g.fillStyle = 'rgba(0,0,0,0.18)';
-    g.fillRect(cx + 5, y + 11, 2, 13 + ((i * 5) % 7));
-  }
-}
-
-/** The back of the barber's: a mirror in a frame and a shelf of bottles */
-function barberMirror(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  const mx = x + w / 2 - 14;
-  g.fillStyle = '#6b4e33';
-  g.fillRect(mx - 2, y + 4, 32, Math.round(h * 0.5) + 4);
-  g.fillStyle = '#c7dde6';
-  g.fillRect(mx, y + 6, 28, Math.round(h * 0.5));
-  g.fillStyle = 'rgba(255,255,255,0.4)';
-  g.fillRect(mx + 4, y + 8, 3, Math.round(h * 0.5) - 4);
-  g.fillStyle = 'rgba(60,40,30,0.7)';
-  g.fillRect(x + 2, y + h * 0.62, 12, 2);
-  g.fillRect(x + w - 14, y + h * 0.62, 12, 2);
-  const bottles = ['#4d9c8a', '#c46b4a', '#d9c06a'];
-  for (let i = 0; i < 3; i++) {
-    g.fillStyle = bottles[i];
-    g.fillRect(x + 3 + i * 4, y + h * 0.62 - 6, 3, 6);
-    g.fillRect(x + w - 13 + i * 4, y + h * 0.62 - 5, 3, 5);
-  }
-}
-
-/** A striped awning over the window, its scalloped edge stirring a little */
-function awning(g: CanvasRenderingContext2D, x: number, y: number, w: number, stripes: readonly string[], now: number): void {
-  const top = y - 10;
-  const n = Math.max(4, Math.round(w / 9));
-  const sw = w / n;
-  for (let i = 0; i < n; i++) {
-    g.fillStyle = stripes[i % 2];
-    // Slanted: wider at the bottom, as seen from above the street
-    g.beginPath();
-    g.moveTo(x + 3 + i * ((w - 6) / n), top);
-    g.lineTo(x + 3 + (i + 1) * ((w - 6) / n), top);
-    g.lineTo(x + (i + 1) * sw, y);
-    g.lineTo(x + i * sw, y);
-    g.fill();
-    // The scallop
-    const sway = Math.sin(now / 900 + i) * 0.6;
-    g.beginPath();
-    g.arc(x + (i + 0.5) * sw, y + sway, sw / 2, 0, Math.PI);
-    g.fill();
-  }
-  g.fillStyle = 'rgba(0,0,0,0.22)';
-  g.fillRect(x, y, w, 1);
-  g.fillStyle = 'rgba(0,0,0,0.18)';
-  g.fillRect(x + 2, y + sw / 2 + 2, w - 4, 3);
-}
-
-/** The clothes shop's sign: a board on a bracket by the door, a shirt painted on it, swinging gently */
-function hangingSign(g: CanvasRenderingContext2D, p: TownPlace, now: number): void {
-  const bx = p.door.x + 24;
-  const by = p.window.y - 2;
-  g.fillStyle = '#2b2b30';
-  g.fillRect(bx - 1, by - 2, 16, 2);
-  const swing = Math.sin(now / 1300) * 0.06;
-  g.save();
-  g.translate(bx + 8, by);
-  g.rotate(swing);
-  g.fillStyle = '#2b2b30';
-  g.fillRect(-6, 0, 1, 5);
-  g.fillRect(5, 0, 1, 5);
-  g.fillStyle = '#6b4a2e';
-  g.fillRect(-10, 5, 20, 18);
-  g.fillStyle = '#e8dcc0';
-  g.fillRect(-9, 6, 18, 16);
-  // A shirt
-  g.fillStyle = '#b8433f';
-  g.beginPath();
-  g.moveTo(-3, 9);
-  g.lineTo(-7, 11);
-  g.lineTo(-6, 14);
-  g.lineTo(-4, 13);
-  g.lineTo(-4, 20);
-  g.lineTo(4, 20);
-  g.lineTo(4, 13);
-  g.lineTo(6, 14);
-  g.lineTo(7, 11);
-  g.lineTo(3, 9);
-  g.lineTo(1, 11);
-  g.lineTo(-1, 11);
-  g.closePath();
-  g.fill();
-  g.restore();
-}
-
-/** The barber's pole by the door, its stripes turning */
-function barberPole(g: CanvasRenderingContext2D, x: number, bottom: number, now: number): void {
-  const h = 34;
-  const w = 8;
-  const top = bottom - h;
-  g.fillStyle = '#d9dde2';
-  g.fillRect(x - w / 2 - 1, top - 4, w + 2, 4);
-  g.fillRect(x - w / 2 - 1, bottom, w + 2, 3);
-  g.save();
-  g.beginPath();
-  g.rect(x - w / 2, top, w, h);
-  g.clip();
-  g.fillStyle = '#f1f2f4';
-  g.fillRect(x - w / 2, top, w, h);
-  const shift = (now / 60) % 12;
-  for (let k = -2; k < h / 6 + 2; k++) {
-    g.fillStyle = k % 2 ? '#c8353a' : '#2f5d9a';
-    g.beginPath();
-    const yy = top + k * 6 - shift;
-    g.moveTo(x - w / 2, yy + 8);
-    g.lineTo(x + w / 2, yy);
-    g.lineTo(x + w / 2, yy + 3);
-    g.lineTo(x - w / 2, yy + 11);
-    g.fill();
-  }
-  // Round glass: a shine down one side
-  g.fillStyle = 'rgba(255,255,255,0.35)';
-  g.fillRect(x - w / 2 + 1, top, 2, h);
-  g.fillStyle = 'rgba(0,0,0,0.2)';
-  g.fillRect(x + w / 2 - 2, top, 2, h);
-  g.restore();
 }
