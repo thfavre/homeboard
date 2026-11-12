@@ -165,11 +165,21 @@
     return () => clearTimeout(debounce);
   });
 
-  onMount(() => {
+  // Loaded once connected (opened while offline, "no answer" is not "no avatar yet"); a failed load
+  // is tried again on the next connection
+  let loading = false;
+  $effect(() => {
+    if (!firstLoad || loading || !hb.connected) return;
+    loading = true;
     void (async () => {
-      const mine = await rpc<{ body: 'male' | 'female' } | null>('world', 'mine').catch(() => null);
-      body = mine?.body ?? null;
-      wd = await rpc<WardrobeMine>('world', 'wardrobe').catch(() => null);
+      try {
+        const mine = await rpc<{ body: 'male' | 'female' } | null>('world', 'mine');
+        body = mine?.body ?? null;
+        wd = mine ? await rpc<WardrobeMine>('world', 'wardrobe') : null;
+      } catch {
+        loading = false;
+        return;
+      }
       void loadColored();
       try {
         const draft = JSON.parse(storageGet(DRAFT_KEY) ?? 'null');
@@ -189,10 +199,13 @@
       firstLoad = false;
       if (body) void build(candidate());
     })();
-    return onEvent<{ balance: number }>('world', 'wallet', (w) => {
-      if (wd) wd.balance = w.balance;
-    });
   });
+
+  onMount(() =>
+    onEvent<{ balance: number }>('world', 'wallet', (w) => {
+      if (wd) wd.balance = w.balance;
+    }),
+  );
 
   // ------------------------------------------------------------ actions
 

@@ -22,12 +22,15 @@
     pill.animate([{}, { borderColor: c, transform: 'scale(1.06)' }, {}], { duration: 650, easing: 'ease-out' });
   }
 
-  onMount(() => {
+  // Fetched on every connection: the panel may open offline, and changes made while away were missed
+  $effect(() => {
+    if (!hb.connected) return;
     rpc<WardrobeMine>('world', 'wardrobe')
       .then((w) => set(w.balance))
       .catch(() => {});
-    return onEvent<{ balance: number }>('world', 'wallet', (w) => set(w.balance));
   });
+
+  onMount(() => onEvent<{ balance: number }>('world', 'wallet', (w) => set(w.balance)));
 </script>
 
 {#if shop && balance !== null}
