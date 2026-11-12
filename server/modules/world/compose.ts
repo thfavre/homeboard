@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PNG } from 'pngjs';
 import { BEARDS, DEFAULT_CHOICES, HAIR_STYLES, type AvatarChoices, type SheetInfo } from '../../../shared/world.ts';
-import { SLOTS, itemById, piecesOf, splitColor, type Outfit } from '../../../shared/wardrobe.ts';
+import { SLOTS, costumeOf, itemById, piecesOf, splitColor, type Outfit } from '../../../shared/wardrobe.ts';
 import type { LpcFiles } from './lpc.ts';
 
 /**
@@ -60,16 +60,20 @@ interface Item {
 
 /**
  * The items a guest's choices and outfit stand for. The white underwear (shorts and basic shoes)
- * stays wherever the outfit leaves the body bare; a dress covers the bottom slot too.
+ * stays wherever the outfit leaves the body bare; a dress covers the bottom slot too. A costume
+ * head is drawn instead of the guest's own head, and takes their hair and beard off unless it is
+ * drawn to wear them.
  */
 function itemsOf(c: AvatarChoices, outfit: Outfit): Item[] {
-  const items: Item[] = [{ def: `head/heads/human/heads_human_${c.body}`, eyes: c.eyes }];
+  const costume = costumeOf(outfit);
+  const items: Item[] = costume ? [] : [{ def: `head/heads/human/heads_human_${c.body}`, eyes: c.eyes }];
   if (!outfit.feet) items.push({ def: 'feet/shoes/feet_shoes_basic', color: 'white' });
   if (!outfit.bottom && !outfit.dress) items.push({ def: 'legs/shorts/legs_shorts', color: 'white' });
   for (const worn of Object.values(outfit)) {
     const item = itemById(worn.id);
     if (item) items.push(...piecesOf(item, worn.color));
   }
+  if (costume && !costume.item.head?.keepHair) return items;
   const hair = HAIR_STYLES.find((h) => h.id === c.hair)?.def;
   if (hair) items.push({ def: hair, color: c.hairColor });
   const beard = BEARDS.find((b) => b.id === c.beard)?.def;
@@ -132,24 +136,37 @@ export class Composer {
     return buf ? PNG.sync.read(buf) : null;
   }
 
-  /** The palettes of a material (body, cloth, hair, eye) and the base the art is drawn in */
-  private async palette(material: string): Promise<{ base: string; colors: Record<string, string[]> }> {
-    let p = this.palettes.get(material);
+  /** The palettes of a material (body, cloth, hair, eye) and the base the art is drawn in; `set` is
+   *  the palette file (ulpc, or lpcr for art drawn in its ramps) */
+  private async palette(material: string, set = 'ulpc'): Promise<{ base: string; colors: Record<string, string[]> }> {
+    const key = `${material}_${set}`;
+    let p = this.palettes.get(key);
     if (!p) {
       p = (async () => {
         const meta = await this.json(`palette_definitions/${material}/meta_${material}.json`);
-        return { base: meta.base, colors: await this.json(`palette_definitions/${material}/${material}_ulpc.json`) };
+        return { base: meta.base, colors: await this.json(`palette_definitions/${material}/${material}_${set}.json`) };
       })();
-      this.palettes.set(material, p);
-      p.catch(() => this.palettes.delete(material));
+      this.palettes.set(key, p);
+      p.catch(() => this.palettes.delete(key));
     }
     return p;
   }
 
-  private async swapFor(recolor: { material: string; base?: string }, target: string): Promise<Swap> {
+  /**
+   * The color swap from the art's own ramp to the target color. The base may name its palette
+   * ("ulpc.fur_brown", "lpcr.ivory"); a target missing from the material's palette is looked up in the other
+   * materials the art allows (pauldrons drawn in cloth, worn in steel: "metal.ulpc").
+   */
+  private async swapFor(recolor: { material: string; base?: string; palettes?: string[] }, target: string): Promise<Swap> {
     const p = await this.palette(recolor.material);
-    const from = p.colors[recolor.base ?? p.base];
-    const to = p.colors[target];
+    const [set, base] = /^(ulpc|lpcr)\.(.+)$/.exec(recolor.base ?? '')?.slice(1) ?? ['ulpc', recolor.base ?? p.base];
+    const from = (await this.palette(recolor.material, set)).colors[base];
+    let to = p.colors[target];
+    for (const other of recolor.palettes ?? []) {
+      if (to) break;
+      const m = /^(\w+)\.ulpc$/.exec(other);
+      if (m) to = (await this.palette(m[1])).colors[target];
+    }
     if (!from || !to) throw new Error(`No ${recolor.material} color "${target}"`);
     return from.map((c, i) => ({ from: rgb(c), to: rgb(to[Math.min(i, to.length - 1)]) }));
   }
@@ -166,7 +183,8 @@ export class Composer {
     const rc = def.recolors;
     const [main, accent] = item.color ? splitColor(item.color) : [undefined, undefined];
     if (rc?.material) {
-      swaps.push(await this.swapFor(rc, rc.material === 'body' ? c.skin : main!));
+      // Art drawn in skin takes the wearer's skin, unless the piece names a tone (horns of bone)
+      swaps.push(await this.swapFor(rc, rc.material === 'body' ? (main && main !== 'skin' ? main : c.skin) : main!));
     } else if (rc?.color_1) {
       let n = 0;
       for (const [key, r] of Object.entries<any>(rc)) {
@@ -212,20 +230,35 @@ export class Composer {
     return { zPos: def.layer_1.zPos, dir, swaps: [await this.swapFor(def.recolors.material ? def.recolors : def.recolors.color_1, c.skin)] };
   }
 
-  /** One animation of a layer, colored (null: the layer has no sheet for it; it is left out) */
+  /**
+   * One animation of a layer, colored (null: the layer has no sheet for it; it is left out). Art
+   * drawn only walking (butterfly wings) stands in the first walking frame.
+   */
   private async sheet(layer: Layer, anim: Anim): Promise<PNG | null> {
-    const png = await this.image(`spritesheets/${layer.dir}${anim}${layer.variant ? `/${layer.variant}` : ''}.png`);
+    const file = (a: Anim) => `spritesheets/${layer.dir}${a}${layer.variant ? `/${layer.variant}` : ''}.png`;
+    let png = await this.image(file(anim));
+    if (!png && anim === 'idle') {
+      const walk = await this.image(file('walk'));
+      if (walk) {
+        png = new PNG({ width: FRAME * COLUMNS, height: walk.height });
+        for (let f = 0; f < COLUMNS; f++) over(png, f * FRAME, 0, walk, 0, 0, FRAME, walk.height);
+      }
+    }
     if (png && layer.swaps.length) recolor(png, layer.swaps);
     return png;
   }
 
   /** Build the whole sheet of an avatar */
-  async build(c: AvatarChoices, outfit: Outfit = {}): Promise<Composed> {
+  async build(choices: AvatarChoices, outfit: Outfit = {}): Promise<Composed> {
+    // A costume head of skin colors colors the whole body; its own face stays as drawn (the happy
+    // and closed-eye faces are drawn for human heads)
+    const costume = costumeOf(outfit);
+    const c = costume?.item.head?.skin ? { ...choices, skin: splitColor(costume.color)[0] } : choices;
     const layers = (await Promise.all([{ def: 'body/body' } as Item, ...itemsOf(c, outfit)].map((it) => this.layersOf(it, c)))).flat();
     const out = new PNG({ width: FRAME * COLUMNS, height: FRAME * SHEET_ROWS });
     for (const r of ROWS) {
       const stack = [...layers];
-      if (r.face) stack.push(await this.faceLayer(r.face, c));
+      if (r.face && !costume) stack.push(await this.faceLayer(r.face, c));
       stack.sort((a, b) => a.zPos - b.zPos);
       const loaded = await Promise.all(stack.map((l) => this.sheet(l, r.anim)));
       const sheets = loaded.filter((s): s is PNG => !!s);
@@ -247,10 +280,10 @@ export class Composer {
   /**
    * A small picture of one item alone (no body) for the shop's grid: the down-facing idle frame
    * of its layers (the item's pieces: see piecesOf), trimmed to the drawn pixels and centered in
-   * a square.
+   * a square. `skin` colors art drawn in skin (a costume head).
    */
-  async icon(pieces: Item[], body: 'male' | 'female'): Promise<Buffer> {
-    const c: AvatarChoices = { ...DEFAULT_CHOICES, body };
+  async icon(pieces: Item[], body: 'male' | 'female', skin?: string): Promise<Buffer> {
+    const c: AvatarChoices = { ...DEFAULT_CHOICES, body, ...(skin ? { skin } : {}) };
     const layers = (await Promise.all(pieces.map((p) => this.layersOf(p, c)))).flat().sort((a, b) => a.zPos - b.zPos);
     const flat = new PNG({ width: FRAME, height: FRAME });
     for (const layer of layers) {
@@ -337,6 +370,9 @@ export function choicesHash(c: AvatarChoices, outfit: Outfit = {}): string {
     const item = w && itemById(w.id);
     return w ? [w.id, w.color, ...(item ? piecesOf(item, w.color) : [])] : null;
   });
+  // Empty slots past the first eight (the slots added later) are left out, so adding a slot keeps
+  // the names of the sheets already drawn
+  while (worn.length > 8 && worn[worn.length - 1] === null) worn.pop();
   return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes, worn])).digest('hex').slice(0, 12);
 }
 

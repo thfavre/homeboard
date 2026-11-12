@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { Ban, Crown, Lock, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
+  import { ArrowLeftRight, Ban, Crown, Lock, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
-  import { COLOR_HEX, SLOTS, colorName, itemById, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
+  import { COLOR_HEX, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import OutfitThumb from './OutfitThumb.svelte';
   import type { PreviewView } from './preview.ts';
@@ -56,10 +56,26 @@
     feet: 'feet',
     dress: null,
     back: null,
+    arms: 'torso',
+    shoulders: 'torso',
+    costume: 'head',
   };
 
-  const slots = $derived(SLOTS.filter((s) => s.id !== 'dress' || body === 'female'));
+  const shop = $derived((hb.modules.world as WorldState | undefined)?.shop);
+  /** How far the guest is from the locked slots */
+  const progress = $derived(body && shop ? unlockProgress(wd?.owned ?? [], body, shop.unlockPieces) : null);
+  /** The secret slot shows only once it is found (no lock, no hint before) */
+  const found = $derived(!!body && !!shop && openSlots(wd?.owned ?? [], body, shop.unlockPieces, shop.secretPieces).includes('costume'));
+  const slots = $derived(slotsFor(body).filter((s) => !isSecretSlot(s.id) || found));
+  const lockedNow = (s: Slot) => isLockedSlot(s) && !progress?.unlocked;
   const slotName = $derived(SLOTS.find((s) => s.id === slot)?.name ?? '');
+  /** The worn piece that wearing something in this slot would take off: the dress for tops and
+   *  bottoms, the costume head for hats */
+  function takesOff(s: Slot): string | null {
+    const o = wd?.outfit;
+    const other = (s === 'top' || s === 'bottom') && o?.dress ? o.dress : s === 'hat' && o?.costume ? o.costume : null;
+    return other ? (itemById(other.id)?.name ?? null) : null;
+  }
 
   /** Owned pieces grouped by item, with the colors owned of each */
   const closet = $derived.by(() => {
@@ -82,7 +98,9 @@
   const pieces = $derived(closet.get(slot) ?? []);
   const worn = $derived(wd?.outfit[slot] ?? null);
   /** The hat slot is open and locked: its pieces show under a crown that says why */
-  const hatLocked = $derived(crowned && slot === 'hat');
+  /** The King's headwear stays as it is: the hat (the crown) and the costume heads that would take it off */
+  const headSlot = (id: Slot) => id === 'hat' || id === 'costume';
+  const hatLocked = $derived(crowned && headSlot(slot));
   const ownedCount = $derived((wd?.owned ?? []).length);
   /** Saved outfits only show once the closet is big enough to need them: less to learn at first */
   const OUTFITS_FROM = 7;
@@ -253,6 +271,9 @@
       delete outfit.bottom;
     }
     if (slot === 'top' || slot === 'bottom') delete outfit.dress;
+    // A costume head replaces the hat (and a hat replaces it)
+    if (slot === 'costume') delete outfit.hat;
+    if (slot === 'hat') delete outfit.costume;
     void apply(outfit);
   }
 
@@ -322,7 +343,8 @@
     {/if}
 
     <span class="label">Wearing</span>
-    <div class="outfit" role="tablist" aria-label="Slots">
+    <!-- Two rows at most: five tiles show per row, more scroll sideways -->
+    <div class="outfit" role="tablist" aria-label="Slots" style:--cols={Math.ceil(slots.length / 2)}>
       {#each slots as s (s.id)}
         {@const w = wd?.outfit[s.id]}
         {@const count = closet.get(s.id)?.length ?? 0}
@@ -341,15 +363,20 @@
               {#if icons.crown}<img src={icons.crown} alt="Crown" />{:else}<Crown size={26} />{/if}
             {:else if w && pictureOf(w.id, w.color)}
               <img src={pictureOf(w.id, w.color)} alt="" />
+            {:else if lockedNow(s.id)}
+              <Lock size={20} />
             {:else}
               <span class="blank"></span>
             {/if}
           </span>
           <span class="sname">{s.name}</span>
-          {#if crowned && s.id === 'hat'}
+          {#if crowned && headSlot(s.id)}
             <span class="count lock"><Lock size={12} /></span>
           {:else if count}
             <span class="count">{count}</span>
+          {/if}
+          {#if takesOff(s.id)}
+            <span class="swap" title={`Wearing one takes off the ${takesOff(s.id)}`}><ArrowLeftRight size={12} strokeWidth={2.5} /></span>
           {/if}
         </button>
       {/each}
@@ -358,8 +385,14 @@
     <section class="closet">
       <div class="chead">
         <span class="ctitle">My {slotName.toLowerCase()}<span class="faint">{pieces.length ? ` · ${pieces.length}` : ''}</span></span>
-        <button type="button" class="shoplink" onclick={() => onshop?.(slot)}><ShoppingBag size={15} />Buy more</button>
+        <!-- A locked slot is not in the shop yet -->
+        {#if !lockedNow(slot)}
+          <button type="button" class="shoplink" onclick={() => onshop?.(slot)}><ShoppingBag size={15} />Buy more</button>
+        {/if}
       </div>
+      {#if takesOff(slot)}
+        <p class="swapnote"><ArrowLeftRight size={14} />Wearing one takes off the {takesOff(slot)}.</p>
+      {/if}
       {#if pieces.length || hatLocked}
         <!-- The King's hats stay in sight under the crown, out of reach -->
         <div class="scroll" class:shut={hatLocked}>
@@ -416,10 +449,16 @@
           <div class="locked">
             <span class="lmark"><Crown size={46} /></span>
             <strong>The King keeps the crown</strong>
-            <p>You cannot change your hat while you are the King.</p>
+            <p>{slot === 'hat' ? 'You cannot change your hat while you are the King.' : 'A costume head would take the crown off.'}</p>
           </div>
         {/if}
         </div>
+      {:else if lockedNow(slot) && progress && shop}
+        <p class="faint none-yet">
+          Opens once you own a piece in every slot and {shop.unlockPieces} pieces in all ({Math.min(progress.pieces, shop.unlockPieces)}/{shop.unlockPieces}{progress.missing.length
+            ? `, still missing: ${progress.missing.map((m) => SLOTS.find((x) => x.id === m)?.name.toLowerCase()).join(', ')}`
+            : ''}).
+        </p>
       {:else}
         <p class="faint none-yet">Nothing here yet. The shop has some.</p>
       {/if}
@@ -502,10 +541,33 @@
   }
 
   /* ------------------------------------------------------------ the outfit strip */
+  /* Tiles shown at once: four and a bit on a phone (the next one peeks out, so the row reads as
+     scrollable), five from a tablet up, every tile on a wide screen */
+  .wardrobe {
+    container-type: inline-size;
+  }
   .outfit {
+    --gap: 0.4rem;
+    --shown: 4.35;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.4rem;
+    grid-template-columns: repeat(var(--cols), calc((100% - (var(--shown) - 1) * var(--gap)) / var(--shown)));
+    gap: var(--gap);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .outfit::-webkit-scrollbar {
+    display: none;
+  }
+  @container (min-width: 30rem) {
+    .outfit {
+      --shown: 5;
+    }
+  }
+  @container (min-width: 44rem) {
+    .outfit {
+      --shown: var(--cols);
+    }
   }
   .slot {
     position: relative;
@@ -513,7 +575,7 @@
     flex-direction: column;
     align-items: center;
     gap: 0;
-    padding: 0.15rem 0.2rem 0.3rem;
+    padding: 0.15rem 0.1rem 0.3rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-2);
@@ -551,8 +613,32 @@
     border-radius: 50%;
   }
   .sname {
-    font-size: 1.05rem;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.84rem;
     font-weight: 600;
+  }
+  .spic :global(svg) {
+    color: var(--text-dim);
+  }
+  /* On a slot whose pieces would take off the dress or costume head worn */
+  .swap {
+    position: absolute;
+    top: 0.25rem;
+    left: 0.3rem;
+    display: grid;
+    place-items: center;
+    color: var(--warning);
+  }
+  .swapnote {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: -0.25rem 0 0;
+    font-size: 0.8rem;
+    color: var(--warning);
   }
   .count {
     position: absolute;

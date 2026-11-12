@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { Check, Coins, Crown, Lock, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet, toast } from '$lib/client.svelte.ts';
-  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
+  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, openSlots, slotsFor, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
   import KingCard from './KingCard.svelte';
@@ -58,7 +58,10 @@
   let buildingCount = $state(0);
   let firstLoad = $state(true);
 
-  const slots = $derived(SLOTS.filter((s) => s.id !== 'dress' || body === 'female'));
+  /** Locked slots stay out of the shop until they open (the wardrobe tells what opens them), the
+   *  secret one until it is found */
+  const open_ = $derived(body && shop ? openSlots(wd?.owned ?? [], body, shop.unlockPieces, shop.secretPieces) : []);
+  const slots = $derived(slotsFor(body).filter((s) => open_.includes(s.id)));
   /** Where the preview zooms while browsing a slot */
   const FOCUS: Record<Slot, 'head' | 'torso' | 'legs' | 'feet' | null> = {
     hat: 'head',
@@ -69,6 +72,9 @@
     feet: 'feet',
     dress: null,
     back: null,
+    arms: 'torso',
+    shoulders: 'torso',
+    costume: 'head',
   };
   const items = $derived(CATALOG.filter((i) => i.slot === slot && (!i.bodies || (body && i.bodies.includes(body)))));
   const openItem = $derived(open ? (CATALOG.find((i) => i.id === open!.id) ?? null) : null);
@@ -96,6 +102,9 @@
       delete out.bottom;
     }
     if (at === 'top' || at === 'bottom') delete out.dress;
+    // A costume head replaces the hat (and a hat replaces it)
+    if (at === 'costume') delete out.hat;
+    if (at === 'hat') delete out.costume;
     return out;
   }
 
@@ -182,7 +191,7 @@
       try {
         const draft = JSON.parse(storageGet(DRAFT_KEY) ?? 'null');
         if (draft?.id === hb.me?.id) {
-          if (SLOTS.some((s) => s.id === draft.slot)) slot = draft.slot;
+          if (slots.some((s) => s.id === draft.slot)) slot = draft.slot;
           // The catalog may have changed since: only a piece that still exists, in a color it still has
           const piece = validWorn(draft.open, body ?? undefined);
           if (piece && piece.item.slot === slot) open = { id: piece.id, color: piece.color };
@@ -190,7 +199,7 @@
       } catch {
         // A broken draft is just dropped
       }
-      if (startSlot && startSlot !== slot) {
+      if (startSlot && startSlot !== slot && slots.some((s) => s.id === startSlot)) {
         slot = startSlot;
         open = null;
       }
@@ -386,10 +395,20 @@
     padding: 2rem 0;
     color: var(--text-dim);
   }
+  /* Two rows at most, filled column by column; more slots scroll sideways */
   .slots {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-rows: repeat(2, auto);
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
     gap: 0.35rem;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .slots::-webkit-scrollbar {
+    display: none;
   }
   .slot {
     position: relative;

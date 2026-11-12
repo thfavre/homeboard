@@ -5,7 +5,7 @@ import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { CATALOG, TIERS, itemById, piecesOf, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, TIERS, itemById, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -27,6 +27,10 @@ interface WorldSettings {
   priceFancy: number;
   priceEpic: number;
   priceLegendary: number;
+  /** Pieces a guest must own (with one in every open slot) before the locked slots open */
+  unlockPieces: number;
+  /** Pieces a guest must own (with one in every slot, the locked ones too) to find the secret slot */
+  secretPieces: number;
   /** What changing each part of an existing look costs (the hair style, its color...) */
   lookHair: number;
   lookHairColor: number;
@@ -180,6 +184,8 @@ export default defineModule<WorldSettings>({
     priceFancy: 60,
     priceEpic: 150,
     priceLegendary: 400,
+    unlockPieces: 10,
+    secretPieces: 20,
     lookHair: 30,
     lookHairColor: 20,
     lookBeard: 15,
@@ -389,7 +395,8 @@ export default defineModule<WorldSettings>({
      * they see of themselves on the phone wears the crown, like their character in the town.
      */
     const crownOn = (guestId: string, outfit: Outfit): Outfit => (guestId === kingId() && outfit.hat?.id !== KING_CROWN.id ? { ...outfit, hat: KING_CROWN } : outfit);
-    const sameHat = (a: Outfit, b: Outfit) => a.hat?.id === b.hat?.id && a.hat?.color === b.hat?.color;
+    // A costume head takes the hat off, so it counts as headwear too
+    const sameHat = (a: Outfit, b: Outfit) => (['hat', 'costume'] as const).every((k) => a[k]?.id === b[k]?.id && a[k]?.color === b[k]?.color);
 
     /** How the title's price moves (see the settings): what it went up to and when, how fast it drops, where it stops */
     const kingPricing = (): KingPricing => {
@@ -500,7 +507,7 @@ export default defineModule<WorldSettings>({
       const base: WorldState = {
         characters,
         sheet: store.data.sheet,
-        shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices() },
+        shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices(), unlockPieces: s.unlockPieces, secretPieces: s.secretPieces },
         king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), pricing: kingPricing(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null, reigns },
       };
       if (role === 'admin') {
@@ -649,6 +656,7 @@ export default defineModule<WorldSettings>({
         delete out.top;
         delete out.bottom;
       }
+      if (out.costume) delete out.hat;
       return out;
     };
 
@@ -686,7 +694,7 @@ export default defineModule<WorldSettings>({
       if (!existsSync(file)) {
         let p = drawingIcons.get(name);
         if (!p) {
-          p = composer.icon(pieces, item.bodies?.[0] ?? 'male').then((png) => writeFileSync(file, png));
+          p = composer.icon(pieces, item.bodies?.[0] ?? 'male', item.head?.skin ? splitColor(color)[0] : undefined).then((png) => writeFileSync(file, png));
           drawingIcons.set(name, p);
           p.catch(() => drawingIcons.delete(name));
         }
@@ -736,6 +744,9 @@ export default defineModule<WorldSettings>({
       if (worn.item.bodies && !worn.item.bodies.includes(stored.choices.body)) throw new HbError('That does not fit your body');
       if ((owned[guest.id] ?? []).some((o) => o.id === worn.id && o.color === worn.color)) throw new HbError('You own that already');
       const s = ctx.settings.get();
+      if (!openSlots((owned[guest.id] ?? []).filter((o) => validWorn(o)), stored.choices.body, s.unlockPieces, s.secretPieces).includes(worn.item.slot)) {
+        throw new HbError('That part of the shop is still locked');
+      }
       const price = s[PRICE_KEY[worn.item.tier]];
       const balance = wallets[guest.id] ?? 0;
       if (balance < price) throw new HbError(`Not enough ${s.currencyName}: this costs ${price}, you have ${balance}`, 'NO_MONEY');
@@ -809,9 +820,11 @@ export default defineModule<WorldSettings>({
         const outfit = wearable(guest.id, o);
         if (guest.id === kingId()) {
           // The King keeps the crown: the rest of the saved outfit goes on, the headwear stays as it is
-          const hat = store.data.avatars[guest.id]?.outfit?.hat;
-          if (hat) outfit.hat = hat;
-          else delete outfit.hat;
+          for (const k of ['hat', 'costume'] as const) {
+            const worn = store.data.avatars[guest.id]?.outfit?.[k];
+            if (worn) outfit[k] = worn;
+            else delete outfit[k];
+          }
         }
         return wearOutfit(guest.id, outfit);
       }),
@@ -955,6 +968,8 @@ export default defineModule<WorldSettings>({
         priceFancy: price(args.priceFancy, s.priceFancy),
         priceEpic: price(args.priceEpic, s.priceEpic),
         priceLegendary: price(args.priceLegendary, s.priceLegendary),
+        unlockPieces: Math.max(0, Math.min(1000, Math.round(num(args.unlockPieces, s.unlockPieces)))),
+        secretPieces: Math.max(0, Math.min(1000, Math.round(num(args.secretPieces, s.secretPieces)))),
         lookHair: price(args.lookHair, s.lookHair),
         lookHairColor: price(args.lookHairColor, s.lookHairColor),
         lookBeard: price(args.lookBeard, s.lookBeard),
