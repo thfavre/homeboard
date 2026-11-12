@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Ban, Ellipsis, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
+  import { Ban, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, onEvent, rpc } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
   import { COLOR_HEX, SLOTS, colorName, itemById, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
@@ -182,22 +182,21 @@
     else if (wd) void build($state.snapshot(wd.outfit) as Outfit);
   }
 
-  /** A filled slot: save over it or empty it, both asked first */
-  async function manage(i: number) {
+  /** A filled slot always asks first: wear it, or save the current look over it */
+  async function tapSaved(i: number) {
+    const o = wd?.saved[i];
+    if (busy || !o) return;
     const what = await choose({
       title: `Outfit ${i + 1}`,
+      message: outfitKey(o) === wornKey ? 'You are wearing this outfit now.' : 'Saving here replaces this outfit with what you wear now.',
+      // The dialog stacks the last choice on top
       options: [
-        { label: 'Save what I wear here', value: 'save' as const, kind: 'primary' },
-        { label: 'Clear this outfit', value: 'clear' as const, kind: 'danger' },
+        { label: 'Save current look here', value: 'save' as const, kind: 'default' },
+        { label: 'Wear this outfit', value: 'wear' as const, kind: 'primary' },
       ],
     });
+    if (what === 'wear') void putOn(i);
     if (what === 'save') void saveOutfit(i);
-    if (what === 'clear') {
-      busy = true;
-      const done = await attempt(() => rpc<WardrobeMine>('world', 'clearOutfit', { slot: i }));
-      busy = false;
-      if (done) wd = done;
-    }
   }
 
   // ------------------------------------------------------------ actions
@@ -273,15 +272,12 @@
         {#if o}
           {@const t = thumbs[outfitKey(o)]}
           {@const on = outfitKey(o) === wornKey}
-          <div class="outfit-slot" class:on>
-            <button type="button" class="apply" disabled={busy} aria-label={on ? `Outfit ${i + 1}, worn` : `Wear outfit ${i + 1}`} onclick={() => putOn(i)}>
-              <span class="onum">{i + 1}</span>
-              <span class="thumb">
-                {#if t}<OutfitThumb url={t.url} sheet={t.sheet} />{/if}
-              </span>
-            </button>
-            <button type="button" class="more" disabled={busy} aria-label={`Change outfit ${i + 1}`} onclick={() => manage(i)}><Ellipsis size={16} /></button>
-          </div>
+          <button type="button" class="outfit-slot" class:on disabled={busy} aria-label={on ? `Outfit ${i + 1}, worn` : `Outfit ${i + 1}`} onclick={() => tapSaved(i)}>
+            <span class="onum">{i + 1}</span>
+            <span class="thumb">
+              {#if t}<OutfitThumb url={t.url} sheet={t.sheet} />{/if}
+            </span>
+          </button>
         {:else}
           <button type="button" class="outfit-slot empty-slot" disabled={busy} aria-label={`Save what I wear as outfit ${i + 1}`} onclick={() => saveOutfit(i)}>
             <Plus size={15} />Save look
@@ -415,7 +411,9 @@
     position: relative;
     display: flex;
     align-items: center;
+    justify-content: center;
     min-width: 0;
+    padding: 0;
     height: 2.75rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -425,18 +423,6 @@
   .outfit-slot.on {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
-  }
-  .apply {
-    flex: 1;
-    position: relative;
-    display: grid;
-    place-items: center;
-    min-width: 0;
-    height: 100%;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: inherit;
   }
   .onum {
     position: absolute;
@@ -453,19 +439,6 @@
   .thumb {
     width: 2.4rem;
     height: 2.4rem;
-  }
-  .more {
-    position: absolute;
-    top: 0;
-    right: 0;
-    display: grid;
-    place-items: center;
-    width: 1.5rem;
-    height: 100%;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--text-dim);
   }
   .empty-slot {
     justify-content: center;

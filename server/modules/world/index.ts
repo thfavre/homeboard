@@ -558,7 +558,7 @@ export default defineModule<WorldSettings>({
       return i;
     };
 
-    // Saved outfits: the worn outfit into a slot, a slot emptied, a saved outfit put back on
+    // Saved outfits: the worn outfit into a slot (over what was there), a saved outfit put back on
     ctx.onGuest('saveOutfit', (args, guest) =>
       oneAtATime(guest.id, async () => {
         const stored = store.data.avatars[guest.id];
@@ -567,16 +567,6 @@ export default defineModule<WorldSettings>({
         const list = (saved[guest.id] ??= []);
         while (list.length < SAVED_SLOTS) list.push(null);
         list[i] = { ...stored.outfit };
-        store.save();
-        return mine(guest.id);
-      }),
-    );
-
-    ctx.onGuest('clearOutfit', (args, guest) =>
-      oneAtATime(guest.id, async () => {
-        const i = savedSlot(args?.slot);
-        const list = saved[guest.id];
-        if (list && i < list.length) list[i] = null;
         store.save();
         return mine(guest.id);
       }),
