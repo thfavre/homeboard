@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Check, Coins, ShoppingBag, X } from '@lucide/svelte';
+  import { Check, Coins, Crown, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
   import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
+  import KingCard from './KingCard.svelte';
 
   /**
    * The shop and wardrobe: pick a slot, scroll a picture grid of everything it sells, tap a piece
@@ -21,6 +22,8 @@
   let wd = $state<WardrobeMine | null>(null);
   let body = $state<'male' | 'female' | null>(null);
   let slot = $state<Slot>('top');
+  /** The King's title is shown instead of a slot's items */
+  let kingTab = $state(false);
   /** The piece opened in the detail view (null: the grid) */
   let open = $state<WornItem | null>(null);
   /** Item pictures by id, fetched per slot and kept */
@@ -140,7 +143,7 @@
       view.sheet = sheet;
     }
     view.building = buildingCount > 0;
-    view.focus = FOCUS[slot];
+    view.focus = kingTab ? 'head' : FOCUS[slot];
     view.facing = slot === 'back' ? 'up' : 'down';
   });
 
@@ -148,7 +151,8 @@
   const DRAFT_KEY = 'hb.world.shop';
 
   $effect(() => {
-    const snapshot = JSON.stringify(candidate());
+    // On the King's title: the guest tries the crown on
+    const snapshot = JSON.stringify(kingTab && wd?.outfit.hat?.id !== 'crown' ? { ...candidate(null), hat: { id: 'crown', color: 'crown_gold' } } : candidate());
     const picks = JSON.stringify({ id: hb.me?.id, slot, open });
     if (firstLoad || !body) return;
     storageSet(DRAFT_KEY, picks);
@@ -222,18 +226,35 @@
         <button
           type="button"
           class="slot"
-          class:on={slot === s.id}
+          class:on={!kingTab && slot === s.id}
           onclick={() => {
             slot = s.id;
             open = null;
+            kingTab = false;
           }}
         >
           {s.name}
         </button>
       {/each}
+      {#if mod?.king?.on}
+        <button
+          type="button"
+          class="slot king"
+          class:on={kingTab}
+          onclick={() => {
+            kingTab = true;
+            open = null;
+          }}
+        >
+          <Crown size={14} />King
+        </button>
+      {/if}
     </div>
 
     <div class="scroll">
+    {#if kingTab}
+      <KingCard balance={wd?.balance ?? null} />
+    {:else}
     <div class="grid">
       {#each items as i (i.id)}
         <button
@@ -260,6 +281,7 @@
         </button>
       {/each}
     </div>
+    {/if}
     </div>
 
     {#if open && openItem}
@@ -344,6 +366,12 @@
   .slot.on {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
+  }
+  .slot.king {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--warning);
   }
 
   /* ------------------------------------------------------------ the grid */
