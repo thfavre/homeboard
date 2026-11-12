@@ -226,6 +226,8 @@ export interface WardrobeMine {
   balance: number;
   owned: WornItem[];
   outfit: Outfit;
+  /** The saved outfits, one per slot (null: empty), without pieces that cannot be worn anymore */
+  saved: (Outfit | null)[];
 }
 
 export interface WorldState {
