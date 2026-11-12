@@ -178,7 +178,8 @@ export class Composer {
     const rc = def.recolors;
     const [main, accent] = item.color ? splitColor(item.color) : [undefined, undefined];
     if (rc?.material) {
-      swaps.push(await this.swapFor(rc, rc.material === 'body' ? c.skin : main!));
+      // Art drawn in skin takes the wearer's skin, unless the piece names a tone (horns of bone)
+      swaps.push(await this.swapFor(rc, rc.material === 'body' ? (main && main !== 'skin' ? main : c.skin) : main!));
     } else if (rc?.color_1) {
       let n = 0;
       for (const [key, r] of Object.entries<any>(rc)) {
