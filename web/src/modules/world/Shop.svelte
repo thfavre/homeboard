@@ -3,6 +3,7 @@
   import { Check, Coins, Crown, Lock, ShoppingBag, X } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc, storageGet, storageSet, toast } from '$lib/client.svelte.ts';
   import { isNewSlot, markSlotSeen } from './newSlots.svelte.ts';
+  import { sideScroll } from '$lib/sideScroll.ts';
   import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, openSlots, slotsFor, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
@@ -266,7 +267,7 @@
   </div>
 {:else}
   <div class="shop">
-    <div class="slots">
+    <div class="slots" use:sideScroll>
       {#each slots as s (s.id)}
         <button
           type="button"

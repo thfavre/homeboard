@@ -4,6 +4,7 @@
   import { attempt, hb, onEvent, rpc, toast } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
   import { isNewSlot, markSlotSeen } from './newSlots.svelte.ts';
+  import { sideScroll } from '$lib/sideScroll.ts';
   import { COLOR_HEX, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, notForTheKing, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import OutfitThumb from './OutfitThumb.svelte';
@@ -353,8 +354,8 @@
     {/if}
 
     <span class="label">Wearing</span>
-    <!-- Two rows at most: five tiles show per row, more scroll sideways -->
-    <div class="outfit" role="tablist" aria-label="Slots" style:--cols={Math.ceil(slots.length / 2)}>
+    <!-- Two rows at most: about five tiles show per row, more scroll sideways (a part of the next one shows) -->
+    <div class="outfit" role="tablist" aria-label="Slots" style:--cols={Math.ceil(slots.length / 2)} use:sideScroll>
       {#each slots as s (s.id)}
         {@const w = wd?.outfit[s.id]}
         {@const count = closet.get(s.id)?.length ?? 0}
@@ -563,7 +564,9 @@
   }
   .outfit {
     --gap: 0.4rem;
-    --shown: 4.35;
+    /* How many tiles fit across: never a whole number while more wait off the side, so a part of
+       the next one always shows and says the row scrolls */
+    --shown: min(var(--cols), 4.35);
     display: grid;
     grid-template-columns: repeat(var(--cols), calc((100% - (var(--shown) - 1) * var(--gap)) / var(--shown)));
     gap: var(--gap);
@@ -579,7 +582,7 @@
   }
   @container (min-width: 30rem) {
     .outfit {
-      --shown: 5;
+      --shown: min(var(--cols), 5.3);
     }
   }
   @container (min-width: 44rem) {
