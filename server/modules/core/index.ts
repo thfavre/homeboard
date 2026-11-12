@@ -209,6 +209,7 @@ export default defineModule({
         guestsOnline: guests.filter((g) => g.online).length,
         takeover: hub.takeover,
         privacy: c.privacy,
+        tvJoinCard: c.tvJoinCard,
         avatars: Object.fromEntries([...session.guests.values()].filter((g) => g.avatar).map((g) => [g.id, g.avatar!.url])),
         activity: hub.activityFor(role),
       };
@@ -473,6 +474,7 @@ export default defineModule({
         patch.privacy = p;
       }
       if (args.qrIncludesCode !== undefined) patch.qrIncludesCode = !!args.qrIncludesCode;
+      if (args.tvJoinCard !== undefined) patch.tvJoinCard = !!args.tvJoinCard;
       if (args.requireCode !== undefined) patch.requireCode = !!args.requireCode;
       updateCore(patch);
       if (patch.requireCode) hub.checkCodes();

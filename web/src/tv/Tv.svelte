@@ -108,7 +108,8 @@
       <span class="time mono">{time}</span>
     </header>
 
-    <main>
+    <!-- Nothing on the side (leaderboard and join card turned off): the main view takes the whole width -->
+    <main class:wide={side.length === 0}>
       <section class="main" class:stacked={above.length > 0}>
         <!-- Cards side by side (several games can be played at once on the lights and the phones) -->
         {#if above.length}
@@ -235,6 +236,12 @@
     display: grid;
     grid-template-columns: 1fr var(--tv-side);
     gap: var(--tv-gap);
+  }
+  main.wide {
+    grid-template-columns: 1fr;
+  }
+  main.wide > aside {
+    display: none;
   }
   .main {
     min-height: 0;

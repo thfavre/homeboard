@@ -178,6 +178,8 @@ export interface CoreState {
   boards?: Board[];
   boardSeconds?: number;
   privacy: PrivacySettings;
+  /** The TV shows the join card (QR and code) */
+  tvJoinCard: boolean;
   /** Avatar URL of every guest who has one, by guest id */
   avatars: Record<string, string>;
   guestsOnline: number;

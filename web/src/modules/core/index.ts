@@ -9,8 +9,8 @@ export default {
   id: 'core',
   tv: [
     { slot: 'main', order: 999, component: Welcome },
-    { slot: 'side', order: 50, component: Leaderboard },
-    { slot: 'side', order: 100, component: JoinCard },
+    { slot: 'side', order: 50, component: Leaderboard, visible: () => (hb.core?.boards?.length ?? 0) > 0 },
+    { slot: 'side', order: 100, component: JoinCard, visible: () => hb.core?.tvJoinCard !== false },
     { slot: 'footer', order: 10, component: ActivityTicker, visible: () => hb.core?.privacy.activity !== 'off' },
   ],
 } satisfies ClientModule;

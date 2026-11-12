@@ -115,6 +115,13 @@
     </div>
     <Toggle checked={admin.qrIncludesCode} label="Code in QR" onchange={(v) => set({ qrIncludesCode: v })} />
   </div>
+  <div class="line">
+    <div>
+      <strong>Join card on the TV</strong>
+      <p class="faint small">The card with the QR code and the session code. Off: more room for what is on the TV.</p>
+    </div>
+    <Toggle checked={hb.core?.tvJoinCard !== false} label="Join card on the TV" onchange={(v) => set({ tvJoinCard: v })} />
+  </div>
 </Section>
 
 {#if password !== null}
