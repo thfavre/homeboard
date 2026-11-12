@@ -189,6 +189,23 @@ export const BEARDS: { id: string; name: string; def: string | null }[] = [
   { id: 'handlebar', name: 'Handlebar', def: 'hair/mustaches/beards_handlebar' },
 ];
 
+/**
+ * A random look to start the editor with, so the town is not full of the same face. Every part
+ * is drawn from its list; only male bodies get facial hair, and half of them stay clean shaven.
+ */
+export function randomChoices(): AvatarChoices {
+  const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
+  const body = pick(['male', 'female'] as const);
+  return {
+    body,
+    skin: pick(SKINS),
+    hair: pick(HAIR_STYLES).id,
+    hairColor: pick(HAIR_COLORS),
+    beard: body === 'male' && Math.random() < 0.5 ? pick(BEARDS.slice(1)).id : 'none',
+    eyes: pick(EYE_COLORS),
+  };
+}
+
 /** The picks that exist; anything else is refused by the server */
 export function validChoices(c: unknown): AvatarChoices | null {
   const o = c as Partial<AvatarChoices> | null;

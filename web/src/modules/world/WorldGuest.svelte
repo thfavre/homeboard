@@ -3,7 +3,7 @@
   import { Check, Coins, PersonStanding, Shirt, ShoppingBag, Undo2 } from '@lucide/svelte';
   import { attempt, hb, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
   import type { Slot } from '$shared/wardrobe.ts';
-  import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, lookCost, type AvatarChoices, type SheetInfo, type WorldState } from '$shared/world.ts';
+  import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, lookCost, randomChoices, type AvatarChoices, type SheetInfo, type WorldState } from '$shared/world.ts';
   import AvatarPreview from './AvatarPreview.svelte';
   import Picker from './Picker.svelte';
   import type { PreviewView } from './preview.ts';
@@ -29,7 +29,8 @@
   }
   /** The slot the wardrobe sent the guest shopping for */
   let shopSlot = $state<Slot | null>(null);
-  let choices = $state<AvatarChoices>({ ...DEFAULT_CHOICES });
+  // A new guest starts from a random look (a saved avatar or a draft replaces it on load)
+  let choices = $state<AvatarChoices>(randomChoices());
   let saved = $state<string | null>(null);
   /** The avatar exists: body and skin are set, only hair, face and clothes change */
   let created = $state(false);
