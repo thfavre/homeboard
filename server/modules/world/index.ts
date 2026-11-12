@@ -410,11 +410,16 @@ export default defineModule<WorldSettings>({
 
     // ------------------------------------------------------------ the shop
 
-    const mine = (guestId: string): WardrobeMine => ({
-      balance: wallets[guestId] ?? 0,
-      owned: owned[guestId] ?? [],
-      outfit: store.data.avatars[guestId]?.outfit ?? {},
-    });
+    // Only pieces the catalog still has: the phone sends the outfit back with one slot changed, and
+    // a piece gone from the catalog would get every change refused
+    const mine = (guestId: string): WardrobeMine => {
+      const a = store.data.avatars[guestId];
+      return {
+        balance: wallets[guestId] ?? 0,
+        owned: (owned[guestId] ?? []).filter((o) => validWorn(o)),
+        outfit: a ? outfitFor(guestId, a.choices.body) : {},
+      };
+    };
 
     /** Tell this guest's open pages their new balance */
     const sendWallet = (guestId: string) => ctx.emit({ guest: guestId }, 'wallet', { balance: wallets[guestId] ?? 0 });
