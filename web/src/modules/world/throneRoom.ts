@@ -45,8 +45,6 @@ const CUSHION_SWAP: Record<string, string> = { '#6a1d16': RED.dark, '#7b2008': R
 const RUG = { x: 0, y: 96, tile: 32 };
 /** The throne with the red cushions, seen from the side and facing left (its finials stick out above its 64 px) */
 const THRONE_CUT = [96, 80, 32, 80] as const;
-/** In that cut: what passes in front of whoever sits there, from halfway down the seat cushion: its front half, the near armrest and the legs (the back, the far armrest and the cushion's back half stay behind) */
-const THRONE_NEAR = { x: 0, y: 60, w: 26, h: 20 };
 /** A small round tree in a porcelain pot (the planters sheet) */
 const TOPIARY = [64, 0, 32, 80] as const;
 /** The floor: two tones of diamond tiles (32 px), laid as a chessboard */
@@ -58,8 +56,10 @@ const FLOOR_TILES = [
 export interface HallArt {
   /** The hall's ground, in sprite pixels */
   ground: HTMLCanvasElement;
-  /** The throne (in the royal red), in sprite pixels */
+  /** The throne (in the royal red), in sprite pixels: the part behind whoever sits on it */
   throne: HTMLCanvasElement;
+  /** The part of the throne drawn in front of whoever sits on it (same size and place as the cut) */
+  throneFront: HTMLCanvasElement;
 }
 
 let loading: Promise<HallArt | null> | null = null;
@@ -73,10 +73,23 @@ export function loadHall(): Promise<HallArt | null> {
       img.onerror = () => reject(new Error(f));
       img.src = `/crowd/env/${f}.png`;
     });
-  loading ??= Promise.all([load('throne'), load('carpet'), load('pave-stone-diamond'), load('planters')])
-    .then(([throne, carpet, tiles, planters]) => {
+  // The front part is drawn by hand over the cut (/world/throne-front.png, the cut's size): its pixels
+  // come off the back part, so each pixel of the throne is drawn once
+  const front = () =>
+    new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('throne-front'));
+      img.src = '/world/throne-front.png';
+    });
+  loading ??= Promise.all([load('throne'), load('carpet'), load('pave-stone-diamond'), load('planters'), front()])
+    .then(([throne, carpet, tiles, planters, near]) => {
       const [tx, ty, tw, th] = THRONE_CUT;
-      return { ground: buildGround(carpet, tiles, planters), throne: recolored(throne, tx, ty, tw, th, CUSHION_SWAP) };
+      const back = recolored(throne, tx, ty, tw, th, CUSHION_SWAP);
+      const g = back.getContext('2d')!;
+      g.globalCompositeOperation = 'destination-out';
+      g.drawImage(near, 0, 0);
+      return { ground: buildGround(carpet, tiles, planters), throne: back, throneFront: recolored(near, 0, 0, tw, th, CUSHION_SWAP) };
     })
     .catch(() => null);
   return loading;
@@ -678,7 +691,7 @@ export function drawHallWall(g: G, now: number): void {
   });
 }
 
-/** What stands up in the hall, drawn in depth order with the characters: the throne (in two parts: its back and far armrest behind whoever sits on it, the rest in front) and the braziers */
+/** What stands up in the hall, drawn in depth order with the characters: the throne (in two parts, around whoever sits on it: see throne-front.png) and the braziers */
 export function hallProps(art: HallArt): Prop[] {
   const up = A.dais.length * A.rise;
   const w = art.throne.width;
@@ -702,10 +715,9 @@ export function hallProps(art: HallArt): Prop[] {
       },
     },
     {
-      // Just in front of the King: the near armrest across his lap, the seat's front and the legs
+      // Just in front of the King: the hand-drawn front part of the throne
       y: THRONE_SEAT.y + 2,
-      draw: (g) =>
-        g.drawImage(art.throne, THRONE_NEAR.x, THRONE_NEAR.y, THRONE_NEAR.w, THRONE_NEAR.h, left + Math.round(THRONE_NEAR.x * S), top + Math.round(THRONE_NEAR.y * S), Math.round(THRONE_NEAR.w * S), Math.round(THRONE_NEAR.h * S)),
+      draw: (g) => g.drawImage(art.throneFront, 0, 0, w, h, left, top, Math.round(w * S), Math.round(h * S)),
     },
   ];
   // Behind the throne, along the back edge of the top step: a row of banners on poles, the middle one the tallest
