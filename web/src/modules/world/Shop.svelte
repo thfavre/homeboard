@@ -4,7 +4,7 @@
   import { attempt, hb, onEvent, rpc, storageGet, storageSet, toast } from '$lib/client.svelte.ts';
   import { isNewSlot, markSlotSeen } from './newSlots.svelte.ts';
   import { sideScroll } from '$lib/sideScroll.ts';
-  import { CATALOG, COLOR_HEX, SLOTS, TIER_NAMES, colorName, openSlots, slotsFor, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
+  import { CATALOG, COLOR_HEX, NOT_FOR_THE_KING, SLOTS, TIER_NAMES, colorName, notForTheKing, openSlots, slotsFor, splitColor, validWorn, type Outfit, type Slot, type WornItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import type { PreviewView } from './preview.ts';
   import KingCard from './KingCard.svelte';
@@ -110,10 +110,19 @@
     return out;
   }
 
+  /** A skirt or dress the King can neither buy nor wear (one he already wears is left alone) */
+  const kingLocked = (item: { id: string; slot: Slot }) =>
+    crowned && notForTheKing(CATALOG.find((i) => i.id === item.id)) && wd?.outfit[item.slot]?.id !== item.id;
+
   /** Open a piece in the color its card shows (every piece starts fresh, whatever was picked before) */
   function show(id: string) {
     const item = CATALOG.find((i) => i.id === id);
     if (!item) return;
+    if (kingLocked(item)) {
+      open = null;
+      toast({ text: NOT_FOR_THE_KING, kind: 'info' });
+      return;
+    }
     open = { id, color: colorOf(id) ?? item.colors[0] };
   }
 
@@ -311,8 +320,10 @@
           class:on={open?.id === i.id}
           class:owned={ownedIs(i.id)}
           class:wearing={wd?.outfit[slot]?.id === i.id}
+          class:kinglock={kingLocked(i)}
           onclick={() => show(i.id)}
         >
+          {#if kingLocked(i)}<span class="klock"><Lock size={22} strokeWidth={2.25} /></span>{/if}
           <span class="pic">
             {#if pictureOf(i.id)}
               <img src={pictureOf(i.id)} alt={i.name} loading="lazy" />
@@ -465,6 +476,25 @@
     grid-template-columns: repeat(auto-fill, minmax(6.8rem, 1fr));
     grid-auto-rows: 1fr;
     gap: 0.5rem;
+  }
+  /* A piece the King cannot have: dimmed, a lock over the middle of the picture, the reason on a tap */
+  .item.kinglock .pic {
+    opacity: 0.4;
+  }
+  .klock {
+    position: absolute;
+    top: 38%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
   }
   .item {
     position: relative;

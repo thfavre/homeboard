@@ -5,7 +5,7 @@
   import { choose } from '$lib/dialog.svelte.ts';
   import { isNewSlot, markSlotSeen } from './newSlots.svelte.ts';
   import { sideScroll } from '$lib/sideScroll.ts';
-  import { COLOR_HEX, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, notForTheKing, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
+  import { COLOR_HEX, NOT_FOR_THE_KING, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, notForTheKing, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
   import type { SheetInfo, WardrobeMine, WorldState } from '$shared/world.ts';
   import OutfitThumb from './OutfitThumb.svelte';
   import type { PreviewView } from './preview.ts';
@@ -300,7 +300,7 @@
   function tap(p: { item: WardrobeItem; colors: string[] }) {
     if (kingLocked(p.item)) {
       picking = null;
-      toast({ text: 'Not fit for a King: you could not sit on your throne or greet your court in this', kind: 'info' });
+      toast({ text: NOT_FOR_THE_KING, kind: 'info' });
       return;
     }
     if (p.colors.length > 1) {

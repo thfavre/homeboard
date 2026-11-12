@@ -440,6 +440,8 @@ export const itemById =(id: string): WardrobeItem | undefined => CATALOG.find((i
  * underwear on the throne, so he cannot put one on while he holds the title. Neck and back pieces
  * just vanish for a moment, so they stay allowed.
  */
+/** What the King is told when he tries one */
+export const NOT_FOR_THE_KING = 'Not fit for a King: you could not sit on your throne or greet your court in this';
 export const notForTheKing = (item: WardrobeItem | undefined): boolean =>
   !!item && (item.slot === 'bottom' || item.slot === 'dress') && !!(item.noSit || item.noCheer);
 

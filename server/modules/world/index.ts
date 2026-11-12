@@ -5,7 +5,7 @@ import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { CATALOG, TIERS, itemById, notForTheKing, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, NOT_FOR_THE_KING, TIERS, itemById, notForTheKing, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -743,6 +743,7 @@ export default defineModule<WorldSettings>({
       if (!worn) throw new HbError('The shop does not have that');
       if (worn.item.bodies && !worn.item.bodies.includes(stored.choices.body)) throw new HbError('That does not fit your body');
       if ((owned[guest.id] ?? []).some((o) => o.id === worn.id && o.color === worn.color)) throw new HbError('You own that already');
+      if (guest.id === kingId() && notForTheKing(worn.item)) throw new HbError(NOT_FOR_THE_KING);
       const s = ctx.settings.get();
       if (!openSlots((owned[guest.id] ?? []).filter((o) => validWorn(o)), stored.choices.body, s.unlockPieces, s.secretPieces).includes(worn.item.slot)) {
         throw new HbError('That part of the shop is still locked');
@@ -793,7 +794,7 @@ export default defineModule<WorldSettings>({
           const before = stored.outfit ?? {};
           for (const k of ['bottom', 'dress'] as const) {
             const w = outfit[k];
-            if (w && w.id !== before[k]?.id && notForTheKing(itemById(w.id))) throw new HbError('Not fit for a King: you could not sit on your throne or greet your court in this');
+            if (w && w.id !== before[k]?.id && notForTheKing(itemById(w.id))) throw new HbError(NOT_FOR_THE_KING);
           }
         }
         return wearOutfit(guest.id, outfit);
