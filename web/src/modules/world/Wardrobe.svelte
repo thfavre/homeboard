@@ -327,8 +327,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.2rem;
-    padding: 0.4rem 0.2rem 0.35rem;
+    gap: 0;
+    padding: 0.15rem 0.2rem 0.3rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-2);
@@ -345,12 +345,13 @@
   .slot.none:not(.on) .spic {
     opacity: 0.5;
   }
+  /* The worn piece's picture, as big as the tile allows (the tile keeps its size) */
   .spic {
     position: relative;
     display: grid;
     place-items: center;
-    width: 2.4rem;
-    height: 2.4rem;
+    width: 3rem;
+    height: 3rem;
   }
   .spic img {
     width: 100%;
