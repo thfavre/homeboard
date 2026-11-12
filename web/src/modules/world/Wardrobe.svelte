@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Ban, Lock, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
+  import { ArrowLeftRight, Ban, Lock, Plus, Shirt, ShoppingBag } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import { choose } from '$lib/dialog.svelte.ts';
   import { COLOR_HEX, SLOTS, colorName, isLockedSlot, isSecretSlot, itemById, openSlots, slotsFor, unlockProgress, type Outfit, type Slot, type WardrobeItem } from '$shared/wardrobe.ts';
@@ -63,6 +63,13 @@
   const slots = $derived(slotsFor(body).filter((s) => !isSecretSlot(s.id) || found));
   const lockedNow = (s: Slot) => isLockedSlot(s) && !progress?.unlocked;
   const slotName = $derived(SLOTS.find((s) => s.id === slot)?.name ?? '');
+  /** The worn piece that wearing something in this slot would take off: the dress for tops and
+   *  bottoms, the costume head for hats */
+  function takesOff(s: Slot): string | null {
+    const o = wd?.outfit;
+    const other = (s === 'top' || s === 'bottom') && o?.dress ? o.dress : s === 'hat' && o?.costume ? o.costume : null;
+    return other ? (itemById(other.id)?.name ?? null) : null;
+  }
 
   /** Owned pieces grouped by item, with the colors owned of each */
   const closet = $derived.by(() => {
@@ -341,6 +348,9 @@
           </span>
           <span class="sname">{s.name}</span>
           {#if count}<span class="count">{count}</span>{/if}
+          {#if takesOff(s.id)}
+            <span class="swap" title={`Wearing one takes off the ${takesOff(s.id)}`}><ArrowLeftRight size={12} strokeWidth={2.5} /></span>
+          {/if}
         </button>
       {/each}
     </div>
@@ -353,6 +363,9 @@
           <button type="button" class="shoplink" onclick={() => onshop?.(slot)}><ShoppingBag size={15} />Buy more</button>
         {/if}
       </div>
+      {#if takesOff(slot)}
+        <p class="swapnote"><ArrowLeftRight size={14} />Wearing one takes off the {takesOff(slot)}.</p>
+      {/if}
       {#if pieces.length}
         <div class="scroll">
         <div class="grid">
@@ -574,6 +587,23 @@
   }
   .spic :global(svg) {
     color: var(--text-dim);
+  }
+  /* On a slot whose pieces would take off the dress or costume head worn */
+  .swap {
+    position: absolute;
+    top: 0.25rem;
+    left: 0.3rem;
+    display: grid;
+    place-items: center;
+    color: var(--warning);
+  }
+  .swapnote {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: -0.25rem 0 0;
+    font-size: 0.8rem;
+    color: var(--warning);
   }
   .count {
     position: absolute;
