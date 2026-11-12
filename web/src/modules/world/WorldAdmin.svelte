@@ -1,13 +1,60 @@
 <script lang="ts">
-  import { attempt, hb, rpc } from '$lib/client.svelte.ts';
+  import { Crown } from '@lucide/svelte';
+  import { attempt, hb, rpc, serverNow } from '$lib/client.svelte.ts';
+  import { day } from '$lib/time.ts';
   import Section from '$lib/ui/Section.svelte';
   import Toggle from '$lib/ui/Toggle.svelte';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { TIERS, TIER_NAMES } from '$shared/wardrobe.ts';
-  import { LOOK_PARTS, LOOK_PART_NAMES, type WorldState } from '$shared/world.ts';
+  import { LOOK_PARTS, LOOK_PART_NAMES, type CeremonyHold, type WorldState } from '$shared/world.ts';
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
   const kingName = $derived(mod?.king?.id ? (mod.characters.find((c) => c.id === mod.king!.id)?.name ?? null) : null);
+
+  // The clock, for when the next ceremony is
+  let now = $state(serverNow());
+  $effect(() => {
+    const t = setInterval(() => (now = serverNow()), 15_000);
+    return () => clearInterval(t);
+  });
+
+  const HOLDS: Record<CeremonyHold, string> = {
+    king: 'the King to be in the town and awake',
+    game: 'the game on the TV to end',
+    tv: 'a TV to be open',
+  };
+
+  /** Where the ceremony is at: on right now, when the next one comes on its own, or what it is waiting for */
+  const ceremonyStatus = $derived.by(() => {
+    if (!mod) return '';
+    if (mod.ceremonyPhase === 'gather') return 'A ceremony is on: everyone is on the way to the throne room';
+    if (mod.ceremonyPhase === 'court') return 'A ceremony is on: the King holds court';
+    if (mod.ceremonyPhase === 'leave') return 'The ceremony is over: everyone goes back to town';
+    const next = mod.ceremonyNext;
+    if (!mod.ceremonyAuto || !next) return 'Held only when you start it';
+    if (next <= now) return mod.ceremonyHold ? `Due now, waiting for ${HOLDS[mod.ceremonyHold]}` : 'Due now: about to start';
+    const days = Math.round((new Date(next).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / 86_400_000);
+    return `Next on its own: ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : day(next, now)} at ${mod.ceremonyTime}`;
+  });
+
+  function setDays(value: string) {
+    const n = Math.round(Number(value));
+    if (Number.isFinite(n) && n >= 1) setOption('ceremonyEveryDays', n);
+  }
+
+  /** Said under the field when what was typed is not a time of day */
+  let timeError = $state('');
+
+  function setTime(input: HTMLInputElement) {
+    const m = /^(\d{1,2})[:.h ]?(\d{2})$/.exec(input.value.trim());
+    if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) {
+      timeError = 'Write the time as hours and minutes, like 21:00';
+      return;
+    }
+    timeError = '';
+    input.value = `${m[1].padStart(2, '0')}:${m[2]}`;
+    setOption('ceremonyTime', input.value);
+  }
 
   function setSeconds(key: string, value: string) {
     const n = Number(value);
@@ -87,6 +134,109 @@
     <p class="faint small">A sleeper gone for this much longer fades away, so the town never clutters up.</p>
   </Section>
 
+  <Section title="The King">
+    <div class="line">
+      <div>
+        <strong>King's title</strong>
+        <p class="faint small">
+          One guest at a time is the King: their character wears a crown and a gold nametag, and the town gathers before them in the throne room. Anyone can
+          take the title from the shop on their phone.
+        </p>
+      </div>
+      <Toggle checked={!!mod.king?.on} label="King's title" onchange={(v) => setOption('king', v)} />
+    </div>
+    <div class="current">
+      <span class="who">
+        {#if kingName}
+          <strong>{kingName}</strong> is the King
+        {:else}
+          Nobody is the King
+        {/if}
+      </span>
+      <span class="bal">Next price {mod.king?.price ?? 0} {mod.shop?.currencyName}</span>
+    </div>
+    <div class="buttons">
+      <TwoStepButton class="small" disabled={!mod.king?.id} onconfirm={() => attempt(() => rpc('world', 'removeKing'), 'Title removed')}>
+        Remove the title
+        {#snippet armed()}Tap again to remove{/snippet}
+      </TwoStepButton>
+      <TwoStepButton class="small" disabled={!mod.kingSales} onconfirm={() => attempt(() => rpc('world', 'resetKingPrice'), 'Price reset')}>
+        Reset the price
+        {#snippet armed()}Tap again to reset{/snippet}
+      </TwoStepButton>
+    </div>
+    <p class="faint small">
+      The title changed hands {mod.kingSales ?? 0} {mod.kingSales === 1 ? 'time' : 'times'}. Removing it leaves the price as it is; resetting brings it back to
+      the first price.
+    </p>
+    <div class="pair">
+      <label class="field">
+        <span>First price</span>
+        <input class="input" type="number" min="0" value={mod.kingBase} onchange={(e) => setAmount('kingBase', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>More each time</span>
+        <input class="input" type="number" min="0" value={mod.kingStep} onchange={(e) => setAmount('kingStep', e.currentTarget.value)} />
+      </label>
+    </div>
+    <label class="field">
+      <span>The old King gets back (percent of what they paid)</span>
+      <input class="input" type="number" min="0" max="100" value={mod.kingRefundPct} onchange={(e) => setAmount('kingRefundPct', e.currentTarget.value)} />
+    </label>
+
+    <div class="line">
+      <div>
+        <strong>Ceremony in the throne room</strong>
+        <p class="faint small">
+          The TV's camera moves a third of the screen to the right, over to the throne room: the King walks up the red carpet and sits on the throne, and
+          everyone else comes and kneels before it. Then all go back to town. On: it is held on its own, on the days and at the time below.
+        </p>
+      </div>
+      <Toggle checked={!!mod.ceremonyAuto} label="Hold the ceremony on its own" onchange={(v) => setOption('ceremony', v)} />
+    </div>
+    <div class="pair">
+      <label class="field">
+        <span>Every (days)</span>
+        <input class="input" type="number" min="1" max="365" value={mod.ceremonyEveryDays} onchange={(e) => setDays(e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>At (hours:minutes)</span>
+        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="21:00" value={mod.ceremonyTime} onchange={(e) => setTime(e.currentTarget)} />
+      </label>
+    </div>
+    {#if timeError}<p class="error small">{timeError}</p>{/if}
+    <div class="pair">
+      <label class="field">
+        <span>The King holds court for (seconds)</span>
+        <input class="input" type="number" min="10" max="600" value={mod.ceremonySec} onchange={(e) => setSeconds('ceremonySec', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>Time to get going (seconds)</span>
+        <input class="input" type="number" min="0" max="120" value={mod.ceremonyGraceSec} onchange={(e) => setSeconds('ceremonyGraceSec', e.currentTarget.value)} />
+      </label>
+    </div>
+    <p class="faint small">
+      The court lasts from the moment the King sits. When a ceremony starts, everyone has the time to get going to finish what they are doing: what ends
+      within it is finished, the rest is cut short. A trip to a shop is finished first, and sleepers stay asleep.
+    </p>
+    <div class="current">
+      <span class="status">{ceremonyStatus}</span>
+    </div>
+    <div class="buttons">
+      <button type="button" class="btn small" disabled={!!mod.ceremonyPhase} onclick={() => attempt(() => rpc('world', 'startCeremony'), 'The ceremony begins')}>
+        <Crown size={16} />Start the ceremony now
+      </button>
+      {#if mod.ceremonyPhase}
+        <button type="button" class="btn small" disabled={mod.ceremonyPhase === 'leave'} onclick={() => attempt(() => rpc('world', 'endCeremony'))}>
+          End it
+        </button>
+      {/if}
+    </div>
+    <p class="faint small">
+      Starting it yourself works at any time, to see it or for the fun of it, and does not count for the days above. Without a King the throne stays empty.
+    </p>
+  </Section>
+
   <Section title="Shop visits">
     <div class="line">
       <div>
@@ -137,85 +287,6 @@
     <p class="faint small">
       Any other activity (petting the cat, walking to it) is finished first if it ends soon, otherwise it ends early within this range. A visit or a cheer
       is never cut short, and a sleeper goes once the guest is back.
-    </p>
-  </Section>
-
-  <Section title="The King">
-    <div class="line">
-      <div>
-        <strong>King's title</strong>
-        <p class="faint small">
-          One guest at a time is the King: their character wears a crown and a gold nametag, now and then sits on the throne below the fountain, and the
-          others come to pray before it. Anyone can take the title from the shop on their phone.
-        </p>
-      </div>
-      <Toggle checked={!!mod.king?.on} label="King's title" onchange={(v) => setOption('king', v)} />
-    </div>
-    <div class="current">
-      <span class="who">
-        {#if kingName}
-          <strong>{kingName}</strong> is the King
-        {:else}
-          Nobody is the King
-        {/if}
-      </span>
-      <span class="bal">Next price {mod.king?.price ?? 0} {mod.shop?.currencyName}</span>
-    </div>
-    <div class="buttons">
-      <TwoStepButton class="small" disabled={!mod.king?.id} onconfirm={() => attempt(() => rpc('world', 'removeKing'), 'Title removed')}>
-        Remove the title
-        {#snippet armed()}Tap again to remove{/snippet}
-      </TwoStepButton>
-      <TwoStepButton class="small" disabled={!mod.kingSales} onconfirm={() => attempt(() => rpc('world', 'resetKingPrice'), 'Price reset')}>
-        Reset the price
-        {#snippet armed()}Tap again to reset{/snippet}
-      </TwoStepButton>
-    </div>
-    <p class="faint small">
-      The title changed hands {mod.kingSales ?? 0} {mod.kingSales === 1 ? 'time' : 'times'}. Removing it leaves the price as it is; resetting brings it back to
-      the first price.
-    </p>
-    <div class="pair">
-      <label class="field">
-        <span>First price</span>
-        <input class="input" type="number" min="0" value={mod.kingBase} onchange={(e) => setAmount('kingBase', e.currentTarget.value)} />
-      </label>
-      <label class="field">
-        <span>More each time</span>
-        <input class="input" type="number" min="0" value={mod.kingStep} onchange={(e) => setAmount('kingStep', e.currentTarget.value)} />
-      </label>
-    </div>
-    <label class="field">
-      <span>The old King gets back (percent of what they paid)</span>
-      <input class="input" type="number" min="0" max="100" value={mod.kingRefundPct} onchange={(e) => setAmount('kingRefundPct', e.currentTarget.value)} />
-    </label>
-    <label class="field">
-      <span>Sits on the throne about every (minutes)</span>
-      <input class="input" type="number" min="0.5" max="120" step="0.5" value={mod.throneEveryMin} onchange={(e) => setSeconds('throneEveryMin', e.currentTarget.value)} />
-    </label>
-    <div class="pair">
-      <label class="field">
-        <span>Sits from (seconds)</span>
-        <input class="input" type="number" min="0" max="900" value={mod.throneMinSec} onchange={(e) => setSeconds('throneMinSec', e.currentTarget.value)} />
-      </label>
-      <label class="field">
-        <span>to (seconds)</span>
-        <input class="input" type="number" min="0" max="900" value={mod.throneMaxSec} onchange={(e) => setSeconds('throneMaxSec', e.currentTarget.value)} />
-      </label>
-    </div>
-    <div class="pair">
-      <label class="field">
-        <span>Others pray from (seconds)</span>
-        <input class="input" type="number" min="0" max="300" value={mod.prayMinSec} onchange={(e) => setSeconds('prayMinSec', e.currentTarget.value)} />
-      </label>
-      <label class="field">
-        <span>to (seconds)</span>
-        <input class="input" type="number" min="0" max="300" value={mod.prayMaxSec} onchange={(e) => setSeconds('prayMaxSec', e.currentTarget.value)} />
-      </label>
-    </div>
-    <p class="faint small">
-      While the King sits, characters nearby may come and kneel before the throne (eight at most), then get up and leave; all get up when the King does.
-      Walking around or a bench is dropped for the King's turn on the throne, other activities are finished first.
     </p>
   </Section>
 
@@ -290,6 +361,14 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+  }
+  .error {
+    margin: 0;
+    color: var(--danger);
+  }
+  .status {
+    flex: 1;
+    font-size: 0.9rem;
   }
   .wallets {
     display: flex;

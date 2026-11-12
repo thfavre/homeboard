@@ -39,8 +39,11 @@ const ROWS: { key: string; row: number; anim: Anim; dir: number; face?: Face; la
   { key: 'walkLeft', row: 12, anim: 'walk', dir: DIR.left },
   { key: 'idleUp', row: 13, anim: 'idle', dir: DIR.up },
   { key: 'idleLeft', row: 14, anim: 'idle', dir: DIR.left },
-  // Kneeling with the back to us: praying before the throne (the town only)
+  // The town only. Kneeling with the back to us; then the ceremony in the throne room: seated
+  // facing left (the King on the throne, seen from the side) and kneeling toward the throne
   { key: 'sitUp', row: 15, anim: 'sit', dir: DIR.up },
+  { key: 'sitLeft', row: 16, anim: 'sit', dir: DIR.left },
+  { key: 'sitRight', row: 17, anim: 'sit', dir: DIR.right },
 ];
 /** Every row key: a sheet measured without one of them was made before it existed and is redrawn */
 export const ROW_KEYS = ROWS.map((r) => r.key);

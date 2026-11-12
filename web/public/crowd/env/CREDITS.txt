@@ -87,12 +87,15 @@ LPC Revised, buildings
   https://github.com/ElizaWy/LPC/tree/main/Structure/Windows
   https://opengameart.org/content/lpc-adobe-building-set
 
-LPC Revised, throne and carpet (the King's throne of the avatar town)
+LPC Revised, throne and carpet (the throne room of the avatar town, web/src/modules/world/throneRoom.ts)
   Files: throne.png (Objects/Furniture/Seating/Thrones.png), carpet.png (Objects/Furniture/Rugs/Diamond Rug, tiling.png)
   License: OGA-BY 3.0
   Authors: Lanea Zimmerman (Sharm), Eliza Wyatt (ElizaWy, DeathsDarling)
   Notes: thrones: original front view by Lanea Zimmerman, side and back views and recolors by Eliza Wyatt;
-         carpet by Eliza Wyatt
+         carpet by Eliza Wyatt. The files are unchanged; on the TV the throne's cushions and the rug are
+         recolored to one red in code. The throne room's floor is pave-stone-diamond.png and its potted
+         trees are from planters.png (both above). Its walls, pillars, banners, windows, dais, footstool
+         and braziers are drawn in code for Homeboard, in the palettes of these sheets.
   https://github.com/ElizaWy/LPC/tree/main/Objects/Furniture/Seating
   https://github.com/ElizaWy/LPC/tree/main/Objects/Furniture/Rugs
   https://opengameart.org/content/lpc-interior-castle-tiles

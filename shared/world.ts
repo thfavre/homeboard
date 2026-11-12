@@ -81,21 +81,95 @@ export const TOWN_PLACES: Record<PlaceId, TownPlace> = {
   barber: place('barber', 'Barber', 'brickB', 1330, 1),
 };
 
-// ------------------------------------------------------------ the throne
+// ------------------------------------------------------------ the throne room
 
-/** The King's throne on the square, below the fountain: where its legs stand (world units) */
-export const THRONE = { x: 800, y: 728 };
-/** Where the King's feet land on the throne */
-export const THRONE_SEAT = { x: THRONE.x, y: THRONE.y + 8 };
-/** The throne is in the way like the fountain: an ellipse around its legs, the seat just in front of it */
-export const THRONE_OBSTACLE = { x: THRONE.x, y: THRONE.y - 6, rx: 28, ry: 11 };
-/** Where the faithful kneel before the throne, facing it: two rows on the carpet, an aisle in the middle */
-export const PRAY_SPOTS: { x: number; y: number }[] = [
-  ...[-92, -42, 42, 92].map((dx) => ({ x: THRONE.x + dx, y: THRONE.y + 62 })),
-  ...[-92, -42, 42, 92].map((dx) => ({ x: THRONE.x + dx, y: THRONE.y + 108 })),
-];
-/** The royal carpet under the throne and the faithful, between the two lamp posts (world units, a whole number of carpet tiles) */
-export const THRONE_CARPET = { x: THRONE.x, y0: THRONE.y - 40, tilesW: 6, tilesH: 4 };
+/**
+ * The throne room: a hall off the right edge of the town, out of the TV's normal view. For the
+ * King's ceremony the camera moves over to it: the King walks up the red carpet to the throne at
+ * its far end and sits, and everyone else kneels on both sides of the carpet, facing the throne.
+ *
+ * These are the hall's measures in sprite pixels, from its top left corner. The TV builds the hall
+ * on them (web/src/modules/world/throneRoom.ts) and the town's life walks by them.
+ */
+export const HALL_ART = {
+  /** Its width: a third of the town's, as much as the camera moves */
+  w: 396,
+  /** The foot of the back wall */
+  wall: 128,
+  /** The red carpet, from the hall's open side to the throne: its top and bottom edge */
+  carpet: { y0: 366, y1: 442 },
+  /**
+   * The dais the throne stands on: three steps, the widest first, each `rise` higher than the one
+   * before. `x` is a step's left edge (the stairs face the carpet), y0 and y1 its back and front;
+   * all three run to the right wall.
+   */
+  dais: [
+    { x: 246, y0: 300, y1: 508 },
+    { x: 262, y0: 312, y1: 496 },
+    { x: 278, y0: 324, y1: 484 },
+  ],
+  rise: 6,
+  /** The left edge of the right wall */
+  east: 380,
+  /** The throne, seen from the side and facing left: the middle of its legs */
+  throne: { x: 338, y: 414 },
+};
+
+/** Where the hall lies in the world: from the town's right edge on (world units) */
+export const HALL = { x0: TOWN.w, w: HALL_ART.w * SPRITE_SCALE };
+/** How far the camera moves to the right for the ceremony: a third of the screen (world units) */
+export const HALL_PAN = TOWN.w / 3;
+
+/** A point of the hall's art in world units */
+const hallPoint = (px: number, py: number) => ({ x: HALL.x0 + px * SPRITE_SCALE, y: py * SPRITE_SCALE });
+
+/** The middle line of the red carpet (world units): the King walks up it */
+export const CARPET_Y = ((HALL_ART.carpet.y0 + HALL_ART.carpet.y1) / 2) * SPRITE_SCALE;
+/** Where the carpet starts, at the hall's open side, and the foot of the dais stairs */
+export const CARPET_START = HALL.x0 + 14;
+export const DAIS_FOOT = hallPoint(HALL_ART.dais[0].x, 0).x;
+/** Where the throne's legs stand, and where the King's feet land on it (the seat is high: the feet rest on its footstool) */
+export const THRONE = hallPoint(HALL_ART.throne.x, HALL_ART.throne.y);
+export const THRONE_SEAT = { x: THRONE.x - 1, y: THRONE.y - 13 * SPRITE_SCALE };
+/** Where a King who cannot sit (worn art without sit sheets) stands: on the dais, before the throne and its footstool */
+export const THRONE_STAND = { x: THRONE.x - 58, y: THRONE.y - 2 };
+
+/**
+ * Where everyone kneels, facing the throne: lines along both sides of the carpet, from the foot of
+ * the dais back through the hall and out onto the square. The line next to the carpet fills up
+ * first, from the throne back, then the ones behind it (each a half step off the one before).
+ */
+export const PRAY_SPOTS: { x: number; y: number }[] = (() => {
+  const out: { x: number; y: number }[] = [];
+  const side = ((HALL_ART.carpet.y1 - HALL_ART.carpet.y0) / 2) * SPRITE_SCALE + 30;
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 10; col++) {
+      for (const s of [-1, 1]) {
+        // A little off the lines, so the crowd does not kneel like a drill square
+        const k = row * 20 + col * 2 + (s + 1) / 2;
+        const x = Math.round(DAIS_FOOT - 42 - col * 60 - (row % 2) * 30 + ((k * 37) % 9) - 4);
+        const y = Math.round(CARPET_Y + s * (side + row * 56) + ((k * 53) % 7) - 3);
+        // Not where a lamp post or a tree of the square stands
+        if (TOWN_OBSTACLES.some((o) => Math.abs(x - o.x) < o.rx + 26 && Math.abs(y - o.y) < o.ry + 22)) continue;
+        out.push({ x, y });
+      }
+    }
+  }
+  return out;
+})();
+
+/**
+ * How high above the floor a character at (x, y) stands (world units): the steps of the dais, as a
+ * ramp from the foot of the stairs to the top step. The TV draws the character that much higher.
+ */
+export function hallLift(x: number, y: number): number {
+  const { dais, rise } = HALL_ART;
+  const px = (x - HALL.x0) / SPRITE_SCALE;
+  const py = y / SPRITE_SCALE;
+  if (px < dais[0].x || py < dais[0].y0 || py > dais[0].y1) return 0;
+  const top = dais[dais.length - 1].x + 8;
+  return Math.min(1, (px - dais[0].x) / (top - dais[0].x)) * dais.length * rise * SPRITE_SCALE;
+}
 
 /** What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat, inside is seen through a shop window, pray kneels before the throne) */
 export const WANIM = { idle: 0, walk: 1, sit: 2, sleep: 3, pet: 4, cheer: 5, inside: 6, pray: 7 } as const;
@@ -108,13 +182,15 @@ export const FRAME_STRIDE = 5;
 
 /**
  * One frame of the town for the TV. `ids` names the characters of `a` (FRAME_STRIDE numbers each).
- * The cat wanders too; `hearts` is set while someone pets it.
+ * The cat wanders too; `hearts` is set while someone pets it. `cam` is where the camera looks: 0 the
+ * town, 1 moved over to the throne room (HALL_PAN to the right), anything between on its way.
  */
 export interface TownFrame {
   t: number;
   ids: string[];
   a: number[];
   cat: { x: number; y: number; dir: WDir; walk: boolean; hearts: boolean };
+  cam: number;
 }
 
 // ------------------------------------------------------------ the avatar
@@ -262,7 +338,12 @@ export interface KingInfo {
   since: number;
   /** What taking the title costs now */
   price: number;
+  /** The ceremony in the throne room, when it is held on its own: every so many days, at this time (HH:MM). Null: only when the host starts it */
+  ceremony: { everyDays: number; time: string } | null;
 }
+
+/** Why a ceremony that is due has not started yet: the King is not in the town (or asleep), a game is on the TV, or no TV is open */
+export type CeremonyHold = 'king' | 'game' | 'tv';
 
 export interface WorldState {
   characters: TownCharacter[];
@@ -287,11 +368,16 @@ export interface WorldState {
   kingBase?: number;
   kingStep?: number;
   kingRefundPct?: number;
-  throneEveryMin?: number;
-  throneMinSec?: number;
-  throneMaxSec?: number;
-  prayMinSec?: number;
-  prayMaxSec?: number;
+  ceremonyAuto?: boolean;
+  ceremonyEveryDays?: number;
+  ceremonyTime?: string;
+  ceremonySec?: number;
+  ceremonyGraceSec?: number;
+  /** The ceremony that is on right now: everyone gathering, the King holding court, everyone leaving (null: none) */
+  ceremonyPhase?: 'gather' | 'court' | 'leave' | null;
+  /** When the next one is due on its own (server time; in the past: due now), and what holds it back then */
+  ceremonyNext?: number | null;
+  ceremonyHold?: CeremonyHold | null;
   /** Times the title changed hands (the price counts them) */
   kingSales?: number;
   wallets?: { id: string; name: string; color: string; balance: number }[];

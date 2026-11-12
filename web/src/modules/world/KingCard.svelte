@@ -6,7 +6,7 @@
 
   /**
    * The King's title in the shop: who holds it and what taking it costs. The King wears the crown
-   * in the town and now and then sits on the throne while the others come to pray. Anyone can take
+   * in the town, and the whole town gathers in the throne room to kneel before them. Anyone can take
    * the title, and its price rises each time it changes hands.
    */
 
@@ -14,6 +14,10 @@
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
   const king = $derived(mod?.king);
+  /** When the town gathers before the King, if the ceremony is held on its own */
+  const gathers = $derived(
+    king?.ceremony ? `${king.ceremony.everyDays === 1 ? 'every day' : `every ${king.ceremony.everyDays} days`} at ${king.ceremony.time}` : 'now and then',
+  );
   const kingName = $derived(king?.id ? (mod?.characters.find((c) => c.id === king.id)?.name ?? null) : null);
   const mine = $derived(!!king?.id && king.id === hb.me?.id);
   const short = $derived(!!king && balance !== null && balance < king.price);
@@ -37,8 +41,8 @@
       </div>
     </div>
     <p class="faint small">
-      The King wears the crown in the town and now and then sits on the throne, while the others come to pray. The price rises each time the title
-      changes hands.
+      The King wears the crown in the town, and {gathers} the whole town gathers in the throne room to kneel before the King on the throne. The price
+      rises each time the title changes hands.
     </p>
     {#if !mine}
       <TwoStepButton class="primary take" disabled={short} onconfirm={take}>

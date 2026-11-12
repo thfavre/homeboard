@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type LookPart, type PlaceId, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type LookPart, type PlaceId, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, piecesOf, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -52,14 +52,21 @@ interface WorldSettings {
   kingStep: number;
   /** The King who loses the title gets this share of what they paid back (percent) */
   kingRefundPct: number;
-  /** About this long between two turns of the King on the throne (minutes) */
-  throneEveryMin: number;
-  /** How long the King sits there (seconds, a random time in the range) */
-  throneMinSec: number;
-  throneMaxSec: number;
-  /** How long a character prays before the throne (seconds, a random time in the range) */
-  prayMinSec: number;
-  prayMaxSec: number;
+  /** The ceremony in the throne room is held on its own: every so many days, at this time of day (HH:MM) */
+  ceremony: boolean;
+  ceremonyEveryDays: number;
+  ceremonyTime: string;
+  /** How long the King holds court once seated (seconds) */
+  ceremonySec: number;
+  /** When a ceremony starts, everyone has this long to finish what they are doing and go (seconds) */
+  ceremonyGraceSec: number;
+}
+
+/** A time of day as "HH:MM" (24 hours), or null when it is not one */
+function timeOfDay(v: unknown): string | null {
+  const m = typeof v === 'string' ? /^(\d{1,2}):(\d{2})$/.exec(v.trim()) : null;
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
 }
 
 const LOOK_KEY: Record<LookPart, 'lookHair' | 'lookHairColor' | 'lookBeard' | 'lookEyes'> = {
@@ -118,6 +125,8 @@ interface WorldData {
   /** Saved outfits per guest, one per slot (null: an empty slot), put back on in one tap */
   saved?: Record<string, (Outfit | null)[]>;
   king?: KingData;
+  /** When the last ceremony held on its own started (0: never) */
+  ceremony?: { last: number };
 }
 
 /** How many outfits a guest can save */
@@ -137,10 +146,14 @@ const KING_CROWN: WornItem = { id: 'crown', color: 'crown_gold' };
 /** Frames to the TV per second (the TV interpolates between them) */
 const FRAME_HZ = 10;
 
+/** A ceremony due on its own waits this long after the server starts, so the TV has loaded the town */
+const CEREMONY_SETTLE_MS = 45_000;
+
 /**
  * The avatar world: a living pixel town as the TV home screen. Guests design an LPC-style
  * character on their phone (composited on the server, see compose.ts); the characters wander the
- * town, sit on benches, pet the cat, and go to sleep when their guest leaves.
+ * town, sit on benches, pet the cat, and go to sleep when their guest leaves. One guest holds the
+ * King's title, and the town gathers in the throne room for the King's ceremony.
  */
 export default defineModule<WorldSettings>({
   id: 'world',
@@ -173,11 +186,11 @@ export default defineModule<WorldSettings>({
     kingBase: 300,
     kingStep: 150,
     kingRefundPct: 50,
-    throneEveryMin: 4,
-    throneMinSec: 40,
-    throneMaxSec: 80,
-    prayMinSec: 10,
-    prayMaxSec: 25,
+    ceremony: true,
+    ceremonyEveryDays: 1,
+    ceremonyTime: '21:00',
+    ceremonySec: 60,
+    ceremonyGraceSec: 20,
   },
 
   setup(ctx) {
@@ -186,8 +199,9 @@ export default defineModule<WorldSettings>({
     const wallets = (store.data.wallets ??= {});
     const owned = (store.data.owned ??= {});
     const saved = (store.data.saved ??= {});
-    // Came with the King's title
+    // Came with the King's title, and with the ceremony
     const king = (store.data.king ??= { id: null, since: 0, paid: 0, sales: 0 });
+    const held = (store.data.ceremony ??= { last: 0 });
     const composer = new Composer(new LpcFiles());
     for (const [file, cr] of Object.entries(store.data.credits)) composer.credits.set(file, cr);
     const sheetsDir = ctx.mediaDir('sheets');
@@ -361,10 +375,15 @@ export default defineModule<WorldSettings>({
     /** Crowned looks that could not be built: not tried again on every publish */
     const crownFailed = new Set<string>();
 
-    /** The sheet of the King's crowned look, once it is on disk; until then it is built in the background (null) */
+    /**
+     * The sheet of the King's crowned look, once it is on disk; until then it is built in the
+     * background (null). One drawn before a row was added is used as it is while it is drawn again.
+     */
     const crownedSheet = (a: StoredAvatar): string | null => {
       const look = crownedOf(a);
-      if (sheetInfos[look.hash] && existsSync(join(sheetsDir, `${look.hash}.png`))) return look.hash;
+      const info = sheetInfos[look.hash];
+      const onDisk = !!info && existsSync(join(sheetsDir, `${look.hash}.png`));
+      if (onDisk && complete(info)) return look.hash;
       if (!building.has(look.hash) && !crownFailed.has(look.hash)) {
         composite(look.choices, look.outfit).then(
           () => ctx.publish(),
@@ -374,7 +393,62 @@ export default defineModule<WorldSettings>({
           },
         );
       }
+      return onDisk ? look.hash : null;
+    };
+
+    /**
+     * The address of a sheet for the TV. It changes with the rows the sheet has, so a sheet drawn
+     * again with more rows is loaded anew instead of taken from the browser's cache.
+     */
+    const sheetUrl = (hash: string) => `${ctx.mediaUrl(`sheets/${hash}.png`)}?rows=${Object.keys(sheetInfos[hash]?.rows ?? {}).length}`;
+
+    // ------------------------------------------------------------ the ceremony
+
+    const startedAt = Date.now();
+
+    /** When the next ceremony is due on its own: at the set time of day, so many days after the last one (in the past: due now) */
+    const ceremonyDue = (now: number): number => {
+      const s = ctx.settings.get();
+      const [h, m] = (timeOfDay(s.ceremonyTime) ?? '21:00').split(':').map(Number);
+      const dayOf = (t: number) => {
+        const d = new Date(t);
+        d.setHours(0, 0, 0, 0);
+        return d;
+      };
+      let day = dayOf(now);
+      if (held.last) {
+        const next = dayOf(held.last);
+        next.setDate(next.getDate() + Math.max(1, Math.round(s.ceremonyEveryDays)));
+        if (next > day) day = next;
+      }
+      day.setHours(h, m, 0, 0);
+      return day.getTime();
+    };
+
+    /** What keeps a due ceremony from starting: the King is not in the town (or asleep), a game is on the TV, no TV is open */
+    const ceremonyHold = (): CeremonyHold | null => {
+      const id = kingId();
+      if (!id || !sim.awake(id)) return 'king';
+      if (ctx.hub.takeover) return 'game';
+      if (!ctx.hub.io.sockets.adapter.rooms.get('role:tv')?.size) return 'tv';
       return null;
+    };
+
+    /** Start a ceremony (false: one is on already). One held on its own counts for the schedule, one the host starts does not */
+    const beginCeremony = (scheduled: boolean): boolean => {
+      if (!sim.startCeremony()) return false;
+      if (scheduled) {
+        held.last = Date.now();
+        store.save();
+      }
+      const id = kingId();
+      const guest = id ? ctx.session.guests.get(id) : undefined;
+      if (guest) {
+        ctx.activity('{name} holds court in the throne room', { guest });
+        ctx.toast(guest, { text: 'The town gathers before you in the throne room', kind: 'info' });
+      }
+      ctx.publish();
+      return true;
     };
 
     ctx.state((role): WorldState | undefined => {
@@ -384,7 +458,7 @@ export default defineModule<WorldSettings>({
           const guest = ctx.session.guests.get(id);
           // The King wears the crown in the town, whether they own one or not
           const hash = (id === crowned ? crownedSheet(a) : null) ?? townOf(a).hash;
-          return guest ? { id, name: guest.name, color: guest.color, url: ctx.mediaUrl(`sheets/${hash}.png`), sheet: sheetInfos[hash] ?? store.data.sheet ?? undefined } : null;
+          return guest ? { id, name: guest.name, color: guest.color, url: sheetUrl(hash), sheet: sheetInfos[hash] ?? store.data.sheet ?? undefined } : null;
         })
         .filter((c): c is NonNullable<typeof c> => !!c);
       const s = ctx.settings.get();
@@ -392,7 +466,7 @@ export default defineModule<WorldSettings>({
         characters,
         sheet: store.data.sheet,
         shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices() },
-        king: { on: s.king, id: crowned, since: king.since, price: kingPrice() },
+        king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null },
       };
       if (role === 'admin') {
         const guests = [...ctx.session.guests.values()];
@@ -413,11 +487,14 @@ export default defineModule<WorldSettings>({
           kingBase: s.kingBase,
           kingStep: s.kingStep,
           kingRefundPct: s.kingRefundPct,
-          throneEveryMin: s.throneEveryMin,
-          throneMinSec: s.throneMinSec,
-          throneMaxSec: s.throneMaxSec,
-          prayMinSec: s.prayMinSec,
-          prayMaxSec: s.prayMaxSec,
+          ceremonyAuto: s.ceremony,
+          ceremonyEveryDays: s.ceremonyEveryDays,
+          ceremonyTime: s.ceremonyTime,
+          ceremonySec: s.ceremonySec,
+          ceremonyGraceSec: s.ceremonyGraceSec,
+          ceremonyPhase: sim.ceremonyPhase,
+          ceremonyNext: s.ceremony ? ceremonyDue(Date.now()) : null,
+          ceremonyHold: s.ceremony ? ceremonyHold() : null,
           kingSales: king.sales,
           wallets: guests.map((g) => ({ id: g.id, name: g.name, color: g.color, balance: wallets[g.id] ?? 0 })),
         };
@@ -718,10 +795,15 @@ export default defineModule<WorldSettings>({
       return { noSit: items.some((i) => i?.noSit), noCheer: items.some((i) => i?.noCheer) };
     };
 
+    /** The ceremony's phase at the last frame: the admin page hears of every change */
+    let ceremonyPhase = sim.ceremonyPhase;
+
     setInterval(() => {
       if (!ctx.enabled()) return;
       const s = ctx.settings.get();
       const now = Date.now();
+      // The ceremony on its own: once it is due and nothing holds it back
+      if (s.ceremony && !sim.ceremonyOn && now - startedAt > CEREMONY_SETTLE_MS && now >= ceremonyDue(now) && !ceremonyHold()) beginCeremony(true);
       const roster = Object.entries(store.data.avatars)
         .map(([id, a]) => ({ a, g: ctx.session.guests.get(id) }))
         .filter((r): r is { a: StoredAvatar; g: NonNullable<typeof r.g> } => !!r.g)
@@ -743,11 +825,14 @@ export default defineModule<WorldSettings>({
         wrapUpMs: sec(s.wrapMinSec, s.wrapMaxSec),
         quickStopMs: sec(s.quickMinSec, s.quickMaxSec),
         king: kingId(),
-        throneEveryMs: Math.max(0.1, s.throneEveryMin) * 60_000,
-        throneMs: sec(s.throneMinSec, s.throneMaxSec),
-        prayMs: sec(s.prayMinSec, s.prayMaxSec),
+        courtMs: s.ceremonySec * 1000,
+        graceMs: s.ceremonyGraceSec * 1000,
       });
       ctx.emit('tv', 'frame', frame);
+      if (sim.ceremonyPhase !== ceremonyPhase) {
+        ceremonyPhase = sim.ceremonyPhase;
+        ctx.publish();
+      }
     }, 1000 / FRAME_HZ);
 
     /** A character celebrates, unless the worn art has no cheer sheets (the dress would vanish) */
@@ -833,12 +918,23 @@ export default defineModule<WorldSettings>({
         kingBase: price(args.kingBase, s.kingBase),
         kingStep: price(args.kingStep, s.kingStep),
         kingRefundPct: Math.max(0, Math.min(100, Math.round(num(args.kingRefundPct, s.kingRefundPct)))),
-        throneEveryMin: Math.max(0.5, Math.min(120, Math.round(num(args.throneEveryMin, s.throneEveryMin) * 10) / 10)),
-        throneMinSec: secs(args.throneMinSec, s.throneMinSec, 900),
-        throneMaxSec: secs(args.throneMaxSec, s.throneMaxSec, 900),
-        prayMinSec: secs(args.prayMinSec, s.prayMinSec, 300),
-        prayMaxSec: secs(args.prayMaxSec, s.prayMaxSec, 300),
+        ceremony: typeof args.ceremony === 'boolean' ? args.ceremony : s.ceremony,
+        ceremonyEveryDays: Math.max(1, Math.min(365, Math.round(num(args.ceremonyEveryDays, s.ceremonyEveryDays)))),
+        ceremonyTime: timeOfDay(args.ceremonyTime) ?? s.ceremonyTime,
+        ceremonySec: Math.max(10, secs(args.ceremonySec, s.ceremonySec, 600)),
+        ceremonyGraceSec: secs(args.ceremonyGraceSec, s.ceremonyGraceSec, 120),
       });
+      ctx.publish();
+    });
+
+    // The host starts a ceremony now (to see it, or for the fun of it), or ends the one that is on
+    ctx.onAdmin('startCeremony', () => {
+      if (!ctx.enabled()) throw new HbError('Turn the Avatar world on first');
+      if (!beginCeremony(false)) throw new HbError('A ceremony is on already');
+    });
+
+    ctx.onAdmin('endCeremony', () => {
+      sim.endCeremony();
       ctx.publish();
     });
 
@@ -881,6 +977,7 @@ export default defineModule<WorldSettings>({
       for (const k of Object.keys(saved)) delete saved[k];
       for (const k of Object.keys(sheetInfos)) delete sheetInfos[k];
       Object.assign(king, { id: null, since: 0, paid: 0, sales: 0 });
+      sim.reset();
       store.save();
       // Open pages (the header, the shop) show the emptied wallet at once instead of the old balance
       ctx.emit('guest', 'wallet', { balance: 0 });

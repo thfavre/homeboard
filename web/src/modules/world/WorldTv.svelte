@@ -2,20 +2,20 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, WORLD } from '$shared/crowd.ts';
-  import { FRAME_STRIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { FRAME_STRIDE, HALL, HALL_PAN, THRONE_SEAT, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
-  import { crownMark, drawCarpet, drawPraying, loadThrone, throneProp, type ThroneArt } from './throne.ts';
+  import { crownMark, drawEnthroned, drawHallLight, drawHallWall, drawKneeling, hallProps, loadHall, type HallArt } from './throneRoom.ts';
 
   /**
    * The town on the TV: the crowd games' square (same LPC environment art, same renderer), lived in
    * by the guests' avatars. The server sends where everyone is a few times a second, this draws it
    * smoothly in between, with the birds, the cat, a night veil in the evening and a name over every
-   * head.
+   * head. For the King's ceremony the camera moves to the right, over to the throne room.
    */
 
   const world = $derived(hb.modules.world as WorldState | undefined);
@@ -24,8 +24,10 @@
   let wrap: HTMLDivElement;
   let env: Env | null = null;
   let shopArt: ShopArt | null = null;
-  let throne: ThroneArt | null = null;
+  let hall: HallArt | null = null;
   let standingProps: Prop[] = [];
+  /** What stands up in the throne room (only drawn while the camera shows it) */
+  let hallStanding: Prop[] = [];
 
   /** Frames kept to draw between, a little in the past */
   const DELAY_MS = 180;
@@ -77,7 +79,10 @@
       setShopArt(e, a);
       if (e) standingProps = squareProps(e).sort((a, b) => a.y - b.y);
     });
-    void loadThrone().then((t) => (throne = t));
+    void loadHall().then((h) => {
+      hall = h;
+      hallStanding = h ? hallProps(h) : [];
+    });
     const off = onEvent<TownFrame>('world', 'frame', (f) => {
       frames.push(f);
       if (frames.length > 30) frames = frames.slice(-15);
@@ -166,21 +171,21 @@
     }
   }
 
-  // The ground, built once per env state
+  // The ground, built once per art state: the town, and the throne room to its right once its art is there
   let bg: HTMLCanvasElement | null = null;
   let bgKey = '';
   function background(): HTMLCanvasElement {
-    const key = `${!!env}${!!shopArt}${!!throne}`;
+    const key = `${!!env}${!!shopArt}${!!hall}`;
     if (bg && bgKey === key) return bg;
     if (env) {
       const c = document.createElement('canvas');
-      c.width = WORLD.w;
+      c.width = WORLD.w + (hall ? Math.ceil(HALL.w) : 0);
       c.height = WORLD.h;
       const g = c.getContext('2d')!;
       g.imageSmoothingEnabled = false;
       const ground = squareGround(env, shopArt ? shopSwap(env, shopArt) : undefined);
       g.drawImage(ground, 0, 0, ground.width * 1.35, ground.height * 1.35);
-      if (throne) drawCarpet(g, throne);
+      if (hall) g.drawImage(hall.ground, HALL.x0, 0, hall.ground.width * SPRITE_SCALE, hall.ground.height * SPRITE_SCALE);
       bg = c;
     } else {
       // Until the art is there: plain stone
@@ -209,16 +214,10 @@
     g.setTransform(1, 0, 0, 1, 0, 0);
     // The whole canvas: birds fly off above the town rectangle, into the letterbox bands
     g.clearRect(0, 0, cw, ch);
-    const k = Math.min(cw / TOWN.w, ch / TOWN.h);
-    g.setTransform(k, 0, 0, k, (cw - TOWN.w * k) / 2, (ch - TOWN.h * k) / 2);
     g.imageSmoothingEnabled = false;
     const now = serverNow();
     const step = Math.min(0.1, Math.max(0, (now - lastDraw) / 1000));
     lastDraw = now;
-
-    g.drawImage(background(), 0, 0, TOWN.w, TOWN.h);
-    // Shadows of the things standing up, on the ground under everyone
-    for (const p of standingProps) p.ground?.(g, now);
 
     // The two frames around the drawn time; positions are mixed between them by id
     const t = now - DELAY_MS;
@@ -232,11 +231,44 @@
       }
     }
     f0 ??= f1;
+    const mix = f0 && f1 && f1 !== f0 ? Math.max(0, Math.min(1, (t - f0.t) / (f1.t - f0.t))) : 0;
+
+    // The camera: on the town, or moved to the right for the ceremony in the throne room (on
+    // whole screen pixels, so the ground does not shimmer as it slides)
+    const k = Math.min(cw / TOWN.w, ch / TOWN.h);
+    const cam = f0 ? (f0.cam ?? 0) + (f1 ? ((f1.cam ?? 0) - (f0.cam ?? 0)) * mix : 0) : 0;
+    const shift = Math.round(Math.max(0, Math.min(1, cam)) * HALL_PAN * k);
+    const away = shift > 0;
+    g.setTransform(k, 0, 0, k, (cw - TOWN.w * k) / 2 - shift, (ch - TOWN.h * k) / 2);
+    g.save();
+    if (away) {
+      // Moved over: only what the screen shows of both (nothing spills into the letterbox bands)
+      g.beginPath();
+      g.rect(shift / k, 0, TOWN.w, TOWN.h);
+      g.clip();
+    }
+
+    const ground = background();
+    if (ground.width < TOWN.w) g.drawImage(ground, 0, 0, TOWN.w, TOWN.h);
+    else if (away) g.drawImage(ground, 0, 0);
+    else g.drawImage(ground, 0, 0, TOWN.w, TOWN.h, 0, 0, TOWN.w, TOWN.h);
+    if (away && (!hall || ground.width <= TOWN.w)) {
+      // The throne room's art is not there: plain stone
+      g.fillStyle = '#3a3c42';
+      g.fillRect(TOWN.w, 0, HALL.w, TOWN.h);
+    }
+    const inHall = away && hall ? hallStanding : [];
+    if (away && hall) drawHallWall(g, now);
+    // Shadows of the things standing up, on the ground under everyone
+    for (const p of standingProps) p.ground?.(g, now);
+    for (const p of inHall) p.ground?.(g, now);
 
     interface Person {
       id: string;
       x: number;
       y: number;
+      /** How high above the ground it is drawn: the steps of the throne's dais */
+      lift: number;
       anim: number;
       dir: 0 | 1 | 2 | 3;
       alpha: number;
@@ -245,7 +277,6 @@
     if (f0) {
       const at1 = new Map<string, number>();
       if (f1 && f1 !== f0) f1.ids.forEach((id, i) => at1.set(id, i));
-      const mix = f1 && f1 !== f0 ? Math.max(0, Math.min(1, (t - f0.t) / (f1.t - f0.t))) : 0;
       for (let i = 0; i < f0.ids.length; i++) {
         const id = f0.ids[i];
         const o = i * FRAME_STRIDE;
@@ -256,7 +287,9 @@
           x += (f1.a[j * FRAME_STRIDE] - x) * mix;
           y += (f1.a[j * FRAME_STRIDE + 1] - y) * mix;
         }
-        people.push({ id, x, y, anim: f0.a[o + 2], dir: f0.a[o + 3] as 0 | 1 | 2 | 3, alpha: f0.a[o + 4] / 100 });
+        // Still out in the throne room once the camera is back on the town: out of the picture
+        if (!away && x > TOWN.w + 40) continue;
+        people.push({ id, x, y, lift: hallLift(x, y), anim: f0.a[o + 2], dir: f0.a[o + 3] as 0 | 1 | 2 | 3, alpha: f0.a[o + 4] / 100 });
       }
     }
 
@@ -284,8 +317,8 @@
         g.moveTo(p.x + s * 30 + 30, p.y + 2);
         g.ellipse(p.x + s * 30, p.y + 2, 30, 7, 0, 0, Math.PI * 2);
       } else {
-        g.moveTo(p.x + 15, p.y);
-        g.ellipse(p.x, p.y, 15, 5, 0, 0, Math.PI * 2);
+        g.moveTo(p.x + 15, p.y - p.lift);
+        g.ellipse(p.x, p.y - p.lift, 15, 5, 0, 0, Math.PI * 2);
       }
     }
     g.fill();
@@ -320,10 +353,15 @@
       }
       return l;
     };
+    /** For how long the King has been on the throne (ms), once drawn there this frame (seated, or standing before it) */
+    let enthroned: number | null = null;
     const drawPerson = (p: Person, sheet?: HTMLImageElement | null) => {
       const l = poseOf(p);
+      if (p.id === world?.king?.id && p.anim !== WANIM.walk && Math.abs(p.x - THRONE_SEAT.x) < 70 && Math.abs(p.y - THRONE_SEAT.y) < 30) enthroned = now - l.since;
       const img = (sheet !== undefined ? sheet : sheetOf(p.id, false).img) ?? undefined;
       const sheets = sheetsOf(img);
+      const info = img ? infoOf(img) : null;
+      const y = p.y - p.lift;
       g.globalAlpha = p.alpha;
       if (p.anim === WANIM.sleep) {
         // Asleep on their side: the side-view idle turned flat (the breathing keeps playing),
@@ -335,8 +373,12 @@
         // The clock runs slow for a sleeper, so the idle breathing is calm
         drawCharacter(g, sheets, img, 0, 0, { anim: gameAnim(WANIM.idle), dir: s === 1 ? 1 : 3, dist: 0, since: now - l.since, now: now / 2.5, phase: l.phase / 2.5 }, hue(p.id));
         g.restore();
-      } else if (!(p.anim === WANIM.pray && img && infoOf(img) && drawPraying(g, img, infoOf(img)!, p.x, p.y, now - l.since, l.phase))) {
-        drawCharacter(g, sheets, img, p.x, p.y, { anim: gameAnim(p.anim), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id));
+      } else if (p.anim === WANIM.pray && img && info && drawKneeling(g, img, info, p.x, y, now - l.since, now)) {
+        // Kneeling toward the throne
+      } else if (p.anim === WANIM.sit && p.dir === 1 && img && info && drawEnthroned(g, img, info, p.x, y)) {
+        // The King on the throne, seen from the side
+      } else {
+        drawCharacter(g, sheets, img, p.x, y, { anim: gameAnim(p.anim), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id));
       }
       g.globalAlpha = 1;
     };
@@ -403,7 +445,7 @@
     const cat = frames[frames.length - 1]?.cat;
     const standing = [
       ...standingProps,
-      ...(throne ? [throneProp(throne)] : []),
+      ...inHall,
       ...(env ? pigeons.groundItems(env) : []),
       ...(cat && env ? [{ y: cat.y, draw: (gg: CanvasRenderingContext2D) => drawCat(gg, cat, now) }] : []),
     ].sort((a, b) => a.y - b.y);
@@ -418,10 +460,12 @@
     const dark = darkness();
     if (dark > 0.02) {
       g.fillStyle = `rgba(14,16,42,${0.34 * dark})`;
-      g.fillRect(0, 0, TOWN.w, TOWN.h);
+      g.fillRect(0, 0, TOWN.w + (away ? HALL.w : 0), TOWN.h);
       // The shops stay lit inside
       for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
     }
+    // The throne room has its own light: the windows by day, its fires at any time
+    if (away && hall) drawHallLight(g, now, dark, enthroned);
 
     // Names and sleep bubbles over everything. The head's top comes from the measured sheet, so
     // the name hangs just over the hair.
@@ -433,12 +477,12 @@
     for (const p of people) {
       const c = byId.get(p.id);
       const s = sleepSide(p.x);
-      // Kneeling: the name comes down with the head
-      const tall = tallOf(shown.get(p.id)?.img) * (p.anim === WANIM.pray ? 0.66 : 1);
-      if (c) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - tall - 14, p.alpha, p.id === world?.king?.id);
+      // Kneeling, or seated on the throne: the name comes down with the head
+      const tall = tallOf(shown.get(p.id)?.img) * (p.anim === WANIM.pray ? 0.66 : p.anim === WANIM.sit && p.dir === 1 ? 0.86 : 1);
+      if (c) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - p.lift - tall - 14, p.alpha, p.id === world?.king?.id);
       if (p.anim === WANIM.sleep) drawZzz(g, p.x + s * 58, p.y - 4, now, p.alpha);
     }
-
+    g.restore();
   }
 
   /** A sprite of a character drawn alone (feet at the usual spot), to read its pixels */
