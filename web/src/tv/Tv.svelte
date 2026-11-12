@@ -236,6 +236,14 @@
     grid-template-columns: 1fr var(--tv-side);
     gap: var(--tv-gap);
   }
+  /* Nothing drawn on the side (leaderboard and join card off, nothing playing): the main view takes
+     the whole width. Read from the page, since a side widget may be on but draw nothing */
+  main:has(> aside:empty) {
+    grid-template-columns: 1fr;
+  }
+  aside:empty {
+    display: none;
+  }
   .main {
     min-height: 0;
     min-width: 0;

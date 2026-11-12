@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PNG } from 'pngjs';
-import { BEARDS, HAIR_STYLES, type AvatarChoices, type SheetInfo } from '../../../shared/world.ts';
+import { BEARDS, DEFAULT_CHOICES, HAIR_STYLES, type AvatarChoices, type SheetInfo } from '../../../shared/world.ts';
+import { SLOTS, itemById, piecesOf, splitColor, type Outfit } from '../../../shared/wardrobe.ts';
 import type { LpcFiles } from './lpc.ts';
 
 /**
@@ -38,7 +39,11 @@ const ROWS: { key: string; row: number; anim: Anim; dir: number; face?: Face; la
   { key: 'walkLeft', row: 12, anim: 'walk', dir: DIR.left },
   { key: 'idleUp', row: 13, anim: 'idle', dir: DIR.up },
   { key: 'idleLeft', row: 14, anim: 'idle', dir: DIR.left },
+  // Kneeling with the back to us: praying before the throne (the town only)
+  { key: 'sitUp', row: 15, anim: 'sit', dir: DIR.up },
 ];
+/** Every row key: a sheet measured without one of them was made before it existed and is redrawn */
+export const ROW_KEYS = ROWS.map((r) => r.key);
 const SHEET_ROWS = Math.max(...ROWS.map((r) => r.row)) + 1;
 
 /** One item of an avatar: a sheet definition, its color, the eye color for heads */
@@ -48,13 +53,18 @@ interface Item {
   eyes?: string;
 }
 
-/** The items a guest's choices stand for. Everyone starts in their underwear. */
-function itemsOf(c: AvatarChoices): Item[] {
-  const items: Item[] = [
-    { def: `head/heads/human/heads_human_${c.body}`, eyes: c.eyes },
-    { def: 'feet/shoes/feet_shoes_basic', color: 'white' },
-    { def: 'legs/shorts/legs_shorts', color: 'white' },
-  ];
+/**
+ * The items a guest's choices and outfit stand for. The white underwear (shorts and basic shoes)
+ * stays wherever the outfit leaves the body bare; a dress covers the bottom slot too.
+ */
+function itemsOf(c: AvatarChoices, outfit: Outfit): Item[] {
+  const items: Item[] = [{ def: `head/heads/human/heads_human_${c.body}`, eyes: c.eyes }];
+  if (!outfit.feet) items.push({ def: 'feet/shoes/feet_shoes_basic', color: 'white' });
+  if (!outfit.bottom && !outfit.dress) items.push({ def: 'legs/shorts/legs_shorts', color: 'white' });
+  for (const worn of Object.values(outfit)) {
+    const item = itemById(worn.id);
+    if (item) items.push(...piecesOf(item, worn.color));
+  }
   const hair = HAIR_STYLES.find((h) => h.id === c.hair)?.def;
   if (hair) items.push({ def: hair, color: c.hairColor });
   const beard = BEARDS.find((b) => b.id === c.beard)?.def;
@@ -139,22 +149,28 @@ export class Composer {
     return from.map((c, i) => ({ from: rgb(c), to: rgb(to[Math.min(i, to.length - 1)]) }));
   }
 
-  /** The drawn layers of one item for this body, with their color swaps */
+  /**
+   * The drawn layers of one item for this body, with their color swaps. A two-color id
+   * ("leather+steel") gives art drawn in two materials one color each, in order; anything else
+   * takes the first color.
+   */
   private async layersOf(item: Item, c: AvatarChoices): Promise<Layer[]> {
     const def = await this.json(`sheet_definitions/${item.def}.json`);
     const swaps: Swap[] = [];
     let variant: string | undefined;
     const rc = def.recolors;
+    const [main, accent] = item.color ? splitColor(item.color) : [undefined, undefined];
     if (rc?.material) {
-      swaps.push(await this.swapFor(rc, rc.material === 'body' ? c.skin : item.color!));
+      swaps.push(await this.swapFor(rc, rc.material === 'body' ? c.skin : main!));
     } else if (rc?.color_1) {
+      let n = 0;
       for (const [key, r] of Object.entries<any>(rc)) {
         if (!key.startsWith('color_')) continue;
-        const target = r.material === 'body' ? c.skin : r.material === 'eye' ? (item.eyes ?? 'brown') : item.color;
+        const target = r.material === 'body' ? c.skin : r.material === 'eye' ? (item.eyes ?? 'brown') : n++ === 0 ? main : (accent ?? main);
         if (target) swaps.push(await this.swapFor(r, target));
       }
     } else if (def.variants?.length) {
-      variant = item.color && def.variants.includes(item.color) ? item.color : def.variants[0];
+      variant = main && def.variants.includes(main) ? main : def.variants[0];
     }
 
     const out: Layer[] = [];
@@ -199,8 +215,8 @@ export class Composer {
   }
 
   /** Build the whole sheet of an avatar */
-  async build(c: AvatarChoices): Promise<Composed> {
-    const layers = (await Promise.all([{ def: 'body/body' } as Item, ...itemsOf(c)].map((it) => this.layersOf(it, c)))).flat();
+  async build(c: AvatarChoices, outfit: Outfit = {}): Promise<Composed> {
+    const layers = (await Promise.all([{ def: 'body/body' } as Item, ...itemsOf(c, outfit)].map((it) => this.layersOf(it, c)))).flat();
     const out = new PNG({ width: FRAME * COLUMNS, height: FRAME * SHEET_ROWS });
     for (const r of ROWS) {
       const stack = [...layers];
@@ -221,6 +237,40 @@ export class Composer {
       }
     }
     return { png: PNG.sync.write(out), info: this.measure(out) };
+  }
+
+  /**
+   * A small picture of one item alone (no body) for the shop's grid: the down-facing idle frame
+   * of its layers (the item's pieces: see piecesOf), trimmed to the drawn pixels and centered in
+   * a square.
+   */
+  async icon(pieces: Item[], body: 'male' | 'female'): Promise<Buffer> {
+    const c: AvatarChoices = { ...DEFAULT_CHOICES, body };
+    const layers = (await Promise.all(pieces.map((p) => this.layersOf(p, c)))).flat().sort((a, b) => a.zPos - b.zPos);
+    const flat = new PNG({ width: FRAME, height: FRAME });
+    for (const layer of layers) {
+      const png = (await this.sheet(layer, 'idle')) ?? (await this.sheet(layer, 'walk'));
+      if (!png || png.height < (DIR.down + 1) * FRAME || png.width < FRAME) continue;
+      over(flat, 0, 0, png, 0, DIR.down * FRAME, FRAME, FRAME);
+    }
+    let top = FRAME;
+    let bottom = -1;
+    let left = FRAME;
+    let right = -1;
+    for (let y = 0; y < FRAME; y++) {
+      for (let x = 0; x < FRAME; x++) {
+        if (!flat.data[(y * FRAME + x) * 4 + 3]) continue;
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+      }
+    }
+    if (bottom < 0) return PNG.sync.write(flat);
+    const size = Math.max(bottom - top, right - left) + 5;
+    const out = new PNG({ width: size, height: size });
+    over(out, Math.floor((size - (right - left + 1)) / 2), Math.floor((size - (bottom - top + 1)) / 2), flat, left, top, right - left + 1, bottom - top + 1);
+    return PNG.sync.write(out);
   }
 
   /** Rows, frame counts and where the body stands, read off the finished sheet */
@@ -276,9 +326,13 @@ export class Composer {
   }
 }
 
-/** A stable name for a set of choices, for the sheet's file name */
-export function choicesHash(c: AvatarChoices): string {
-  return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes])).digest('hex').slice(0, 12);
+/** A stable name for a look (choices plus outfit, with the layers each piece draws), for the sheet's file name */
+export function choicesHash(c: AvatarChoices, outfit: Outfit = {}): string {
+  const worn = SLOTS.map((s) => outfit[s.id]).map((w) => {
+    const item = w && itemById(w.id);
+    return w ? [w.id, w.color, ...(item ? piecesOf(item, w.color) : [])] : null;
+  });
+  return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes, worn])).digest('hex').slice(0, 12);
 }
 
 /** Swap the colors of an image in place (a color within 1 of a base color counts as that color) */

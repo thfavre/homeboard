@@ -1,23 +1,47 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { Check, Loader2 } from '@lucide/svelte';
+  import { fly } from 'svelte/transition';
+  import { Check, Coins, PersonStanding, Shirt, ShoppingBag, Undo2 } from '@lucide/svelte';
   import { attempt, hb, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
-  import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, type AvatarChoices, type SheetInfo } from '$shared/world.ts';
+  import type { Slot } from '$shared/wardrobe.ts';
+  import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, lookCost, type AvatarChoices, type SheetInfo, type WorldState } from '$shared/world.ts';
+  import AvatarPreview from './AvatarPreview.svelte';
   import Picker from './Picker.svelte';
+  import type { PreviewView } from './preview.ts';
+  import Shop from './Shop.svelte';
+  import Wardrobe from './Wardrobe.svelte';
 
   /**
-   * The avatar editor: pick a body, skin, hair and eyes, watch the character live, then move into
-   * the town. The server composites a sheet for every look; the preview shows it walking.
+   * The avatar panel: the look editor (body, skin, hair, eyes), the wardrobe of owned clothes
+   * and the shop. The server
+   * composites a sheet for every look; the preview shows it walking.
    */
 
+  let tab = $state<'look' | 'wardrobe' | 'shop'>('look');
+  /** The one preview of the panel; the open tab says what it shows */
+  const view = $state<PreviewView>({ url: null, sheet: null, building: false, focus: null, facing: 'down' });
+
+  /** The new tab slides in from the right when going right, from the left when going back */
+  const ORDER = ['look', 'wardrobe', 'shop'];
+  let slideFrom = $state(0);
+  function go(next: typeof tab) {
+    slideFrom = Math.sign(ORDER.indexOf(next) - ORDER.indexOf(tab)) * 40;
+    tab = next;
+  }
+  /** The slot the wardrobe sent the guest shopping for */
+  let shopSlot = $state<Slot | null>(null);
   let choices = $state<AvatarChoices>({ ...DEFAULT_CHOICES });
   let saved = $state<string | null>(null);
+  /** The avatar exists: body and skin are set, only hair, face and clothes change */
+  let created = $state(false);
   let url = $state<string | null>(null);
   let sheet = $state<SheetInfo | null>(null);
   let buildingCount = $state(0);
   let firstLoad = $state(true);
 
   const dirty = $derived(saved !== JSON.stringify(choices));
+  const shop = $derived((hb.modules.world as WorldState | undefined)?.shop);
+  /** What the changes cost (creating is free; after that, each changed part has its price) */
+  const cost = $derived(created && saved && shop ? lookCost(JSON.parse(saved) as AvatarChoices, choices, shop.look) : 0);
 
   /** Swatch colors, roughly the LPC palettes */
   const SKIN_HEX: Record<string, string> = {
@@ -57,8 +81,9 @@
     }
   }
 
-  /** Editing the head zooms the preview onto it until then; a body or skin change zooms out */
-  let headUntil = 0;
+  /** Editing the head zooms the preview onto it for a moment; a body or skin change zooms out */
+  let focusHead = $state(false);
+  let focusTimer: ReturnType<typeof setTimeout> | undefined;
   let lastHead = '';
   let lastBody = '';
 
@@ -70,8 +95,15 @@
     const head = JSON.stringify([choices.hair, choices.hairColor, choices.beard, choices.eyes]);
     const body = JSON.stringify([choices.body, choices.skin]);
     if (firstLoad) return;
-    if (lastHead && head !== lastHead) headUntil = Date.now() + 5500;
-    if (lastBody && body !== lastBody) headUntil = 0;
+    if (lastHead && head !== lastHead) {
+      focusHead = true;
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => (focusHead = false), 5500);
+    }
+    if (lastBody && body !== lastBody) {
+      focusHead = false;
+      clearTimeout(focusTimer);
+    }
     lastHead = head;
     lastBody = body;
     storageSet(DRAFT_KEY, snapshot === saved ? null : JSON.stringify({ id: hb.me?.id, choices: JSON.parse(snapshot) }));
@@ -80,17 +112,33 @@
     return () => clearTimeout(debounce);
   });
 
-  onMount(() => {
+  // Loaded once connected: a panel opened while offline would otherwise take "no answer" for "no
+  // avatar yet" and offer Create, which then pays for a look change back to the defaults
+  let loading = false;
+  $effect(() => {
+    if (!firstLoad || loading || !hb.connected) return;
+    loading = true;
     void (async () => {
-      const mine = await rpc<AvatarChoices | null>('world', 'mine').catch(() => null);
+      let mine: AvatarChoices | null;
+      try {
+        mine = await rpc<AvatarChoices | null>('world', 'mine');
+      } catch {
+        // Tried again on the next connection
+        loading = false;
+        return;
+      }
       if (mine) {
         choices = mine;
         saved = JSON.stringify(mine);
+        created = true;
       }
       // A half-made look from last time wins over the saved one, so nothing is lost
+      // (except body and skin, which never change once the avatar exists)
       try {
         const draft = JSON.parse(storageGet(DRAFT_KEY) ?? 'null');
-        if (draft?.id === hb.me?.id && draft.choices) choices = { ...DEFAULT_CHOICES, ...draft.choices };
+        if (draft?.id === hb.me?.id && draft.choices) {
+          choices = { ...DEFAULT_CHOICES, ...draft.choices, ...(mine ? { body: mine.body, skin: mine.skin } : {}) };
+        }
       } catch {
         // A broken draft is just dropped
       }
@@ -99,145 +147,178 @@
     })();
   });
 
+  /** Back from the wardrobe or the shop: redraw, since the clothes may have changed there */
+  function backToLook() {
+    if (tab === 'look') return;
+    go('look');
+    if (!firstLoad) void build($state.snapshot(choices) as AvatarChoices);
+  }
+
+  $effect(() => {
+    if (tab !== 'look') return;
+    if (url && sheet) {
+      view.url = url;
+      view.sheet = sheet;
+    }
+    view.building = buildingCount > 0;
+    view.focus = focusHead ? 'head' : null;
+    view.facing = 'down';
+  });
+
+  /** Back to the saved look, dropping the changes */
+  function cancel() {
+    if (!saved) return;
+    choices = JSON.parse(saved);
+    storageSet(DRAFT_KEY, null);
+  }
+
   async function save() {
     const c = $state.snapshot(choices) as AvatarChoices;
-    const done = await attempt(() => rpc('world', 'save', { choices: c }), 'Saved');
+    const done = await attempt(() => rpc('world', 'save', { choices: c }), created ? 'New look' : 'Saved');
     if (done) {
       saved = JSON.stringify(c);
+      // Once created, body and skin are set and later changes are paid
+      created = true;
       storageSet(DRAFT_KEY, null);
     }
   }
-
-  // ------------------------------------------------------------ the live preview
-
-  let canvas = $state<HTMLCanvasElement>();
-  const img = new Image();
-  let imgReady = $state(false);
-  $effect(() => {
-    if (!url) return;
-    imgReady = false;
-    const me = url;
-    img.onload = () => {
-      if (me === url) imgReady = true;
-    };
-    img.src = url;
-  });
-
-  $effect(() => {
-    if (!canvas) return;
-    let raf = 0;
-    let zoom = 0;
-    let last = Date.now();
-    const g = canvas.getContext('2d')!;
-    const loop = () => {
-      raf = requestAnimationFrame(loop);
-      const now = Date.now();
-      const dt = Math.min(0.1, (now - last) / 1000);
-      last = now;
-      g.imageSmoothingEnabled = false;
-      g.clearRect(0, 0, canvas!.width, canvas!.height);
-      if (!imgReady || !sheet) return;
-      // Walking toward the camera, steady: turning around was found annoying
-      const row = sheet.rows.walkDown ?? sheet.rows.walk;
-      if (!row) return;
-      const count = Math.max(1, row.frames - 1);
-      const frame = row.frames > 1 ? 1 + (Math.floor(now / 110) % count) : 0;
-      const px = sheet.frame;
-      // Editing the head glides the view onto it, and out again after a few untouched seconds
-      zoom += ((now < headUntil ? 1 : 0) - zoom) * Math.min(1, dt * 7);
-      const headSize = 34;
-      const headY = Math.max(0, (sheet.body.top ?? 8) - 3);
-      const ease = zoom * zoom * (3 - 2 * zoom);
-      const size = px + (headSize - px) * ease;
-      const sx = ((px - headSize) / 2) * ease;
-      const sy = headY * ease;
-      g.drawImage(img, frame * px + sx, row.row * px + sy, size, size, 0, 0, canvas!.width, canvas!.height);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  });
 </script>
 
-<div class="editor">
-  <div class="stage card">
-    <canvas bind:this={canvas} width="192" height="192"></canvas>
-    {#if buildingCount > 0}
-      <span class="building"><Loader2 size={18} class="spin" /></span>
+<!-- The wardrobe and the shop fit the screen: only their item list scrolls -->
+<div class="panel" class:fit={tab !== 'look'}>
+<!-- The wardrobe and the shop come once the character exists: before that there is only the editor -->
+{#if created}
+<div class="tabs">
+  <button type="button" class="tab" class:on={tab === 'look'} onclick={backToLook}><PersonStanding size={17} />My look</button>
+  <button type="button" class="tab" class:on={tab === 'wardrobe'} onclick={() => tab !== 'wardrobe' && go('wardrobe')}><Shirt size={16} />Wardrobe</button>
+  <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => tab !== 'shop' && ((shopSlot = null), go('shop'))}><ShoppingBag size={16} />Shop</button>
+</div>
+{/if}
+
+<!-- Stays put across the tabs: only the character inside changes and zooms -->
+<div class="stage-wrap"><AvatarPreview {...view} /></div>
+
+{#key tab}
+<div class="pane" in:fly={{ x: slideFrom, duration: 220 }}>
+{#if tab === 'shop'}
+  <Shop startSlot={shopSlot} {view} />
+{:else if tab === 'wardrobe'}
+  <Wardrobe
+    {view}
+    onshop={(s) => {
+      shopSlot = s;
+      go('shop');
+    }}
+  />
+{:else}
+  <div class="editor">
+    {#if !created}
+      <div class="group">
+        <span class="label">Body</span>
+        <div class="row">
+          {#each ['male', 'female'] as const as b}
+            <button type="button" class="pick wide" class:on={choices.body === b} onclick={() => (choices.body = b)}>{b === 'male' ? 'Male' : 'Female'}</button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="group">
+        <span class="label">Skin</span>
+        <div class="row">
+          {#each SKINS as s}
+            <button type="button" class="swatch" class:on={choices.skin === s} style:background={SKIN_HEX[s]} aria-label={s} onclick={() => (choices.skin = s)}></button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <Picker label="Hair" items={HAIR_STYLES} value={choices.hair} onchange={(id) => (choices.hair = id)} />
+    <Picker label="Hair color" items={hairColorItems} value={choices.hairColor} onchange={(id) => (choices.hairColor = id)} />
+    <Picker label="Facial hair" items={BEARDS} value={choices.beard} onchange={(id) => (choices.beard = id)} />
+
+    <div class="group">
+      <span class="label">Eyes</span>
+      <div class="row">
+        {#each EYE_COLORS as c}
+          <button type="button" class="swatch" class:on={choices.eyes === c} style:background={EYE_HEX[c]} aria-label={c} onclick={() => (choices.eyes = c)}></button>
+        {/each}
+      </div>
+    </div>
+
+    {#if !created}
+      <button type="button" class="btn primary save" disabled={buildingCount > 0 || firstLoad} onclick={save}><Check size={18} />Create</button>
+    {:else if dirty}
+      <!-- Changing a look is paid: undo the changes, or pay for them -->
+      <div class="deal">
+        <button type="button" class="btn" onclick={cancel}><Undo2 size={18} />Cancel</button>
+        <button type="button" class="btn primary" disabled={buildingCount > 0} onclick={save}>
+          {#if cost}
+            <Coins size={18} />Buy for {cost} {shop?.currencyName ?? ''}
+          {:else}
+            <Check size={18} />Save
+          {/if}
+        </button>
+      </div>
     {/if}
   </div>
-
-  <div class="group">
-    <span class="label">Body</span>
-    <div class="row">
-      {#each ['male', 'female'] as const as b}
-        <button type="button" class="pick wide" class:on={choices.body === b} onclick={() => (choices.body = b)}>{b === 'male' ? 'Male' : 'Female'}</button>
-      {/each}
-    </div>
-  </div>
-
-  <div class="group">
-    <span class="label">Skin</span>
-    <div class="row">
-      {#each SKINS as s}
-        <button type="button" class="swatch" class:on={choices.skin === s} style:background={SKIN_HEX[s]} aria-label={s} onclick={() => (choices.skin = s)}></button>
-      {/each}
-    </div>
-  </div>
-
-  <Picker label="Hair" items={HAIR_STYLES} value={choices.hair} onchange={(id) => (choices.hair = id)} />
-  <Picker label="Hair color" items={hairColorItems} value={choices.hairColor} per={6} onchange={(id) => (choices.hairColor = id)} />
-  <Picker label="Facial hair" items={BEARDS} value={choices.beard} onchange={(id) => (choices.beard = id)} />
-
-  <div class="group">
-    <span class="label">Eyes</span>
-    <div class="row">
-      {#each EYE_COLORS as c}
-        <button type="button" class="swatch" class:on={choices.eyes === c} style:background={EYE_HEX[c]} aria-label={c} onclick={() => (choices.eyes = c)}></button>
-      {/each}
-    </div>
-  </div>
-
-  <button type="button" class="btn primary save" disabled={!dirty || buildingCount > 0} onclick={save}>
-    <Check size={18} />
-    {saved ? 'Save my look' : 'Move into the town'}
-  </button>
-  <p class="faint hint">You start in your underwear. Clothes come to the town's shop soon.</p>
+{/if}
+</div>
+{/key}
 </div>
 
 <style>
+  /* Exactly the screen between the page header and the bottom nav (the margin cancels part of
+     the page's bottom padding, so the page itself does not scroll) */
+  .fit {
+    --nav-h: calc(4.2rem + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    height: max(30rem, calc(100dvh - var(--header-h, 4rem) - 0.5rem - var(--nav-h) - 0.75rem));
+    margin-bottom: calc(var(--nav-h) + 0.75rem - 6.5rem);
+  }
+  .fit > .pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .fit > .pane > :global(*) {
+    flex: 1;
+    min-height: 0;
+  }
+  .stage-wrap {
+    flex: none;
+    margin-bottom: 1rem;
+  }
+  .tabs {
+    flex: none;
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+  }
+  .tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+  .tab.on {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
+    color: var(--text);
+  }
   .editor {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-  }
-  .stage {
-    display: grid;
-    place-items: center;
-    padding: 0.8rem;
-    position: relative;
-    background:
-      linear-gradient(rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.12)),
-      var(--surface-2);
-  }
-  .stage canvas {
-    width: 10rem;
-    height: 10rem;
-    image-rendering: pixelated;
-  }
-  .building {
-    position: absolute;
-    top: 0.6rem;
-    right: 0.6rem;
-    color: var(--text-dim);
-    display: grid;
-  }
-  .building :global(.spin) {
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
   .group {
     display: flex;
@@ -285,9 +366,12 @@
   .save {
     justify-content: center;
   }
-  .hint {
-    margin: -0.4rem 0 0;
-    text-align: center;
-    font-size: 0.85rem;
+  .deal {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem;
+  }
+  .deal .btn {
+    justify-content: center;
   }
 </style>

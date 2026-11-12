@@ -3,7 +3,8 @@
 // avatar editor. The sprites are composited on the server from the Universal LPC generator's art
 // (see server/modules/world/compose.ts).
 
-import { SPY_OBSTACLES, SPY_SCENE, WORLD } from './crowd.ts';
+import { SPRITE_SCALE, SPY_OBSTACLES, SPY_SCENE, SQUARE_HOUSES, WORLD, houseRow, type HouseKind } from './crowd.ts';
+import type { Outfit, Tier, WornItem } from './wardrobe.ts';
 
 /**
  * The town is the crowd games' square for now (same size, same scene, same environment art), so
@@ -12,16 +13,92 @@ import { SPY_OBSTACLES, SPY_SCENE, WORLD } from './crowd.ts';
 export const TOWN = WORLD;
 export const TOWN_SCENE = SPY_SCENE;
 export const TOWN_OBSTACLES = SPY_OBSTACLES;
-/** Where characters walk: the square below the sidewalk */
-export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
 /** Benches characters can sit on: where the square's benches stand, and where a sitter's feet land */
 export const BENCHES: { x: number; y: number }[] = [
   { x: 400, y: 178 },
   { x: 1200, y: 178 },
 ];
 
-/** What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat) */
-export const WANIM = { idle: 0, walk: 1, sit: 2, sleep: 3, pet: 4, cheer: 5 } as const;
+// ------------------------------------------------------------ the shops
+
+/** The places a character walks into when its guest changes their look on the phone */
+export type PlaceId = 'clothes' | 'barber';
+
+/**
+ * A shop of the town: one of the square's houses, dressed up as a shop on the TV. All in world
+ * units: `door` is where a character goes in, `front` where it stands before the door on the square,
+ * `window` the shop window on the wall where the ones inside are seen, `seats` the x of each place
+ * inside (as many as the shop takes at once; the others queue at the door).
+ */
+export interface TownPlace {
+  id: PlaceId;
+  name: string;
+  house: { kind: HouseKind; x0: number; x1: number; bottom: number };
+  door: { x: number; y: number };
+  front: { x: number; y: number };
+  window: { x: number; y: number; w: number; h: number };
+  seats: number[];
+}
+
+/**
+ * Where the door and the shop window are on the shop built on each kind of house (sprite pixels: x
+ * from the left of the house's art, heights up from its bottom). The TV builds the shopfronts
+ * (web/src/modules/world/shopfronts.ts) on these same numbers.
+ */
+export const SHOPFRONTS: Partial<Record<HouseKind, { door: number; doorUp: number; win: { x0: number; x1: number; top: number; bottom: number } }>> = {
+  // The clothes shop: the door on the left at the top of the steps, a wide display window on the right
+  brickA: { door: 42, doorUp: 25, win: { x0: 66, x1: 118, top: 71, bottom: 31 } },
+  // The barber: the window on the left, the door in the house's own doorway
+  brickB: { door: 89, doorUp: 4, win: { x0: 18, x1: 60, top: 60, bottom: 22 } },
+};
+
+/** A shop in the house of this kind nearest to `nearX` (world units) */
+function place(id: PlaceId, name: string, kind: HouseKind, nearX: number, seats: number): TownPlace {
+  const S = SPRITE_SCALE;
+  const row = houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / S)).filter((h) => h.kind === kind);
+  const h = row.reduce((a, b) => (Math.abs((b.x + b.w / 2) * S - nearX) < Math.abs((a.x + a.w / 2) * S - nearX) ? b : a));
+  const f = SHOPFRONTS[kind]!;
+  const bottom = SQUARE_HOUSES.bottom * S;
+  const window = { x: (h.x + f.win.x0) * S, y: bottom - f.win.top * S, w: (f.win.x1 - f.win.x0) * S, h: (f.win.top - f.win.bottom) * S };
+  const doorX = (h.x + f.door) * S;
+  return {
+    id,
+    name,
+    house: { kind, x0: h.x * S, x1: (h.x + h.w) * S, bottom },
+    door: { x: doorX, y: bottom - f.doorUp * S + 2 },
+    front: { x: doorX, y: TOWN_AREA.y0 + 2 },
+    window,
+    seats: Array.from({ length: seats }, (_, i) => window.x + (window.w * (i + 0.5)) / seats),
+  };
+}
+
+/** Where characters walk: the square below the sidewalk */
+export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
+
+/** The clothes shop (the big house near the middle) and the barber (the small one on the right) */
+export const TOWN_PLACES: Record<PlaceId, TownPlace> = {
+  clothes: place('clothes', 'Clothes shop', 'brickA', 860, 2),
+  barber: place('barber', 'Barber', 'brickB', 1330, 1),
+};
+
+// ------------------------------------------------------------ the throne
+
+/** The King's throne on the square, below the fountain: where its legs stand (world units) */
+export const THRONE = { x: 800, y: 728 };
+/** Where the King's feet land on the throne */
+export const THRONE_SEAT = { x: THRONE.x, y: THRONE.y + 8 };
+/** The throne is in the way like the fountain: an ellipse around its legs, the seat just in front of it */
+export const THRONE_OBSTACLE = { x: THRONE.x, y: THRONE.y - 6, rx: 28, ry: 11 };
+/** Where the faithful kneel before the throne, facing it: two rows on the carpet, an aisle in the middle */
+export const PRAY_SPOTS: { x: number; y: number }[] = [
+  ...[-92, -42, 42, 92].map((dx) => ({ x: THRONE.x + dx, y: THRONE.y + 62 })),
+  ...[-92, -42, 42, 92].map((dx) => ({ x: THRONE.x + dx, y: THRONE.y + 108 })),
+];
+/** The royal carpet under the throne and the faithful, between the two lamp posts (world units, a whole number of carpet tiles) */
+export const THRONE_CARPET = { x: THRONE.x, y0: THRONE.y - 40, tilesW: 6, tilesH: 4 };
+
+/** What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat, inside is seen through a shop window, pray kneels before the throne) */
+export const WANIM = { idle: 0, walk: 1, sit: 2, sleep: 3, pet: 4, cheer: 5, inside: 6, pray: 7 } as const;
 export type WAnimId = (typeof WANIM)[keyof typeof WANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
 export type WDir = 0 | 1 | 2 | 3;
@@ -142,14 +219,80 @@ export interface TownCharacter {
   color: string;
   /** The composited sprite sheet */
   url: string;
+  /** Its measurements (rows, where the head and feet are): every look has its own */
+  sheet?: SheetInfo;
+}
+
+/** The parts of a look that cost money to change once the avatar exists (body and skin never change) */
+export const LOOK_PARTS = ['hair', 'hairColor', 'beard', 'eyes'] as const;
+export type LookPart = (typeof LOOK_PARTS)[number];
+export const LOOK_PART_NAMES: Record<LookPart, string> = { hair: 'Hair style', hairColor: 'Hair color', beard: 'Facial hair', eyes: 'Eyes' };
+
+/** What changing from one look to another costs: the price of each part that differs */
+export function lookCost(before: AvatarChoices, after: AvatarChoices, prices: Record<LookPart, number>): number {
+  return LOOK_PARTS.reduce((sum, part) => sum + (before[part] !== after[part] ? prices[part] : 0), 0);
+}
+
+/** The town's shop as everyone sees it: its own money, prices by tier and for look changes */
+export interface ShopInfo {
+  currencyName: string;
+  prices: Record<Tier, number>;
+  look: Record<LookPart, number>;
+}
+
+/** What a guest owns and wears, fetched per guest (the shared state cannot carry it) */
+export interface WardrobeMine {
+  balance: number;
+  owned: WornItem[];
+  outfit: Outfit;
+  /** The saved outfits, one per slot (null: empty), without pieces that cannot be worn anymore */
+  saved: (Outfit | null)[];
+}
+
+/**
+ * The King of the town: one guest at a time holds the title, and anyone can buy it from them. The
+ * price rises each time it changes hands.
+ */
+export interface KingInfo {
+  /** The title can be bought (admin setting) */
+  on: boolean;
+  /** Who holds it (null: nobody yet) */
+  id: string | null;
+  /** When they took it */
+  since: number;
+  /** What taking the title costs now */
+  price: number;
 }
 
 export interface WorldState {
   characters: TownCharacter[];
   sheet: SheetInfo | null;
+  shop?: ShopInfo;
+  king?: KingInfo;
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
   /** Admin only */
   sleepAfterMin?: number;
   fadeAfterMin?: number;
+  earnPerMin?: number;
+  startMoney?: number;
+  shopVisits?: boolean;
+  visitMinSec?: number;
+  visitMaxSec?: number;
+  finishWithinSec?: number;
+  wrapMinSec?: number;
+  wrapMaxSec?: number;
+  quickMinSec?: number;
+  quickMaxSec?: number;
+  kingBase?: number;
+  kingStep?: number;
+  kingRefundPct?: number;
+  throneEveryMin?: number;
+  throneMinSec?: number;
+  throneMaxSec?: number;
+  prayMinSec?: number;
+  prayMaxSec?: number;
+  /** Times the title changed hands (the price counts them) */
+  kingSales?: number;
+  wallets?: { id: string; name: string; color: string; balance: number }[];
 }

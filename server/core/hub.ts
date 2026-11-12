@@ -52,6 +52,8 @@ export interface CoreSettings {
   privacy: PrivacySettings;
   qrIncludesCode: boolean;
   requireCode: boolean;
+  /** The TV shows the card with the QR code and the session code */
+  tvJoinCard: boolean;
   adminPassword: string;
   adminTokens: string[];
   tunnel: boolean;
@@ -79,6 +81,7 @@ const CORE_DEFAULTS: CoreSettings = {
   privacy: { activity: 'names', photoNames: true, stickerNames: true, songNames: true, effectNames: true },
   qrIncludesCode: true,
   requireCode: true,
+  tvJoinCard: true,
   adminPassword: '',
   adminTokens: [],
   tunnel: true,

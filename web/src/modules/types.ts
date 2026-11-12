@@ -27,6 +27,8 @@ export interface GuestFeature {
   priceKey?: string;
   /** Keep this panel open when this module's takeover ends (default: go back home), e.g. while a form is being filled */
   stayAfterTakeover?: () => boolean;
+  /** Shown in the page header next to the coins while this panel is open (e.g. a module's own money) */
+  header?: Component;
 }
 
 /** Groups of the admin side menu, for the features: play, sound, and what shows on the TV or the lights */

@@ -87,6 +87,16 @@ LPC Revised, buildings
   https://github.com/ElizaWy/LPC/tree/main/Structure/Windows
   https://opengameart.org/content/lpc-adobe-building-set
 
+LPC Revised, throne and carpet (the King's throne of the avatar town)
+  Files: throne.png (Objects/Furniture/Seating/Thrones.png), carpet.png (Objects/Furniture/Rugs/Diamond Rug, tiling.png)
+  License: OGA-BY 3.0
+  Authors: Lanea Zimmerman (Sharm), Eliza Wyatt (ElizaWy, DeathsDarling)
+  Notes: thrones: original front view by Lanea Zimmerman, side and back views and recolors by Eliza Wyatt;
+         carpet by Eliza Wyatt
+  https://github.com/ElizaWy/LPC/tree/main/Objects/Furniture/Seating
+  https://github.com/ElizaWy/LPC/tree/main/Objects/Furniture/Rugs
+  https://opengameart.org/content/lpc-interior-castle-tiles
+
 [LPC] Birds
   Files: bird-white.png (bird_2_white.png), bird-black.png (bird_2_black.png), bird-brown.png (bird_2_brown_1.png),
          bird-sparrow.png (bird_3_sparrow.png)
