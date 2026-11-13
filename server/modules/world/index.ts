@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { LOOK_PARTS, TOWN_SPEEDS, kingPriceAt, lookCost, partyAt, validChoices, type AvatarChoices, type CeremonyHold, townMinutes, realAt, type TownClock, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, TOWN_SPEEDS, kingPriceAt, minuteOf, lookCost, partyAt, validChoices, type AvatarChoices, type CeremonyHold, townMinutes, realAt, type TownClock, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, notForTheKing, starterPieces, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -67,8 +67,13 @@ interface WorldSettings {
   kingDropPerMin: number;
   /** The King who loses the title gets this share of what they paid back (percent) */
   kingRefundPct: number;
-  /** The ceremony in the throne room is held on its own: every so many days, at this time of day (HH:MM) */
+  /**
+   * The ceremony in the throne room is held on its own: every so many town days, at this time of
+   * the town's day (HH:MM), halfway between two of the weekly parties (see ceremonyDue)
+   */
   ceremony: boolean;
+  /** A ceremony follows every crowning (a guest taking the King's title) */
+  ceremonyOnCrowning: boolean;
   ceremonyEveryDays: number;
   ceremonyTime: string;
   /** How long the King holds court once seated (seconds) */
@@ -177,7 +182,7 @@ interface WorldData {
   king?: KingData;
   /** The monarchy: every reign so far, the oldest first (the last one is open while its King reigns) */
   reigns?: Reign[];
-  /** When the last ceremony held on its own started (0: never) */
+  /** When the last ceremony held on its own started (0: never), and the town day it was held for */
   ceremony?: { last: number };
 }
 
@@ -204,6 +209,10 @@ const FRAME_HZ = 10;
 
 /** A ceremony due on its own waits this long after the server starts, so the TV has loaded the town */
 const CEREMONY_SETTLE_MS = 45_000;
+/** A ceremony follows a crowning this long after it (the TV loads the new King's look, the King cheers) */
+const CROWNING_WAIT_MS = 12_000;
+/** A scheduled ceremony missed by more than this (town minutes: the server was off) is let go */
+const CEREMONY_LATE_MIN = 6 * 60;
 
 /**
  * The avatar world: a living pixel town as the TV home screen. Guests design an LPC-style
@@ -250,7 +259,8 @@ export default defineModule<WorldSettings>({
     kingDropPerMin: 5,
     kingRefundPct: 50,
     ceremony: true,
-    ceremonyEveryDays: 1,
+    ceremonyOnCrowning: true,
+    ceremonyEveryDays: 7,
     ceremonyTime: '21:00',
     ceremonySec: 60,
     ceremonyGraceSec: 20,
@@ -285,7 +295,7 @@ export default defineModule<WorldSettings>({
     const saved = (store.data.saved ??= {});
     // Came with the King's title, and with the ceremony
     const king = (store.data.king ??= { id: null, since: 0, paid: 0, sales: 0 });
-    const held = (store.data.ceremony ??= { last: 0 });
+    const held: { last: number; day?: number } = (store.data.ceremony ??= { last: 0 });
     // Came with the price that drops: a King crowned before it has the price go up from what they paid
     if (king.id && king.paid && !king.asked) king.asked = { amount: Math.round(king.paid * Math.max(1, ctx.settings.get().kingRise)), at: king.since };
     // Came with the monarchy. A King crowned before it existed gets their reign written down now
@@ -575,22 +585,27 @@ export default defineModule<WorldSettings>({
     const startedAt = Date.now();
 
     /** When the next ceremony is due on its own: at the set time of day, so many days after the last one (in the past: due now) */
-    const ceremonyDue = (now: number): number => {
+    const ceremonyDue = (now: number): number => ceremonySlot(now).at;
+
+    /**
+     * The ceremony on its own, on the town's clock: every `ceremonyEveryDays` town days at
+     * `ceremonyTime`, on the days halfway between two of the weekly parties (the party's nights
+     * are days 0, 7, 14...; the ceremony's days 3, 10, 17... with a week). Which day it is for (the
+     * one due, or once held the next), and when that is in real time. One missed by more than a
+     * few town hours (the server was off) is let go.
+     */
+    const ceremonySlot = (now: number): { day: number; at: number } => {
       const s = ctx.settings.get();
-      const [h, m] = (timeOfDay(s.ceremonyTime) ?? '21:00').split(':').map(Number);
-      const dayOf = (t: number) => {
-        const d = new Date(t);
-        d.setHours(0, 0, 0, 0);
-        return d;
-      };
-      let day = dayOf(now);
-      if (held.last) {
-        const next = dayOf(held.last);
-        next.setDate(next.getDate() + Math.max(1, Math.round(s.ceremonyEveryDays)));
-        if (next > day) day = next;
-      }
-      day.setHours(h, m, 0, 0);
-      return day.getTime();
+      const every = Math.max(1, Math.round(s.ceremonyEveryDays));
+      const off = Math.floor(every / 2);
+      const time = minuteOf(timeOfDay(s.ceremonyTime) ?? '21:00');
+      const t = townNow();
+      const m = townMinutes(t, townClock());
+      // The day of the last time on the schedule, now or before
+      const today = Math.floor((m - time) / 1440);
+      let day = today - ((((today - off) % every) + every) % every);
+      if (held.day === day || m - (day * 1440 + time) > CEREMONY_LATE_MIN) day += every;
+      return { day, at: now + (realAt(day * 1440 + time, townClock()) - t) / warp.speed };
     };
 
     /** What keeps a due ceremony from starting: the King is not in the town (asleep is fine: the ceremony wakes everyone), a game is on the TV, no TV is open */
@@ -602,11 +617,15 @@ export default defineModule<WorldSettings>({
       return null;
     };
 
+    /** When a new King took the crown, for the ceremony that follows (0: none waits) */
+    let crowned = 0;
+
     /** Start a ceremony (false: one is on already). One held on its own counts for the schedule, one the host starts does not */
     const beginCeremony = (scheduled: boolean): boolean => {
       if (!sim.startCeremony()) return false;
       if (scheduled) {
         held.last = Date.now();
+        held.day = ceremonySlot(Date.now()).day;
         store.save();
       }
       const id = kingId();
@@ -664,6 +683,7 @@ export default defineModule<WorldSettings>({
           kingDropPerMin: s.kingDropPerMin,
           kingRefundPct: s.kingRefundPct,
           ceremonyAuto: s.ceremony,
+          ceremonyOnCrowning: s.ceremonyOnCrowning,
           ceremonyEveryDays: s.ceremonyEveryDays,
           ceremonyTime: s.ceremonyTime,
           ceremonySec: s.ceremonySec,
@@ -1068,6 +1088,11 @@ export default defineModule<WorldSettings>({
       const now = Date.now();
       // The ceremony on its own: once it is due and nothing holds it back
       if (s.ceremony && !sim.ceremonyOn && now - startedAt > CEREMONY_SETTLE_MS && now >= ceremonyDue(now) && !ceremonyHold()) beginCeremony(true);
+      // A new King: the town gathers before them, a moment after the crowning (once nothing holds it back)
+      if (crowned && now - crowned >= CROWNING_WAIT_MS && !ceremonyHold()) {
+        if (!sim.ceremonyOn && s.ceremonyOnCrowning) beginCeremony(false);
+        crowned = 0;
+      }
       const roster = Object.entries(store.data.avatars)
         .map(([id, a]) => ({ a, g: ctx.session.guests.get(id) }))
         .filter((r): r is { a: StoredAvatar; g: NonNullable<typeof r.g> } => !!r.g)
@@ -1198,8 +1223,9 @@ export default defineModule<WorldSettings>({
       ctx.publish();
       ctx.activity(old ? `{name} took the crown from ${old.name} and is the new King of the town` : '{name} is the first King of the town', { guest });
       if (takenOff.length) ctx.toast(guest, { text: `The King takes off the ${takenOff.join(' and the ')}: not fit for the throne`, kind: 'info' });
-      // A moment for the TV to load the crowned look, then the new King celebrates
+      // A moment for the TV to load the crowned look, then the new King celebrates; the ceremony follows
       setTimeout(() => cheer(guest.id), 1500);
+      crowned = Date.now();
       return { balance: wallets[guest.id] };
     });
 
@@ -1244,6 +1270,7 @@ export default defineModule<WorldSettings>({
         kingDropPerMin: price(args.kingDropPerMin, s.kingDropPerMin),
         kingRefundPct: Math.max(0, Math.min(100, Math.round(num(args.kingRefundPct, s.kingRefundPct)))),
         ceremony: typeof args.ceremony === 'boolean' ? args.ceremony : s.ceremony,
+        ceremonyOnCrowning: typeof args.ceremonyOnCrowning === 'boolean' ? args.ceremonyOnCrowning : s.ceremonyOnCrowning,
         ceremonyEveryDays: Math.max(1, Math.min(365, Math.round(num(args.ceremonyEveryDays, s.ceremonyEveryDays)))),
         ceremonyTime: timeOfDay(args.ceremonyTime) ?? s.ceremonyTime,
         ceremonySec: Math.max(10, secs(args.ceremonySec, s.ceremonySec, 600)),

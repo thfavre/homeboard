@@ -35,8 +35,9 @@
     const next = mod.ceremonyNext;
     if (!mod.ceremonyAuto || !next) return 'Held only when you start it';
     if (next <= now) return mod.ceremonyHold ? `Due now, waiting for ${HOLDS[mod.ceremonyHold]}` : 'Due now: about to start';
-    const days = Math.round((new Date(next).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / 86_400_000);
-    return `Next on its own: ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : day(next, now)} at ${mod.ceremonyTime}`;
+    // (on the town's clock: in real time it comes in so many minutes or hours)
+    const min = Math.max(1, Math.round((next - now) / 60_000));
+    return `Next on its own: at ${mod.ceremonyTime} town time, in ${min < 90 ? `${min} min` : `${Math.round(min / 6) / 10} hours`} (real time)`;
   });
 
   function setDays(value: string) {
@@ -428,18 +429,26 @@
         <p class="faint small">
           The TV's camera moves a third of the screen to the right, over to the throne room. The King walks up the red carpet to the throne; once he is
           in the room the others follow and line up along the carpet. When all are there the King raises his hands, everyone kneels and he sits. Then all go
-          back to town. On: it is held on its own, on the days and at the time below.
+          back to town. On: it is held on its own, on the town's days and at the town's time below, in the middle of the week between two of the
+          weekly parties.
         </p>
       </div>
       <Toggle checked={!!mod.ceremonyAuto} label="Hold the ceremony on its own" onchange={(v) => setOption('ceremony', v)} />
     </div>
+    <div class="line">
+      <div>
+        <strong>Ceremony for a new King</strong>
+        <p class="faint small">A few seconds after a guest takes the crown, the town gathers before the new King in the throne room.</p>
+      </div>
+      <Toggle checked={!!mod.ceremonyOnCrowning} label="Ceremony for a new King" onchange={(v) => setOption('ceremonyOnCrowning', v)} />
+    </div>
     <div class="pair">
       <label class="field">
-        <span>Every (days)</span>
+        <span>Every (town days)</span>
         <input class="input" type="number" min="1" max="365" value={mod.ceremonyEveryDays} onchange={(e) => setDays(e.currentTarget.value)} />
       </label>
       <label class="field">
-        <span>At (hours:minutes)</span>
+        <span>At (on the town's clock)</span>
         <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="21:00" value={mod.ceremonyTime} onchange={(e) => setTime('ceremonyTime', e.currentTarget)} />
       </label>
     </div>

@@ -905,6 +905,7 @@ export interface WorldState {
   kingDropPerMin?: number;
   kingRefundPct?: number;
   ceremonyAuto?: boolean;
+  ceremonyOnCrowning?: boolean;
   ceremonyEveryDays?: number;
   ceremonyTime?: string;
   ceremonySec?: number;
