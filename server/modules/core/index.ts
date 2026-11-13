@@ -7,7 +7,7 @@ import { BOARD_KINDS, STAT_BOARDS, isMoneyBoard, type Board, type BoardKind, typ
 import { THEMES } from '../../../shared/themes.ts';
 import type { CoreSettings } from '../../core/hub.ts';
 import { defineModule } from '../../core/module.ts';
-import type { Guest } from '../../core/session.ts';
+import { validPin, type Guest } from '../../core/session.ts';
 import type { GamesApi } from '../games/index.ts';
 import { Attempts, HbError, cleanName, clamp, num, uid } from '../../core/util.ts';
 
@@ -428,6 +428,7 @@ export default defineModule({
     });
 
     ctx.onGuest('setPin', (args, guest) => {
+      session.notTheCode(validPin(args.pin));
       session.setPin(guest, args.pin);
       return true;
     });

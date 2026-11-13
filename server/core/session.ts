@@ -151,6 +151,7 @@ export class Session extends EventEmitter {
     const pin = validPin(rawPin);
     const existing = this.byName(name);
     if (existing) return { guest: this.login(existing, pin), returning: true };
+    this.notTheCode(pin);
     const now = Date.now();
     const guest: Guest = {
       id: uid(6),
@@ -194,6 +195,16 @@ export class Session extends EventEmitter {
     }
     // The token stays the same, so the first phone stays logged in too
     return guest;
+  }
+
+  /**
+   * Everyone at the party knows the code, so a PIN equal to it would let anyone log in
+   * as that guest. Only checked for new PINs: an older account keeps working.
+   */
+  notTheCode(pin: string): void {
+    if (pin === this.code) {
+      throw new HbError('Your PIN cannot be the party code: everyone here knows it. Pick other digits.');
+    }
   }
 
   setPin(guest: Guest, rawPin: unknown): void {
