@@ -111,8 +111,9 @@ export interface Seat {
 export const FOUNTAIN_SEATS: Seat[] = [
   { x: 775, y: 578, dir: 2 },
   { x: 825, y: 578, dir: 2 },
-  { x: 740, y: 556, dir: 1 },
-  { x: 860, y: 556, dir: 3 },
+  // (no higher: the sitter would be drawn behind the fountain, which stands at y 545)
+  { x: 740, y: 547, dir: 1 },
+  { x: 860, y: 547, dir: 3 },
 ];
 
 /** The campfire on the grass in the bottom right corner: the fire pit, two logs by it (behind and right) and the places around it (on the ground on its left) */
