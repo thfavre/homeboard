@@ -720,7 +720,8 @@ function garden(g: G, sheets: Sheets): void {
 /** The floor: a chessboard of diamond tiles, a sill of light stone along the open side, the back wall's shadow */
 function floor(g: G, tiles: HTMLImageElement): void {
   const y0 = A.wall - 12;
-  const y1 = A.front;
+  // On under the front wall's merlons, which show it between them
+  const y1 = A.front + 12;
   for (let y = y0, row = 0; y < y1; y += 32, row++) {
     for (let x = 6, col = 0; x < A.east; x += 32, col++) {
       const [sx, sy] = FLOOR_TILES[(row + col) % 2];
@@ -1040,8 +1041,7 @@ function tallWindow(g: G, cx: number, top: number, w: number, h: number): void {
   veil(g, x - 3, top + h + 5, w + 8, 2, 0.3);
 }
 
-/** How thick the walk along the top of the front wall shows, and how far below its edge its face ends (sprite pixels) */
-const FRONT_WALL = 12;
+/** How far below the front wall's edge its face ends (sprite pixels) */
 const FRONT_FACE = 56;
 /** How high the battlements along the top of the back wall stand over its face */
 const BACK_TOP = 24;
@@ -1089,16 +1089,8 @@ function outerWalls(g: G, stone: HTMLCanvasElement): void {
   }
   for (let y = A.top + 6; y < A.front; y += TILE) g.drawImage(stone, T.right, T.side, TILE, Math.min(TILE, A.front - y), A.w - TILE, y, TILE, Math.min(TILE, A.front - y));
   px(g, STONE.line, x - 1, A.wall, 1, A.front - A.wall);
-  // The front wall's walk, seen from above
-  const walk = A.front - FRONT_WALL;
-  px(g, STONE.shade, 0, walk, A.w, FRONT_WALL);
-  for (let bx = 4, col = 0; bx < A.w; bx += 22, col++) {
-    px(g, STONE.dark, bx + 1, walk + 1, 20, FRONT_WALL - 2);
-    veil(g, bx + 1, walk + 1, 20, 1, 0.12, true);
-    if (col % 3 === 1) veil(g, bx + 1, walk + 1, 20, FRONT_WALL - 2, 0.1);
-  }
-  px(g, STONE.line, 0, walk, A.w, 1);
-  // Its face: merlons along its edge over a course of stone, another course under it, arrow slits
+  // The front wall's face (the hall's floor runs on under its merlons, so the gaps between them
+  // show the floor): merlons along its edge over a course of stone, another course under it, arrow slits
   tileRow(g, stone, A.front - 8, F.merlons, TILE, A.w, F.left, F.mid, F.right);
   tileRow(g, stone, A.front + 24, F.course, TILE, A.w, F.left, F.mid, F.right);
   const [sx, sy, sw, sh] = CASTLE.slit;
@@ -1115,7 +1107,7 @@ const TOWER_TALL = 172;
 const TOWER_LOW = 84;
 /** Where the towers stand (in the hall's pixels: their left edge and their foot): two tall ones at the back, two low ones at the front */
 const TOWERS = [
-  { x: -8, foot: A.wall + 10, tall: true },
+  { x: -22, foot: A.wall + 10, tall: true },
   { x: A.w - TOWER_W, foot: A.wall + 10, tall: true },
   { x: -8, foot: A.front + FRONT_FACE + 4, tall: false },
   { x: A.w - TOWER_W, foot: A.front + FRONT_FACE + 4, tall: false },
@@ -1151,8 +1143,11 @@ function castleTower(stone: HTMLCanvasElement, tall: boolean): HTMLCanvasElement
   return c;
 }
 
+/** The towers' pictures, once built with the ground (the ones standing out over the riverside are drawn again over the river's frames) */
+let towerArt: { tall: HTMLCanvasElement; low: HTMLCanvasElement } | null = null;
+
 function towers(g: G, stone: HTMLCanvasElement): void {
-  const art = { tall: castleTower(stone, true), low: castleTower(stone, false) };
+  const art = (towerArt = { tall: castleTower(stone, true), low: castleTower(stone, false) });
   for (const t of TOWERS) {
     const img = t.tall ? art.tall : art.low;
     // Its shadow on the ground, to the right
@@ -1353,6 +1348,13 @@ export function drawRiver(g: G, art: HallArt, now: number): void {
     g.drawImage(art.sparkle, ((t + k) % 4) * 32, 32, 32, 32, Math.round(q.x - 16), Math.round(q.y - 16), 32, 32);
   }
   g.globalAlpha = 1;
+  // The towers standing out over the riverside's grass, which the river's frames just painted over
+  for (const tw of TOWERS) {
+    const img = tw.tall ? towerArt?.tall : towerArt?.low;
+    if (!img || tw.x >= 0) continue;
+    const q = at(tw.x, tw.foot - img.height);
+    g.drawImage(img, q.x, q.y, img.width * S, img.height * S);
+  }
 }
 
 /**
