@@ -63,6 +63,8 @@ export interface CafeArt {
   front: HTMLCanvasElement;
   /** The room behind the glass, the glass's size */
   room: HTMLCanvasElement;
+  /** The doors sheet (its green door stands in the porch) */
+  doors: HTMLImageElement;
 }
 
 let built: CafeArt | null = null;
@@ -84,7 +86,7 @@ export function cafeArt(env: Env, shops: ShopArt): CafeArt {
   // In the ground the glass shows the room (the TV draws it again every frame, with the light of the moment)
   g.drawImage(room, GLASS.x0, GLASS.y0);
   g.drawImage(front, 0, 0);
-  built = { house, front, room };
+  built = { house, front, room, doors: shops.doors };
   return built;
 }
 
@@ -281,6 +283,24 @@ export function drawCafe(g: G, art: CafeArt, now: number, dark: number, party: b
   g.restore();
   const o = at(0, 0);
   g.drawImage(art.front, o.x, o.y, ART * S, ART * S);
+}
+
+/**
+ * The door in the porch: the green 12-panel door of the doors sheet (its frames 64 x 96 from shut
+ * to swung wide open, the door itself 32 x 48 at 32, 16 in each). It stands in the porch's doorway,
+ * its top 80 pixels down the house's art.
+ */
+const DOOR = { sx: 448, sy: 192, x: CAFE_ART.door - 16 - 32, y: 80 - 16 };
+const door = { open: 0, at: 0 };
+
+/** The cafe's door: open while the cafe is (`open`: in the day, and for a party), shut at night; it swings over a moment */
+export function drawCafeDoor(g: G, art: CafeArt, now: number, open: boolean): void {
+  const dt = Math.min(0.2, Math.max(0, (now - door.at) / 1000));
+  door.at = now;
+  door.open = Math.max(0, Math.min(1, door.open + (open ? dt : -dt) * 2));
+  const frame = 3 + Math.round(door.open * 3);
+  const o = at(DOOR.x, DOOR.y);
+  g.drawImage(art.doors, DOOR.sx + frame * 64, DOOR.sy, 64, 96, o.x, o.y, 64 * S, 96 * S);
 }
 
 /**

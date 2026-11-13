@@ -6,7 +6,7 @@
   import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, TOWN_SPEEDS, hallLift, townMinutes, townTime, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { SQUARE_STREET, loadEnv, squareGround, type Env, type Prop } from '../games/crowd/scene.ts';
-  import { DANCE_FEET, cafeArt, drawCafe, drawCafeLight, type CafeArt } from './cafe.ts';
+  import { DANCE_FEET, cafeArt, drawCafe, drawCafeDoor, drawCafeLight, type CafeArt } from './cafe.ts';
   import { drawAngler, drawCatch, drawDancing, drawGlass, drawPerched, drawPole } from './poses.ts';
   import { GREEN_TOP, brookFrames, drawBrook, drawBrookGlints, townGround } from './townGround.ts';
   import { drawCup, drawFireLight, drawKindling, lampLevel, townNow, townProps } from './townScene.ts';
@@ -550,7 +550,11 @@
       });
     }
     // The cafe, with the dancers seen through its window on a party night
-    if (cafe) drawCafe(g, cafe, now, dark, party, () => dancers.forEach((p) => drawPerson({ ...p, y: DANCE_FEET })));
+    if (cafe) {
+      drawCafe(g, cafe, now, dark, party, () => dancers.forEach((p) => drawPerson({ ...p, y: DANCE_FEET })));
+      // Its door stands open while it is open: in the day, and for a party
+      drawCafeDoor(g, cafe, now, dark < 0.5 || party);
+    }
 
     // The characters, the things that stand up, the birds and the cat, back to front together
     let pi = 0;
