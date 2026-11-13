@@ -1,16 +1,16 @@
 /**
  * Plays the town (server/modules/world/sim.ts) on a fake clock, hours in seconds, with many
  * characters: guests leave and come back, change their looks, cheer, and the King holds a ceremony
- * every 15 minutes. It watches every step for trouble (walking on the spot, standing in the
+ * every 15 minutes, and a whole day goes by every hour (night from 21:30 to 07:00). It watches every step for trouble (walking on the spot, standing in the
  * fountain, off the square, in the river, an activity that never ends, a chat partner who is not
- * chatting back) and measures how things go (shop trips, the ceremony, sleep, variety).
+ * chatting back) and measures how things go (shop trips, the ceremony, sleep, who sleeps at night, variety).
  *
  *   npx tsx scripts/town-sim-test.ts [minutes] [characters] [seed]
  *
  * Nothing runs but the sim: no server, no data folder, no lights. Run it after changing how the
  * characters walk or choose what to do; "no problems" at the end is what you want.
  */
-import { TownSim, type RosterEntry } from '../server/modules/world/sim.ts';
+import { TownSim, type RosterEntry, type TownOptions } from '../server/modules/world/sim.ts';
 import { CROSSING, DAIS_FOOT, TOWN, TOWN_AREA, TOWN_OBSTACLES, WANIM, FRAME_STRIDE, type PlaceId } from '../shared/world.ts';
 
 const MINUTES = Number(process.argv[2]) || 120;
@@ -47,7 +47,9 @@ const awaySince = new Map<string, number>();
 const roster: (RosterEntry & { away: number })[] = [];
 for (let i = 0; i < N; i++) roster.push({ id: `g${i}`, online: true, awayMs: 0, away: 0, noSit: i % 9 === 0, noCheer: i % 9 === 0 });
 
-const opts = {
+/** A whole day on the town's clock goes by in this much test time; the test starts at noon */
+const DAY_MS = 60 * 60_000;
+const opts: TownOptions = {
   sleepAfterMs: 4 * 60_000,
   fadeAfterMs: 3 * 60_000,
   insideMs: [2000, 5000] as [number, number],
@@ -59,7 +61,16 @@ const opts = {
   king: 'g1' as string | null,
   courtMs: 60_000,
   graceMs: 20_000,
+  dayNight: { mode: 'clock', dusk: '21:30', dawn: '07:00', twilightMin: 90 },
+  localMinutes: 12 * 60,
+  nightSleep: true,
+  bedtimeSpreadMin: 180,
+  nightOwls: 0.2,
 };
+/** The share of characters asleep for the night at 3:00, at 9:00 (the night owls) and at noon, each day */
+const atNight: number[] = [];
+const atMorning: number[] = [];
+const atNoon: number[] = [];
 
 const STEP = 100;
 type Track = { kind: string; since: number; x: number; y: number; stillSince: number };
@@ -104,7 +115,17 @@ while (clock < end) {
     lastCeremony = clock;
   }
   const prevKinds = new Map([...(simAny.walkers as Map<string, any>)].map(([id, w]) => [id, w.doing.kind]));
+  const before = opts.localMinutes % 1440;
+  opts.localMinutes = 12 * 60 + ((clock - start) / DAY_MS) * 1440;
+  const minute = opts.localMinutes % 1440;
   frame = sim.tick(roster, opts);
+  const asleep = () => {
+    const all = [...(simAny.walkers as Map<string, any>).values()];
+    return all.filter((w) => (w.doing.kind === 'sleep' || w.doing.kind === 'goSleep') && w.doing.night).length / Math.max(1, all.length);
+  };
+  if (before < 180 && minute >= 180) atNight.push(asleep());
+  if (before < 540 && minute >= 540) atMorning.push(asleep());
+  if (before < 720 && minute >= 720 && clock - start > DAY_MS / 2) atNoon.push(asleep());
   for (const [id, w] of simAny.walkers as Map<string, any>) {
     (kinds.get(id) ?? kinds.set(id, new Set()).get(id)!).add(w.doing.kind);
     if (prevKinds.get(id) === 'goChat' && w.doing.kind === 'idle') chatGiveUps++;
@@ -119,7 +140,8 @@ while (clock < end) {
   }
   if (lastPhase && !phase) leaveAt = clock;
   if (leaveAt && clock - leaveAt > 60_000) {
-    for (const w of (simAny.walkers as Map<string, any>).values()) if (w.x > TOWN_AREA.x1 + 40) backLate.push(`${w.id} ${w.doing.kind} at ${Math.round(w.x)}`);
+    // (sleepers lie at the town's edge, right of the square)
+    for (const w of (simAny.walkers as Map<string, any>).values()) if (w.x > TOWN_AREA.x1 + 40 && w.doing.kind !== 'sleep' && w.doing.kind !== 'goSleep') backLate.push(`${w.id} ${w.doing.kind} at ${Math.round(w.x)}`);
     leaveAt = 0;
   }
   lastPhase = phase;
@@ -195,6 +217,7 @@ console.log(`court opened after (s from the call): ${(stats as any).courtWaits?.
 console.log(`in place when the court opens: ${courtShares.map((x) => Math.round(x * 100) + '%').join(' ')}`);
 console.log(`still out by the throne room a minute after: ${backLate.length ? backLate.slice(0, 5).join('; ') : 'nobody'}`);
 console.log(`away guests not asleep in time: ${sleepLate.length}`);
+console.log(`asleep for the night at 3:00: ${atNight.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; at 9:00: ${atMorning.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; at noon: ${atNoon.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; dark now ${frame!.dark}`);
 const never = (k: string) => [...kinds].filter(([id, set]) => !set.has(k) && !(Number(id.slice(1)) % 9 === 0 && (k === 'sit' || k === 'pet'))).length;
 console.log(`characters that never: sat ${never('sit')}, petted ${never('pet')}, chatted ${never('chat')}, wandered ${never('wander')}`);
 console.log('longest per activity:', Object.fromEntries(Object.entries(stats.maxKindMs).map(([k, v]) => [k, sec(v)])));

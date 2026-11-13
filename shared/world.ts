@@ -230,6 +230,50 @@ export interface TownFrame {
   a: number[];
   cat: { x: number; y: number; dir: WDir; walk: boolean; hearts: boolean };
   cam: number;
+  /** How dark it is in the town: 0 in the day, 1 at night (see darknessAt) */
+  dark?: number;
+}
+
+// ------------------------------------------------------------ day and night
+
+/** The town's time of day: following the clock, or always day, or always night */
+export type DayNightMode = 'clock' | 'day' | 'night';
+
+export interface DayNight {
+  mode: DayNightMode;
+  /** When night falls and when the day comes back ("HH:MM", 24 hours) */
+  dusk: string;
+  dawn: string;
+  /** The light changes over this long, half before and half after each of those times (minutes) */
+  twilightMin: number;
+}
+
+/** Minutes since midnight of a time of day "HH:MM" (0 when it is not one) */
+export function minuteOf(time: string): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(time);
+  return m ? (Number(m[1]) * 60 + Number(m[2])) % 1440 : 0;
+}
+
+/** Minutes from `a` forward to `b` on the clock face (0..1439) */
+export const minutesFrom = (a: number, b: number) => (((b - a) % 1440) + 1440) % 1440;
+
+/**
+ * How dark it is at a minute of the day (0 in the day, 1 at night): half dark right at dusk and at
+ * dawn, fading over the twilight around each. A twilight longer than the day or the night is cut
+ * down to fit.
+ */
+export function darknessAt(d: DayNight, minute: number): number {
+  if (d.mode === 'day') return 0;
+  if (d.mode === 'night') return 1;
+  const dusk = minuteOf(d.dusk);
+  const dawn = minuteOf(d.dawn);
+  const night = minutesFrom(dusk, dawn);
+  if (night === 0) return 0;
+  const twilight = Math.max(1, Math.min(d.twilightMin, night, 1440 - night));
+  const sinceDusk = minutesFrom(dusk, minute);
+  // Inside the night: how far from its nearest end; outside: how far from it (negative)
+  const edge = sinceDusk < night ? Math.min(sinceDusk, night - sinceDusk) : -Math.min(minutesFrom(minute, dusk), sinceDusk - night);
+  return Math.max(0, Math.min(1, 0.5 + edge / twilight));
 }
 
 // ------------------------------------------------------------ the avatar
@@ -502,6 +546,16 @@ export interface WorldState {
   ceremonyTime?: string;
   ceremonySec?: number;
   ceremonyGraceSec?: number;
+  dayNight?: DayNightMode;
+  dusk?: string;
+  dawn?: string;
+  twilightMin?: number;
+  nightSleep?: boolean;
+  bedtimeSpreadMin?: number;
+  nightOwlPct?: number;
+  /** How dark the town is right now (0 day, 1 night), and how many characters sleep for the night */
+  darkNow?: number;
+  nightSleepers?: number;
   /** The ceremony that is on right now: everyone gathering, the King holding court, everyone leaving (null: none) */
   ceremonyPhase?: 'gather' | 'court' | 'leave' | null;
   /** When the next one is due on its own (server time; in the past: due now), and what holds it back then */

@@ -1,9 +1,12 @@
-import { BENCHES, CARPET_START, CARPET_Y, CROSSING, DAIS_FOOT, PRAY_HALL_COLS, PRAY_ROWS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, TOWN_SCENE, WANIM, praySpots, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
+import { BENCHES, darknessAt, minuteOf, minutesFrom, type DayNight, CARPET_START, CARPET_Y, CROSSING, DAIS_FOOT, PRAY_HALL_COLS, PRAY_ROWS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, TOWN_SCENE, WANIM, praySpots, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
 
 /**
  * The life of the town: characters wander the ground band, stop for a while, sit on benches, pet
  * the cat, walk up to each other and chat for a while; a guest away for too long walks to the edge,
  * lies down to sleep and slowly fades out.
+ * Night falls on the town at the time set by the host: each character goes to bed at its own
+ * time after dusk and gets up at its own time around dawn, different every night, while a few
+ * night owls stay up until morning and sleep in instead.
  * When a guest changes their look on the phone, the character walks to the shop for it (clothes or
  * barber) and comes out in the new look. For the King's ceremony the camera moves over to the
  * throne room off the town's right edge: the King walks up the carpet to the throne, the others
@@ -65,6 +68,15 @@ const QUEUE_GAP = 36;
 const DOOR_FADE = 26;
 /** Time inside after the look changes: the TV shows it changing (the barber's cut, the curtain) */
 const CHANGE_MS = 3200;
+/** The light takes at least this long to go from day to night (a switch to always night in the admin fades in) */
+const DARK_FADE_S = 20;
+/** A night is counted from this long before dusk: everyone's bedtime and the owls' late morning fall within one */
+const NIGHT_LEAD_MIN = 240;
+/** Night owls go to bed within this after dawn, and sleep this long (minutes, a random time in each range) */
+const OWL_BED_MIN = 60;
+const OWL_SLEEP_MIN: [number, number] = [150, 270];
+/** Up in the morning: a stretch, arms up (characters whose clothes have the art for it) */
+const STRETCH_MS = 1800;
 
 type Doing =
   | { kind: 'idle'; until: number }
@@ -73,8 +85,8 @@ type Doing =
   | { kind: 'sit'; bench: number; until: number }
   | { kind: 'goPet' }
   | { kind: 'pet'; until: number }
-  | { kind: 'goSleep'; tx: number; ty: number }
-  | { kind: 'sleep' }
+  | { kind: 'goSleep'; tx: number; ty: number; night: boolean }
+  | { kind: 'sleep'; night: boolean }
   | { kind: 'cheer'; until: number }
   | { kind: 'goThrone'; onCarpet: boolean }
   | { kind: 'throne'; stage: 'stand' | 'hail' | 'seat' | 'sit' | 'rise' | 'cheer'; until: number; next?: number }
@@ -190,7 +202,7 @@ const PRIORITY = {
   activity: 1,
   /** A trip to a shop for the look on the phone */
   errand: 2,
-  /** Asleep while the guest is away */
+  /** Asleep while the guest is away, or for the night */
   rest: 3,
   /** The King's ceremony: everyone goes, the sleepers too; only a shop trip under way is finished first (it cannot be cut short) */
   ceremony: 4,
@@ -245,6 +257,45 @@ export interface TownOptions {
   /** A ceremony: how long the King holds court once seated, and how long everyone has to finish what they are doing and go (ms) */
   courtMs: number;
   graceMs: number;
+  /** Day and night, and the time now: minutes since 1970 on the local clock (the town follows the wall clock, not UTC) */
+  dayNight: DayNight;
+  localMinutes: number;
+  /** Characters go to bed at night: bedtimes spread over this many minutes around dusk, and this share are night owls (0..1) */
+  nightSleep: boolean;
+  bedtimeSpreadMin: number;
+  nightOwls: number;
+}
+
+/** A number in 0..1 from a text, always the same for the same text (FNV-1a) */
+function hash01(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return (h >>> 0) / 0x1_0000_0000;
+}
+
+/**
+ * Whether a character sleeps for the night right now. Each one has its own bedtime, from a little
+ * before dusk to the spread after it, and gets up around dawn, both different every night. Night
+ * owls (the same ones every night) stay up and go to bed after dawn, for a few hours. Always night:
+ * all but the owls sleep.
+ */
+export function asleepForTheNight(id: string, o: Pick<TownOptions, 'dayNight' | 'localMinutes' | 'nightSleep' | 'bedtimeSpreadMin' | 'nightOwls'>): boolean {
+  if (!o.nightSleep || o.dayNight.mode === 'day') return false;
+  const owl = hash01(`${id}:owl`) < o.nightOwls;
+  if (o.dayNight.mode === 'night') return !owl;
+  const dusk = minuteOf(o.dayNight.dusk);
+  const night = minutesFrom(dusk, minuteOf(o.dayNight.dawn));
+  // Which night it is, and how far into it (counted from its lead before dusk)
+  const since = o.localMinutes - dusk + NIGHT_LEAD_MIN;
+  const key = Math.floor(since / 1440);
+  const rel = since - key * 1440 - NIGHT_LEAD_MIN;
+  const a = hash01(`${id}:${key}:bed`);
+  const b = hash01(`${id}:${key}:wake`);
+  const spread = o.bedtimeSpreadMin;
+  const [bed, wake] = owl
+    ? [night + a * OWL_BED_MIN, night + OWL_SLEEP_MIN[0] + b * (OWL_SLEEP_MIN[1] - OWL_SLEEP_MIN[0])]
+    : [(a - 0.2) * spread, night + (b - 0.5) * spread * 0.6];
+  return rel >= bed && rel < wake;
 }
 
 export interface TownHooks {
@@ -366,6 +417,10 @@ export class TownSim {
   private ceremony: Ceremony | null = null;
   /** The camera: 0 on the town, 1 on the throne room. Where it moves from and to, from when on and for how long */
   private cam = { from: 0, to: 0, at: 0, ms: 1 };
+  /** How dark it is (0 day, 1 night), moving toward the clock's in DARK_FADE_S at the fastest (-1: not known yet) */
+  private dark = -1;
+  /** Characters asleep for the night (not the ones whose guest is away) */
+  private nightSleepers = 0;
 
   constructor(private hooks: TownHooks) {}
 
@@ -422,20 +477,25 @@ export class TownSim {
     this.last = now;
     this.king = o.king;
     this.stepCeremony(now, o);
+    const darkTarget = darknessAt(o.dayNight, ((o.localMinutes % 1440) + 1440) % 1440);
+    this.dark = this.dark < 0 ? darkTarget : this.dark + Math.max(-dt / DARK_FADE_S, Math.min(dt / DARK_FADE_S, darkTarget - this.dark));
 
     const seen = new Set<string>();
     for (const r of roster) {
       seen.add(r.id);
       let w = this.walkers.get(r.id);
-      const shouldSleep = !r.online && r.awayMs > o.sleepAfterMs;
+      const away = !r.online && r.awayMs > o.sleepAfterMs;
       const shouldFade = !r.online && r.awayMs > o.sleepAfterMs + o.fadeAfterMs;
       const errands = r.errands ?? [];
+      // Asleep for the night, unless the guest just picked a new look: up to go and get it, back to bed after
+      const night = !away && !errands.length && asleepForTheNight(r.id, o);
+      const shouldSleep = away || night;
       if (!w) {
         // Nobody sees a character that is not in the town: it takes its new look at once
         for (const p of errands) this.hooks.dress(r.id, p);
         // Faded away (or new): only come back when awake. New arrivals walk in from an edge (the
         // left one during a ceremony: the right one is the throne room then, in full view).
-        if (shouldSleep) continue;
+        if (away) continue;
         const from = this.ceremony || Math.random() < 0.5 ? -20 : TOWN.w + 20;
         const spot = randSpot();
         w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, noCheer: !!r.noCheer, errands: [], wrapped: null, anchor: { x: from, y: spot.y, at: now }, through: 0, turn: 0 };
@@ -465,12 +525,16 @@ export class TownSim {
         const right = w.x >= TOWN.w / 2;
         let ty = rand(TOWN_AREA.y0 + 40, TOWN_AREA.y1 - 20);
         if (right && Math.abs(ty - CARPET_Y) < 70) ty = CARPET_Y + (ty < CARPET_Y ? -1 : 1) * rand(70, 110);
-        w.doing = { kind: 'goSleep', tx: right ? rand(TOWN.w - 90, TOWN.w - 30) : rand(30, 90), ty };
+        w.doing = { kind: 'goSleep', tx: right ? rand(TOWN.w - 90, TOWN.w - 30) : rand(30, 90), ty, night };
       }
+      // Asleep for the night when the guest leaves (or the other way around): stays in bed, for the new reason
+      if (shouldSleep && (w.doing.kind === 'sleep' || w.doing.kind === 'goSleep')) w.doing.night = night;
       if (!shouldSleep && (w.doing.kind === 'sleep' || w.doing.kind === 'goSleep')) {
+        // Up in the morning: a stretch first, for one that was lying down for the night
+        const stretch = w.doing.kind === 'sleep' && w.doing.night && !w.noCheer;
         w.fading = false;
         w.alpha = 1;
-        w.doing = { kind: 'idle', until: now + 600 };
+        w.doing = stretch ? { kind: 'cheer', until: now + STRETCH_MS } : { kind: 'idle', until: now + 600 };
       }
       w.fading = shouldFade && (w.doing.kind === 'sleep' || w.doing.kind === 'goSleep');
     }
@@ -490,6 +554,8 @@ export class TownSim {
     }
     this.separate();
     this.stepCat(now, dt);
+    this.nightSleepers = 0;
+    for (const w of this.walkers.values()) if ((w.doing.kind === 'sleep' || w.doing.kind === 'goSleep') && w.doing.night) this.nightSleepers++;
 
     const ids: string[] = [];
     const a: number[] = [];
@@ -511,6 +577,7 @@ export class TownSim {
       a,
       cat: { x: Math.round(this.cat.x), y: Math.round(this.cat.y), dir: this.cat.dir, walk: this.cat.doing.kind === 'wander' && !someonePets, hearts: someonePets },
       cam: Math.round(this.camAt(now) * 1000) / 1000,
+      dark: Math.round(Math.max(0, this.dark) * 1000) / 1000,
     };
   }
 
@@ -753,7 +820,7 @@ export class TownSim {
         if (now >= d.until) w.doing = { kind: 'idle', until: now + rand(500, 2000) };
         break;
       case 'goSleep':
-        if (this.walkTo(w, d.tx, d.ty, WALK_UPS, dt)) w.doing = { kind: 'sleep' };
+        if (this.walkTo(w, d.tx, d.ty, WALK_UPS, dt)) w.doing = { kind: 'sleep', night: d.night };
         break;
       case 'cheer':
         if (now >= d.until) w.doing = { kind: 'idle', until: now + rand(500, 1500) };
@@ -944,6 +1011,16 @@ export class TownSim {
   /** Where the ceremony is at (null: none is on) */
   get ceremonyPhase(): Ceremony['phase'] | null {
     return this.ceremony?.phase ?? null;
+  }
+
+  /** How dark the town is now (0 day, 1 night) */
+  get darkness(): number {
+    return Math.max(0, this.dark);
+  }
+
+  /** How many characters sleep for the night right now */
+  get sleepingForTheNight(): number {
+    return this.nightSleepers;
   }
 
   /** This guest's character is in the town (asleep or not): the King must be, for a ceremony to start on its own */

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type DayNightMode, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, notForTheKing, starterPieces, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -75,6 +75,17 @@ interface WorldSettings {
   ceremonySec: number;
   /** When a ceremony starts, everyone has this long to finish what they are doing and go (seconds) */
   ceremonyGraceSec: number;
+  /** The town's time of day: following the clock (night from dusk to dawn, "HH:MM"), or always day, or always night */
+  dayNight: DayNightMode;
+  dusk: string;
+  dawn: string;
+  /** The light changes over this long around dusk and dawn (minutes) */
+  twilightMin: number;
+  /** Characters go to bed at night, each at its own time within this spread around dusk (minutes) */
+  nightSleep: boolean;
+  bedtimeSpreadMin: number;
+  /** The share of characters who stay up all night and sleep in the morning (percent) */
+  nightOwlPct: number;
 }
 
 /** A time of day as "HH:MM" (24 hours), or null when it is not one */
@@ -221,6 +232,13 @@ export default defineModule<WorldSettings>({
     ceremonyTime: '21:00',
     ceremonySec: 60,
     ceremonyGraceSec: 20,
+    dayNight: 'clock',
+    dusk: '21:30',
+    dawn: '07:00',
+    twilightMin: 90,
+    nightSleep: true,
+    bedtimeSpreadMin: 180,
+    nightOwlPct: 20,
   },
 
   setup(ctx) {
@@ -575,6 +593,15 @@ export default defineModule<WorldSettings>({
           ceremonyPhase: sim.ceremonyPhase,
           ceremonyNext: s.ceremony ? ceremonyDue(Date.now()) : null,
           ceremonyHold: s.ceremony ? ceremonyHold() : null,
+          dayNight: s.dayNight,
+          dusk: s.dusk,
+          dawn: s.dawn,
+          twilightMin: s.twilightMin,
+          nightSleep: s.nightSleep,
+          bedtimeSpreadMin: s.bedtimeSpreadMin,
+          nightOwlPct: s.nightOwlPct,
+          darkNow: Math.round(sim.darkness * 100) / 100,
+          nightSleepers: sim.sleepingForTheNight,
           kingSales: king.sales,
           wallets: guests.map((g) => ({ id: g.id, name: g.name, color: g.color, balance: wallets[g.id] ?? 0 })),
         };
@@ -923,6 +950,7 @@ export default defineModule<WorldSettings>({
 
     /** The ceremony's phase at the last frame: the admin page hears of every change */
     let ceremonyPhase = sim.ceremonyPhase;
+    let nightShown = '';
 
     setInterval(() => {
       if (!ctx.enabled()) return;
@@ -955,10 +983,18 @@ export default defineModule<WorldSettings>({
         king: kingId(),
         courtMs: s.ceremonySec * 1000,
         graceMs: s.ceremonyGraceSec * 1000,
+        dayNight: { mode: s.dayNight, dusk: s.dusk, dawn: s.dawn, twilightMin: s.twilightMin },
+        localMinutes: (now - new Date(now).getTimezoneOffset() * 60_000) / 60_000,
+        nightSleep: s.nightSleep,
+        bedtimeSpreadMin: s.bedtimeSpreadMin,
+        nightOwls: s.nightOwlPct / 100,
       });
       ctx.emit('tv', 'frame', frame);
-      if (sim.ceremonyPhase !== ceremonyPhase) {
+      // The admin page shows how dark it is and who sleeps for the night: sent again when either changes
+      const night = `${Math.round(sim.darkness * 20)}:${sim.sleepingForTheNight}`;
+      if (sim.ceremonyPhase !== ceremonyPhase || night !== nightShown) {
         ceremonyPhase = sim.ceremonyPhase;
+        nightShown = night;
         ctx.publish();
       }
     }, 1000 / FRAME_HZ);
@@ -1098,6 +1134,13 @@ export default defineModule<WorldSettings>({
         ceremonyTime: timeOfDay(args.ceremonyTime) ?? s.ceremonyTime,
         ceremonySec: Math.max(10, secs(args.ceremonySec, s.ceremonySec, 600)),
         ceremonyGraceSec: secs(args.ceremonyGraceSec, s.ceremonyGraceSec, 120),
+        dayNight: args.dayNight === 'clock' || args.dayNight === 'day' || args.dayNight === 'night' ? args.dayNight : s.dayNight,
+        dusk: timeOfDay(args.dusk) ?? s.dusk,
+        dawn: timeOfDay(args.dawn) ?? s.dawn,
+        twilightMin: Math.max(0, Math.min(240, Math.round(num(args.twilightMin, s.twilightMin)))),
+        nightSleep: typeof args.nightSleep === 'boolean' ? args.nightSleep : s.nightSleep,
+        bedtimeSpreadMin: Math.max(0, Math.min(360, Math.round(num(args.bedtimeSpreadMin, s.bedtimeSpreadMin)))),
+        nightOwlPct: Math.max(0, Math.min(100, Math.round(num(args.nightOwlPct, s.nightOwlPct)))),
       });
       ctx.publish();
     });

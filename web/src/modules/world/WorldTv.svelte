@@ -2,7 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-  import { CROSSING, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { CROSSING, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { SQUARE_STREET, loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
@@ -101,14 +101,27 @@
     };
   });
 
-  /** How deep into the night it is: 0 in the day, 1 at night */
-  function darkness(): number {
-    const h = new Date().getHours() + new Date().getMinutes() / 60;
-    if (h < 5.5) return 1;
-    if (h < 8) return 1 - (h - 5.5) / 2.5;
-    if (h < 17) return 0;
-    if (h < 21) return (h - 17) / 4;
-    return 1;
+  /** A lamp post at night: a warm glow around its light, and a pool of it on the ground */
+  function drawLampLight(g: CanvasRenderingContext2D, x: number, y: number, dark: number, now: number): void {
+    const ly = y - 82;
+    const glow = g.createRadialGradient(x, ly, 0, x, ly, 60);
+    glow.addColorStop(0, `rgba(255,214,130,${(0.34 + 0.04 * Math.sin(now / 700 + x)) * dark})`);
+    glow.addColorStop(1, 'rgba(255,214,130,0)');
+    g.fillStyle = glow;
+    g.beginPath();
+    g.arc(x, ly, 60, 0, Math.PI * 2);
+    g.fill();
+    g.save();
+    g.translate(x, y);
+    g.scale(1, 0.4);
+    const pool = g.createRadialGradient(0, 0, 0, 0, 0, 80);
+    pool.addColorStop(0, `rgba(255,205,130,${0.16 * dark})`);
+    pool.addColorStop(1, 'rgba(255,205,130,0)');
+    g.fillStyle = pool;
+    g.beginPath();
+    g.arc(0, 0, 80, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
   }
 
   /** A name over a head, like a game nametag; the King's is gold, with a crown before the name */
@@ -478,13 +491,16 @@
     }
     pigeons.drawAir(g, env);
 
-    // The evening lies over the square (the lamps keep their glow)
-    const dark = darkness();
+    // The evening lies over the square (the lamps keep their glow). The server keeps the time of
+    // day the host set, and sends how dark it is with every frame.
+    const dark = f0 ? (f0.dark ?? 0) + (f1 ? ((f1.dark ?? 0) - (f0.dark ?? 0)) * mix : 0) : 0;
     if (dark > 0.02) {
-      g.fillStyle = `rgba(14,16,42,${0.34 * dark})`;
+      g.fillStyle = `rgba(14,16,42,${0.44 * dark})`;
       g.fillRect(0, 0, TOWN.w + (away ? HALL_PAN : 0), TOWN.h);
       // The shops stay lit inside
       for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
+      // The lamp posts light up through the veil, with a pool of light on the pavement under them
+      for (const l of TOWN_SCENE.lamps) drawLampLight(g, l.x, l.y, dark, now);
     }
     // The throne room has its own light: the windows by day, its fires at any time
     // The throne glows from the moment the King opens the court, until he comes down from the dais

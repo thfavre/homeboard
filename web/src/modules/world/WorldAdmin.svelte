@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Crown } from '@lucide/svelte';
+  import { Crown, Moon, Sun, Sunrise } from '@lucide/svelte';
   import { attempt, hb, rpc, serverNow } from '$lib/client.svelte.ts';
   import { day } from '$lib/time.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -44,19 +44,28 @@
     if (Number.isFinite(n) && n >= 1) setOption('ceremonyEveryDays', n);
   }
 
-  /** Said under the field when what was typed is not a time of day */
-  let timeError = $state('');
+  /** Said under a field when what was typed is not a time of day (by the setting it is for) */
+  let timeErrors = $state<Record<string, string>>({});
 
-  function setTime(input: HTMLInputElement) {
+  function setTime(key: 'ceremonyTime' | 'dusk' | 'dawn', input: HTMLInputElement) {
     const m = /^(\d{1,2})[:.h ]?(\d{2})$/.exec(input.value.trim());
     if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) {
-      timeError = 'Write the time as hours and minutes, like 21:00';
+      timeErrors[key] = `Write the time as hours and minutes, like ${input.placeholder}`;
       return;
     }
-    timeError = '';
+    timeErrors[key] = '';
     input.value = `${m[1].padStart(2, '0')}:${m[2]}`;
-    setOption('ceremonyTime', input.value);
+    setOption(key, input.value);
   }
+
+  /** How it looks in the town right now */
+  const nightStatus = $derived.by(() => {
+    if (!mod) return '';
+    const dark = mod.darkNow ?? 0;
+    const light = dark >= 0.95 ? 'Night' : dark <= 0.05 ? 'Day' : dark >= 0.5 ? 'Nightfall' : 'Daybreak';
+    const sleepers = mod.nightSleepers ?? 0;
+    return `${light} in the town${mod.dayNight === 'clock' ? '' : ' (always)'}. ${sleepers === 0 ? 'Nobody sleeps' : sleepers === 1 ? 'One character sleeps' : `${sleepers} characters sleep`} for the night.`;
+  });
 
   function setSeconds(key: string, value: string) {
     const n = Number(value);
@@ -144,6 +153,67 @@
       <input class="input" type="number" min="1" max="480" value={mod.fadeAfterMin} onchange={(e) => setMinutes('fadeAfterMin', e.currentTarget.value)} />
     </label>
     <p class="faint small">A sleeper gone for this much longer fades away, so the town never clutters up.</p>
+  </Section>
+
+  <Section title="Day and night">
+    <label class="field">
+      <span>Time of day</span>
+      <select class="input" value={mod.dayNight ?? 'clock'} onchange={(e) => setOption('dayNight', e.currentTarget.value)}>
+        <option value="clock">Follow the clock</option>
+        <option value="day">Always day</option>
+        <option value="night">Always night</option>
+      </select>
+    </label>
+    <div class="pair">
+      <label class="field">
+        <span>Night falls at (hours:minutes)</span>
+        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="21:30" value={mod.dusk} onchange={(e) => setTime('dusk', e.currentTarget)} />
+      </label>
+      <label class="field">
+        <span>Day comes back at</span>
+        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="07:00" value={mod.dawn} onchange={(e) => setTime('dawn', e.currentTarget)} />
+      </label>
+    </div>
+    {#if timeErrors.dusk}<p class="error small">{timeErrors.dusk}</p>{/if}
+    {#if timeErrors.dawn}<p class="error small">{timeErrors.dawn}</p>{/if}
+    <label class="field">
+      <span>Twilight (minutes)</span>
+      <input class="input" type="number" min="0" max="240" value={mod.twilightMin} onchange={(e) => setAmount('twilightMin', e.currentTarget.value)} />
+    </label>
+    <p class="faint small">
+      The light fades over this long, half before and half after each time above. At night the square darkens, the shop windows and the lamp posts
+      light up. The town follows this computer's clock.
+    </p>
+    <div class="line">
+      <div>
+        <strong>Bedtime</strong>
+        <p class="faint small">
+          At night characters walk to the edge of the town and lie down, each at its own time, and get up around daybreak with a stretch. Bedtimes change
+          from one night to the next. Night owls stay up all night and sleep in the morning instead. A guest who picks a new look gets up to fetch it, and
+          everyone wakes for the King's ceremony.
+        </p>
+      </div>
+      <Toggle checked={!!mod.nightSleep} label="Bedtime" onchange={(v) => setOption('nightSleep', v)} />
+    </div>
+    <div class="pair">
+      <label class="field">
+        <span>Bedtimes spread over (minutes)</span>
+        <input class="input" type="number" min="0" max="360" value={mod.bedtimeSpreadMin} onchange={(e) => setAmount('bedtimeSpreadMin', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>Night owls (percent)</span>
+        <input class="input" type="number" min="0" max="100" value={mod.nightOwlPct} onchange={(e) => setAmount('nightOwlPct', e.currentTarget.value)} />
+      </label>
+    </div>
+    <p class="faint small">
+      The first go to bed a little before night falls, the last this long after. Always night: everyone but the night owls sleeps.
+    </p>
+    <div class="current">
+      <span class="status night">
+        {#if (mod.darkNow ?? 0) >= 0.95}<Moon size={16} />{:else if (mod.darkNow ?? 0) <= 0.05}<Sun size={16} />{:else}<Sunrise size={16} />{/if}
+        {nightStatus}
+      </span>
+    </div>
   </Section>
 
   <Section title="Town life">
@@ -250,10 +320,10 @@
       </label>
       <label class="field">
         <span>At (hours:minutes)</span>
-        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="21:00" value={mod.ceremonyTime} onchange={(e) => setTime(e.currentTarget)} />
+        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="21:00" value={mod.ceremonyTime} onchange={(e) => setTime('ceremonyTime', e.currentTarget)} />
       </label>
     </div>
-    {#if timeError}<p class="error small">{timeError}</p>{/if}
+    {#if timeErrors.ceremonyTime}<p class="error small">{timeErrors.ceremonyTime}</p>{/if}
     <div class="pair">
       <label class="field">
         <span>The King holds court for (seconds)</span>
@@ -418,6 +488,11 @@
   .status {
     flex: 1;
     font-size: 0.9rem;
+  }
+  .status.night {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
   }
   .wallets {
     display: flex;
