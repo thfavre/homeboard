@@ -16,12 +16,14 @@ export const TOWN_SCENE = SPY_SCENE;
 export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
 /**
  * The town hall in the top left corner of the square (drawn by the TV, web/src/modules/world/townHall.ts):
- * its left edge, width and height in sprite pixels, from the top of the screen down past the sidewalk
- * onto the square. It stands over the first two houses of the row, as wide as both, so none of them shows.
+ * its left edge, top edge, width and height in sprite pixels, down past the sidewalk onto the square.
+ * It stands over the first two houses of the row, as wide as both, so none of them shows. Its top
+ * lies one tile of the square (32 sprite pixels) above the screen: the TV draws the whole building,
+ * so a screen showing more above the town (another ratio) will show its roof whole.
  */
 export const TOWN_HALL = (() => {
   const [, second] = houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / SPRITE_SCALE));
-  return { x: 0, w: second.x + second.w, h: 254 };
+  return { x: 0, y: -32, w: second.x + second.w, h: 254 };
 })();
 
 /**
@@ -36,10 +38,11 @@ function townHallFootprint(): { x: number; y: number; rx: number; ry: number }[]
   const right = (TOWN_HALL.x + TOWN_HALL.w) * S;
   const mid = (TOWN_HALL.x + TOWN_HALL.w / 2) * S;
   const ry = 70;
-  const steps = TOWN_HALL.h * S + 3;
+  const bottom = TOWN_HALL.y + TOWN_HALL.h;
+  const steps = bottom * S + 3;
   const y = steps - ry;
   // How wide an ellipse is at the bottom of the plinth (14 sprite pixels above the steps' bottom), for its width there
-  const plinth = Math.sqrt(1 - (((TOWN_HALL.h - 14) * S - y) / ry) ** 2);
+  const plinth = Math.sqrt(1 - (((bottom - 14) * S - y) / ry) ** 2);
   const side = (x: number, to: number) => ({ x, y, rx: Math.abs(to - x) / plinth, ry });
   return [side(TOWN_AREA.x0 + 100, TOWN_AREA.x0 + 30), { x: mid, y, rx: 140, ry }, side((mid + right) / 2 - 10, right)];
 }

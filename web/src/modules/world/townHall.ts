@@ -21,8 +21,9 @@ import { TOWN_HALL } from '$shared/world.ts';
  */
 
 const S = SPRITE_SCALE;
-/** Where it stands and its size (sprite pixels) */
+/** Where it stands (its top above the screen) and its size (sprite pixels) */
 const X0 = TOWN_HALL.x;
+const Y0 = TOWN_HALL.y;
 const W = TOWN_HALL.w;
 const H = TOWN_HALL.h;
 /** The middle, where the tower stands */
@@ -541,15 +542,15 @@ let built: HTMLCanvasElement | null = null;
 /** Draw the building over the square's ground and its row of houses (world units), with its shadow on the ground to the right */
 export function drawTownHall(g: CanvasRenderingContext2D): void {
   g.fillStyle = 'rgba(10,10,25,0.28)';
-  g.fillRect((X0 + W) * S, 4 * S, 6 * S, (PLINTH + 6) * S);
-  g.drawImage((built ??= build()), X0 * S, 0, W * S, H * S);
+  g.fillRect((X0 + W) * S, (Y0 + 4) * S, 6 * S, (PLINTH + 6) * S);
+  g.drawImage((built ??= build()), X0 * S, Y0 * S, W * S, H * S);
 }
 
 /** The building's left and right edges (world units): the sidewalk's plants and benches stay clear of it */
 export const TOWN_HALL_SPAN = { x0: X0 * S, x1: (X0 + W) * S };
 
 /** World position of a sprite pixel of the building */
-const world = (x: number, y: number) => ({ x: (X0 + x) * S, y: y * S });
+const world = (x: number, y: number) => ({ x: (X0 + x) * S, y: (Y0 + y) * S });
 
 /** A warm glow on a window's glass at night, warmer at the bottom where the lamps inside are, and a soft halo on the stone round it */
 function glowWindow(g: CanvasRenderingContext2D, dark: number, x: number, y: number, w: number, h: number, arched: boolean): void {
