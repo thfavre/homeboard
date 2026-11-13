@@ -332,6 +332,7 @@
     townNow.lamps = f0?.lamps ?? 0;
     townNow.party = party;
     townNow.fire = !!f0?.fire;
+    townNow.parasols = f0?.parasols ?? 0;
     const inHall = away && hall ? hallStanding : [];
     if (away && hall) {
       drawRiver(g, hall, now);

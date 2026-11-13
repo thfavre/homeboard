@@ -99,6 +99,15 @@ const FIRE_NIGHTS = 2 / 3;
 const FIRE_DAYS = 0.15;
 const DAY_FIRE = { from: 9 * 60, to: 16 * 60, lasts: 120 };
 const KINDLE_MS = 3200;
+/**
+ * The cafe's parasols: opened this many town minutes after dawn and folded this many after dusk
+ * (a random time in each range, every day and table its own), by someone standing this far in front
+ * of the table, for this long; nobody free to do it this long, it goes by itself
+ */
+const PARASOL_DAY = { open: [30, 180] as [number, number], close: [-90, 45] as [number, number] };
+const PARASOL_REACH = 22;
+const PARASOL_MS = 1800;
+const PARASOL_WAIT_MS = 25_000;
 const KINDLE_WAIT_MS = 20_000;
 /** Where the one lighting the fire kneels: left of the pit, facing it */
 const KINDLE_AT = { x: CAMPFIRE.x - 34, y: CAMPFIRE.y + 4 };
@@ -200,7 +209,8 @@ type Doing =
   | Fishing
   | Lamps
   | Party
-  | { kind: 'kindle'; at: number };
+  | { kind: 'kindle'; at: number }
+  | { kind: 'parasol'; table: number; open: boolean; at: number };
 
 /** The seats besides the benches: the fountain's rim, the cafe's chairs, the logs by the campfire */
 type SeatAt = 'fountain' | 'cafe' | 'fire';
@@ -627,6 +637,9 @@ export class TownSim {
   /** The campfire burns; since when it should and is not lit yet (0: nothing waits) */
   private fireLit = false;
   private fireWait = 0;
+  /** The cafe's parasols: open or folded, and since when one waits for someone to do it (0: none waits) */
+  private parasolOpen = CAFE.tables.map(() => false);
+  private parasolWait = CAFE.tables.map(() => 0);
   /** A party the host started: until when on the town's clock (minutes), and since when (its name) */
   private partyUntil = 0;
   private partyFrom = 0;
@@ -705,6 +718,8 @@ export class TownSim {
     // The lamplighter hands the round over to someone else (the lamps left wait for the next one)
     lamps: { priority: PRIORITY.activity, left: () => 60_000, wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
     // Lighting the fire is dropped for a call: someone else lights it later
+    // Opening or folding a parasol is dropped for a call: someone else does it later
+    parasol: { priority: PRIORITY.activity, left: (d, _w, now) => (d.at ? d.at + PARASOL_MS - now : 30_000), wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
     kindle: { priority: PRIORITY.activity, left: (d, _w, now) => (d.at ? d.at + KINDLE_MS - now : 30_000), wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
     // The party: off on the way, a little sooner out of the cafe or away from the terrace
     party: {
@@ -827,6 +842,7 @@ export class TownSim {
     }
     this.stepLamps(now, o);
     this.stepFire(now, o);
+    this.stepParasols(now, o);
     this.nightSleepers = 0;
     for (const w of this.walkers.values()) if ((w.doing.kind === 'sleep' || w.doing.kind === 'goSleep') && w.doing.night) this.nightSleepers++;
 
@@ -859,6 +875,7 @@ export class TownSim {
       lamps: this.lampLit.reduce((bits, lit, i) => bits | (lit ? 1 << i : 0), 0),
       party: !!this.partyNow,
       fire: this.fireLit,
+      parasols: this.parasolOpen.reduce((bits, open, i) => bits | (open ? 1 << i : 0), 0),
     };
   }
 
@@ -887,6 +904,9 @@ export class TownSim {
         return d.at ? WANIM.light : WANIM.walk;
       case 'kindle':
         return d.at ? WANIM.kindle : WANIM.walk;
+      case 'parasol':
+        // Reaching up to the parasol's crank, arms up
+        return d.at ? WANIM.cheer : WANIM.walk;
       case 'party':
         return d.phase === 'stand' ? WANIM.drink : this.partyWalking(w, d) ? WANIM.walk : WANIM.idle;
       // The King before the throne: standing until all are there, his hands up to open the court,
@@ -1172,6 +1192,22 @@ export class TownSim {
         }
         if (now >= d.until) w.doing = idle(now, 600, 1800);
         break;
+      case 'parasol': {
+        const t = CAFE.tables[d.table];
+        // Done already (it went by itself), or not wanted that way anymore: never mind
+        if (this.parasolOpen[d.table] === d.open || this.parasolWanted(d.table, o) !== d.open) {
+          w.doing = idle(now, 400, 1200);
+        } else if (!d.at) {
+          if (this.walkTo(w, t.x, t.y + PARASOL_REACH, WALK_UPS, dt)) {
+            Object.assign(w, { x: t.x, y: t.y + PARASOL_REACH, dir: 2 });
+            d.at = now;
+          }
+        } else if (now - d.at >= PARASOL_MS) {
+          this.parasolOpen[d.table] = d.open;
+          w.doing = idle(now, 600, 1500);
+        }
+        break;
+      }
       case 'kindle':
         // Lit already (it caught on its own), or not wanted anymore: never mind
         if (this.fireLit || !this.fireWanted(o)) {
@@ -1686,6 +1722,57 @@ export class TownSim {
     }
   }
 
+  // ------------------------------------------------------------ the cafe's parasols
+
+  /**
+   * A parasol should be open now: from some time in the morning to some time around nightfall,
+   * different every day and for each table (see PARASOL_DAY), and all through a party
+   */
+  private parasolWanted(table: number, o: TownOptions): boolean {
+    if (this.partyNow) return true;
+    if (!o.dayNight.on) return true;
+    const m = o.localMinutes;
+    const day = Math.floor(m / 1440);
+    const t = m - day * 1440;
+    const dawn = minuteOf(o.dayNight.dawn);
+    const dusk = minuteOf(o.dayNight.dusk);
+    const open = dawn + PARASOL_DAY.open[0] + hash01(`parasol:${table}:${day}:up`) * (PARASOL_DAY.open[1] - PARASOL_DAY.open[0]);
+    const close = dusk + PARASOL_DAY.close[0] + hash01(`parasol:${table}:${day}:down`) * (PARASOL_DAY.close[1] - PARASOL_DAY.close[0]);
+    return close > open ? t >= open && t < close : t >= open || t < close;
+  }
+
+  /**
+   * The cafe's parasols: when one should be open or folded and is not, someone free (the one
+   * nearest) goes and does it; nobody free for a while (or during a ceremony), it goes by itself
+   */
+  private stepParasols(now: number, o: TownOptions): void {
+    const all = [...this.walkers.values()];
+    CAFE.tables.forEach((t, i) => {
+      const want = this.parasolWanted(i, o);
+      if (this.parasolOpen[i] === want) {
+        this.parasolWait[i] = 0;
+        return;
+      }
+      if (all.some((w) => w.doing.kind === 'parasol' && w.doing.table === i)) return;
+      this.parasolWait[i] ||= now;
+      if (this.ceremony || now - this.parasolWait[i] >= PARASOL_WAIT_MS) {
+        this.parasolOpen[i] = want;
+        return;
+      }
+      let best: Walker | null = null;
+      let dist = Infinity;
+      for (const w of all) {
+        const free = (w.doing.kind === 'idle' || w.doing.kind === 'wander') && !w.errands.length && !w.fading && !w.noCheer && w.x >= TOWN_AREA.x0 && w.x <= TOWN_AREA.x1;
+        const d = Math.hypot(w.x - t.x, w.y - t.y);
+        if (free && d < dist) [best, dist] = [w, d];
+      }
+      if (best) {
+        best.doing = { kind: 'parasol', table: i, open: want, at: 0 };
+        best.wrapped = null;
+      }
+    });
+  }
+
   // ------------------------------------------------------------ the campfire
 
   /**
@@ -2020,6 +2107,7 @@ export class TownSim {
         w.doing.kind !== 'fish' &&
         !(w.doing.kind === 'lamps' && w.doing.at) &&
         !(w.doing.kind === 'kindle' && w.doing.at) &&
+        !(w.doing.kind === 'parasol' && w.doing.at) &&
         !(w.doing.kind === 'party' && w.doing.phase !== 'go' && w.doing.phase !== 'terrace'),
     );
     for (let i = 0; i < list.length; i++) {

@@ -101,12 +101,14 @@ const stats = { chats: 0, ceremonies: 0, visits: 0, maxKindMs: {} as Record<stri
 const LIMIT: Record<string, number> = {
   idle: 15_000, wander: 60_000, goBench: 60_000, sit: 30_000, goPet: 45_000, pet: 10_000, goChat: 20_000, chat: 40_000,
   cheer: 4000, goSleep: 90_000, visit: 120_000, goThrone: 120_000, descend: 60_000, goHall: 120_000, goPray: 120_000,
-  goSeat: 60_000, seated: 60_000, goRead: 60_000, read: 10_000, goFish: 60_000, fish: 50_000, lamps: 150_000, party: 90_000, kindle: 60_000,
+  goSeat: 60_000, seated: 60_000, goRead: 60_000, read: 10_000, goFish: 60_000, fish: 50_000, lamps: 150_000, party: 90_000, kindle: 60_000, parasol: 60_000,
 };
 
 /** How often each activity was started, the lamps lit at 23:00 and at 10:00 each day, the most dancing at the party at once */
 const started: Record<string, number> = {};
 const lampsAt: string[] = [];
+/** The parasols open at 9:00, 13:00 and 23:00 (a party keeps them open), each day */
+const parasolsAt: string[] = [];
 /** Nights the campfire burned at 1:00, and town days it burned at some point by day */
 let fireNights = 0;
 let nights = 0;
@@ -162,6 +164,7 @@ while (clock < end) {
   const lit = (bits = frame.lamps ?? 0) => bits.toString(2).split('1').length - 1;
   if (before < 1380 && minute >= 1380) lampsAt.push(`23:00 ${lit()}`);
   if (before < 600 && minute >= 600) lampsAt.push(`10:00 ${lit()}`);
+  for (const [at, label] of [[540, '9:00'], [780, '13:00'], [1380, '23:00']] as const) if (before < at && minute >= at) parasolsAt.push(`${label} ${lit(frame.parasols ?? 0)}${frame.party ? ' (party)' : ''}`);
   if (before < 60 && minute >= 60) {
     nights++;
     if (frame.fire) fireNights++;
@@ -275,6 +278,7 @@ console.log('started:', started);
 console.log(`campfire burning at 1:00 on ${fireNights} of ${nights} nights, lit by day on ${dayFires.size} days`);
 console.log(`at the party: ${atParty.join(', ') || '-'}`);
 console.log(`fish caught: ${fishCaught} in ${started.fish ?? 0} fishing trips`);
+console.log(`parasols open: ${parasolsAt.join(', ')}`);
 console.log(`lamps lit: ${lampsAt.join(', ')}; most dancing at once: ${dancersMax}`);
 console.log('longest per activity:', Object.fromEntries(Object.entries(stats.maxKindMs).map(([k, v]) => [k, sec(v)])));
 if (!problems.size) console.log('no problems');

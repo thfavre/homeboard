@@ -503,6 +503,8 @@ export interface TownFrame {
   party?: boolean;
   /** The campfire burns */
   fire?: boolean;
+  /** The cafe's parasols that are open, one bit each in the order of CAFE.tables */
+  parasols?: number;
 }
 
 // ------------------------------------------------------------ the cafe's party night

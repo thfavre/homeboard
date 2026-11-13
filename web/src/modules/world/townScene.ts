@@ -14,7 +14,7 @@ type G = CanvasRenderingContext2D;
 const S = SPRITE_SCALE;
 
 /** What the props need to know of the town right now (set by the TV every frame) */
-export const townNow = { dark: 0, lamps: 0, party: false, fire: false };
+export const townNow = { dark: 0, lamps: 0, party: false, fire: false, parasols: 0 };
 
 function canvas(w: number, h: number): [HTMLCanvasElement, G] {
   const c = document.createElement('canvas');
@@ -285,7 +285,22 @@ export function drawCup(g: G, x: number, y: number, dir: WDir, now: number, phas
   }
 }
 
-function cafeTable(table: HTMLCanvasElement, chair: HTMLCanvasElement, parasol: HTMLCanvasElement, furled: HTMLCanvasElement, x: number, y: number): Prop[] {
+/** When each parasol last opened or folded (TV time), to show it opening and folding */
+const parasolSwitch: { open: boolean; at: number }[] = [];
+
+/** How far a parasol is open now, 0 (folded) to 1: it unfolds and folds over a moment */
+function parasolLevel(i: number, now: number): number {
+  const s = (parasolSwitch[i] ??= { open: false, at: -Infinity });
+  const open = !!(townNow.parasols & (1 << i));
+  if (open !== s.open) {
+    s.open = open;
+    s.at = now;
+  }
+  const k = Math.min(1, (now - s.at) / 700);
+  return open ? k : 1 - k;
+}
+
+function cafeTable(table: HTMLCanvasElement, chair: HTMLCanvasElement, parasol: HTMLCanvasElement, furled: HTMLCanvasElement, x: number, y: number, i: number): Prop[] {
   return [
     {
       y,
@@ -303,11 +318,20 @@ function cafeTable(table: HTMLCanvasElement, chair: HTMLCanvasElement, parasol: 
       },
     },
     {
-      // The canopy over the table, over the heads of who sits there; furled at night, open again for a party
+      // The canopy over the table, over the heads of who sits there: opened in the morning and folded
+      // around nightfall by someone (see the sim), unfolding and folding over a moment
       y: y + 8,
       draw(g, now) {
-        const open = townNow.dark < 0.5 || townNow.party;
-        stand(g, open ? parasol : furled, x, y - (open ? 50 : 30) * S);
+        const level = parasolLevel(i, now);
+        const open = level >= 1;
+        if (level <= 0) stand(g, furled, x, y - 30 * S);
+        else if (open) stand(g, parasol, x, y - 50 * S);
+        else {
+          // Half way: the canopy narrow and high, spreading as it opens (or closing up)
+          const w = parasol.width * S * (0.2 + 0.8 * level);
+          const h = parasol.height * S * (0.6 + 0.4 * level);
+          g.drawImage(parasol, Math.round(x - w / 2), Math.round(y - 50 * S - h - (1 - level) * 6 * S), Math.round(w), Math.round(h));
+        }
         if (!open || !townNow.party || townNow.dark < 0.2) return;
         // On a party night: a string of little colored lights along its edge, twinkling
         const colors = ['#ff6a6a', '#ffd36a', '#6affb0', '#6ab8ff', '#e07aff'];
@@ -556,9 +580,9 @@ export function townProps(env: Env, keep: (x: number) => boolean): Prop[] {
   const chair = buildChair();
   const parasol = buildParasol(true);
   const furled = buildParasol(false);
-  for (const t of CAFE.tables) out.push(...cafeTable(table, chair, parasol, furled, t.x, t.y));
+  CAFE.tables.forEach((t, i) => out.push(...cafeTable(table, chair, parasol, furled, t.x, t.y, i)));
   const board = buildChalkboard();
-  out.push({ y: 170, draw: (g) => stand(g, board, CAFE.door.x - 48, 171) });
+  out.push({ y: 164, draw: (g) => stand(g, board, CAFE.door.x - 58, 165) });
   out.push(...campfire());
   return out;
 }
