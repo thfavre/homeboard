@@ -102,6 +102,8 @@ interface WorldSettings {
   /** The cafe throws a party every so many town days, from nightfall for so many town hours; this share of the town stays up for it (percent) */
   party: boolean;
   partyEveryDays: number;
+  /** And on any other night, by this chance (percent) */
+  partyChancePct: number;
   partyHours: number;
   partyGoersPct: number;
 }
@@ -270,6 +272,7 @@ export default defineModule<WorldSettings>({
     lamplighter: true,
     party: true,
     partyEveryDays: 7,
+    partyChancePct: 20,
     partyHours: 7,
     partyGoersPct: 70,
   },
@@ -562,7 +565,7 @@ export default defineModule<WorldSettings>({
       if (!s.party || !s.dayCycle) return null;
       const t = townNow();
       const m = townMinutes(t, townClock());
-      const p = partyAt(m, s.dusk, s.partyEveryDays, s.partyHours);
+      const p = partyAt(m, s.dusk, s.partyEveryDays, s.partyHours, s.partyChancePct / 100);
       // (in real time: the town's time runs `speed` times faster meanwhile)
       return p.on ? null : now + (realAt(m + p.startsIn, townClock()) - t) / warp.speed;
     };
@@ -686,6 +689,7 @@ export default defineModule<WorldSettings>({
           lamplighter: s.lamplighter,
           party: s.party,
           partyEveryDays: s.partyEveryDays,
+          partyChancePct: s.partyChancePct,
           partyHours: s.partyHours,
           partyGoersPct: s.partyGoersPct,
           partyOn: sim.partyOn,
@@ -1096,7 +1100,7 @@ export default defineModule<WorldSettings>({
         nightOwls: s.nightOwlPct / 100,
         activities: { cafe: s.cafe, fountain: s.fountainSit, board: s.noticeBoard, fish: s.fishing, fire: s.campfire },
         lamplighter: s.lamplighter,
-        party: { on: s.party, everyDays: s.partyEveryDays, hours: s.partyHours, goers: s.partyGoersPct / 100 },
+        party: { on: s.party, everyDays: s.partyEveryDays, chance: s.partyChancePct / 100, hours: s.partyHours, goers: s.partyGoersPct / 100 },
       });
       // The TV draws between frames by real time (the town's own runs in what they show)
       ctx.emit('tv', 'frame', { ...frame, t: now });
@@ -1262,6 +1266,7 @@ export default defineModule<WorldSettings>({
         lamplighter: typeof args.lamplighter === 'boolean' ? args.lamplighter : s.lamplighter,
         party: typeof args.party === 'boolean' ? args.party : s.party,
         partyEveryDays: Math.max(1, Math.min(60, Math.round(num(args.partyEveryDays, s.partyEveryDays)))),
+        partyChancePct: Math.max(0, Math.min(100, Math.round(num(args.partyChancePct, s.partyChancePct)))),
         partyHours: Math.max(1, Math.min(12, Math.round(num(args.partyHours, s.partyHours) * 2) / 2)),
         partyGoersPct: Math.max(0, Math.min(100, Math.round(num(args.partyGoersPct, s.partyGoersPct)))),
       });

@@ -74,7 +74,7 @@ const opts: TownOptions = {
   activities: { cafe: true, fountain: true, board: true, fish: true, fire: true },
   lamplighter: true,
   // A party every other night, so a two hour test sees one
-  party: { on: true, everyDays: 2, hours: 7, goers: 0.7 },
+  party: { on: true, everyDays: 2, chance: 0.2, hours: 7, goers: 0.7 },
 };
 /** The share of characters asleep for the night at 3:00, at 9:00 (the night owls) and at noon, each day */
 const atNight: number[] = [];

@@ -507,18 +507,33 @@ export interface TownFrame {
 
 // ------------------------------------------------------------ the cafe's party night
 
+/** A number in 0..1 for a night, always the same for the same night (its chance of a party) */
+function nightDice(night: number): number {
+  let h = Math.imul(night ^ 0x2545f491, 0x9e3779b1);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 0x1_0000_0000;
+}
+
 /**
- * The cafe's party, on its own every `everyDays` town days from nightfall for `hours` town hours
- * (counted from the night the town's clock started on, so the same nights on every server start).
- * `on`: one is on at `minute` (town minutes, see townMinutes); `night` names it (each party's
- * own number); `startsIn`: town minutes until the next one starts.
+ * The cafe's party, from nightfall for `hours` town hours: on its own every `everyDays` town
+ * nights, and on any other night with the chance `chance` (0..1). Nights are counted from the
+ * night the town's clock started on, so they are the same on every server start. `on`: one is on
+ * at `minute` (town minutes, see townMinutes); `night` names the night (each party's own
+ * number); `startsIn`: town minutes until the next one starts.
  */
-export function partyAt(minute: number, dusk: string, everyDays: number, hours: number): { on: boolean; night: number; startsIn: number } {
-  const every = Math.max(1, Math.round(everyDays)) * 1440;
+export function partyAt(minute: number, dusk: string, everyDays: number, hours: number, chance = 0): { on: boolean; night: number; startsIn: number } {
+  const every = Math.max(1, Math.round(everyDays));
   const since = minute - minuteOf(dusk);
-  const start = Math.floor(since / every) * every;
-  const on = since - start < hours * 60;
-  return { on, night: start / 1440, startsIn: on ? 0 : start + every - since };
+  const night = Math.floor(since / 1440);
+  const party = (n: number) => ((n % every) + every) % every === 0 || nightDice(n) < chance;
+  if (party(night) && since - night * 1440 < hours * 60) return { on: true, night, startsIn: 0 };
+  let next = night + 1;
+  while (!party(next)) next++;
+  return { on: false, night, startsIn: next * 1440 - since };
 }
 
 // ------------------------------------------------------------ day and night
@@ -915,6 +930,7 @@ export interface WorldState {
   /** The cafe's party night: on its own every so many town days, from nightfall for so many town hours, and the share of the town that stays up for it (percent) */
   party?: boolean;
   partyEveryDays?: number;
+  partyChancePct?: number;
   partyHours?: number;
   partyGoersPct?: number;
   /** A party is on now; else when the next one starts on its own (server time, null: none to come) */

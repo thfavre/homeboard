@@ -341,6 +341,10 @@
       </label>
     </div>
     <label class="field">
+      <span>Any other night, a chance of (percent)</span>
+      <input class="input" type="number" min="0" max="100" value={mod.partyChancePct} onchange={(e) => setAmount('partyChancePct', e.currentTarget.value)} />
+    </label>
+    <label class="field">
       <span>Stay up for it (percent of the town)</span>
       <input class="input" type="number" min="0" max="100" value={mod.partyGoersPct} onchange={(e) => setAmount('partyGoersPct', e.currentTarget.value)} />
     </label>

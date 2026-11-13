@@ -409,7 +409,7 @@ export interface TownOptions {
   /** Someone lights the lamps at nightfall (off: they light themselves) */
   lamplighter: boolean;
   /** The cafe's party night: on its own every so many days, for so many town hours from nightfall, and the share who stay up for it (0..1) */
-  party: { on: boolean; everyDays: number; hours: number; goers: number };
+  party: { on: boolean; everyDays: number; chance: number; hours: number; goers: number };
 }
 
 /**
@@ -1749,7 +1749,7 @@ export class TownSim {
       this.partyNow = { night: `now${this.partyFrom}`, from: this.partyFrom, until: this.partyUntil };
       return;
     }
-    const p = o.party.on && o.dayNight.on ? partyAt(o.localMinutes, o.dayNight.dusk, o.party.everyDays, o.party.hours) : null;
+    const p = o.party.on && o.dayNight.on ? partyAt(o.localMinutes, o.dayNight.dusk, o.party.everyDays, o.party.hours, o.party.chance) : null;
     const from = p ? p.night * 1440 + minuteOf(o.dayNight.dusk) : 0;
     this.partyNow = p?.on && `${p.night}` !== this.partyStopped ? { night: `${p.night}`, from, until: from + o.party.hours * 60 } : null;
   }
