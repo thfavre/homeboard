@@ -5,6 +5,7 @@
 
 import { SPRITE_SCALE, SPY_OBSTACLES, SPY_SCENE, SQUARE_HOUSES, WORLD, houseRow, type HouseKind } from './crowd.ts';
 import type { Outfit, Tier, WornItem } from './wardrobe.ts';
+import { LOT, LOT_FENCE, type LotInfo, type LotSettings } from './worldBuild.ts';
 
 /**
  * The town is built on the crowd games' square (same size, same houses, same environment art), so
@@ -24,11 +25,11 @@ export const TOWN_SCENE = {
   trees: [
     { x: 430, y: 440, size: 1.12 },
     { x: 1170, y: 440, size: 1.18, stem: 0.62 },
-    { x: 480, y: 780, size: 0.97 },
     { x: 1120, y: 780, size: 1.24 },
   ],
   lamps: [
-    { x: 300, y: 610 },
+    // (over the build lot's top fence: it lights the lot at night)
+    { x: 300, y: 494 },
     { x: 620, y: 300 },
     { x: 980, y: 300 },
     { x: 1300, y: 610 },
@@ -133,15 +134,14 @@ export const NOTICE_BOARD = { x: 148, y: 304 };
 /**
  * The town's own benches, where each stands (the middle of its bottom): in front of the potted tree
  * right of the barber, in place of the square's bench at `instead` (it would stand before the cafe's
- * porch; the square's other one is behind the town hall), on the square at the top left of the
- * fountain, and just right of the bottom left tree's trunk facing right (toward the fountain, drawn by hand: the
- * city sheet has the bench only facing the front). `dir`: the way its sitter faces.
+ * porch; the square's other one is behind the town hall), and on the square at the top left of the
+ * fountain. `dir`: the way its sitter faces; a bench facing sideways is drawn by hand (the city
+ * sheet has the bench only facing the front; one stood by a tree where the build lot is now).
  */
 export const TOWN_BENCHES: { instead: number; list: { x: number; y: number; dir: WDir }[] } = {
   list: [
     { x: 1450, y: 184, dir: 2 },
     { x: 676, y: 468, dir: 2 },
-    { x: 516, y: 792, dir: 3 },
   ],
   instead: 1200,
 };
@@ -240,20 +240,22 @@ function townHallFootprint(): { x: number; y: number; rx: number; ry: number }[]
 
 /**
  * Where nobody can stand: an ellipse on the ground around the fountain, the trees, the lamp posts,
- * the town hall's front, the notice board, the bench by the fountain, the cafe's tables, the campfire and its logs
+ * the town hall's front, the notice board, the bench by the fountain, the cafe's tables, the campfire
+ * and its logs; and a box (`box`: rx and ry are its half width and height) for the build lot inside
+ * its fence, where only the builders go (through its gate)
  */
-export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number }[] = [
+export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number; box?: boolean }[] = [
   SPY_OBSTACLES[0],
   ...TOWN_SCENE.trees.map((t) => ({ x: t.x, y: t.y, rx: Math.round(20 * t.size), ry: 10 })),
   ...TOWN_SCENE.lamps.map((l) => ({ x: l.x, y: l.y, rx: 12, ry: 7 })),
   ...townHallFootprint(),
   { x: NOTICE_BOARD.x, y: NOTICE_BOARD.y, rx: 30, ry: 7 },
-  // The benches on the square (the one on the sidewalk stands off it): the fountain's, and the one by the tree, seen from the side
+  // The bench on the square (the one on the sidewalk stands off it): the fountain's
   { x: TOWN_BENCHES.list[1].x, y: TOWN_BENCHES.list[1].y - 9, rx: 40, ry: 7 },
-  { x: TOWN_BENCHES.list[2].x - 2, y: TOWN_BENCHES.list[2].y - 18, rx: 11, ry: 18 },
   ...CAFE.tables.map((t) => ({ x: t.x, y: t.y, rx: 22, ry: 8 })),
   { x: CAMPFIRE.x, y: CAMPFIRE.y, rx: 25, ry: 12 },
   ...FIRE_LOGS.map((l) => (l.along === 'y' ? { x: l.x, y: l.y, rx: 6, ry: 25 } : { x: l.x, y: l.y, rx: 30, ry: 4 })),
+  { x: (LOT.x0 + LOT.x1) / 2, y: (LOT.y0 + LOT.y1) / 2, rx: (LOT.x1 - LOT.x0) / 2 + LOT_FENCE, ry: (LOT.y1 - LOT.y0) / 2 + LOT_FENCE, box: true },
 ];
 /**
  * The benches characters can sit on, where a sitter's feet land and the way they face: 2 below a
@@ -883,6 +885,8 @@ export interface WorldState {
   sheet: SheetInfo | null;
   shop?: ShopInfo;
   king?: KingInfo;
+  /** The build lot: what stands on it, its prices */
+  lot?: LotInfo;
   /** The town's own day: on or off (always day), and how many real minutes a whole day takes (the TV's town hall clock follows it) */
   day?: { on: boolean } & TownClock;
   /** Guest: the own choices (to edit again), set once the avatar exists */
@@ -952,4 +956,6 @@ export interface WorldState {
   /** Times the title changed hands (the price counts them) */
   kingSales?: number;
   wallets?: { id: string; name: string; color: string; balance: number }[];
+  /** Admin only: the build lot's settings */
+  lotSettings?: LotSettings;
 }

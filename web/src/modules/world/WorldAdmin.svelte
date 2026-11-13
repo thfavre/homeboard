@@ -8,6 +8,7 @@
   import { SLOTS, TIERS, TIER_NAMES } from '$shared/wardrobe.ts';
   import { LOOK_PARTS, LOOK_PART_NAMES, TOWN_SPEEDS, clockOf, kingPriceAt, townMinutes, townTime, type CeremonyHold, type WorldState } from '$shared/world.ts';
   import Monarchy from './Monarchy.svelte';
+  import LotAdmin from './LotAdmin.svelte';
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
   const kingName = $derived(mod?.king?.id ? (mod.characters.find((c) => c.id === mod.king!.id)?.name ?? null) : null);
@@ -276,6 +277,8 @@
       </span>
     </div>
   </Section>
+
+  <LotAdmin />
 
   <Section title="Town life">
     <div class="line">

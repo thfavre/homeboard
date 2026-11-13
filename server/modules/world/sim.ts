@@ -35,6 +35,7 @@ import {
   type WDir,
 } from '../../../shared/world.ts';
 import { SPRITE_SCALE } from '../../../shared/crowd.ts';
+import { LOT, LOT_ADMIRE, cellAt, cellMiddle, inLot, isGate } from '../../../shared/worldBuild.ts';
 
 /**
  * The life of the town: characters wander the ground band, stop for a while, sit on benches or on
@@ -52,6 +53,9 @@ import { SPRITE_SCALE } from '../../../shared/crowd.ts';
  * throne room off the town's right edge: the King walks up the carpet to the throne, the others
  * follow and line up along the carpet, and when all are there the King raises his hands, everyone
  * kneels and the King sits. The module ticks it and sends the frames to the TV.
+ * Guests build on the lot in the square's bottom left from their phone: the character walks in by
+ * its gate, kneels by each spot in turn while the piece goes up, and walks out again; townsfolk
+ * passing by stop at its fence now and then to look at what was built.
  */
 
 const WALK_UPS = 42;
@@ -185,6 +189,9 @@ const OWL_SLEEP_MIN: [number, number] = [150, 270];
 const MAX_STEP_S = 0.2;
 /** Up in the morning: a stretch, arms up (characters whose clothes have the art for it) */
 const STRETCH_MS = 1800;
+/** A look at the build lot: how long (ms, a random time in the range), and the clap on arriving */
+const ADMIRE_MS: [number, number] = [5000, 11_000];
+const ADMIRE_CLAP_MS = 1600;
 
 type Doing =
   | { kind: 'idle'; until: number }
@@ -215,7 +222,25 @@ type Doing =
   | Party
   | { kind: 'kindle'; at: number }
   | Coffee
-  | { kind: 'parasol'; table: number; open: boolean; at: number };
+  | { kind: 'parasol'; table: number; open: boolean; at: number }
+  | Build
+  | { kind: 'goAdmire'; spot: number }
+  | { kind: 'admire'; spot: number; until: number; since: number };
+
+/**
+ * Building on the lot: to its gate (`go`), in along `path` (cell middles) to the spot by the next
+ * piece (`walk`), kneeling there until `until` while it goes up (`work`, piece `job`, facing `face`),
+ * on to the next one; with none left (or called away) back out by the gate (`out`). Only builders
+ * walk inside the fence: their way is found cell by cell around what stands there.
+ */
+interface Build {
+  kind: 'build';
+  phase: 'go' | 'walk' | 'work' | 'out';
+  path: { x: number; y: number }[];
+  job: number;
+  face: WDir;
+  until: number;
+}
 
 /**
  * Getting a coffee inside the cafe before sitting on its terrace (the chair `seat` is held all
@@ -356,6 +381,9 @@ interface Walker {
   through: number;
   /** The side it is going around something on (1 or -1; 0: nothing in the way) */
   turn: number;
+  /** Its guest has pieces waiting to be built on the lot, and is away (see RosterEntry) */
+  building: boolean;
+  away: boolean;
 }
 
 /**
@@ -402,6 +430,8 @@ export interface RosterEntry {
   noCheer?: boolean;
   /** Shops the character has to visit to look like on the phone (the latest look counts, so one trip each) */
   errands?: PlaceId[];
+  /** Pieces wait to be built on the lot: the character goes and builds them (an errand, like a shop) */
+  build?: boolean;
 }
 
 export interface TownOptions {
@@ -438,6 +468,8 @@ export interface TownOptions {
   lamplighter: boolean;
   /** The cafe's party night: on its own every so many days, for so many town hours from nightfall, and the share who stay up for it (0..1) */
   party: { on: boolean; everyDays: number; chance: number; hours: number; goers: number };
+  /** The build lot: how long a piece takes to put up (ms), and the chance someone picking something to do stops to look at it (0..1, when something stands there) */
+  lot?: { buildMs: number; admire: number };
 }
 
 /**
@@ -510,6 +542,14 @@ export interface TownHooks {
   dress(id: string, place: PlaceId): void;
   /** A fish on the line is pulled out of the water (once per fish) */
   caught?(id: string): void;
+  /** The build lot: the next piece this guest's character is to build (its cells), or null when none waits */
+  lotJob?(id: string): { id: number; c: number; r: number; w: number; d: number } | null;
+  /** The character finished putting a piece up */
+  lotDone?(id: string, job: number): void;
+  /** Something stands on this cell of the lot (nobody walks through it) */
+  lotSolid?(c: number, r: number): boolean;
+  /** The character is not in the town: its pieces go up at once */
+  lotFlush?(id: string): void;
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -538,9 +578,48 @@ const sooner = (d: { until: number }, _w: Walker, now: number, ms: number) => {
   d.until = Math.min(d.until, now + ms);
 };
 
-/** The obstacle on the square a point is inside (the fountain, a tree, a lamp post) */
-function obstacleAt(x: number, y: number, margin = 0): (typeof OBSTACLES)[number] | undefined {
-  return OBSTACLES.find((o) => ((x - o.x) / (o.rx + margin)) ** 2 + ((y - o.y) / (o.ry + margin)) ** 2 < 1);
+type Obstacle = (typeof OBSTACLES)[number];
+
+/** How far into an obstacle a point is, from 0 in its middle to 1 on its edge (an ellipse, or the build lot's box) */
+function depthIn(o: Obstacle, x: number, y: number, margin = 0): number {
+  const nx = (x - o.x) / (o.rx + margin);
+  const ny = (y - o.y) / (o.ry + margin);
+  return o.box ? Math.max(Math.abs(nx), Math.abs(ny)) : Math.hypot(nx, ny);
+}
+
+/**
+ * The way straight out of an obstacle from a point (a unit vector): for an ellipse, its edge's
+ * normal; for a box, out through its nearest side
+ */
+function outOf(o: Obstacle, x: number, y: number): [number, number] {
+  if (o.box) {
+    const nx = (x - o.x) / o.rx;
+    const ny = (y - o.y) / o.ry;
+    return Math.abs(nx) > Math.abs(ny) ? [Math.sign(nx) || 1, 0] : [0, Math.sign(ny) || 1];
+  }
+  const nx = (x - o.x) / (o.rx * o.rx);
+  const ny = (y - o.y) / (o.ry * o.ry);
+  const nl = Math.hypot(nx, ny) || 1;
+  return [nx / nl, ny / nl];
+}
+
+/** The point just outside an obstacle's edge (grown by `margin`) from a point inside it, the shortest way out */
+function edgeOf(o: Obstacle, x: number, y: number, margin: number): { x: number; y: number } {
+  if (o.box) {
+    const [ux, uy] = outOf(o, x, y);
+    return ux ? { x: o.x + ux * (o.rx + margin), y } : { x, y: o.y + uy * (o.ry + margin) };
+  }
+  const nx = (x - o.x) / (o.rx + margin);
+  const ny = (y - o.y) / (o.ry + margin);
+  const d = Math.hypot(nx, ny);
+  // Dead in the middle: out to the front
+  const [ux, uy] = d ? [nx / d, ny / d] : [0, 1];
+  return { x: o.x + ux * (o.rx + margin), y: o.y + uy * (o.ry + margin) };
+}
+
+/** The obstacle on the square a point is inside (the fountain, a tree, a lamp post, the build lot) */
+function obstacleAt(x: number, y: number, margin = 0): Obstacle | undefined {
+  return OBSTACLES.find((o) => depthIn(o, x, y, margin) < 1);
 }
 
 /**
@@ -549,13 +628,7 @@ function obstacleAt(x: number, y: number, margin = 0): (typeof OBSTACLES)[number
  */
 function standable(x: number, y: number): { x: number; y: number } {
   const o = obstacleAt(x, y, STAND_CLEAR);
-  if (!o) return { x, y };
-  const nx = (x - o.x) / (o.rx + STAND_CLEAR);
-  const ny = (y - o.y) / (o.ry + STAND_CLEAR);
-  const d = Math.hypot(nx, ny);
-  // Dead in the middle: out to the front
-  const [ux, uy] = d ? [nx / d, ny / d] : [0, 1];
-  return { x: o.x + ux * (o.rx + STAND_CLEAR + 1), y: o.y + uy * (o.ry + STAND_CLEAR + 1) };
+  return o ? edgeOf(o, x, y, STAND_CLEAR + 1) : { x, y };
 }
 
 /** The nearest y on the bridge's deck */
@@ -601,12 +674,9 @@ function blocked(x: number, y: number, margin = 0): boolean {
  */
 function keepOut(a: { x: number; y: number }): void {
   for (const o of OBSTACLES) {
-    const nx = (a.x - o.x) / o.rx;
-    const ny = (a.y - o.y) / o.ry;
-    const d = Math.hypot(nx, ny);
+    const d = depthIn(o, a.x, a.y);
     if (d >= 1 || d === 0) continue;
-    a.x = o.x + (nx / d) * (o.rx + 1);
-    a.y = o.y + (ny / d) * (o.ry + 1);
+    Object.assign(a, edgeOf(o, a.x, a.y, 1));
   }
 }
 
@@ -621,6 +691,13 @@ const BROOK_WAY = { x: 1588, y: 598 };
 function crossesBrook(ax: number, ay: number, bx: number, by: number): boolean {
   const n = Math.ceil(Math.hypot(bx - ax, by - ay) / 6);
   for (let i = 1; i < n; i++) if (wet(ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n, 0)) return true;
+  return false;
+}
+
+/** The straight walk from a to b would go over the build lot */
+function crossesLot(ax: number, ay: number, bx: number, by: number): boolean {
+  const n = Math.ceil(Math.hypot(bx - ax, by - ay) / 8);
+  for (let i = 0; i <= n; i++) if (inLot(ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n, 10)) return true;
   return false;
 }
 
@@ -648,7 +725,7 @@ function randSpot() {
 
 export class TownSim {
   private walkers = new Map<string, Walker>();
-  private cat = { x: 500, y: 700, dir: 3 as WDir, doing: { kind: 'idle', until: 0 } as Doing, petted: false };
+  private cat = { x: 640, y: 720, dir: 3 as WDir, doing: { kind: 'idle', until: 0 } as Doing, petted: false };
   /** Which lamp posts are lit; since when some wait for the lamplighter (0: none waits), and when one last switched itself */
   private lampLit = TOWN_SCENE.lamps.map(() => false);
   private lampWait = 0;
@@ -752,6 +829,11 @@ export class TownSim {
     // Opening or folding a parasol is dropped for a call: someone else does it later
     parasol: { priority: PRIORITY.activity, left: (d, _w, now) => (d.at ? d.at + PARASOL_MS - now : 30_000), wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
     kindle: { priority: PRIORITY.activity, left: (d, _w, now) => (d.at ? d.at + KINDLE_MS - now : 30_000), wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
+    // Building on the lot runs its course, like a shop visit: called away, the builder leaves between two pieces (see stepBuild)
+    build: { priority: PRIORITY.errand, left: () => Infinity },
+    // Looking at the lot is casual, like a bench
+    goAdmire: { priority: PRIORITY.casual, left: (d, w) => walkMs(w, LOT_ADMIRE[d.spot].x, LOT_ADMIRE[d.spot].y), wrapUp: stopWalking, quickStop: pauseFor },
+    admire: { priority: PRIORITY.casual, left: (d, _w, now) => d.until - now, wrapUp: sooner, quickStop: sooner },
     // The party: off on the way, a little sooner out of the cafe or away from the terrace
     party: {
       priority: PRIORITY.activity,
@@ -797,11 +879,13 @@ export class TownSim {
       const errands = r.errands ?? [];
       // Asleep for the night, unless the guest just picked a new look: up to go and get it, back to
       // bed after. The ones staying up for the party go to bed once it is over.
-      const night = !away && !errands.length && asleepForTheNight(r.id, o) && !this.upForParty(r.id, o);
+      const night = !away && !errands.length && !r.build && asleepForTheNight(r.id, o) && !this.upForParty(r.id, o);
       const shouldSleep = away || night;
       if (!w) {
         // Nobody sees a character that is not in the town: it takes its new look at once
         for (const p of errands) this.hooks.dress(r.id, p);
+        // (and its pieces go up on the lot)
+        if (r.build) this.hooks.lotFlush?.(r.id);
         // Faded away (or new): only come back when awake. New arrivals walk in from an edge (the
         // left one during a ceremony: the right one is the throne room then, in full view).
         if (away) continue;
@@ -809,13 +893,15 @@ export class TownSim {
         const spot = randSpot();
         // (in from the right: above the river, which leaves the town lower down that edge)
         const y = from > 0 && wet(TOWN_AREA.x1, spot.y, 40) ? rand(TOWN_AREA.y0 + 20, BROOK_WAY.y - 20) : spot.y;
-        w = { id: r.id, x: from, y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, noCheer: !!r.noCheer, errands: [], wrapped: null, anchor: { x: from, y, at: now }, through: 0, turn: 0 };
+        w = { id: r.id, x: from, y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, noCheer: !!r.noCheer, errands: [], wrapped: null, anchor: { x: from, y, at: now }, through: 0, turn: 0, building: false, away };
         this.walkers.set(r.id, w);
         continue;
       }
       w.noSit = !!r.noSit;
       w.noCheer = !!r.noCheer;
       w.errands = errands;
+      w.building = !!r.build;
+      w.away = away;
       // An outfit change mid-sit (or mid-pet) would show missing art: stand up
       const k = w.doing.kind;
       if (w.noSit && (k === 'sit' || k === 'goBench' || k === 'pet' || k === 'goPet' || k === 'seated' || k === 'goSeat')) {
@@ -931,7 +1017,14 @@ export class TownSim {
       case 'goSeat':
       case 'goRead':
       case 'goFish':
+      case 'goAdmire':
         return WANIM.walk;
+      // Kneeling by the piece going up (the TV tells it from the kindling by where it is: on the lot)
+      case 'build':
+        return d.phase === 'work' ? WANIM.kindle : WANIM.walk;
+      // A clap with the hands up on arriving, then a long look
+      case 'admire':
+        return !w.noCheer && now - d.since < ADMIRE_CLAP_MS ? WANIM.cheer : WANIM.idle;
       case 'seated':
         return WANIM.perch;
       case 'fish':
@@ -1006,11 +1099,7 @@ export class TownSim {
     const o = this.inTheWay(w, ux, uy, d);
     if (o && blocked(w.x, w.y)) {
       // Pushed into it: straight out first, the shortest way (the edge's normal)
-      const nx = (w.x - o.x) / (o.rx * o.rx);
-      const ny = (w.y - o.y) / (o.ry * o.ry);
-      const nl = Math.hypot(nx, ny) || 1;
-      ux = nx / nl;
-      uy = ny / nl;
+      [ux, uy] = outOf(o, w.x, w.y);
     } else if (o) {
       // Turn just enough for the way ahead to be clear, to one side and the same side until past it
       // (changing sides every step gets nowhere). The side: the one that needs the smaller turn.
@@ -1039,7 +1128,7 @@ export class TownSim {
    * thing the character stands in, if it got pushed into one): the line is tried every few units,
    * against everything grown by a small gap, so a walk along an edge does not cut through it
    */
-  private inTheWay(w: Walker, ux: number, uy: number, dist: number): (typeof OBSTACLES)[number] | undefined {
+  private inTheWay(w: Walker, ux: number, uy: number, dist: number): Obstacle | undefined {
     const here = obstacleAt(w.x, w.y);
     if (here) return here;
     const reach = Math.min(LOOK_AHEAD, dist);
@@ -1074,6 +1163,21 @@ export class TownSim {
       case 'visit':
         this.stepVisit(w, d, now, dt, o);
         break;
+      case 'build':
+        this.stepBuild(w, d, now, dt, o);
+        break;
+      case 'goAdmire': {
+        const s = LOT_ADMIRE[d.spot];
+        if (this.walkTo(w, s.x, s.y, WALK_UPS, dt)) {
+          w.dir = s.dir;
+          w.doing = { kind: 'admire', spot: d.spot, until: now + rand(ADMIRE_MS[0], ADMIRE_MS[1]), since: now };
+        }
+        break;
+      }
+      case 'admire':
+        w.dir = LOT_ADMIRE[d.spot].dir;
+        if (now >= d.until) w.doing = idle(now, 500, 1500);
+        break;
       case 'wander':
         if (this.walkTo(w, d.tx, d.ty, WALK_UPS, dt)) {
           w.dir = Math.random() < 0.7 ? 2 : w.dir;
@@ -1090,6 +1194,10 @@ export class TownSim {
         }
         if (w.errands.length) {
           w.doing = { kind: 'visit', place: w.errands[0], phase: 'go', seat: -1, since: 0, until: 0, dressAt: 0, dressed: false };
+          break;
+        }
+        if (w.building && this.hooks.lotJob) {
+          w.doing = { kind: 'build', phase: 'go', path: [], job: 0, face: 2, until: 0 };
           break;
         }
         // A party on: most go to it
@@ -1616,6 +1724,8 @@ export class TownSim {
       // (and on the left, below the town hall's front: a sleeper lies on the square, not across its steps)
       if (!right && y < (TOWN_HALL.y + TOWN_HALL.h) * SPRITE_SCALE + 30) continue;
       if (blocked(x, y, 10) || wet(x, y) || wet(x + (right ? -60 : 60), y)) continue;
+      // (nor with the body across the build lot's fence)
+      if (inLot(x, y, 12) || inLot(x + (right ? -60 : 60), y, 12)) continue;
       // Lying down, a body takes room sideways: other sleepers count closer above and below than beside
       const room = others.reduce((m, o) => Math.min(m, Math.hypot((x - o.x) * 0.5, y - o.y)), 200);
       const score = Math.min(room, 45) - (right !== near ? 12 : 0) - (inner ? 6 : 0) + Math.random();
@@ -1672,6 +1782,14 @@ export class TownSim {
         },
       ],
       [a.fire && !w.noSit, this.fireLit ? CHANCE.fireAtNight : CHANCE.fire, () => seat('fire', 0)],
+      [
+        !!o.lot,
+        o.lot?.admire ?? 0,
+        () => {
+          const i = spot(LOT_ADMIRE, (o, i) => (o.doing.kind === 'goAdmire' || o.doing.kind === 'admire') && o.doing.spot === i, 0);
+          return i < 0 ? null : { kind: 'goAdmire', spot: i };
+        },
+      ],
     ];
     let roll = Math.random();
     for (const [on, chance, start] of options) {
@@ -2045,7 +2163,7 @@ export class TownSim {
   /** What calls this character away (the ceremony, a shop trip), or null when nothing does */
   private callOf(w: Walker, now: number, o: TownOptions): 'ceremony' | 'errand' | null {
     if (this.summoned(w, now, o)) return 'ceremony';
-    if (w.errands.length) return 'errand';
+    if (w.errands.length || w.building) return 'errand';
     return null;
   }
 
@@ -2074,6 +2192,141 @@ export class TownSim {
     // What it was swapped for (the pause after a walk) already has its time: it is not cut short again
     w.wrapped = w.doing;
   }
+
+  // ------------------------------------------------------------ the build lot
+
+  /** Where one stands in the lot's gate, and before it outside */
+  private static GATE_IN = { x: LOT.gate.x, y: cellMiddle(LOT.gate.c0, 0).y };
+  private static GATE_OUT = { x: LOT.gate.x, y: LOT.gate.out };
+
+  private stepBuild(w: Walker, d: Build, now: number, dt: number, o: TownOptions): void {
+    switch (d.phase) {
+      case 'go':
+        // (the pieces were taken back on the way: nothing to do there)
+        if (!w.building) {
+          w.doing = idle(now, 300, 900);
+          break;
+        }
+        if (this.walkTo(w, TownSim.GATE_OUT.x, TownSim.GATE_OUT.y, WALK_UPS, dt)) {
+          Object.assign(w, TownSim.GATE_OUT);
+          this.nextPiece(w, d, now, o);
+        }
+        break;
+      case 'walk':
+      case 'out':
+        if (!this.followPath(w, d, dt)) break;
+        if (d.phase === 'out') w.doing = idle(now, 300, 900);
+        else {
+          d.phase = 'work';
+          d.until = now + (o.lot?.buildMs ?? 1500);
+          w.dir = d.face;
+        }
+        break;
+      case 'work':
+        w.dir = d.face;
+        if (now < d.until) break;
+        this.hooks.lotDone?.(w.id, d.job);
+        this.nextPiece(w, d, now, o);
+        break;
+    }
+  }
+
+  /** One step along a builder's path (cell middles, straight from one to the next); true at its end */
+  private followPath(w: Walker, d: Build, dt: number): boolean {
+    let left = WALK_UPS * dt;
+    while (d.path.length) {
+      const p = d.path[0];
+      const dx = p.x - w.x;
+      const dy = p.y - w.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > left) {
+        w.x += (dx / dist) * left;
+        w.y += (dy / dist) * left;
+        w.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 3 : 1) : dy > 0 ? 2 : 0;
+        return false;
+      }
+      w.x = p.x;
+      w.y = p.y;
+      left -= dist;
+      d.path.shift();
+    }
+    return true;
+  }
+
+  /**
+   * After a piece (or on arriving at the gate): on to the spot beside the next one, or out by the
+   * gate when none is left, the guest went away or the ceremony calls
+   */
+  private nextPiece(w: Walker, d: Build, now: number, o: TownOptions): void {
+    const leave = !w.building || w.away || this.summoned(w, now, o);
+    const job = leave ? null : (this.hooks.lotJob?.(w.id) ?? null);
+    // Coming in from the gate, the walk starts at its cell
+    const here = cellAt(w.x, w.y);
+    const from = here ?? { c: LOT.gate.c0 + (w.x > TownSim.GATE_IN.x ? 1 : 0), r: 0 };
+    const start = here ? [] : [TownSim.GATE_IN];
+    if (!job) {
+      const gate = [LOT.gate.c0, LOT.gate.c1].map((c) => ({ c, r: 0, face: 0 as WDir }));
+      const way = this.lotWay(from, gate) ?? { cells: [], face: 0 };
+      d.phase = 'out';
+      d.job = 0;
+      d.path = [...start, ...way.cells.map((c) => cellMiddle(c.c, c.r)), TownSim.GATE_IN, TownSim.GATE_OUT];
+      return;
+    }
+    // The spots beside the piece: on its sides (seen side on) or in front of it, each facing it; only
+    // when none can be reached, behind it (where the piece hides the builder)
+    const bottom = job.r + job.d - 1;
+    const near: { c: number; r: number; face: WDir }[] = [
+      { c: job.c - 1, r: bottom, face: 3 },
+      { c: job.c + job.w, r: bottom, face: 1 },
+      ...Array.from({ length: job.w }, (_, k) => ({ c: job.c + k, r: job.r + job.d, face: 0 as WDir })),
+    ];
+    const behind = Array.from({ length: job.w }, (_, k) => ({ c: job.c + k, r: job.r - 1, face: 2 as WDir }));
+    // None to reach (walled in): from where it stands, reaching over
+    const facing: WDir = job.r > from.r ? 2 : job.r + job.d <= from.r ? 0 : job.c > from.c ? 3 : 1;
+    const way = this.lotWay(from, near) ?? this.lotWay(from, behind) ?? { cells: [from], face: facing };
+    d.phase = 'walk';
+    d.job = job.id;
+    d.face = way.face;
+    d.path = [...start, ...way.cells.map((c) => cellMiddle(c.c, c.r))];
+  }
+
+  /**
+   * The shortest way on the lot's grid from a cell to the nearest of some cells, around what stands
+   * there (null: none can be reached): the cells along it, the first one included, and how the goal faces
+   */
+  private lotWay(from: { c: number; r: number }, goals: { c: number; r: number; face: WDir }[]): { cells: { c: number; r: number }[]; face: WDir } | null {
+    const inside = (c: number, r: number) => c >= 0 && c < LOT.cols && r >= 0 && r < LOT.rows;
+    const free = (c: number, r: number) => inside(c, r) && (isGate(c, r) || !this.hooks.lotSolid?.(c, r));
+    const want = new Map<number, WDir>();
+    for (const g of goals) if (free(g.c, g.r) && !want.has(g.r * LOT.cols + g.c)) want.set(g.r * LOT.cols + g.c, g.face);
+    if (!want.size) return null;
+    const startKey = from.r * LOT.cols + from.c;
+    const back = new Map<number, number>([[startKey, -1]]);
+    const queue = [startKey];
+    while (queue.length) {
+      const k = queue.shift()!;
+      if (want.has(k)) {
+        const cells: { c: number; r: number }[] = [];
+        for (let at = k; at >= 0; at = back.get(at)!) cells.unshift({ c: at % LOT.cols, r: Math.floor(at / LOT.cols) });
+        return { cells, face: want.get(k)! };
+      }
+      const c = k % LOT.cols;
+      const r = Math.floor(k / LOT.cols);
+      for (const [nc, nr] of [
+        [c + 1, r],
+        [c - 1, r],
+        [c, r + 1],
+        [c, r - 1],
+      ]) {
+        const nk = nr * LOT.cols + nc;
+        if (!free(nc, nr) || back.has(nk)) continue;
+        back.set(nk, k);
+        queue.push(nk);
+      }
+    }
+    return null;
+  }
+
 
   /** The visits of a shop in some phases */
   private visits(place: PlaceId, ...phases: Visit['phase'][]): Visit[] {
@@ -2199,7 +2452,9 @@ export class TownSim {
         !(w.doing.kind === 'kindle' && w.doing.at) &&
         !(w.doing.kind === 'parasol' && w.doing.at) &&
         !(w.doing.kind === 'party' && w.doing.phase !== 'go' && w.doing.phase !== 'terrace') &&
-        !(w.doing.kind === 'coffee' && w.doing.phase !== 'go'),
+        !(w.doing.kind === 'coffee' && w.doing.phase !== 'go') &&
+        // Nor a builder inside the lot's fence (or on its way out of it)
+        !(w.doing.kind === 'build' && w.doing.phase !== 'go'),
     );
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
@@ -2242,8 +2497,11 @@ export class TownSim {
       c.y += ((d.ty - c.y) / len) * step;
       c.dir = dx > 0 ? 3 : 1;
     } else if (c.doing.kind === 'idle' && now >= c.doing.until) {
-      const t = randSpot();
-      c.doing = { kind: 'wander', tx: t.x, ty: t.y };
+      // (it walks straight: never over the build lot's fence)
+      let t = randSpot();
+      for (let k = 0; k < 12 && crossesLot(c.x, c.y, t.x, t.y); k++) t = randSpot();
+      if (!crossesLot(c.x, c.y, t.x, t.y)) c.doing = { kind: 'wander', tx: t.x, ty: t.y };
+      else c.doing = { kind: 'idle', until: now + 2000 };
     }
   }
 }

@@ -16,6 +16,7 @@
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
   import { TOWN_HALL_SPAN, drawTownHall, drawTownHallClock, drawTownHallLight } from './townHall.ts';
   import { drawLaughing, drawTalking, nodDip } from './chat.ts';
+  import { buildingAt, drawHammer, drawLotGround, drawLotLight, drawLotPuffs, loadLotArt, lotNow, lotStanding, type LotArt } from './lotArt.ts';
   import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
 
   /**
@@ -49,6 +50,8 @@
   let shopArt: ShopArt | null = null;
   let hall: HallArt | null = null;
   let cafe: CafeArt | null = null;
+  /** The build lot's own art sheets (its decorations) */
+  let lotArt: LotArt | null = null;
   /** The town's river in the frames of its flow */
   let brook: ReturnType<typeof brookFrames> | null = null;
   let standingProps: Prop[] = [];
@@ -109,6 +112,7 @@
       if (e && a) cafe = cafeArt(e, a);
       brook = brookFrames();
     });
+    void loadLotArt().then((a) => (lotArt = a));
     void loadHall().then((h) => {
       hall = h;
       hallStanding = h ? hallProps(h) : [];
@@ -239,6 +243,7 @@
       // The town's grass, its bank and its river over the square's paving
       townGround(ground);
       g.drawImage(ground, 0, 0, screen, ground.height, 0, 0, screen * SPRITE_SCALE, ground.height * SPRITE_SCALE);
+      drawLotGround(g);
       drawTownHall(g);
       edge = null;
       if (hall) {
@@ -333,6 +338,9 @@
     townNow.party = party;
     townNow.fire = !!f0?.fire;
     townNow.parasols = f0?.parasols ?? 0;
+    lotNow.dark = dark;
+    /** What stands on the build lot (made again when it changes) */
+    const lotThings = env ? lotStanding(env, lotArt, world?.lot?.grid) : [];
     const inHall = away && hall ? hallStanding : [];
     if (away && hall) {
       drawRiver(g, hall, now);
@@ -408,6 +416,7 @@
     // What lies on the ground (the logs by the fire, the chairs, the shadows of the trees and the
     // fountain), over the characters' own shadows: whoever sits on a log casts its shadow under it
     for (const p of standingProps) p.ground?.(g, now);
+    for (const p of lotThings) p.ground?.(g, now);
     for (const p of inHall) p.ground?.(g, now);
 
     /** The sheets of a character: its own, the previous one while a new look loads (and while it changes in a shop) */
@@ -478,8 +487,9 @@
       ) {
         // Fishing with the rod: casting, waiting, a bite, the line whipped up with the fish
       } else if (p.anim === WANIM.kindle && img && info && drawPerched(g, img, info, p.x, y, p.dir, 0, true)) {
-        // Kneeling by the campfire to light it
-        drawKindling(g, now);
+        // Kneeling by the campfire to light it, or on the build lot by the piece going up
+        if (buildingAt(p.x, p.y)) drawHammer(g, p.x, y, p.dir, now);
+        else drawKindling(g, now);
       } else if (p.anim === WANIM.dance && img && info && drawDancing(g, img, info, p.x, y, now, l.phase)) {
         // Dancing in the cafe
       } else {
@@ -565,6 +575,7 @@
     const cat = f0 ? { ...f0.cat, x: f0.cat.x + ((f1 ?? f0).cat.x - f0.cat.x) * mix, y: f0.cat.y + ((f1 ?? f0).cat.y - f0.cat.y) * mix } : undefined;
     const standing = [
       ...standingProps,
+      ...lotThings,
       ...inHall,
       ...(env ? pigeons.groundItems(env) : []),
       ...(cat && env ? [{ y: cat.y, draw: (gg: CanvasRenderingContext2D) => drawCat(gg, cat, now) }] : []),
@@ -574,6 +585,7 @@
       if (qi < standing.length && (pi >= people.length || standing[qi].y <= people[pi].y)) standing[qi++].draw(g, now);
       else drawPerson(people[pi++]);
     }
+    drawLotPuffs(g);
     pigeons.drawAir(g, env);
 
     // The evening lies over the square (the lamps keep their glow). The server keeps the time of
@@ -590,6 +602,7 @@
       });
       drawTownHallLight(g, dark);
       drawFireLight(g, dark, now);
+      drawLotLight(g, world?.lot?.grid, dark, now);
     }
     // The cafe's window at night, and its party lights
     drawCafeLight(g, dark, party, now);

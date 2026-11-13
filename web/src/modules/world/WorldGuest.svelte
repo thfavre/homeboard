@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import { Check, Coins, PersonStanding, Shirt, ShoppingBag, Undo2 } from '@lucide/svelte';
+  import { Check, Coins, Hammer, PersonStanding, Shirt, ShoppingBag, Undo2 } from '@lucide/svelte';
   import { attempt, hb, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
   import type { Slot } from '$shared/wardrobe.ts';
   import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, lookCost, randomChoices, type AvatarChoices, type SheetInfo, type WorldState } from '$shared/world.ts';
@@ -9,6 +9,7 @@
   import type { PreviewView } from './preview.ts';
   import Shop from './Shop.svelte';
   import Wardrobe from './Wardrobe.svelte';
+  import BuildLot from './BuildLot.svelte';
 
   /**
    * The avatar panel: the look editor (body, skin, hair, eyes), the wardrobe of owned clothes
@@ -16,12 +17,12 @@
    * composites a sheet for every look; the preview shows it walking.
    */
 
-  let tab = $state<'look' | 'wardrobe' | 'shop'>('look');
+  let tab = $state<'look' | 'wardrobe' | 'shop' | 'build'>('look');
   /** The one preview of the panel; the open tab says what it shows */
   const view = $state<PreviewView>({ url: null, sheet: null, building: false, focus: null, facing: 'down' });
 
   /** The new tab slides in from the right when going right, from the left when going back */
-  const ORDER = ['look', 'wardrobe', 'shop'];
+  const ORDER = ['look', 'wardrobe', 'shop', 'build'];
   let slideFrom = $state(0);
   function go(next: typeof tab) {
     slideFrom = Math.sign(ORDER.indexOf(next) - ORDER.indexOf(tab)) * 40;
@@ -186,22 +187,25 @@
 </script>
 
 <!-- The wardrobe and the shop fit the screen: only their item list scrolls -->
-<div class="panel" class:fit={tab !== 'look'}>
+<div class="panel" class:fit={tab === 'wardrobe' || tab === 'shop'}>
 <!-- The wardrobe and the shop come once the character exists: before that there is only the editor -->
 {#if created}
 <div class="tabs">
   <button type="button" class="tab" class:on={tab === 'look'} onclick={backToLook}><PersonStanding size={17} />My look</button>
   <button type="button" class="tab" class:on={tab === 'wardrobe'} onclick={() => tab !== 'wardrobe' && go('wardrobe')}><Shirt size={16} />Wardrobe</button>
   <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => tab !== 'shop' && ((shopSlot = null), go('shop'))}><ShoppingBag size={16} />Shop</button>
+  <button type="button" class="tab" class:on={tab === 'build'} onclick={() => tab !== 'build' && go('build')}><Hammer size={16} />Build</button>
 </div>
 {/if}
 
 <!-- Stays put across the tabs: only the character inside changes and zooms -->
-<div class="stage-wrap"><AvatarPreview {...view} /></div>
+<div class="stage-wrap" class:gone={tab === 'build'}><AvatarPreview {...view} /></div>
 
 {#key tab}
 <div class="pane" in:fly={{ x: slideFrom, duration: 220 }}>
-{#if tab === 'shop'}
+{#if tab === 'build'}
+  <BuildLot />
+{:else if tab === 'shop'}
   <Shop startSlot={shopSlot} {view} />
 {:else if tab === 'wardrobe'}
   <Wardrobe
@@ -277,6 +281,10 @@
 </div>
 
 <style>
+  /* The build lot has a picture of its own */
+  .stage-wrap.gone {
+    display: none;
+  }
   /* Exactly the screen between the page header and the bottom nav (the margin cancels part of
      the page's bottom padding, so the page itself does not scroll) */
   .fit {
@@ -303,22 +311,26 @@
   .tabs {
     flex: none;
     display: flex;
-    gap: 0.4rem;
+    gap: 0.35rem;
     margin-bottom: 1rem;
   }
+  /* Four of them on a phone: the icon over the name */
   .tab {
     flex: 1;
+    min-width: 0;
     display: inline-flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.4rem;
-    padding: 0.55rem;
+    gap: 0.2rem;
+    padding: 0.5rem 0.2rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-dim);
-    font-size: 0.92rem;
+    font-size: 0.82rem;
     font-weight: 600;
+    white-space: nowrap;
   }
   .tab.on {
     border-color: var(--accent);

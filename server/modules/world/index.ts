@@ -9,8 +9,11 @@ import { CATALOG, TIERS, itemById, notForTheKing, starterPieces, openSlots, piec
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
+import { LOT_DEFAULTS, emptyLot, lotKeeper, type LotData } from './lot.ts';
+import type { LotSettings } from '../../../shared/worldBuild.ts';
 
-interface WorldSettings {
+/** (the build lot's settings are in LotSettings) */
+interface WorldSettings extends LotSettings {
   /** A guest with no open page for this long lies down to sleep at the edge of the town */
   sleepAfterMin: number;
   /** A sleeping character fades out after this much longer */
@@ -113,6 +116,21 @@ interface WorldSettings {
   partyGoersPct: number;
 }
 
+/** The build lot's settings, for the admin page */
+const lotSettingsOf = (s: LotSettings): LotSettings => ({
+  lot: s.lot,
+  lotFreePerDay: s.lotFreePerDay,
+  lotBlock: s.lotBlock,
+  lotFancy: s.lotFancy,
+  lotSmall: s.lotSmall,
+  lotBig: s.lotBig,
+  lotGrand: s.lotGrand,
+  lotQueueMax: s.lotQueueMax,
+  lotBuildSec: s.lotBuildSec,
+  lotAdmirePct: s.lotAdmirePct,
+  lotClearOnNew: s.lotClearOnNew,
+});
+
 /** A time of day as "HH:MM" (24 hours), or null when it is not one */
 function timeOfDay(v: unknown): string | null {
   const m = typeof v === 'string' ? /^(\d{1,2}):(\d{2})$/.exec(v.trim()) : null;
@@ -184,6 +202,8 @@ interface WorldData {
   reigns?: Reign[];
   /** When the last ceremony held on its own started (0: never), and the town day it was held for */
   ceremony?: { last: number };
+  /** The build lot: what stands on it, the pieces on their way, the day's free share used */
+  lot?: LotData;
 }
 
 /** How many outfits a guest can save */
@@ -285,6 +305,7 @@ export default defineModule<WorldSettings>({
     partyChancePct: 20,
     partyHours: 7,
     partyGoersPct: 70,
+    ...LOT_DEFAULTS,
   },
 
   setup(ctx) {
@@ -329,7 +350,17 @@ export default defineModule<WorldSettings>({
       return { speed };
     };
 
-    const sim = new TownSim({ dress: (id, place) => dress(id, place), caught: (id) => caughtFish(id) }, townNow);
+    const sim = new TownSim(
+      {
+        dress: (id, place) => dress(id, place),
+        caught: (id) => caughtFish(id),
+        lotJob: (id) => lot.hooks.lotJob(id),
+        lotDone: (id, job) => lot.hooks.lotDone(id, job),
+        lotSolid: (c, r) => lot.hooks.lotSolid(c, r),
+        lotFlush: (id) => lot.hooks.lotFlush(id),
+      },
+      townNow,
+    );
 
     /** Builds by hash, so the same look is composited once even when asked twice at once */
     const building = new Map<string, Promise<SheetInfo>>();
@@ -657,6 +688,7 @@ export default defineModule<WorldSettings>({
         shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices(), unlockPieces: s.unlockPieces, secretPieces: s.secretPieces },
         day: { on: s.dayCycle, ...townClock() },
         king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), pricing: kingPricing(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null, reigns },
+        lot: lot.info(),
       };
       if (role === 'admin') {
         const guests = [...ctx.session.guests.values()];
@@ -718,6 +750,7 @@ export default defineModule<WorldSettings>({
           nightSleepers: sim.sleepingForTheNight,
           kingSales: king.sales,
           wallets: guests.map((g) => ({ id: g.id, name: g.name, color: g.color, balance: wallets[g.id] ?? 0 })),
+          lotSettings: lotSettingsOf(s),
         };
       }
       return base;
@@ -866,6 +899,62 @@ export default defineModule<WorldSettings>({
     const sendWallet = (guestId: string) => ctx.emit({ guest: guestId }, 'wallet', { balance: wallets[guestId] ?? 0 });
 
     ctx.onGuest('wardrobe', (_args, guest) => mine(guest.id));
+
+    // ------------------------------------------------------------ the build lot
+
+    const lot = lotKeeper({
+      data: (store.data.lot ??= emptyLot()),
+      settings: () => ctx.settings.get(),
+      townDay: () => Math.floor(townMinutes(townNow(), townClock()) / 1440),
+      wallets,
+      sendWallet,
+      sendMine: (guestId, m) => ctx.emit({ guest: guestId }, 'lotMine', m),
+      save: () => store.save(),
+      publish: () => ctx.publish(),
+      feed: (guestId) => {
+        const guest = ctx.session.guests.get(guestId);
+        if (guest) ctx.activity('{name} is building on the lot', { guest });
+      },
+      failed: (guestId, why) => {
+        const guest = ctx.session.guests.get(guestId);
+        if (guest) ctx.toast(guest, { text: `A piece could not go up (${why.toLowerCase()}): you got its price back`, kind: 'info' });
+      },
+    });
+
+    /** Only a guest with a character builds: it is the one who carries the pieces */
+    const builder = (guestId: string) => {
+      if (!store.data.avatars[guestId]) throw new HbError('Create your character first');
+    };
+    ctx.onGuest('lotMine', (_args, guest) => lot.mine(guest.id));
+    ctx.onGuest('lotPlace', (args, guest) => {
+      builder(guest.id);
+      return lot.place(guest.id, args?.job);
+    });
+    ctx.onGuest('lotCancel', (args, guest) => lot.cancel(guest.id, typeof args?.id === 'number' ? args.id : undefined));
+    ctx.onAdmin('setLot', (args) => {
+      const s = ctx.settings.get();
+      const price = (v: unknown, old: number) => Math.max(0, Math.min(1_000_000, Math.round(num(v, old))));
+      ctx.settings.update({
+        lot: typeof args.lot === 'boolean' ? args.lot : s.lot,
+        lotFreePerDay: price(args.lotFreePerDay, s.lotFreePerDay),
+        lotBlock: price(args.lotBlock, s.lotBlock),
+        lotFancy: price(args.lotFancy, s.lotFancy),
+        lotSmall: price(args.lotSmall, s.lotSmall),
+        lotBig: price(args.lotBig, s.lotBig),
+        lotGrand: price(args.lotGrand, s.lotGrand),
+        lotQueueMax: Math.max(1, Math.min(200, Math.round(num(args.lotQueueMax, s.lotQueueMax)))),
+        lotBuildSec: Math.max(0.3, Math.min(20, Math.round(num(args.lotBuildSec, s.lotBuildSec) * 10) / 10)),
+        lotAdmirePct: Math.max(0, Math.min(100, Math.round(num(args.lotAdmirePct, s.lotAdmirePct)))),
+        lotClearOnNew: typeof args.lotClearOnNew === 'boolean' ? args.lotClearOnNew : s.lotClearOnNew,
+      });
+      ctx.publish();
+    });
+    ctx.onAdmin('clearLot', () => lot.clear());
+    /** Something stands on the lot */
+    const lotBuilt = () => {
+      const g = lot.info().grid;
+      return g.props.length > 0 || Object.keys(g.blocks).length > 0;
+    };
 
     // Item pictures: the item alone, drawn once per item and color. The shop's grid shows each
     // item in its own (first) color; the wardrobe shows the owned pieces in their colors.
@@ -1103,7 +1192,7 @@ export default defineModule<WorldSettings>({
             setTown(g.id, { choices: a.choices, outfit: a.outfit ?? {} });
             errands = [];
           }
-          return { id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), ...wornLimits(g.id), errands };
+          return { id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), ...wornLimits(g.id), errands, build: s.lot && lot.hasJobs(g.id) };
         });
       const sec = (a: number, b: number): [number, number] => [Math.min(a, b) * 1000, Math.max(a, b) * 1000];
       const frame = sim.tick(roster, {
@@ -1126,6 +1215,8 @@ export default defineModule<WorldSettings>({
         activities: { cafe: s.cafe, fountain: s.fountainSit, board: s.noticeBoard, fish: s.fishing, fire: s.campfire },
         lamplighter: s.lamplighter,
         party: { on: s.party, everyDays: s.partyEveryDays, chance: s.partyChancePct / 100, hours: s.partyHours, goers: s.partyGoersPct / 100 },
+        // (townsfolk only stop to look at the lot once something stands on it)
+        lot: s.lot ? { buildMs: s.lotBuildSec * 1000, admire: lotBuilt() ? s.lotAdmirePct / 100 : 0 } : undefined,
       });
       // The TV draws between frames by real time (the town's own runs in what they show)
       ctx.emit('tv', 'frame', { ...frame, t: now });
@@ -1371,6 +1462,7 @@ export default defineModule<WorldSettings>({
       delete king.asked;
       reigns.length = 0;
       sim.reset();
+      lot.reset();
       store.save();
       // Open pages (the header, the shop) show the emptied wallet at once instead of the old balance
       ctx.emit('guest', 'wallet', { balance: 0 });

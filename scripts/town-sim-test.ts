@@ -1,9 +1,10 @@
 /**
  * Plays the town (server/modules/world/sim.ts) on a fake clock, hours in seconds, with many
- * characters: guests leave and come back, change their looks, cheer, and the King holds a ceremony
+ * characters: guests leave and come back, change their looks, build on the lot, cheer, and the King holds a ceremony
  * every 15 minutes, and a whole town day goes by every hour (night from 22:00 to 06:00). It watches every step for trouble (walking on the spot, standing in the
- * fountain, off the square, in the river, an activity that never ends, a chat partner who is not
- * chatting back) and measures how things go (shop trips, the ceremony, sleep, who sleeps at night, variety).
+ * fountain, off the square, in the river, inside the build lot without building, an activity that never
+ * ends, a chat partner who is not chatting back) and measures how things go (shop trips, pieces built
+ * on the lot, the ceremony, sleep, who sleeps at night, variety).
  *
  *   npx tsx scripts/town-sim-test.ts [minutes] [characters] [seed]
  *
@@ -12,6 +13,7 @@
  */
 import { TownSim, type RosterEntry, type TownOptions } from '../server/modules/world/sim.ts';
 import { BROOK_HW, CROSSING, DAIS_FOOT, TOWN, TOWN_AREA, TOWN_OBSTACLES, WANIM, FRAME_STRIDE, brookSide, type PlaceId } from '../shared/world.ts';
+import { BLOCKS, LOT, PROPS, applyJob, cellIndex, inLot, jobCells, jobProblem, propAt, type LotGrid, type LotJob } from '../shared/worldBuild.ts';
 
 const MINUTES = Number(process.argv[2]) || 120;
 const N = Number(process.argv[3]) || 30;
@@ -26,6 +28,21 @@ const errands = new Map<string, PlaceId[]>();
 /** When each errand was given, to measure how long until the character is dressed */
 const errandAt = new Map<string, number>();
 const errandWaits: number[] = [];
+/** The build lot: what stands on it, each guest's pieces on their way (with when they were asked for), how long until each went up */
+const lot: LotGrid = { blocks: {}, props: [] };
+const lotJobs = new Map<string, { id: number; job: LotJob; at: number }[]>();
+const lotWaits: number[] = [];
+let lotId = 1;
+let lotFailed = 0;
+/** Put a piece up (or count it as one that no longer fit) */
+const putUp = (id: string, j: { id: number; job: LotJob; at: number }) => {
+  lotJobs.set(id, (lotJobs.get(id) ?? []).filter((x) => x !== j));
+  if (jobProblem(lot, j.job)) lotFailed++;
+  else {
+    applyJob(lot, j.job, () => lotId++);
+    lotWaits.push(clock - j.at);
+  }
+};
 const sim = new TownSim({
   dress(id, place) {
     const at = errandAt.get(id + place);
@@ -37,6 +54,21 @@ const sim = new TownSim({
   },
   caught() {
     fishCaught++;
+  },
+  lotJob(id) {
+    for (const j of lotJobs.get(id) ?? []) {
+      if (!jobProblem(lot, j.job)) return { id: j.id, ...jobCells(j.job) };
+      putUp(id, j);
+    }
+    return null;
+  },
+  lotDone(id, job) {
+    const j = lotJobs.get(id)?.find((x) => x.id === job);
+    if (j) putUp(id, j);
+  },
+  lotSolid: (c, r) => !!lot.blocks[cellIndex(c, r)]?.length || !!propAt(lot, c, r),
+  lotFlush(id) {
+    for (const j of [...(lotJobs.get(id) ?? [])]) putUp(id, j);
   },
 });
 const kinds = new Map<string, Set<string>>();
@@ -75,6 +107,7 @@ const opts: TownOptions = {
   lamplighter: true,
   // A party every other night, so a two hour test sees one
   party: { on: true, everyDays: 2, chance: 0.2, hours: 7, goers: 0.7 },
+  lot: { buildMs: 1500, admire: 0.05 },
 };
 /** The share of characters asleep for the night at 3:00, at 9:00 (the night owls) and at noon, each day */
 const atNight: number[] = [];
@@ -102,6 +135,7 @@ const LIMIT: Record<string, number> = {
   idle: 15_000, wander: 60_000, goBench: 60_000, sit: 30_000, goPet: 45_000, pet: 10_000, goChat: 20_000, chat: 40_000,
   cheer: 4000, goSleep: 90_000, visit: 120_000, goThrone: 120_000, descend: 60_000, goHall: 120_000, goPray: 120_000,
   goSeat: 60_000, seated: 60_000, goRead: 60_000, read: 10_000, goFish: 60_000, fish: 50_000, lamps: 150_000, party: 90_000, kindle: 60_000, parasol: 60_000, coffee: 60_000,
+  build: 180_000, goAdmire: 60_000, admire: 15_000,
 };
 
 /** How often each activity was started, the lamps lit at 23:00 and at 10:00 each day, the most dancing at the party at once */
@@ -140,6 +174,24 @@ while (clock < end) {
     }
     if (rnd() < 0.00005) sim.cheer(r.id);
     r.errands = errands.get(r.id) ?? [];
+    // Now and then a guest asks for a few pieces on the lot: blocks (often on one column), a decoration, taking something away
+    if (rnd() < 0.00004) {
+      const list = lotJobs.get(r.id) ?? [];
+      const c = Math.floor(rnd() * LOT.cols);
+      const row = Math.floor(rnd() * LOT.rows);
+      for (let k = Math.floor(rnd() * 6) + 1; k > 0; k--) {
+        const roll = rnd();
+        const job: LotJob =
+          roll < 0.7
+            ? { kind: 'block', c: rnd() < 0.6 ? c : Math.floor(rnd() * LOT.cols), r: row, what: BLOCKS[Math.floor(rnd() * BLOCKS.length)].id }
+            : roll < 0.9
+              ? { kind: 'prop', c: Math.floor(rnd() * (LOT.cols - 3)), r: Math.floor(rnd() * (LOT.rows - 2)), what: PROPS[Math.floor(rnd() * PROPS.length)].id, v: 0 }
+              : { kind: 'remove', c, r: row };
+        list.push({ id: lotId++, job, at: clock });
+      }
+      lotJobs.set(r.id, list);
+    }
+    r.build = !!lotJobs.get(r.id)?.length;
   }
   if (clock - lastCeremony > 15 * 60_000 && sim.inTown('g1')) {
     if (sim.startCeremony()) stats.ceremonies++;
@@ -248,7 +300,10 @@ while (clock < end) {
     }
     // Inside something on the square (sitting on a log is fine), out of bounds, in the river
     const inside = TOWN_OBSTACLES.find((o) => ((w.x - o.x) / o.rx) ** 2 + ((w.y - o.y) / o.ry) ** 2 < 0.6);
-    if (inside && !(d.kind === 'visit' && d.phase === 'inside') && d.kind !== 'sleep' && d.kind !== 'seated' && d.kind !== 'sit') report(`stands inside an obstacle (${kind})`, `${where} obstacle ${inside.x},${inside.y}`);
+    if (inside && !inside.box && !(d.kind === 'visit' && d.phase === 'inside') && d.kind !== 'sleep' && d.kind !== 'seated' && d.kind !== 'sit') report(`stands inside an obstacle (${kind})`, `${where} obstacle ${inside.x},${inside.y}`);
+    // Only builders go inside the lot's fence (a sleeper's body lies toward the middle: none lies along it either)
+    if (inLot(w.x, w.y) && d.kind !== 'build') report(`inside the build lot (${kind})`, where);
+    if (d.kind === 'sleep' && inLot(w.x + (w.x < TOWN.w / 2 ? 60 : -60), w.y)) report('asleep across the build lot', where);
     const inTown = w.x >= TOWN_AREA.x0 - 30 && w.x <= TOWN_AREA.x1 + 30;
     const inHall = w.x > CROSSING.x1;
     if (w.x > CROSSING.x0 + 4 && w.x < CROSSING.x1 - 4 && (w.y < CROSSING.y0 - 4 || w.y > CROSSING.y1 + 4)) report('in the river off the bridge', where);
@@ -270,6 +325,8 @@ console.log(`${MINUTES} min, ${N} characters, seed ${process.argv[4] ?? 1}: ${st
 const pct = (a: number[], p: number) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor((a.length - 1) * p)] : 0);
 console.log(`errands dressed: ${errandWaits.length}, waiting at the end: ${errandAt.size}, wait median ${sec(pct(errandWaits, 0.5))}, 95% ${sec(pct(errandWaits, 0.95))}, max ${sec(pct(errandWaits, 1))}`);
 console.log(`chat walks given up: ${chatGiveUps} of ${stats.chats + chatGiveUps}`);
+const lotLeft = [...lotJobs.values()].reduce((n, l) => n + l.length, 0);
+console.log(`lot: ${lotWaits.length} pieces up, ${lotFailed} no longer fitting, ${lotLeft} waiting at the end; wait median ${sec(pct(lotWaits, 0.5))}, 95% ${sec(pct(lotWaits, 0.95))}, max ${sec(pct(lotWaits, 1))}`);
 console.log(`court opened after (s from the call): ${(stats as any).courtWaits?.join(' ')}, places: ${(stats as any).spots}`);
 console.log(`in place when the court opens: ${courtShares.map((x) => Math.round(x * 100) + '%').join(' ')}`);
 console.log(`still out by the throne room a minute after: ${backLate.length ? backLate.slice(0, 5).join('; ') : 'nobody'}`);
