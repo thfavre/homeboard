@@ -903,8 +903,9 @@ export class TownSim {
         return d.knelt && !w.noSit ? WANIM.pray : WANIM.idle;
       case 'visit':
         return this.walking(w, d) ? WANIM.walk : WANIM.idle;
+      // (on a bench facing the front; on one seen from the side, sitting that way)
       case 'sit':
-        return WANIM.sit;
+        return BENCHES[d.bench]?.dir === 2 ? WANIM.sit : WANIM.perch;
       case 'sleep':
         return WANIM.sleep;
       case 'pet':
@@ -1072,7 +1073,7 @@ export class TownSim {
         if (this.walkTo(w, b.x, b.y, WALK_UPS, dt)) {
           w.x = b.x;
           w.y = b.y;
-          w.dir = 2;
+          w.dir = b.dir;
           w.doing = { kind: 'sit', bench: d.bench, until: now + rand(9000, 26_000) };
         }
         break;

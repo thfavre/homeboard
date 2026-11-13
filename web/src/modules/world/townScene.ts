@@ -323,6 +323,52 @@ function cafeTable(table: HTMLCanvasElement, chair: HTMLCanvasElement, parasol: 
   ];
 }
 
+// ------------------------------------------------------------ the bench facing right
+
+/** The wood of the city sheet's bench, dark to light */
+const BENCH = { line: '#412c18', dark: '#5a3615', shade: '#714f29', mid: '#876437', light: '#a57a44', shine: '#d2a066' };
+/** The bench facing right, in its art (sprite pixels): its size, and the middle of its seat */
+export const SIDE_BENCH = { w: 22, h: 58, seat: { x: 12, y: 30 } };
+
+/**
+ * A park bench seen from the side, facing right (the city sheet has it only facing the front):
+ * its long seat runs front to back, planks lit from the top left, the backrest's boards along its
+ * left edge, the seat's front end and the legs in shade
+ */
+export function buildSideBench(): HTMLCanvasElement {
+  const { w, h } = SIDE_BENCH;
+  const [c, g] = canvas(w, h);
+  // The legs: two under each end, the back ones half hidden by the seat
+  for (const [x, y0] of [
+    [4, 43],
+    [15, 43],
+    [4, 10],
+    [15, 10],
+  ] as const) {
+    px(g, BENCH.line, x, y0, 3, y0 > 20 ? h - y0 : 6);
+    px(g, BENCH.shade, x + 1, y0, 1, y0 > 20 ? h - y0 - 1 : 5);
+  }
+  // The seat from above: planks running front to back, its outer edge lit, its front end in shade
+  px(g, BENCH.line, 5, 7, 15, 39);
+  px(g, BENCH.mid, 6, 8, 13, 36);
+  for (const x of [9, 12, 15]) px(g, BENCH.shade, x, 8, 1, 36);
+  px(g, BENCH.light, 6, 8, 13, 1);
+  px(g, BENCH.shine, 7, 8, 1, 35);
+  for (const x of [10, 13, 16]) px(g, BENCH.light, x, 9, 1, 34);
+  px(g, BENCH.dark, 6, 44, 13, 2);
+  px(g, BENCH.shade, 18, 8, 1, 36);
+  // The backrest along the left edge, a little higher than the seat: boards between two posts
+  px(g, BENCH.line, 1, 0, 6, 44);
+  px(g, BENCH.mid, 2, 1, 4, 42);
+  for (let y = 3; y < 42; y += 7) {
+    px(g, BENCH.light, 2, y, 4, 1);
+    px(g, BENCH.dark, 2, y + 5, 4, 1);
+  }
+  px(g, BENCH.shine, 2, 1, 1, 41);
+  px(g, BENCH.dark, 5, 1, 1, 42);
+  return c;
+}
+
 // ------------------------------------------------------------ the campfire
 
 /** The fire pit seen from above: a ring of stones, ash and charred wood inside */
@@ -493,7 +539,17 @@ export function townProps(env: Env, keep: (x: number) => boolean): Prop[] {
   TOWN_SCENE.lamps.forEach((l, i) => out.push(lampPost(env, i, l.x, l.y)));
   // The sidewalk's benches and plants, but the bench before the cafe's porch: the town's own benches instead
   out.push(...sidewalkProps(env, (x) => keep(x) && x !== TOWN_BENCHES.instead));
-  for (const b of TOWN_BENCHES.list) out.push(still(env.magecity, CUT.bench, b.x, b.y));
+  const side = buildSideBench();
+  for (const b of TOWN_BENCHES.list) {
+    if (b.dir === 2) out.push(still(env.magecity, CUT.bench, b.x, b.y));
+    else
+      out.push({
+        // (sorted a little up its length: who sits on it is drawn over it)
+        y: b.y - 20,
+        ground: (g) => shadow(g, b.x + 2, b.y - 4, 16, 9),
+        draw: (g) => stand(g, side, b.x, b.y, b.dir === 1),
+      });
+  }
   out.push(noticeBoard());
   const table = buildTable();
   const chair = buildChair();

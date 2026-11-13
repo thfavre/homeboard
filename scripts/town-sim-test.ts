@@ -240,7 +240,7 @@ while (clock < end) {
     }
     // Inside something on the square (sitting on a log is fine), out of bounds, in the river
     const inside = TOWN_OBSTACLES.find((o) => ((w.x - o.x) / o.rx) ** 2 + ((w.y - o.y) / o.ry) ** 2 < 0.6);
-    if (inside && !(d.kind === 'visit' && d.phase === 'inside') && d.kind !== 'sleep' && d.kind !== 'seated') report(`stands inside an obstacle (${kind})`, `${where} obstacle ${inside.x},${inside.y}`);
+    if (inside && !(d.kind === 'visit' && d.phase === 'inside') && d.kind !== 'sleep' && d.kind !== 'seated' && d.kind !== 'sit') report(`stands inside an obstacle (${kind})`, `${where} obstacle ${inside.x},${inside.y}`);
     const inTown = w.x >= TOWN_AREA.x0 - 30 && w.x <= TOWN_AREA.x1 + 30;
     const inHall = w.x > CROSSING.x1;
     if (w.x > CROSSING.x0 + 4 && w.x < CROSSING.x1 - 4 && (w.y < CROSSING.y0 - 4 || w.y > CROSSING.y1 + 4)) report('in the river off the bridge', where);
