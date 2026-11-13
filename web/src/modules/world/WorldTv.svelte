@@ -28,11 +28,19 @@
    */
 
   const world = $derived(hb.modules.world as WorldState | undefined);
-  /** How many times faster than real time the town runs, and the button that goes round the speeds */
+  /**
+   * How many times faster than real time the town runs, and its button: pressed again within a few
+   * seconds it goes on to the next speed; pressed later while sped up, back to real time
+   */
   const speed = $derived(world?.warp?.speed ?? 1);
+  const SPEED_AGAIN_MS = 5000;
+  let lastPress = 0;
   function faster() {
+    const again = Date.now() - lastPress < SPEED_AGAIN_MS;
+    lastPress = Date.now();
     const i = TOWN_SPEEDS.indexOf(speed as (typeof TOWN_SPEEDS)[number]);
-    void attempt(() => rpc('world', 'setSpeed', { speed: TOWN_SPEEDS[(i + 1) % TOWN_SPEEDS.length] }));
+    const next = speed > 1 && !again ? 1 : TOWN_SPEEDS[(i + 1) % TOWN_SPEEDS.length];
+    void attempt(() => rpc('world', 'setSpeed', { speed: next }));
   }
 
   let canvas: HTMLCanvasElement;

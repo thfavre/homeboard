@@ -215,7 +215,7 @@
     <div class="line">
       <div>
         <strong>Town speed</strong>
-        <p class="faint small">Everything in the town runs this many times faster: the clock, the characters, the fire and the water. The TV has the same button in its top right corner.</p>
+        <p class="faint small">Everything in the town runs this many times faster: the clock, the characters, the fire and the water. The TV has a button for it in its top right corner: pressed again within a few seconds it goes faster, pressed later it goes back to 1×.</p>
       </div>
       <div class="buttons">
         {#each TOWN_SPEEDS as v (v)}
@@ -248,7 +248,7 @@
         <strong>Bedtime</strong>
         <p class="faint small">
           At night characters walk to the edge of the town and lie down, each at its own time, and get up around daybreak with a stretch. Bedtimes change
-          from one night to the next. Night owls stay up all night and sleep in the morning instead. A guest who picks a new look gets up to fetch it, and
+          from one night to the next. Night owls stay up all night and sleep in the morning instead: a different lot each night, half of last night's owls among them. A guest who picks a new look gets up to fetch it, and
           everyone wakes for the King's ceremony.
         </p>
       </div>
