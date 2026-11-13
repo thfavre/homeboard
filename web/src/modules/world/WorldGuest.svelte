@@ -11,10 +11,15 @@
   import Wardrobe from './Wardrobe.svelte';
   import Actions from './Actions.svelte';
   import LetterPaper from './LetterPaper.svelte';
-  import { mail, watchMail } from './mail.svelte.ts';
+  import { loadMail, mail, unread, watchMail } from './mail.svelte.ts';
 
-  // A letter handed over while the panel is open opens on top of it
+  // A letter handed over while the panel is open opens on top of it; the ones not read yet show
+  // as a count on the Actions tab (loaded on every connection: some may have come meanwhile)
   watchMail();
+  $effect(() => {
+    if (hb.connected) void loadMail();
+  });
+  const unreadLetters = $derived(unread().length);
 
   /**
    * The avatar panel: the look editor (body, skin, hair, eyes), the wardrobe of owned clothes
@@ -199,7 +204,7 @@
   <button type="button" class="tab" class:on={tab === 'look'} onclick={backToLook}><PersonStanding size={17} />My look</button>
   <button type="button" class="tab" class:on={tab === 'wardrobe'} onclick={() => tab !== 'wardrobe' && go('wardrobe')}><Shirt size={16} />Wardrobe</button>
   <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => tab !== 'shop' && ((shopSlot = null), go('shop'))}><ShoppingBag size={16} />Shop</button>
-  <button type="button" class="tab" class:on={tab === 'actions'} onclick={() => tab !== 'actions' && go('actions')}><Sparkles size={16} />Actions</button>
+  <button type="button" class="tab" class:on={tab === 'actions'} onclick={() => tab !== 'actions' && go('actions')}><Sparkles size={16} />Actions{#if unreadLetters}<span class="badge" aria-label="{unreadLetters} unread letters">{unreadLetters}</span>{/if}</button>
 </div>
 {/if}
 
@@ -339,6 +344,26 @@
     font-size: 0.82rem;
     font-weight: 600;
     white-space: nowrap;
+  }
+  /* Letters not read yet, in the tab's corner */
+  .tab {
+    position: relative;
+  }
+  .badge {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.3rem;
+    display: grid;
+    place-items: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    background: var(--accent-2);
+    color: var(--accent-contrast);
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
   }
   .tab.on {
     border-color: var(--accent);
