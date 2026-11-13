@@ -118,8 +118,8 @@ export const FIRE_LOGS = [
 export const FIRE_SEATS: Seat[] = [
   { x: 1346, y: 704, dir: 3, ground: true },
   { x: 1346, y: 734, dir: 3, ground: true },
-  { x: 1457, y: 706, dir: 1 },
-  { x: 1457, y: 733, dir: 1 },
+  { x: 1463, y: 714, dir: 1 },
+  { x: 1463, y: 740, dir: 1 },
   { x: 1382, y: 672, dir: 2 },
   { x: 1418, y: 672, dir: 2 },
 ];
