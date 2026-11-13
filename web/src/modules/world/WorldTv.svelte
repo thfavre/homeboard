@@ -2,9 +2,13 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-  import { CROSSING, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, hallLift, townMinutes, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { CAFE, CROSSING, DAIS_FOOT, FISH_SPOTS, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, hallLift, townMinutes, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
-  import { SQUARE_STREET, loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
+  import { SQUARE_STREET, loadEnv, squareGround, type Env, type Prop } from '../games/crowd/scene.ts';
+  import { DANCE_FEET, cafeArt, drawCafe, drawCafeLight, type CafeArt } from './cafe.ts';
+  import { drawCatch, drawDancing, drawGlass, drawPerched, drawPole, drawRod } from './poses.ts';
+  import { GREEN_TOP, brookFrames, drawBrook, drawBrookGlints, townGround } from './townGround.ts';
+  import { drawCup, drawFireLight, lampLevel, townNow, townProps } from './townScene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
@@ -14,10 +18,12 @@
   import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
 
   /**
-   * The town on the TV: the crowd games' square (same LPC environment art, same renderer), lived in
-   * by the guests' avatars. The server sends where everyone is a few times a second, this draws it
-   * smoothly in between, with the birds, the cat, a night veil in the evening and a name over every
-   * head. For the King's ceremony the camera moves to the right, over to the throne room.
+   * The town on the TV: the crowd games' square (same LPC environment art, same renderer) with the
+   * town's own places (the river along the bottom, the campfire's grass, the cafe, the notice board),
+   * lived in by the guests' avatars. The server sends where everyone is a few times a second, this
+   * draws it smoothly in between, with the birds, the cat, a night veil in the evening, the lamps and
+   * the fire lit, and a name over every head. For the King's ceremony the camera moves to the right,
+   * over to the throne room.
    */
 
   const world = $derived(hb.modules.world as WorldState | undefined);
@@ -27,6 +33,9 @@
   let env: Env | null = null;
   let shopArt: ShopArt | null = null;
   let hall: HallArt | null = null;
+  let cafe: CafeArt | null = null;
+  /** The town's river in the frames of its flow */
+  let brook: HTMLCanvasElement[] = [];
   let standingProps: Prop[] = [];
   /** What stands up in the throne room (only drawn while the camera shows it) */
   let hallStanding: Prop[] = [];
@@ -81,7 +90,9 @@
       env = e;
       shopArt = a;
       setShopArt(e, a);
-      if (e) standingProps = squareProps(e, (x) => x < TOWN_HALL_SPAN.x0 || x > TOWN_HALL_SPAN.x1).sort((a, b) => a.y - b.y);
+      if (e) standingProps = townProps(e, (x) => x < TOWN_HALL_SPAN.x0 || x > TOWN_HALL_SPAN.x1).sort((a, b) => a.y - b.y);
+      if (e && a) cafe = cafeArt(e, a);
+      brook = brookFrames();
     });
     void loadHall().then((h) => {
       hall = h;
@@ -194,7 +205,7 @@
   /** Where the town meets the grass (built with the ground once the throne room's art is there): drawn over the river's frames */
   let edge: { canvas: HTMLCanvasElement; x: number } | null = null;
   function background(): HTMLCanvasElement {
-    const key = `${!!env}${!!shopArt}${!!hall}`;
+    const key = `${!!env}${!!shopArt}${!!hall}${!!cafe}`;
     if (bg && bgKey === key) return bg;
     if (env) {
       const c = document.createElement('canvas');
@@ -205,13 +216,19 @@
       // With the riverside, the square is built on past the screen's edge: its last house sticks out over the grass
       const screen = Math.ceil(WORLD.w / SPRITE_SCALE);
       const last = houseRow(SQUARE_HOUSES.seed, screen).at(-1)!;
-      const ground = squareGround(env, shopArt ? shopSwap(env, shopArt) : undefined, hall ? last.x + last.w + 40 : screen);
+      // The shops and the cafe built on their houses
+      const shops = shopArt ? shopSwap(env, shopArt) : undefined;
+      const built = cafe;
+      const swap = shops && built ? (kind: Parameters<typeof shops>[0], x: number) => (kind === 'paneled' && x === CAFE.house.art ? built.house : shops(kind, x)) : shops;
+      const ground = squareGround(env, swap, hall ? last.x + last.w + 40 : screen);
+      // The town's grass, its bank and its river over the square's paving
+      townGround(ground);
       g.drawImage(ground, 0, 0, screen, ground.height, 0, 0, screen * SPRITE_SCALE, ground.height * SPRITE_SCALE);
       drawTownHall(g);
       edge = null;
       if (hall) {
         g.drawImage(hall.ground, RIVERSIDE.x0, 0, hall.ground.width * SPRITE_SCALE, hall.ground.height * SPRITE_SCALE);
-        edge = townEdge(ground, screen, last.x + last.w, SQUARE_STREET);
+        edge = townEdge(ground, screen, last.x + last.w, SQUARE_STREET, Math.floor(GREEN_TOP));
         g.drawImage(edge.canvas, edge.x * SPRITE_SCALE, 0, edge.canvas.width * SPRITE_SCALE, edge.canvas.height * SPRITE_SCALE);
       }
       bg = c;
@@ -285,6 +302,17 @@
       g.fillStyle = '#3a3c42';
       g.fillRect(TOWN.w, 0, HALL_PAN, TOWN.h);
     }
+    // The town's river flowing, glinting in the light
+    if (env && ground.width >= TOWN.w) {
+      if (brook.length) drawBrook(g, brook, now, away);
+      drawBrookGlints(g, env['water-sparkle-anim'], now);
+    }
+    // What the town's things need to know: how dark it is, which lamps are lit, a party on
+    const dark = f0 ? (f0.dark ?? 0) + (f1 ? ((f1.dark ?? 0) - (f0.dark ?? 0)) * mix : 0) : 0;
+    const party = !!f0?.party;
+    townNow.dark = dark;
+    townNow.lamps = f0?.lamps ?? 0;
+    townNow.party = party;
     const inHall = away && hall ? hallStanding : [];
     if (away && hall) {
       drawRiver(g, hall, now);
@@ -327,9 +355,11 @@
 
     const byId = new Map(world?.characters.map((c) => [c.id, c]) ?? []);
 
-    // The ones inside a shop are seen through its window, on the wall behind everyone else
+    // The ones inside a shop are seen through its window, on the wall behind everyone else; so are
+    // the ones dancing in the cafe
     const inside = people.filter((p) => p.anim === WANIM.inside);
-    for (let i = people.length - 1; i >= 0; i--) if (people[i].anim === WANIM.inside) people.splice(i, 1);
+    const dancers = people.filter((p) => p.anim === WANIM.dance);
+    for (let i = people.length - 1; i >= 0; i--) if (people[i].anim === WANIM.inside || people[i].anim === WANIM.dance) people.splice(i, 1);
 
     // The birds fly off on their own when someone walks up to them
     pigeons.update(step, people.filter((p) => p.anim !== WANIM.sleep));
@@ -412,10 +442,21 @@
         // Chatting: both laughing
       } else if (p.anim === WANIM.cheer && p.dir === 1 && img && info && drawHailing(g, img, info, p.x, y, now - l.since)) {
         // The King before the throne, both hands up
+      } else if (p.anim === WANIM.perch && img && info && drawPerched(g, img, info, p.x, y, p.dir, now - l.since)) {
+        // On the fountain's rim, a log by the fire, a cafe chair (with a cup on the table)
+        if (CAFE.seats.some((s) => Math.abs(s.x - p.x) < 3 && Math.abs(s.y - p.y) < 3)) drawCup(g, p.x, y, p.dir, now, l.phase);
+      } else if (p.anim === WANIM.dance && img && info && drawDancing(g, img, info, p.x, y, now, l.phase)) {
+        // Dancing in the cafe
       } else {
         // (a listener in a chat nods now and then)
         const dip = p.anim === WANIM.listen ? nodDip(now, l.phase) : 0;
         drawCharacter(g, sheets, img, p.x, y + dip, { anim: gameAnim(p.anim), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id));
+        // What they hold: the rod (the fish caught), a glass at the party, the lamplighter's pole
+        const side = () => FISH_SPOTS.reduce((a, b) => (Math.abs(b.x - p.x) < Math.abs(a.x - p.x) ? b : a)).side;
+        if (p.anim === WANIM.fish || p.anim === WANIM.bite) drawRod(g, p.x, y, side(), now, p.anim === WANIM.bite ? now - l.since : null);
+        else if (p.anim === WANIM.catch) drawCatch(g, p.x, y, side(), now - l.since);
+        else if (p.anim === WANIM.drink) drawGlass(g, p.x, y, p.dir, now, l.phase);
+        else if (p.anim === WANIM.light) drawPole(g, p.x, y, townNow.dark >= 0.3, now);
       }
       g.globalAlpha = 1;
     };
@@ -475,6 +516,8 @@
         if (place.id === 'barber') drawClippings(gg, step);
       });
     }
+    // The cafe, with the dancers seen through its window on a party night
+    if (cafe) drawCafe(g, cafe, now, dark, party, () => dancers.forEach((p) => drawPerson({ ...p, y: DANCE_FEET })));
 
     // The characters, the things that stand up, the birds and the cat, back to front together
     let pi = 0;
@@ -495,16 +538,21 @@
 
     // The evening lies over the square (the lamps keep their glow). The server keeps the time of
     // day the host set, and sends how dark it is with every frame.
-    const dark = f0 ? (f0.dark ?? 0) + (f1 ? ((f1.dark ?? 0) - (f0.dark ?? 0)) * mix : 0) : 0;
     if (dark > 0.02) {
       g.fillStyle = `rgba(14,16,42,${0.44 * dark})`;
       g.fillRect(0, 0, TOWN.w + (away ? HALL_PAN : 0), TOWN.h);
       // The shops stay lit inside
       for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
-      // The lamp posts light up through the veil, with a pool of light on the pavement under them
-      for (const l of TOWN_SCENE.lamps) drawLampLight(g, l.x, l.y, dark, now);
+      // The lamp posts the lamplighter has lit shine through the veil, with a pool of light on the pavement under them
+      TOWN_SCENE.lamps.forEach((l, i) => {
+        const level = lampLevel(i, now);
+        if (level > 0) drawLampLight(g, l.x, l.y, dark * level, now);
+      });
       drawTownHallLight(g, dark);
+      drawFireLight(g, dark, now);
     }
+    // The cafe's window at night, and its party lights
+    drawCafeLight(g, dark, party, now);
     // The town hall's clock shows the town's own time (the real one when its day is off)
     const day = world?.day;
     const local = new Date(now);

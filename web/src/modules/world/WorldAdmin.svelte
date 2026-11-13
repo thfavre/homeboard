@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Crown, Moon, Sun, Sunrise } from '@lucide/svelte';
+  import { Crown, Moon, PartyPopper, Sun, Sunrise } from '@lucide/svelte';
   import { attempt, hb, rpc, serverNow } from '$lib/client.svelte.ts';
   import { day } from '$lib/time.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -74,6 +74,36 @@
     const light = dark >= 0.95 ? 'Night' : dark <= 0.05 ? 'Day' : dark >= 0.5 ? 'Nightfall' : 'Daybreak';
     const sleepers = mod.nightSleepers ?? 0;
     return `${light} in the town, ${clockOf(townMinutes(clockNow, mod.dayMin ?? 30))} on its clock. ${sleepers === 0 ? 'Nobody sleeps' : sleepers === 1 ? 'One character sleeps' : `${sleepers} characters sleep`} for the night.`;
+  });
+
+  /** The town's places to go, each with its switch */
+  const PLACES: { key: 'cafe' | 'fountainSit' | 'noticeBoard' | 'fishing' | 'campfire' | 'lamplighter'; name: string; about: string }[] = [
+    { key: 'cafe', name: 'Cafe terrace', about: 'Two tables outside the cafe, a chair on each side: characters sit down for a coffee in the day. It closes at night.' },
+    { key: 'fountainSit', name: 'Fountain rim', about: 'Now and then someone sits on the rim of the fountain, less often than on a bench.' },
+    { key: 'noticeBoard', name: 'Notice board', about: 'The board by the town hall: characters stop in front of it and read for a moment.' },
+    { key: 'fishing', name: 'Fishing', about: 'Anglers stand on the river bank with a rod. Sometimes a fish bites, and they pull it out and hold it up.' },
+    {
+      key: 'campfire',
+      name: 'Campfire',
+      about: 'Logs around a fire pit on the grass by the river. Some sit there in the day; at night the fire burns and the night owls gather round it.',
+    },
+    {
+      key: 'lamplighter',
+      name: 'Lamplighter',
+      about: 'At nightfall someone goes round the lamp posts with a pole and lights them one by one, and puts them out in the morning. Off: they light themselves.',
+    },
+  ];
+
+  /** Whether the party is on, or when the next one comes */
+  const partyStatus = $derived.by(() => {
+    if (!mod) return '';
+    if (mod.partyOn) return 'The party is on';
+    if (!mod.party) return 'Only when you throw one';
+    if (!mod.dayCycle) return 'Waiting for night: day and night are off';
+    const next = mod.partyNext;
+    if (!next) return '';
+    const min = Math.max(1, Math.round((next - clockNow) / 60_000));
+    return `Next one in ${min < 90 ? `${min} min` : `${Math.round(min / 6) / 10} hours`} (real time)`;
   });
 
   function setSeconds(key: string, value: string) {
@@ -254,6 +284,56 @@
         <input class="input" type="number" min="2" max="120" value={mod.chatMaxSec} onchange={(e) => setSeconds('chatMaxSec', e.currentTarget.value)} />
       </label>
     </div>
+    {#each PLACES as p (p.key)}
+      <div class="line">
+        <div>
+          <strong>{p.name}</strong>
+          <p class="faint small">{p.about}</p>
+        </div>
+        <Toggle checked={!!mod[p.key]} label={p.name} onchange={(v) => setOption(p.key, v)} />
+      </div>
+    {/each}
+  </Section>
+
+  <Section title="Party at the cafe">
+    <div class="line">
+      <div>
+        <strong>Party nights</strong>
+        <p class="faint small">
+          Every few nights the cafe throws a party from nightfall. Many stay up for it: some dance inside, seen through the window in flashing colored light,
+          others stand out on the terrace with a drink. When it is over they go to bed. Needs day and night.
+        </p>
+      </div>
+      <Toggle checked={!!mod.party} label="Party nights" onchange={(v) => setOption('party', v)} />
+    </div>
+    <div class="pair">
+      <label class="field">
+        <span>Every (town days)</span>
+        <input class="input" type="number" min="1" max="60" value={mod.partyEveryDays} onchange={(e) => setAmount('partyEveryDays', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>Lasts (town hours from nightfall)</span>
+        <input class="input" type="number" min="1" max="12" step="0.5" value={mod.partyHours} onchange={(e) => setSeconds('partyHours', e.currentTarget.value)} />
+      </label>
+    </div>
+    <label class="field">
+      <span>Stay up for it (percent of the town)</span>
+      <input class="input" type="number" min="0" max="100" value={mod.partyGoersPct} onchange={(e) => setAmount('partyGoersPct', e.currentTarget.value)} />
+    </label>
+    <p class="faint small">The others go to bed as usual; night owls are up anyway.</p>
+    <div class="current">
+      <span class="status"><PartyPopper size={16} />{partyStatus}</span>
+    </div>
+    <div class="buttons">
+      {#if mod.partyOn}
+        <button type="button" class="btn small" onclick={() => attempt(() => rpc('world', 'endParty'), 'The party is over')}>End the party</button>
+      {:else}
+        <button type="button" class="btn small" onclick={() => attempt(() => rpc('world', 'startParty'), 'The party begins')}>
+          <PartyPopper size={16} />Throw a party now
+        </button>
+      {/if}
+    </div>
+    <p class="faint small">One you throw yourself lasts as long as the ones on their own, at any time of day.</p>
   </Section>
 
   <Section title="The King">

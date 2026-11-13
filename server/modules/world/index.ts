@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, townMinutes, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, kingPriceAt, lookCost, partyAt, validChoices, type AvatarChoices, type CeremonyHold, townMinutes, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, notForTheKing, starterPieces, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -87,6 +87,19 @@ interface WorldSettings {
   bedtimeSpreadMin: number;
   /** The share of characters who stay up all night and sleep in the morning (percent) */
   nightOwlPct: number;
+  /** Things to do in the town: the cafe's terrace, sitting on the fountain's rim, the notice board, fishing in the river, the campfire */
+  cafe: boolean;
+  fountainSit: boolean;
+  noticeBoard: boolean;
+  fishing: boolean;
+  campfire: boolean;
+  /** Someone goes round the lamp posts at nightfall and lights them (off: they light themselves) */
+  lamplighter: boolean;
+  /** The cafe throws a party every so many town days, from nightfall for so many town hours; this share of the town stays up for it (percent) */
+  party: boolean;
+  partyEveryDays: number;
+  partyHours: number;
+  partyGoersPct: number;
 }
 
 /** A time of day as "HH:MM" (24 hours), or null when it is not one */
@@ -241,6 +254,16 @@ export default defineModule<WorldSettings>({
     nightSleep: true,
     bedtimeSpreadMin: 180,
     nightOwlPct: 20,
+    cafe: true,
+    fountainSit: true,
+    noticeBoard: true,
+    fishing: true,
+    campfire: true,
+    lamplighter: true,
+    party: true,
+    partyEveryDays: 7,
+    partyHours: 5,
+    partyGoersPct: 70,
   },
 
   setup(ctx) {
@@ -497,6 +520,14 @@ export default defineModule<WorldSettings>({
      */
     const sheetUrl = (hash: string) => `${ctx.mediaUrl(`sheets/${hash}.png`)}?rows=${Object.keys(sheetInfos[hash]?.rows ?? {}).length}`;
 
+    /** When the next party at the cafe starts on its own (server time; null: one is on, they are off, or the town has no night) */
+    const partyNext = (now: number): number | null => {
+      const s = ctx.settings.get();
+      if (!s.party || !s.dayCycle) return null;
+      const p = partyAt(townMinutes(now, s.dayMin), s.dusk, s.partyEveryDays, s.partyHours);
+      return p.on ? null : now + (p.startsIn / 1440) * s.dayMin * 60_000;
+    };
+
     // ------------------------------------------------------------ the ceremony
 
     const startedAt = Date.now();
@@ -604,6 +635,18 @@ export default defineModule<WorldSettings>({
           nightSleep: s.nightSleep,
           bedtimeSpreadMin: s.bedtimeSpreadMin,
           nightOwlPct: s.nightOwlPct,
+          cafe: s.cafe,
+          fountainSit: s.fountainSit,
+          noticeBoard: s.noticeBoard,
+          fishing: s.fishing,
+          campfire: s.campfire,
+          lamplighter: s.lamplighter,
+          party: s.party,
+          partyEveryDays: s.partyEveryDays,
+          partyHours: s.partyHours,
+          partyGoersPct: s.partyGoersPct,
+          partyOn: sim.partyOn,
+          partyNext: partyNext(Date.now()),
           darkNow: Math.round(sim.darkness * 100) / 100,
           nightSleepers: sim.sleepingForTheNight,
           kingSales: king.sales,
@@ -992,10 +1035,13 @@ export default defineModule<WorldSettings>({
         nightSleep: s.nightSleep,
         bedtimeSpreadMin: s.bedtimeSpreadMin,
         nightOwls: s.nightOwlPct / 100,
+        activities: { cafe: s.cafe, fountain: s.fountainSit, board: s.noticeBoard, fish: s.fishing, fire: s.campfire },
+        lamplighter: s.lamplighter,
+        party: { on: s.party, everyDays: s.partyEveryDays, hours: s.partyHours, goers: s.partyGoersPct / 100 },
       });
       ctx.emit('tv', 'frame', frame);
       // The admin page shows how dark it is and who sleeps for the night: sent again when either changes
-      const night = `${Math.round(sim.darkness * 20)}:${sim.sleepingForTheNight}`;
+      const night = `${Math.round(sim.darkness * 20)}:${sim.sleepingForTheNight}:${sim.partyOn}`;
       if (sim.ceremonyPhase !== ceremonyPhase || night !== nightShown) {
         ceremonyPhase = sim.ceremonyPhase;
         nightShown = night;
@@ -1146,6 +1192,16 @@ export default defineModule<WorldSettings>({
         nightSleep: typeof args.nightSleep === 'boolean' ? args.nightSleep : s.nightSleep,
         bedtimeSpreadMin: Math.max(0, Math.min(360, Math.round(num(args.bedtimeSpreadMin, s.bedtimeSpreadMin)))),
         nightOwlPct: Math.max(0, Math.min(100, Math.round(num(args.nightOwlPct, s.nightOwlPct)))),
+        cafe: typeof args.cafe === 'boolean' ? args.cafe : s.cafe,
+        fountainSit: typeof args.fountainSit === 'boolean' ? args.fountainSit : s.fountainSit,
+        noticeBoard: typeof args.noticeBoard === 'boolean' ? args.noticeBoard : s.noticeBoard,
+        fishing: typeof args.fishing === 'boolean' ? args.fishing : s.fishing,
+        campfire: typeof args.campfire === 'boolean' ? args.campfire : s.campfire,
+        lamplighter: typeof args.lamplighter === 'boolean' ? args.lamplighter : s.lamplighter,
+        party: typeof args.party === 'boolean' ? args.party : s.party,
+        partyEveryDays: Math.max(1, Math.min(60, Math.round(num(args.partyEveryDays, s.partyEveryDays)))),
+        partyHours: Math.max(1, Math.min(12, Math.round(num(args.partyHours, s.partyHours) * 2) / 2)),
+        partyGoersPct: Math.max(0, Math.min(100, Math.round(num(args.partyGoersPct, s.partyGoersPct)))),
       });
       ctx.publish();
     });
@@ -1154,6 +1210,18 @@ export default defineModule<WorldSettings>({
     ctx.onAdmin('startCeremony', () => {
       if (!ctx.enabled()) throw new HbError('Turn the Avatar world on first');
       if (!beginCeremony(false)) throw new HbError('A ceremony is on already');
+    });
+
+    // The host throws a party at the cafe now (for its usual length), or ends the one that is on
+    ctx.onAdmin('startParty', () => {
+      if (!ctx.enabled()) throw new HbError('Turn the Avatar world on first');
+      if (!sim.startParty()) throw new HbError('A party is on already');
+      ctx.publish();
+    });
+
+    ctx.onAdmin('endParty', () => {
+      sim.endParty();
+      ctx.publish();
     });
 
     ctx.onAdmin('endCeremony', () => {

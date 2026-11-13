@@ -1,0 +1,468 @@
+import { SPRITE_SCALE } from '$shared/crowd.ts';
+import { CAFE, CAMPFIRE, FIRE_LOGS, NOTICE_BOARD, TOWN_SCENE, type WDir } from '$shared/world.ts';
+import { CUT, fountain, put, sidewalkProps, tree, type Env, type Prop } from '../games/crowd/scene.ts';
+
+/**
+ * What stands up on the town's square, drawn in depth order with the characters: the fountain, the
+ * trees (each its own size), the lamp posts (lit one by one by the lamplighter), the sidewalk's
+ * benches and plants, the notice board by the town hall, the cafe's tables with their chairs and
+ * parasols and its chalkboard, the campfire on the grass with its logs. The board, the cafe's
+ * furniture and the campfire are drawn here by hand, one sprite pixel at a time, lit from the top left.
+ */
+
+type G = CanvasRenderingContext2D;
+const S = SPRITE_SCALE;
+
+/** What the props need to know of the town right now (set by the TV every frame) */
+export const townNow = { dark: 0, lamps: 0, party: false };
+
+function canvas(w: number, h: number): [HTMLCanvasElement, G] {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d')!;
+  g.imageSmoothingEnabled = false;
+  return [c, g];
+}
+
+function px(g: G, color: string, x: number, y: number, w = 1, h = 1): void {
+  g.fillStyle = color;
+  g.fillRect(x, y, w, h);
+}
+
+/** Draw a small canvas of sprite pixels with its bottom middle at (x, y) in world units */
+function stand(g: G, c: HTMLCanvasElement, x: number, y: number, mirror = false): void {
+  const w = c.width * S;
+  const h = c.height * S;
+  if (!mirror) {
+    g.drawImage(c, Math.round(x - w / 2), Math.round(y - h), Math.round(w), Math.round(h));
+    return;
+  }
+  g.save();
+  g.translate(Math.round(x), 0);
+  g.scale(-1, 1);
+  g.drawImage(c, Math.round(-w / 2), Math.round(y - h), Math.round(w), Math.round(h));
+  g.restore();
+}
+
+/** A soft shadow on the ground, an ellipse around (x, y) in world units */
+function shadow(g: G, x: number, y: number, rx: number, ry: number, a = 0.25): void {
+  g.fillStyle = `rgba(10,10,25,${a})`;
+  g.beginPath();
+  g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  g.fill();
+}
+
+const WOOD = { line: '#2a1610', dark: '#4a2a1c', mid: '#6b3d22', light: '#85502c', pale: '#a8703e' };
+const IRON = { line: '#16171d', dark: '#2b2d36', mid: '#454956', light: '#6d7385' };
+const PAPER = ['#f4efe2', '#efe2bf', '#f3d98a', '#c8dcec', '#f2c7c0'];
+/** The cafe's green, the awning's (LPC awnings sheet) */
+const AWNING = { line: '#2c4428', dark: '#3f6339', mid: '#5f8f4e', light: '#82b26a', cream: '#efe6cf', creamDark: '#cfc3a4' };
+
+// ------------------------------------------------------------ the lamp posts
+
+/** When each lamp last switched (TV time), to fade its light in and out */
+const lampSwitch = TOWN_SCENE.lamps.map(() => ({ lit: false, at: -Infinity }));
+
+/** How lit a lamp is now, 0 to 1: it flares up over a moment when lit, and dims when put out */
+export function lampLevel(i: number, now: number): number {
+  const s = lampSwitch[i];
+  const lit = !!(townNow.lamps & (1 << i));
+  if (lit !== s.lit) {
+    s.lit = lit;
+    s.at = now;
+  }
+  const k = Math.min(1, (now - s.at) / 700);
+  return lit ? (k < 0.3 ? k * 3.3 * (1 + Math.sin(k * 40) * 0.2) : 1) : 1 - k;
+}
+
+function lampPost(env: Env, i: number, x: number, y: number): Prop {
+  const ly = y - 82;
+  return {
+    y,
+    draw(g, now) {
+      const level = lampLevel(i, now);
+      put(g, env['lamp-post'], level > 0.5 ? CUT.lamp : CUT.lampOff, x, y + 4);
+      if (level <= 0) return;
+      // A warm glow around the light, breathing a little
+      const glow = g.createRadialGradient(x, ly, 0, x, ly, 46);
+      glow.addColorStop(0, `rgba(255,210,120,${(0.32 + 0.05 * Math.sin(now / 700 + x)) * level})`);
+      glow.addColorStop(1, 'rgba(255,210,120,0)');
+      g.fillStyle = glow;
+      g.beginPath();
+      g.arc(x, ly, 46, 0, Math.PI * 2);
+      g.fill();
+    },
+  };
+}
+
+// ------------------------------------------------------------ the notice board
+
+/** The board: two posts, a little shingled roof, a frame of dark wood round cork, notices pinned on it */
+function buildBoard(): HTMLCanvasElement {
+  const [c, g] = canvas(38, 44);
+  // The posts
+  for (const x of [5, 30]) {
+    px(g, WOOD.line, x - 1, 26, 5, 18);
+    px(g, WOOD.mid, x, 26, 3, 18);
+    px(g, WOOD.light, x, 26, 1, 18);
+    px(g, WOOD.dark, x + 2, 26, 1, 18);
+  }
+  // The roof: two rows of shingles over a ridge plank, lit along the top
+  px(g, WOOD.line, 0, 3, 38, 6);
+  px(g, '#7b2f22', 1, 4, 36, 4);
+  for (let x = 1; x < 37; x += 4) {
+    px(g, '#9e4630', x, 4, 3, 1);
+    px(g, '#5c2218', x + 3, 4, 1, 4);
+  }
+  px(g, WOOD.line, 3, 1, 32, 3);
+  px(g, WOOD.light, 4, 1, 30, 1);
+  px(g, WOOD.mid, 4, 2, 30, 1);
+  px(g, 'rgba(14,10,24,0.35)', 2, 9, 34, 2);
+  // The frame and the cork
+  px(g, WOOD.line, 2, 9, 34, 21);
+  px(g, WOOD.mid, 3, 10, 32, 19);
+  px(g, WOOD.light, 3, 10, 32, 1);
+  px(g, '#b98a5a', 4, 11, 30, 17);
+  for (let y = 11; y < 28; y++) for (let x = 4 + (y % 2); x < 34; x += 3) px(g, '#a8794c', x, y);
+  px(g, 'rgba(14,10,24,0.25)', 4, 11, 30, 2);
+  // The notices: sheets of paper with lines of writing, a red or blue pin at the top of each
+  const notes = [
+    [6, 13, 8, 10, 0],
+    [15, 12, 9, 7, 2],
+    [26, 13, 6, 8, 3],
+    [15, 20, 7, 6, 1],
+    [24, 22, 8, 5, 4],
+    [6, 24, 6, 3, 2],
+  ];
+  for (const [x, y, w, h, k] of notes) {
+    px(g, 'rgba(14,10,24,0.3)', x + 1, y + 1, w, h);
+    px(g, PAPER[k], x, y, w, h);
+    for (let ly = y + 2; ly < y + h - 1; ly += 2) px(g, 'rgba(60,50,60,0.45)', x + 1, ly, w - 2 - ((ly * 7) % 3), 1);
+    px(g, k % 2 ? '#3a6ad0' : '#d23a2c', x + Math.floor(w / 2), y, 1, 1);
+  }
+  return c;
+}
+
+function noticeBoard(): Prop {
+  const art = buildBoard();
+  const { x, y } = NOTICE_BOARD;
+  return {
+    y,
+    ground: (g) => shadow(g, x + 4, y + 1, 30, 6),
+    draw: (g) => stand(g, art, x, y + 2),
+  };
+}
+
+// ------------------------------------------------------------ the cafe's terrace
+
+/** A round bistro table: a marble top on an iron stem and foot */
+function buildTable(): HTMLCanvasElement {
+  const [c, g] = canvas(22, 17);
+  px(g, IRON.line, 7, 15, 8, 2);
+  px(g, IRON.mid, 8, 15, 6, 1);
+  px(g, IRON.line, 10, 6, 2, 10);
+  px(g, IRON.light, 10, 6, 1, 9);
+  // The top, seen from above: an ellipse, its rim in shade
+  g.fillStyle = '#9d978c';
+  g.beginPath();
+  g.ellipse(11, 4, 10.5, 3.5, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#ece8de';
+  g.beginPath();
+  g.ellipse(11, 3.5, 9.5, 2.8, 0, 0, Math.PI * 2);
+  g.fill();
+  px(g, '#fbf9f3', 5, 2, 6, 1);
+  px(g, '#c9c3b6', 4, 6, 14, 1);
+  return c;
+}
+
+/** A bistro chair seen from the side, facing right: a curved iron back on its left, a wooden seat, thin legs */
+function buildChair(): HTMLCanvasElement {
+  const [c, g] = canvas(12, 22);
+  px(g, IRON.line, 1, 1, 2, 12);
+  px(g, IRON.light, 1, 1, 1, 11);
+  px(g, IRON.line, 2, 0, 3, 2);
+  px(g, IRON.line, 3, 4, 1, 6);
+  px(g, WOOD.line, 1, 11, 10, 3);
+  px(g, WOOD.light, 2, 11, 8, 1);
+  px(g, WOOD.mid, 2, 12, 8, 1);
+  for (const x of [2, 9]) {
+    px(g, IRON.line, x, 14, 1, 8);
+    px(g, IRON.mid, x, 14, 1, 1);
+  }
+  px(g, IRON.dark, 3, 17, 6, 1);
+  return c;
+}
+
+/** A parasol from above: a wide low cone in green and cream stripes, scalloped at its edge; or furled at night */
+function buildParasol(open: boolean): HTMLCanvasElement {
+  if (!open) {
+    const [c, g] = canvas(6, 26);
+    px(g, AWNING.line, 1, 2, 4, 20);
+    px(g, AWNING.mid, 2, 3, 2, 18);
+    px(g, AWNING.light, 2, 3, 1, 17);
+    px(g, AWNING.cream, 2, 9, 2, 2);
+    px(g, AWNING.cream, 2, 15, 2, 2);
+    px(g, IRON.line, 2, 0, 2, 2);
+    px(g, IRON.line, 2, 22, 2, 4);
+    return c;
+  }
+  const W = 50;
+  const [c, g] = canvas(W, 18);
+  const cx = W / 2;
+  for (let y = 2; y < 15; y++) {
+    const k = (y - 1) / 13;
+    const half = Math.round(3 + k * 21);
+    for (let x = cx - half; x < cx + half; x++) {
+      // The stripes fan out from the top, like the panels of the canopy
+      const a = Math.atan2(x - cx + 0.5, y + 4);
+      const panel = Math.floor((a + Math.PI) / (Math.PI / 9)) % 2;
+      const lit = x < cx ? 0 : 1;
+      const color = panel ? (lit ? AWNING.creamDark : AWNING.cream) : lit ? AWNING.dark : AWNING.mid;
+      px(g, color, x, y);
+    }
+    px(g, AWNING.line, cx - half - 1, y);
+    px(g, AWNING.line, cx + half, y);
+  }
+  // The scalloped valance hanging from its edge
+  for (let x = cx - 24; x < cx + 24; x++) {
+    const a = Math.atan2(x - cx + 0.5, 18);
+    const panel = Math.floor((a + Math.PI) / (Math.PI / 9)) % 2;
+    const drop = (x - cx + 24) % 6 < 4 ? 2 : 1;
+    px(g, panel ? AWNING.creamDark : AWNING.dark, x, 15, 1, drop);
+    px(g, AWNING.line, x, 15 + drop, 1, 1);
+  }
+  px(g, AWNING.line, cx - 2, 0, 4, 2);
+  px(g, '#d9c26a', cx - 1, 0, 2, 1);
+  return c;
+}
+
+/** The cafe's chalkboard on the sidewalk: an A-frame of wood, a cup drawn in chalk, lines of the day's menu */
+function buildChalkboard(): HTMLCanvasElement {
+  const [c, g] = canvas(16, 21);
+  px(g, WOOD.line, 1, 0, 14, 19);
+  px(g, WOOD.mid, 2, 1, 12, 17);
+  px(g, '#26302c', 3, 2, 10, 14);
+  // The cup and its steam
+  px(g, '#e8e8e0', 5, 7, 5, 4);
+  px(g, '#e8e8e0', 10, 8, 1, 2);
+  px(g, '#c9b089', 6, 7, 3, 1);
+  px(g, '#e8e8e0', 6, 4, 1, 2);
+  px(g, '#e8e8e0', 8, 3, 1, 2);
+  px(g, '#e8e8e0', 4, 12, 8, 1);
+  px(g, '#cfd6cf', 4, 14, 5, 1);
+  px(g, '#e08a8a', 10, 14, 2, 1);
+  px(g, WOOD.line, 2, 18, 2, 3);
+  px(g, WOOD.line, 12, 18, 2, 3);
+  return c;
+}
+
+/** The cups on the cafe's tables, in front of who sits there: white with coffee, a wisp of steam in the day */
+export function drawCup(g: G, x: number, y: number, dir: WDir, now: number, phase: number): void {
+  const side = dir === 1 ? -1 : 1;
+  const cx = Math.round(x + side * 15 * S);
+  const cy = Math.round(y - 17 * S);
+  g.fillStyle = '#f4f1ea';
+  g.fillRect(cx - 1.5 * S, cy - 2 * S, 3 * S, 2 * S);
+  g.fillRect(cx + (side > 0 ? 1.5 : -2.5) * S, cy - 1.6 * S, S, S);
+  g.fillStyle = '#5b3a24';
+  g.fillRect(cx - S, cy - 2 * S, 2 * S, S * 0.7);
+  if (townNow.dark < 0.4) {
+    const t = ((now + phase) % 2400) / 2400;
+    g.fillStyle = `rgba(255,255,255,${0.35 * (1 - t)})`;
+    g.fillRect(Math.round(cx + Math.sin(t * 6) * S), Math.round(cy - (3 + t * 8) * S), S, S * 2);
+  }
+}
+
+function cafeTable(table: HTMLCanvasElement, chair: HTMLCanvasElement, parasol: HTMLCanvasElement, furled: HTMLCanvasElement, x: number, y: number): Prop[] {
+  return [
+    {
+      y,
+      ground(g) {
+        shadow(g, x, y + 1, 22, 6);
+        // The chairs, either side, facing the table: drawn on the ground, under whoever sits on them
+        stand(g, chair, x - 30, y + 2);
+        stand(g, chair, x + 30, y + 2, true);
+      },
+      draw(g) {
+        stand(g, table, x, y + 1);
+        // The parasol's pole, up to its canopy (drawn over the heads, see below)
+        g.fillStyle = IRON.line;
+        g.fillRect(Math.round(x - S / 2), Math.round(y - 56 * S), S, 42 * S);
+      },
+    },
+    {
+      // The canopy over the table, over the heads of who sits there; furled at night, open again for a party
+      y: y + 8,
+      draw(g, now) {
+        const open = townNow.dark < 0.5 || townNow.party;
+        stand(g, open ? parasol : furled, x, y - (open ? 50 : 30) * S);
+        if (!open || !townNow.party || townNow.dark < 0.2) return;
+        // On a party night: a string of little colored lights along its edge, twinkling
+        const colors = ['#ff6a6a', '#ffd36a', '#6affb0', '#6ab8ff', '#e07aff'];
+        for (let i = 0; i < 9; i++) {
+          const lx = x + (i - 4) * 5.3 * S;
+          const ly = y - (50 - 1 - Math.abs(i - 4) * 0.4) * S;
+          const on = (Math.floor(now / 400) + i) % 3 !== 0;
+          g.fillStyle = on ? colors[i % colors.length] : 'rgba(80,70,90,0.8)';
+          g.fillRect(Math.round(lx - S / 2), Math.round(ly), S, S);
+        }
+      },
+    },
+  ];
+}
+
+// ------------------------------------------------------------ the campfire
+
+/** The fire pit seen from above: a ring of stones, ash and charred wood inside */
+function buildPit(): HTMLCanvasElement {
+  const [c, g] = canvas(40, 18);
+  g.fillStyle = '#2e2826';
+  g.beginPath();
+  g.ellipse(20, 9, 15, 6, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#4a423e';
+  g.beginPath();
+  g.ellipse(20, 10, 11, 4, 0, 0, Math.PI * 2);
+  g.fill();
+  // Two charred logs crossing
+  px(g, '#1a1110', 12, 9, 16, 2);
+  px(g, '#3a2418', 12, 9, 16, 1);
+  px(g, '#1a1110', 17, 6, 6, 7);
+  px(g, '#3a2418', 18, 6, 4, 1);
+  // The stones around, lit at the top
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const x = Math.round(20 + Math.cos(a) * 17 - 2);
+    const y = Math.round(9 + Math.sin(a) * 7 - 1);
+    px(g, '#343043', x, y, 5, 4);
+    px(g, i % 3 ? '#8a8494' : '#a8a1ad', x + 1, y, 3, 2);
+    px(g, '#c7c0c8', x + 1, y, 2, 1);
+  }
+  return c;
+}
+
+/** A log lying on the grass, seen from above: bark with dark grain, its cut end a light ring (along x or along y, the cut end toward the front) */
+function buildLog(along: 'x' | 'y'): HTMLCanvasElement {
+  /** The bark across the log, from its lit side to its shaded one: round, lit from the top left */
+  const ROUND = [WOOD.line, WOOD.light, WOOD.pale, WOOD.light, WOOD.mid, WOOD.mid, WOOD.mid, WOOD.dark, WOOD.dark, WOOD.line];
+  const thick = ROUND.length;
+  const long = along === 'x' ? 48 : 40;
+  const [c, g] = canvas(along === 'x' ? long : thick, along === 'x' ? thick + 1 : long);
+  const ring = (x: number, y: number, w: number, h: number) => {
+    px(g, WOOD.line, x, y, w, h);
+    px(g, '#c9a36a', x + 1, y + 1, w - 2, h - 2);
+    px(g, '#e0c08a', x + 1, y + 1, w - 2, 1);
+    px(g, '#a8803e', x + Math.floor(w / 2) - 1, y + Math.floor(h / 2) - 1, 2, 2);
+  };
+  if (along === 'x') {
+    ROUND.forEach((color, k) => px(g, color, 2, k, long - 4, 1));
+    // The bark's grain, and a knot
+    for (let x = 6; x < long - 6; x += 5) px(g, WOOD.dark, x, 3 + (x % 3), 3, 1);
+    px(g, WOOD.line, 20, 4, 2, 2);
+    ring(0, 0, 5, thick);
+    ring(long - 5, 0, 5, thick);
+  } else {
+    ROUND.forEach((color, k) => px(g, color, k, 0, 1, long - 6));
+    for (let y = 3; y < long - 9; y += 5) px(g, WOOD.dark, 4 + (y % 3), y, 1, 3);
+    px(g, WOOD.line, 5, 16, 2, 2);
+    // The cut end toward the front
+    ring(0, long - 8, thick, 8);
+  }
+  return c;
+}
+
+/** How brightly the campfire burns: it is lit as night falls, out in the day */
+export const fireLevel = () => Math.max(0, Math.min(1, (townNow.dark - 0.2) / 0.25));
+
+function campfire(): Prop[] {
+  const pit = buildPit();
+  const logs = FIRE_LOGS.map((l) => ({ ...l, art: buildLog(l.along) }));
+  const { x, y } = CAMPFIRE;
+  return [
+    {
+      y,
+      ground(g) {
+        shadow(g, x, y + 4, 34, 10, 0.2);
+        stand(g, pit, x, y + 10);
+        for (const l of logs) {
+          shadow(g, l.x + 3, l.y + (l.along === 'x' ? 6 : 26), l.along === 'x' ? 32 : 7, l.along === 'x' ? 4 : 6, 0.25);
+          stand(g, l.art, l.x, l.y + (l.along === 'x' ? 6 : 26));
+        }
+      },
+      draw(g, now) {
+        const level = fireLevel();
+        if (level <= 0) return;
+        // The flames: tongues of fire licking up, each flickering on its own, yellow in their heart
+        const tongues = [
+          [-7, 9, 0],
+          [-3, 15, 1.7],
+          [1, 18, 3.1],
+          [5, 13, 4.4],
+          [8, 8, 5.9],
+        ];
+        for (const [dx, h0, ph] of tongues) {
+          const h = (h0 + Math.sin(now / 90 + ph) * 3 + Math.sin(now / 37 + ph * 2) * 1.5) * level;
+          const sway = Math.sin(now / 140 + ph) * 1.2;
+          for (const [color, k, w] of [
+            ['#c2402a', 1, 4],
+            ['#f39c3a', 0.72, 3],
+            ['#ffe08a', 0.4, 2],
+          ] as const) {
+            const fh = Math.max(1, Math.round(h * k));
+            g.fillStyle = color;
+            g.beginPath();
+            g.moveTo(x + (dx - w) * S, y - 1 * S);
+            g.quadraticCurveTo(x + (dx + sway * 0.5) * S, y - fh * 0.6 * S, x + (dx + sway) * S, y - fh * S);
+            g.quadraticCurveTo(x + (dx + sway * 0.5) * S, y - fh * 0.6 * S, x + (dx + w) * S, y - 1 * S);
+            g.fill();
+          }
+        }
+        // Sparks rising and fading
+        for (let i = 0; i < 6; i++) {
+          const t = ((now / 1300 + i / 6) % 1 + 1) % 1;
+          g.fillStyle = `rgba(255,${180 + i * 10},90,${(1 - t) * level})`;
+          g.fillRect(Math.round(x + (Math.sin(i * 7.3 + t * 5) * 8 + (i - 3) * 2) * S), Math.round(y - (14 + t * 40) * S), S, S);
+        }
+      },
+    },
+  ];
+}
+
+/** The campfire's light at night, over the dark: a warm flickering glow on the grass and the faces around it */
+export function drawFireLight(g: G, dark: number, now: number): void {
+  const level = fireLevel() * dark;
+  if (level <= 0.02) return;
+  const { x, y } = CAMPFIRE;
+  const flicker = 1 + Math.sin(now / 80) * 0.05 + Math.sin(now / 31) * 0.03;
+  const r = 170 * flicker;
+  const glow = g.createRadialGradient(x, y - 14, 0, x, y - 14, r);
+  glow.addColorStop(0, `rgba(255,170,80,${0.32 * level})`);
+  glow.addColorStop(0.5, `rgba(255,140,60,${0.12 * level})`);
+  glow.addColorStop(1, 'rgba(255,140,60,0)');
+  g.fillStyle = glow;
+  g.beginPath();
+  g.arc(x, y - 14, r, 0, Math.PI * 2);
+  g.fill();
+}
+
+// ------------------------------------------------------------ all of them
+
+/** Everything that stands up on the town's square (`keep`: which of the sidewalk's benches and plants to keep, by their x) */
+export function townProps(env: Env, keep: (x: number) => boolean): Prop[] {
+  const out: Prop[] = [fountain(env, TOWN_SCENE.fountain.x, TOWN_SCENE.fountain.y)];
+  TOWN_SCENE.trees.forEach((t, k) => out.push(tree(env, t.x, t.y, k % 2 === 1, k * 1.7, t.size)));
+  TOWN_SCENE.lamps.forEach((l, i) => out.push(lampPost(env, i, l.x, l.y)));
+  out.push(...sidewalkProps(env, keep));
+  out.push(noticeBoard());
+  const table = buildTable();
+  const chair = buildChair();
+  const parasol = buildParasol(true);
+  const furled = buildParasol(false);
+  for (const t of CAFE.tables) out.push(...cafeTable(table, chair, parasol, furled, t.x, t.y));
+  const board = buildChalkboard();
+  out.push({ y: 176, draw: (g) => stand(g, board, CAFE.door.x - 40, 177) });
+  out.push(...campfire());
+  return out;
+}

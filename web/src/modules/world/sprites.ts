@@ -35,6 +35,7 @@ export function gameAnim(anim: number): number {
     case WANIM.pet:
       return ANIM.sit;
     case WANIM.cheer:
+    case WANIM.catch:
       return ANIM.cheer;
     default:
       return ANIM.idle;

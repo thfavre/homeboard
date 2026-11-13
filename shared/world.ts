@@ -7,13 +7,137 @@ import { SPRITE_SCALE, SPY_OBSTACLES, SPY_SCENE, SQUARE_HOUSES, WORLD, houseRow,
 import type { Outfit, Tier, WornItem } from './wardrobe.ts';
 
 /**
- * The town is the crowd games' square for now (same size, same scene, same environment art), so
- * the world and the games look like one place. Once guests can buy houses the town gets its own map.
+ * The town is built on the crowd games' square (same size, same houses, same environment art), so
+ * the world and the games look like one place. It has its own things on it though: a river along
+ * the bottom where the square's paving ends in a grassy bank, a corner of grass with a campfire at
+ * the bottom right, a cafe with its terrace, a notice board by the town hall, trees of different sizes.
  */
 export const TOWN = WORLD;
-export const TOWN_SCENE = SPY_SCENE;
-/** Where characters walk: the square below the sidewalk */
-export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
+/**
+ * What stands on the town's square (world units, `y` where it stands): the fountain, the trees (each
+ * `size` times the art's size) and the lamp posts, in the order the lamplighter knows them
+ */
+export const TOWN_SCENE = {
+  fountain: SPY_SCENE.fountain,
+  trees: [
+    { x: 430, y: 440, size: 1.12 },
+    { x: 1170, y: 440, size: 0.88 },
+    { x: 470, y: 688, size: 0.97 },
+    { x: 1110, y: 676, size: 1.24 },
+  ],
+  lamps: [
+    { x: 300, y: 610 },
+    { x: 620, y: 300 },
+    { x: 980, y: 300 },
+    { x: 1300, y: 610 },
+    { x: 940, y: 742 },
+    { x: 660, y: 742 },
+  ],
+};
+/** Where characters walk: the square below the sidewalk, down to the river's bank */
+export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 770 };
+
+/**
+ * The river along the bottom of the town, in sprite pixels from the top: where the square's paving
+ * ends (a grassy bank below it), and the water's top and bottom edge (they wind a little around these).
+ * It flows to the right, into the river by the castle.
+ */
+export const TOWN_RIVER = { paving: 584, top: 606, bottom: 646 };
+/** The grass in the bottom right corner, around the campfire: a quarter of an ellipse from the corner of the river's bank (sprite pixels) */
+export const TOWN_GREEN = { rx: 262, ry: 150 };
+
+/** A place to sit, and the way the sitter faces */
+export interface Seat {
+  x: number;
+  y: number;
+  dir: WDir;
+}
+
+/** Places on the fountain's rim: two on its front, one on each side facing out */
+export const FOUNTAIN_SEATS: Seat[] = [
+  { x: 758, y: 586, dir: 2 },
+  { x: 842, y: 586, dir: 2 },
+  { x: 717, y: 553, dir: 1 },
+  { x: 883, y: 553, dir: 3 },
+];
+
+/** The campfire on the grass in the bottom right corner: the fire pit, three logs around it and the places on them */
+export const CAMPFIRE = { x: 1400, y: 712 };
+export const FIRE_LOGS = [
+  { x: 1333, y: 717, along: 'y' as const },
+  { x: 1467, y: 717, along: 'y' as const },
+  { x: 1400, y: 661, along: 'x' as const },
+];
+export const FIRE_SEATS: Seat[] = [
+  { x: 1343, y: 706, dir: 3 },
+  { x: 1343, y: 733, dir: 3 },
+  { x: 1457, y: 706, dir: 1 },
+  { x: 1457, y: 733, dir: 1 },
+  { x: 1382, y: 672, dir: 2 },
+  { x: 1418, y: 672, dir: 2 },
+];
+
+/** The notice board on the square, right of the town hall, and where its readers stand (facing it) */
+export const NOTICE_BOARD = { x: 352, y: 236 };
+export const BOARD_SPOTS = [
+  { x: 334, y: 264 },
+  { x: 372, y: 264 },
+];
+
+/** Where an angler stands on the river's bank, facing the water (the rod to the left or right) */
+export const FISH_SPOTS: { x: number; y: number; side: 1 | -1 }[] = [
+  { x: 180, y: 805, side: 1 },
+  { x: 395, y: 807, side: -1 },
+  { x: 590, y: 805, side: 1 },
+  { x: 1010, y: 807, side: -1 },
+  { x: 1195, y: 805, side: 1 },
+];
+
+/**
+ * The cafe's front on the paneled house, in sprite pixels of the house's art (160 x 160, see
+ * web/src/modules/world/cafe.ts): the glass of its wide window, the top of the awning over it, the
+ * middle of the porch's doorway and where one stands in it
+ */
+export const CAFE_ART = { glass: { x0: 10, x1: 90, y0: 87, y1: 124 }, awning: 69, door: 128, doorFoot: 142 };
+
+/**
+ * The cafe, in the paneled house between the clothes shop and the barber (world units): its big
+ * window (where the dancers are seen on a party night), the porch door, where one stands before it,
+ * the places inside the window, its two terrace tables with a chair on each side, and the spots on
+ * the terrace where the party stands outside with a drink, in twos facing each other
+ */
+export const CAFE = (() => {
+  const S = SPRITE_SCALE;
+  const h = houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / S)).find((r) => r.kind === 'paneled' && Math.abs((r.x + r.w / 2) * S - 1110) < 120)!;
+  /** The house's art is 160 pixels high: its rows from the top of the screen down are 68 lower in the art */
+  const top = 160 - SQUARE_HOUSES.bottom;
+  const window = { x: (h.x + CAFE_ART.glass.x0) * S, y: (CAFE_ART.glass.y0 - top) * S, w: (CAFE_ART.glass.x1 - CAFE_ART.glass.x0) * S, h: (CAFE_ART.glass.y1 - CAFE_ART.glass.y0) * S };
+  const doorX = (h.x + CAFE_ART.door) * S;
+  const tables = [
+    { x: 1032, y: 236 },
+    { x: 1114, y: 236 },
+  ];
+  return {
+    house: { x0: h.x * S, x1: (h.x + h.w) * S, art: h.x },
+    window,
+    door: { x: doorX, y: (CAFE_ART.doorFoot - top) * S },
+    front: { x: doorX, y: TOWN_AREA.y0 + 4 },
+    inside: [0.14, 0.38, 0.62, 0.86].map((k) => window.x + window.w * k),
+    tables,
+    seats: tables.flatMap((t): Seat[] => [
+      { x: t.x - 27, y: t.y + 2, dir: 3 },
+      { x: t.x + 27, y: t.y + 2, dir: 1 },
+    ]),
+    terrace: [
+      { x: 1012, y: 284, dir: 3 as WDir },
+      { x: 1052, y: 284, dir: 1 as WDir },
+      { x: 1085, y: 322, dir: 3 as WDir },
+      { x: 1125, y: 322, dir: 1 as WDir },
+      { x: 1180, y: 284, dir: 3 as WDir },
+      { x: 1220, y: 284, dir: 1 as WDir },
+    ],
+  };
+})();
 /**
  * The town hall in the top left corner of the square (drawn by the TV, web/src/modules/world/townHall.ts):
  * its left edge, width and height in sprite pixels, from the top of the screen down past the sidewalk
@@ -38,7 +162,20 @@ function townHallFootprint(): { x: number; y: number; rx: number; ry: number } {
   return { x, y, rx, ry };
 }
 
-export const TOWN_OBSTACLES = [...SPY_OBSTACLES, townHallFootprint()];
+/**
+ * Where nobody can stand: an ellipse on the ground around the fountain, the trees, the lamp posts,
+ * the town hall's front, the notice board, the cafe's tables, the campfire and its logs
+ */
+export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number }[] = [
+  SPY_OBSTACLES[0],
+  ...TOWN_SCENE.trees.map((t) => ({ x: t.x, y: t.y, rx: Math.round(20 * t.size), ry: 10 })),
+  ...TOWN_SCENE.lamps.map((l) => ({ x: l.x, y: l.y, rx: 12, ry: 7 })),
+  townHallFootprint(),
+  { x: NOTICE_BOARD.x, y: NOTICE_BOARD.y, rx: 30, ry: 7 },
+  ...CAFE.tables.map((t) => ({ x: t.x, y: t.y, rx: 13, ry: 6 })),
+  { x: CAMPFIRE.x, y: CAMPFIRE.y, rx: 25, ry: 12 },
+  ...FIRE_LOGS.map((l) => (l.along === 'y' ? { x: l.x, y: l.y, rx: 6, ry: 25 } : { x: l.x, y: l.y, rx: 30, ry: 4 })),
+];
 /** Benches characters can sit on: where the square's benches stand, and where a sitter's feet land */
 export const BENCHES: { x: number; y: number }[] = [
   { x: 400, y: 178 },
@@ -233,8 +370,32 @@ export function hallLift(x: number, y: number): number {
  * What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat, inside
  * is seen through a shop window, pray kneels before the throne). In a chat: talk is the one speaking
  * (talking with the hands), listen the other one (nodding now and then), laugh both at once.
+ * perch sits facing the way the character faces (the fountain's rim, a log by the fire, a cafe
+ * chair; plain sit always faces the front, and sit facing left is the King on his throne). fish
+ * waits with a rod, bite is a fish pulling at the line, catch holds the fish up. dance is seen
+ * through the cafe's window (x the place in it, y the window's bottom), drink stands with a glass,
+ * light holds a lamplighter's pole up to the lamp in front.
  */
-export const WANIM = { idle: 0, walk: 1, sit: 2, sleep: 3, pet: 4, cheer: 5, inside: 6, pray: 7, talk: 8, listen: 9, laugh: 10 } as const;
+export const WANIM = {
+  idle: 0,
+  walk: 1,
+  sit: 2,
+  sleep: 3,
+  pet: 4,
+  cheer: 5,
+  inside: 6,
+  pray: 7,
+  talk: 8,
+  listen: 9,
+  laugh: 10,
+  perch: 11,
+  fish: 12,
+  bite: 13,
+  catch: 14,
+  dance: 15,
+  drink: 16,
+  light: 17,
+} as const;
 export type WAnimId = (typeof WANIM)[keyof typeof WANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
 export type WDir = 0 | 1 | 2 | 3;
@@ -255,6 +416,26 @@ export interface TownFrame {
   cam: number;
   /** How dark it is in the town: 0 in the day, 1 at night (see darknessAt) */
   dark?: number;
+  /** The lamp posts that are lit, one bit each in the order of TOWN_SCENE.lamps */
+  lamps?: number;
+  /** A party is on at the cafe */
+  party?: boolean;
+}
+
+// ------------------------------------------------------------ the cafe's party night
+
+/**
+ * The cafe's party, on its own every `everyDays` town days from nightfall for `hours` town hours
+ * (counted from the night the town's clock started on, so the same nights on every server start).
+ * `on`: one is on at `minute` (town minutes, see townMinutes); `night` names it (each party's
+ * own number); `startsIn`: town minutes until the next one starts.
+ */
+export function partyAt(minute: number, dusk: string, everyDays: number, hours: number): { on: boolean; night: number; startsIn: number } {
+  const every = Math.max(1, Math.round(everyDays)) * 1440;
+  const since = minute - minuteOf(dusk);
+  const start = Math.floor(since / every) * every;
+  const on = since - start < hours * 60;
+  return { on, night: start / 1440, startsIn: on ? 0 : start + every - since };
 }
 
 // ------------------------------------------------------------ day and night
@@ -585,6 +766,21 @@ export interface WorldState {
   nightSleep?: boolean;
   bedtimeSpreadMin?: number;
   nightOwlPct?: number;
+  /** Things to do in the town, each on or off: the cafe's terrace, the fountain's rim, the notice board, fishing, the campfire, the lamplighter */
+  cafe?: boolean;
+  fountainSit?: boolean;
+  noticeBoard?: boolean;
+  fishing?: boolean;
+  campfire?: boolean;
+  lamplighter?: boolean;
+  /** The cafe's party night: on its own every so many town days, from nightfall for so many town hours, and the share of the town that stays up for it (percent) */
+  party?: boolean;
+  partyEveryDays?: number;
+  partyHours?: number;
+  partyGoersPct?: number;
+  /** A party is on now; else when the next one starts on its own (server time, null: none to come) */
+  partyOn?: boolean;
+  partyNext?: number | null;
   /** How dark the town is right now (0 day, 1 night), and how many characters sleep for the night */
   darkNow?: number;
   nightSleepers?: number;
