@@ -38,18 +38,18 @@ const rpc = (s: Socket, module: string, method: string, args?: unknown) =>
 for (let b = 0; b < count; b++) {
   const name = `Bot ${NAMES[b] ?? b + 1}`;
   const s = io(`http://localhost:${port}`, { auth: { role: 'guest' }, transports: ['websocket'] });
-  // Also after a server restart: the socket reconnects and the bot joins again
+  // Also after a server restart: the socket reconnects as a visitor (no token kept: a logged-in
+  // guest cannot join) and the bot joins again with its PIN
   const enter = async () => {
     try {
       // The session code, where the server keeps it (the QR code on the TV carries it), read each
       // time: the host may have changed it
       const code = JSON.parse(readFileSync(join(dataDir, 'session.json'), 'utf8')).code;
       const joined = await rpc(s, 'core', 'join', { code, name, pin: PIN });
-      s.auth = { role: 'guest', token: joined.token };
       if (!(await rpc(s, 'world', 'mine'))) await rpc(s, 'world', 'save', { choices: randomChoices() });
       console.log(`${name} is in town${joined.returning ? ' (back again)' : ''}`);
     } catch (e) {
-      // A server that is still starting does not know its modules yet: try again in a moment
+      // A server still starting up, for one: try again in a moment
       console.log(`${name}: ${(e as Error).message}, trying again`);
       setTimeout(() => s.connected && enter(), 3000);
     }
