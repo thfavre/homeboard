@@ -1435,13 +1435,20 @@ export function hallProps(art: HallArt): Prop[] {
       draw: (g, now) => brazier(g, p.x, p.y, now, k * 2.1 + 5),
     });
   });
-  // The front towers, standing in front of whoever is behind them
-  for (const t of TOWERS) {
+  // The front towers, standing in front of whoever is behind them, a flag waving on each
+  TOWERS.forEach((t, k) => {
     const img = towerArt?.low;
-    if (t.tall || !img) continue;
+    if (t.tall || !img) return;
     const q = at(t.x, t.foot - img.height);
-    out.push({ y: t.foot * S, draw: (g) => g.drawImage(img, q.x, q.y, img.width * S, img.height * S) });
-  }
+    const pole = at(t.x + TOWER_W / 2, t.foot - img.height + TOWER_FLOOR);
+    out.push({
+      y: t.foot * S,
+      draw(g, now) {
+        g.drawImage(img, q.x, q.y, img.width * S, img.height * S);
+        flag(g, pole.x, pole.y, now, k);
+      },
+    });
+  });
   return out;
 }
 
