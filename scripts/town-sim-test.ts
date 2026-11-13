@@ -11,7 +11,7 @@
  * characters walk or choose what to do; "no problems" at the end is what you want.
  */
 import { TownSim, type RosterEntry, type TownOptions } from '../server/modules/world/sim.ts';
-import { CROSSING, DAIS_FOOT, TOWN, TOWN_AREA, TOWN_OBSTACLES, WANIM, FRAME_STRIDE, type PlaceId } from '../shared/world.ts';
+import { BROOK_HW, CROSSING, DAIS_FOOT, TOWN, TOWN_AREA, TOWN_OBSTACLES, WANIM, FRAME_STRIDE, brookSide, type PlaceId } from '../shared/world.ts';
 
 const MINUTES = Number(process.argv[2]) || 120;
 const N = Number(process.argv[3]) || 30;
@@ -73,6 +73,9 @@ const opts: TownOptions = {
 };
 /** The share of characters asleep for the night at 3:00, at 9:00 (the night owls) and at noon, each day */
 const atNight: number[] = [];
+/** Pairs of sleepers lying on top of each other at 3:00, and how many slept then */
+let stacked = 0;
+const bedsAt3: number[] = [];
 const atMorning: number[] = [];
 const atNoon: number[] = [];
 
@@ -132,7 +135,13 @@ while (clock < end) {
     const all = [...(simAny.walkers as Map<string, any>).values()];
     return all.filter((w) => (w.doing.kind === 'sleep' || w.doing.kind === 'goSleep') && w.doing.night).length / Math.max(1, all.length);
   };
-  if (before < 180 && minute >= 180) atNight.push(asleep());
+  if (before < 180 && minute >= 180) {
+    atNight.push(asleep());
+    // Sleepers lying on top of each other (a body takes room sideways: closer counts above and below)
+    const beds = [...(simAny.walkers as Map<string, any>).values()].filter((w) => w.doing.kind === 'sleep');
+    for (let i = 0; i < beds.length; i++) for (let j = i + 1; j < beds.length; j++) if (Math.hypot((beds[i].x - beds[j].x) * 0.5, beds[i].y - beds[j].y) < 26) stacked++;
+    bedsAt3.push(beds.length);
+  }
   if (before < 540 && minute >= 540) atMorning.push(asleep());
   if (before < 720 && minute >= 720 && clock - start > DAY_MS / 2) atNoon.push(asleep());
   const lit = (bits = frame.lamps ?? 0) => bits.toString(2).split('1').length - 1;
@@ -212,8 +221,9 @@ while (clock < end) {
     const inTown = w.x >= TOWN_AREA.x0 - 30 && w.x <= TOWN_AREA.x1 + 30;
     const inHall = w.x > CROSSING.x1;
     if (w.x > CROSSING.x0 + 4 && w.x < CROSSING.x1 - 4 && (w.y < CROSSING.y0 - 4 || w.y > CROSSING.y1 + 4)) report('in the river off the bridge', where);
-    // (the anglers stand on the river's bank, below the square, and walk back up from it; a visit or the party goes up to a door)
-    if ((w.y < TOWN_AREA.y0 - 40 || w.y > TOWN_AREA.y1 + 45) && !(d.kind === 'visit' || d.kind === 'party')) report('off the square (y)', where);
+    // (a visit or the party goes up to a door)
+    if ((w.y < TOWN_AREA.y0 - 40 || w.y > TOWN_AREA.y1 + 10) && !(d.kind === 'visit' || d.kind === 'party')) report('off the square (y)', where);
+    if (w.x < TOWN.w && brookSide(w.x, w.y) > -BROOK_HW + 2) report(`in the town's river (${kind})`, where);
     if (!inTown && !inHall && !(w.x > TOWN_AREA.x1) && !(w.x < TOWN_AREA.x0 && (d.kind === 'wander' || d.kind === 'goSleep' || d.kind === 'sleep' || w.x >= 20))) report('off the square (x)', where);
     if (w.x > DAIS_FOOT + 60 && d.kind !== 'throne' && d.kind !== 'descend' && d.kind !== 'goThrone') report('on the dais without being King', where);
     // A chat with someone who is not chatting back
@@ -236,6 +246,7 @@ console.log(`away guests not asleep in time: ${sleepLate.length}`);
 console.log(`asleep for the night at 3:00: ${atNight.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; at 9:00: ${atMorning.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; at noon: ${atNoon.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; dark now ${frame!.dark}`);
 const never = (k: string) => [...kinds].filter(([id, set]) => !set.has(k) && !(Number(id.slice(1)) % 9 === 0 && (k === 'sit' || k === 'pet'))).length;
 console.log(`characters that never: sat ${never('sit')}, petted ${never('pet')}, chatted ${never('chat')}, wandered ${never('wander')}`);
+console.log(`sleepers on top of each other at 3:00: ${stacked} pairs (sleepers ${bedsAt3.join(' ')})`);
 console.log('started:', started);
 console.log(`lamps lit: ${lampsAt.join(', ')}; most dancing at once: ${dancersMax}`);
 console.log('longest per activity:', Object.fromEntries(Object.entries(stats.maxKindMs).map(([k, v]) => [k, sec(v)])));

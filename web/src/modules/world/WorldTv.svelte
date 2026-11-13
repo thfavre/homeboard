@@ -35,7 +35,7 @@
   let hall: HallArt | null = null;
   let cafe: CafeArt | null = null;
   /** The town's river in the frames of its flow */
-  let brook: HTMLCanvasElement[] = [];
+  let brook: ReturnType<typeof brookFrames> | null = null;
   let standingProps: Prop[] = [];
   /** What stands up in the throne room (only drawn while the camera shows it) */
   let hallStanding: Prop[] = [];
@@ -304,8 +304,8 @@
     }
     // The town's river flowing, glinting in the light
     if (env && ground.width >= TOWN.w) {
-      if (brook.length) drawBrook(g, brook, now, away);
-      drawBrookGlints(g, env['water-sparkle-anim'], now);
+      if (brook) drawBrook(g, brook, now, away);
+      drawBrookGlints(g, env['water-sparkle-anim'], now, away);
     }
     // What the town's things need to know: how dark it is, which lamps are lit, a party on
     const dark = f0 ? (f0.dark ?? 0) + (f1 ? ((f1.dark ?? 0) - (f0.dark ?? 0)) * mix : 0) : 0;

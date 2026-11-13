@@ -1,6 +1,6 @@
 import { SPRITE_SCALE } from '$shared/crowd.ts';
-import { CAFE, CAMPFIRE, FIRE_LOGS, NOTICE_BOARD, TOWN_SCENE, type WDir } from '$shared/world.ts';
-import { CUT, fountain, put, sidewalkProps, tree, type Env, type Prop } from '../games/crowd/scene.ts';
+import { CAFE, CAMPFIRE, FIRE_LOGS, NOTICE_BOARD, TOWN_BENCH, TOWN_SCENE, type WDir } from '$shared/world.ts';
+import { CUT, fountain, put, sidewalkProps, still, tree, type Env, type Prop } from '../games/crowd/scene.ts';
 
 /**
  * What stands up on the town's square, drawn in depth order with the characters: the fountain, the
@@ -179,19 +179,29 @@ function buildTable(): HTMLCanvasElement {
 
 /** A bistro chair seen from the side, facing right: a curved iron back on its left, a wooden seat, thin legs */
 function buildChair(): HTMLCanvasElement {
-  const [c, g] = canvas(12, 22);
-  px(g, IRON.line, 1, 1, 2, 12);
-  px(g, IRON.light, 1, 1, 1, 11);
-  px(g, IRON.line, 2, 0, 3, 2);
-  px(g, IRON.line, 3, 4, 1, 6);
-  px(g, WOOD.line, 1, 11, 10, 3);
-  px(g, WOOD.light, 2, 11, 8, 1);
-  px(g, WOOD.mid, 2, 12, 8, 1);
-  for (const x of [2, 9]) {
-    px(g, IRON.line, x, 14, 1, 8);
-    px(g, IRON.mid, x, 14, 1, 1);
+  const [c, g] = canvas(17, 31);
+  // The back: an iron frame curving over at the top, a bar across it
+  px(g, IRON.line, 1, 2, 3, 16);
+  px(g, IRON.light, 2, 2, 1, 15);
+  px(g, IRON.line, 2, 0, 5, 3);
+  px(g, IRON.light, 3, 1, 3, 1);
+  px(g, IRON.line, 4, 6, 1, 9);
+  px(g, IRON.line, 3, 9, 3, 1);
+  // The seat: a wooden plank on its iron rim
+  px(g, WOOD.line, 1, 16, 15, 4);
+  px(g, WOOD.light, 2, 16, 13, 1);
+  px(g, WOOD.mid, 2, 17, 13, 2);
+  px(g, IRON.line, 1, 20, 15, 1);
+  // The legs, a little splayed, and the bar between them
+  for (const [x, dx] of [
+    [2, -1],
+    [13, 1],
+  ]) {
+    px(g, IRON.line, x, 21, 2, 6);
+    px(g, IRON.line, x + dx, 27, 2, 4);
+    px(g, IRON.mid, x, 21, 1, 1);
   }
-  px(g, IRON.dark, 3, 17, 6, 1);
+  px(g, IRON.dark, 4, 25, 9, 1);
   return c;
 }
 
@@ -454,7 +464,9 @@ export function townProps(env: Env, keep: (x: number) => boolean): Prop[] {
   const out: Prop[] = [fountain(env, TOWN_SCENE.fountain.x, TOWN_SCENE.fountain.y)];
   TOWN_SCENE.trees.forEach((t, k) => out.push(tree(env, t.x, t.y, k % 2 === 1, k * 1.7, t.size)));
   TOWN_SCENE.lamps.forEach((l, i) => out.push(lampPost(env, i, l.x, l.y)));
-  out.push(...sidewalkProps(env, keep));
+  // The sidewalk's benches and plants, but the bench before the cafe's porch: it stands in front of the potted tree instead
+  out.push(...sidewalkProps(env, (x) => keep(x) && x !== TOWN_BENCH.instead));
+  out.push(still(env.magecity, CUT.bench, TOWN_BENCH.x, TOWN_BENCH.y));
   out.push(noticeBoard());
   const table = buildTable();
   const chair = buildChair();

@@ -1,6 +1,7 @@
 import {
   BENCHES,
   BOARD_SPOTS,
+  BROOK_HW,
   CAFE,
   CAMPFIRE,
   CARPET_START,
@@ -20,6 +21,7 @@ import {
   TOWN_PLACES,
   TOWN_SCENE,
   WANIM,
+  brookSide,
   darknessAt,
   minuteOf,
   minutesFrom,
@@ -523,12 +525,38 @@ function keepOut(a: { x: number; y: number }): void {
   }
 }
 
+/** Room kept from the town's river's water: nobody stands closer (the anglers stand just outside it) */
+const BROOK_CLEAR = 12;
+/** Too near the town's river, in it, or across it (the far side is not walked on) */
+const wet = (x: number, y: number, margin = BROOK_CLEAR) => x < TOWN.w + 40 && brookSide(x, y) > -(BROOK_HW + margin);
+/** Where a walk that would cross the town's river goes round it: by its end at the town's right edge, on the town's side */
+const BROOK_WAY = { x: 1588, y: 598 };
+
+/** The straight walk from a to b would go through the town's river */
+function crossesBrook(ax: number, ay: number, bx: number, by: number): boolean {
+  const n = Math.ceil(Math.hypot(bx - ax, by - ay) / 6);
+  for (let i = 1; i < n; i++) if (wet(ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n, 0)) return true;
+  return false;
+}
+
+/** Push a character out of the town's river (pushed there by the others): back to its bank, the shortest way */
+function keepDry(a: { x: number; y: number }): void {
+  const side = brookSide(a.x, a.y);
+  const want = -(BROOK_HW + 2);
+  if (a.x > TOWN.w || side <= want) return;
+  const gx = (brookSide(a.x + 1, a.y) - brookSide(a.x - 1, a.y)) / 2;
+  const gy = (brookSide(a.x, a.y + 1) - brookSide(a.x, a.y - 1)) / 2;
+  const g = Math.hypot(gx, gy) || 1;
+  a.x -= ((side - want) * gx) / g;
+  a.y -= ((side - want) * gy) / g;
+}
+
 /** A free spot on the square */
 function randSpot() {
   for (let k = 0; k < 20; k++) {
     const x = rand(TOWN_AREA.x0, TOWN_AREA.x1);
     const y = rand(TOWN_AREA.y0, TOWN_AREA.y1);
-    if (!blocked(x, y, 14)) return { x, y };
+    if (!blocked(x, y, 14) && !wet(x, y)) return { x, y };
   }
   return { x: TOWN.w / 2, y: (TOWN_AREA.y0 + TOWN_AREA.y1) / 2 };
 }
@@ -692,13 +720,9 @@ export class TownSim {
       // first), and never during a ceremony: those away sleep once it is over
       // (one inside the cafe at the party comes out first)
       if (shouldSleep && !this.ceremony && w.doing.kind !== 'sleep' && w.doing.kind !== 'goSleep' && this.rule(w).wrapUp && !inCafe(w)) {
-        // Walk to the nearest edge of the town and lie down there (on the right, clear of the way to the throne room's carpet)
-        const right = w.x >= TOWN.w / 2;
-        // (and above the campfire's corner, nobody lies across its logs)
-        let ty = rand(TOWN_AREA.y0 + 40, TOWN_AREA.y1 - 20);
-        if (right && Math.abs(ty - CARPET_Y) < 70) ty = CARPET_Y + (ty < CARPET_Y ? -1 : 1) * rand(70, 110);
-        if (right && ty > CAMPFIRE.y - 90) ty = rand(TOWN_AREA.y0 + 40, CARPET_Y - 70);
-        w.doing = { kind: 'goSleep', tx: right ? rand(TOWN.w - 90, TOWN.w - 30) : rand(30, 90), ty, night };
+        // Walk to an edge of the town and lie down there, with room from the other sleepers
+        const bed = this.bedFor(w);
+        w.doing = { kind: 'goSleep', tx: bed.x, ty: bed.y, night };
       }
       // Asleep for the night when the guest leaves (or the other way around): stays in bed, for the new reason
       if (shouldSleep && (w.doing.kind === 'sleep' || w.doing.kind === 'goSleep')) w.doing.night = night;
@@ -818,6 +842,11 @@ export class TownSim {
 
   /** Walk toward a point, around what stands in the way and over the bridge if it is across the river; true when there */
   private walkTo(w: Walker, tx: number, ty: number, speed: number, dt: number): boolean {
+    // The town's river lies between: round its end at the town's edge first
+    if (Math.hypot(w.x - BROOK_WAY.x, w.y - BROOK_WAY.y) > ARRIVE && crossesBrook(w.x, w.y, tx, ty)) {
+      if (this.walkStraight(w, BROOK_WAY.x, BROOK_WAY.y, speed, dt)) Object.assign(w, BROOK_WAY);
+      return false;
+    }
     const via = bridgeWay(w, tx);
     if (!via) return this.walkStraight(w, tx, ty, speed, dt);
     // To the bridge's near end first, then over it (landing on each exactly, so the next leg starts from there)
@@ -1057,8 +1086,7 @@ export class TownSim {
       }
       case 'fish':
         w.dir = 2;
-        // Done: back up the bank onto the square
-        if (now >= d.until) w.doing = { kind: 'wander', tx: w.x + rand(-60, 60), ty: TOWN_AREA.y1 - rand(10, 70) };
+        if (now >= d.until) w.doing = idle(now, 600, 1800);
         break;
       case 'lamps':
         this.stepLamplighter(w, d, now, dt);
@@ -1223,7 +1251,7 @@ export class TownSim {
     ];
     // Not across the river, nor where something stands, nor hidden behind a tree's crown
     const hidden = (x: number) => TOWN_SCENE.trees.some((t) => Math.abs(x - t.x) < CROWN.half * t.size && my < t.y && my > t.y - CROWN.up * t.size);
-    if (spots.some((s) => blocked(s.x, my, STAND_CLEAR) || bridgeWay(s.who, s.x) || hidden(s.x))) return false;
+    if (spots.some((s) => blocked(s.x, my, STAND_CLEAR) || wet(s.x, my) || bridgeWay(s.who, s.x) || hidden(s.x))) return false;
     for (const s of spots) {
       s.who.doing = { kind: 'goChat', with: (s.who === w ? o : w).id, tx: s.x, ty: my, since: now };
       s.who.wrapped = null;
@@ -1384,6 +1412,38 @@ export class TownSim {
     if (this.courtOpen()) return idle(now, 300, 900);
     const t = randSpot();
     return { kind: 'wander', tx: t.x, ty: t.y };
+  }
+
+  /**
+   * Where a character lies down to sleep: along the nearest edge of the town (a second row a little
+   * further in when it fills up, the other edge when that is full too), where it has the most room
+   * from the others asleep or on their way to bed. On the right, clear of the way to the throne
+   * room's carpet, of the campfire and of the river.
+   */
+  private bedFor(w: Walker): { x: number; y: number } {
+    const others: { x: number; y: number }[] = [];
+    for (const o of this.walkers.values()) {
+      if (o === w) continue;
+      if (o.doing.kind === 'goSleep') others.push({ x: o.doing.tx, y: o.doing.ty });
+      else if (o.doing.kind === 'sleep') others.push(o);
+    }
+    const near = w.x >= TOWN.w / 2;
+    let best = { x: near ? TOWN.w - 50 : 50, y: rand(TOWN_AREA.y0 + 40, CARPET_Y - 70) };
+    let bestScore = -Infinity;
+    for (let k = 0; k < 60; k++) {
+      const right = k < 40 ? near : !near;
+      const inner = k % 3 === 2;
+      const x = right ? TOWN.w - (inner ? 125 : 55) + rand(-12, 12) : (inner ? 125 : 55) + rand(-12, 12);
+      const y = rand(TOWN_AREA.y0 + 40, TOWN_AREA.y1 - 20);
+      // (a sleeper lies toward the middle: the whole body clear of the river, the logs and the carpet's way)
+      if (right && (Math.abs(y - CARPET_Y) < 70 || y > CAMPFIRE.y - 60)) continue;
+      if (blocked(x, y, 10) || wet(x, y) || wet(x + (right ? -60 : 60), y)) continue;
+      // Lying down, a body takes room sideways: other sleepers count closer above and below than beside
+      const room = others.reduce((m, o) => Math.min(m, Math.hypot((x - o.x) * 0.5, y - o.y)), 200);
+      const score = Math.min(room, 60) - (right !== near ? 25 : 0) - (inner ? 12 : 0) + Math.random();
+      if (score > bestScore) [best, bestScore] = [{ x, y }, score];
+    }
+    return best;
   }
 
   // ------------------------------------------------------------ the town's places
@@ -1803,13 +1863,14 @@ export class TownSim {
         const push = ((PERSONAL_SPACE - d) / d) * 0.5;
         a.x = clampX(a.x - dx * push, a.x);
         b.x = clampX(b.x + dx * push, b.x);
-        a.y = clampY(a.y - (dy / 2.2) * push, a.y);
-        b.y = clampY(b.y + (dy / 2.2) * push, b.y);
+        a.y = clampY(a.y - (dy / 2.2) * push);
+        b.y = clampY(b.y + (dy / 2.2) * push);
       }
     }
     // Pushed into the fountain: back out to its edge; pushed off the bridge: back onto it
     for (const w of list) {
       keepOut(w);
+      keepDry(w);
       if (w.x >= CROSSING.x0 && w.x <= CROSSING.x1) w.y = onBridge(w.y);
     }
   }
@@ -1840,5 +1901,4 @@ export class TownSim {
 
 /** Keep a pushed character on the square; one out in the throne room (`from`: where it was) stays out there, short of the dais */
 const clampX = (x: number, from: number) => Math.max(TOWN_AREA.x0, Math.min(from > TOWN_AREA.x1 ? Math.max(from, DAIS_FOOT - 20) : TOWN_AREA.x1, x));
-/** Keep a pushed character on the square; one down on the river's bank (`from`: where it was) is not pushed further down */
-const clampY = (y: number, from: number) => Math.max(TOWN_AREA.y0, Math.min(Math.max(TOWN_AREA.y1, from), y));
+const clampY = (y: number) => Math.max(TOWN_AREA.y0, Math.min(TOWN_AREA.y1, y));

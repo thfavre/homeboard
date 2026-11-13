@@ -94,8 +94,8 @@ function stroke(g: G, color: string, w: number, ...pts: number[]): void {
 export function drawRod(g: G, x: number, y: number, side: 1 | -1, now: number, bite: number | null): void {
   const hand = { x: x + side * 5 * S, y: y - 26 * S };
   const pull = bite === null ? 0 : (Math.sin(bite / 70) * 0.5 + 0.5) * 6;
-  const tip = { x: x + side * 30 * S, y: y - (54 - pull) * S };
-  const float = { x: tip.x + side * 4 * S, y: y + (26 + (bite === null ? Math.sin(now / 600) * 0.6 : pull * 0.5)) * S };
+  const tip = { x: x + side * 22 * S, y: y - (50 - pull) * S };
+  const float = { x: tip.x + side * 3 * S, y: y + (19 + (bite === null ? Math.sin(now / 600) * 0.6 : pull * 0.5)) * S };
   // The line, then the rod over it: dark wood, lighter along its top, thinner to the tip
   stroke(g, 'rgba(235,235,225,0.75)', 0.5, tip.x, tip.y, float.x, float.y - 2 * S);
   const mid = { x: (hand.x + tip.x) / 2, y: (hand.y + tip.y) / 2 - pull * S * 0.6 };
@@ -146,7 +146,7 @@ function fish(g: G, x: number, y: number, flip: boolean, tilt: number): void {
  */
 export function drawCatch(g: G, x: number, y: number, side: 1 | -1, t: number): void {
   const fly = Math.min(1, t / 380);
-  const from = { x: x + side * 34 * S, y: y + 26 * S };
+  const from = { x: x + side * 25 * S, y: y + 19 * S };
   const to = { x, y: y - 66 * S };
   const fx = from.x + (to.x - from.x) * fly;
   const fy = from.y + (to.y - from.y) * fly - Math.sin(fly * Math.PI) * 26 * S;

@@ -8,9 +8,10 @@ import type { Outfit, Tier, WornItem } from './wardrobe.ts';
 
 /**
  * The town is built on the crowd games' square (same size, same houses, same environment art), so
- * the world and the games look like one place. It has its own things on it though: a river along
- * the bottom where the square's paving ends in a grassy bank, a corner of grass with a campfire at
- * the bottom right, a cafe with its terrace, a notice board by the town hall, trees of different sizes.
+ * the world and the games look like one place. It has its own things on it though: in the bottom
+ * right corner the paving gives way to grass along a slant, with a campfire on it, and a river
+ * runs across that corner and out under the town's right edge into the river by the castle; a cafe
+ * with its terrace, a notice board by the town hall, trees of different sizes.
  */
 export const TOWN = WORLD;
 /**
@@ -22,29 +23,73 @@ export const TOWN_SCENE = {
   trees: [
     { x: 430, y: 440, size: 1.12 },
     { x: 1170, y: 440, size: 0.88 },
-    { x: 470, y: 688, size: 0.97 },
-    { x: 1110, y: 676, size: 1.24 },
+    { x: 480, y: 780, size: 0.97 },
+    { x: 1120, y: 780, size: 1.24 },
   ],
   lamps: [
     { x: 300, y: 610 },
     { x: 620, y: 300 },
     { x: 980, y: 300 },
     { x: 1300, y: 610 },
-    { x: 940, y: 742 },
-    { x: 660, y: 742 },
+    { x: 940, y: 830 },
+    { x: 660, y: 830 },
   ],
 };
-/** Where characters walk: the square below the sidewalk, down to the river's bank */
-export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 770 };
+/** Where characters walk: the square below the sidewalk (but the far side of the river, see brookSide) */
+export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
 
 /**
- * The river along the bottom of the town, in sprite pixels from the top: where the square's paving
- * ends (a grassy bank below it), and the water's top and bottom edge (they wind a little around these).
- * It flows to the right, into the river by the castle.
+ * The grass in the bottom right corner: the paving ends along a slant from `bottom` on the town's
+ * bottom edge to `edge` high on its right edge (sprite pixels)
  */
-export const TOWN_RIVER = { paving: 584, top: 606, bottom: 646 };
-/** The grass in the bottom right corner, around the campfire: a quarter of an ellipse from the corner of the river's bank (sprite pixels) */
-export const TOWN_GREEN = { rx: 262, ry: 150 };
+export const TOWN_GRASS = { bottom: 830, edge: 247 };
+/**
+ * The town's river: its middle, from below the bottom edge across the grass corner and out under
+ * the town's right edge, bending into the river by the castle (sprite pixels; past the town's
+ * width is the riverside), and its half width. It flows that way, into the other river.
+ */
+export const TOWN_BROOK = {
+  points: [
+    [1050, 682],
+    [1062, 660],
+    [1098, 604],
+    [1134, 548],
+    [1164, 506],
+    [1190, 484],
+    [1215, 480],
+    [1250, 487],
+    [1300, 500],
+  ] as [number, number][],
+  hw: 16,
+};
+
+/**
+ * Where a point stands to the town's river (world units): its distance from the river's middle,
+ * negative on the town's side, positive in the water's far half and beyond it. The water reaches
+ * BROOK_HW either side of the middle.
+ */
+export const BROOK_HW = TOWN_BROOK.hw * SPRITE_SCALE;
+export function brookSide(x: number, y: number): number {
+  const S = SPRITE_SCALE;
+  let best = Infinity;
+  let side = -1;
+  const p = TOWN_BROOK.points;
+  for (let i = 1; i < p.length; i++) {
+    const ax = p[i - 1][0] * S;
+    const ay = p[i - 1][1] * S;
+    const dx = p[i][0] * S - ax;
+    const dy = p[i][1] * S - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2));
+    const d = Math.hypot(x - ax - t * dx, y - ay - t * dy);
+    if (d < best) {
+      best = d;
+      // The town's side is left of the way the river flows
+      side = (x - ax) * -dy + (y - ay) * dx < 0 ? -1 : 1;
+    }
+  }
+  return side * best;
+}
 
 /** A place to sit, and the way the sitter faces */
 export interface Seat {
@@ -84,13 +129,11 @@ export const BOARD_SPOTS = [
   { x: 600, y: 264 },
 ];
 
-/** Where an angler stands on the river's bank, facing the water (the rod to the left or right) */
+/** Where an angler stands on the river's bank, facing the front with the rod held out to the right, over the water */
 export const FISH_SPOTS: { x: number; y: number; side: 1 | -1 }[] = [
-  { x: 180, y: 805, side: 1 },
-  { x: 395, y: 807, side: -1 },
-  { x: 590, y: 805, side: 1 },
-  { x: 1010, y: 807, side: -1 },
-  { x: 1195, y: 805, side: 1 },
+  { x: 1422, y: 840, side: 1 },
+  { x: 1462, y: 780, side: 1 },
+  { x: 1551, y: 652, side: 1 },
 ];
 
 /**
@@ -185,8 +228,14 @@ export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number }[] 
   { x: CAMPFIRE.x, y: CAMPFIRE.y, rx: 25, ry: 12 },
   ...FIRE_LOGS.map((l) => (l.along === 'y' ? { x: l.x, y: l.y, rx: 6, ry: 25 } : { x: l.x, y: l.y, rx: 30, ry: 4 })),
 ];
-/** Benches characters can sit on: where the square's benches stand, and where a sitter's feet land */
-export const BENCHES: { x: number; y: number }[] = [{ x: 1200, y: 178 }];
+/**
+ * The bench characters can sit on, where a sitter's feet land: the town's own, in front of the
+ * potted tree on the right (the square's bench there would stand before the cafe's porch; the one
+ * on the left is behind the town hall). See TOWN_BENCH.
+ */
+export const BENCHES: { x: number; y: number }[] = [{ x: 1450, y: 194 }];
+/** The bench in front of the potted tree on the sidewalk, right of the barber: where it stands, in place of the square's bench at `instead` */
+export const TOWN_BENCH = { x: 1450, y: 184, instead: 1200 };
 
 // ------------------------------------------------------------ the shops
 

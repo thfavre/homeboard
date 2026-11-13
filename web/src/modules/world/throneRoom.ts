@@ -1,5 +1,5 @@
 import { BODY, FRAME_PX, SPRITE_SCALE, SQUARE_HOUSES, WORLD, seeded } from '$shared/crowd.ts';
-import { HALL, HALL_ART, RIVERSIDE, RIVERSIDE_ART, THRONE_SEAT, TOWN_RIVER, type SheetInfo } from '$shared/world.ts';
+import { HALL, HALL_ART, RIVERSIDE, RIVERSIDE_ART, THRONE_SEAT, TOWN_BROOK, type SheetInfo } from '$shared/world.ts';
 import type { Prop } from '../games/crowd/scene.ts';
 
 /**
@@ -355,14 +355,14 @@ function riverside(g: G, sheets: Sheets, frame: number): void {
   px(g, GREEN.line, 0, 0, 1, PH);
   river(g, frame);
   // The town's river comes in from the left along the bottom and flows into it
-  brook(g, 0, R.w, Math.round(TOWN_PW), frame, 0);
+  brook(g, Math.round(TOWN_PW), frame, 0);
   const [x0, x1] = bridgeSpan();
   path(g, 0, x0 + 4);
   path(g, x1 - 4, R.w);
   bridge(g);
   // A few flowering bushes in the grass, on whichever side of the river has room
   const r = seeded(19);
-  for (const y of [74, 196, 286, 470, 560]) {
+  for (const y of [74, 196, 286, 560, 626]) {
     const { l, r: rr } = banksAt(y);
     const x = l > R.w - rr ? Math.round((l + TOWN_EDGE.grass) / 2) : Math.round((rr + R.w) / 2);
     if (x < TOWN_EDGE.grass + 12 || R.w - x < 12 || (x > l - 14 && x < rr + 14)) continue;
@@ -528,163 +528,253 @@ function river(g: G, frame: number): void {
 export const TOWN_PW = WORLD.w / S;
 
 /**
- * The town's river at a column (sprite pixels from the town's left edge, on over the riverside):
- * the top and bottom row of its water, winding a little around TOWN_RIVER's
+ * The town's river laid out once (sprite pixels of the town, on over the riverside past TOWN_PW):
+ * its middle every half pixel along a smooth curve through TOWN_BROOK's points, winding a little,
+ * and for every pixel near it how far across the river it lies (`v`: negative toward the town,
+ * the water from -hw to hw) and how far along (`s`)
  */
-export function brookAt(x: number): { top: number; bottom: number } {
-  return {
-    top: Math.round(TOWN_RIVER.top + 2.5 * Math.sin(x / 47 + 0.3) + 1.5 * Math.sin(x / 19 + 2)),
-    bottom: Math.round(TOWN_RIVER.bottom + 2 * Math.sin(x / 53 + 1.7) + 1.2 * Math.sin(x / 23)),
-  };
+interface Brook {
+  x0: number;
+  y0: number;
+  w: number;
+  h: number;
+  v: Float32Array;
+  s: Float32Array;
+  /** The middle and the way across (unit, toward the far bank) every half pixel along, and the half width there */
+  cx: number[];
+  cy: number[];
+  nx: number[];
+  ny: number[];
+  hw: number[];
+  length: number;
+}
+let brookLaid: Brook | null = null;
+const STEP = 0.5;
+
+function layBrook(): Brook {
+  if (brookLaid) return brookLaid;
+  const p = TOWN_BROOK.points;
+  // A Catmull-Rom curve through the points, finely
+  const fine: [number, number][] = [];
+  for (let i = 0; i < p.length - 1; i++) {
+    const [a, b, c, d] = [p[Math.max(0, i - 1)], p[i], p[i + 1], p[Math.min(p.length - 1, i + 2)]];
+    for (let k = 0; k < 60; k++) {
+      const t = k / 60;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const at = (j: 0 | 1) => 0.5 * (2 * b[j] + (-a[j] + c[j]) * t + (2 * a[j] - 5 * b[j] + 4 * c[j] - d[j]) * t2 + (-a[j] + 3 * b[j] - 3 * c[j] + d[j]) * t3);
+      fine.push([at(0), at(1)]);
+    }
+  }
+  fine.push(p[p.length - 1]);
+  // Every half pixel along it: the middle (winding a little), the way across, the half width
+  const cx: number[] = [];
+  const cy: number[] = [];
+  const nx: number[] = [];
+  const ny: number[] = [];
+  const hw: number[] = [];
+  let along = 0;
+  let next = 0;
+  for (let i = 1; i < fine.length; i++) {
+    const [ax, ay] = fine[i - 1];
+    const [bx, by] = fine[i];
+    const len = Math.hypot(bx - ax, by - ay);
+    if (!len) continue;
+    const tx = (bx - ax) / len;
+    const ty = (by - ay) / len;
+    while (next <= along + len) {
+      const k = (next - along) / len;
+      const s = next;
+      const wind = 1.2 * Math.sin(s / 23) + 0.6 * Math.sin(s / 9);
+      cx.push(ax + (bx - ax) * k - ty * wind);
+      cy.push(ay + (by - ay) * k + tx * wind);
+      nx.push(-ty);
+      ny.push(tx);
+      hw.push(TOWN_BROOK.hw + 1.5 * Math.sin(s / 31 + 1));
+      next += STEP;
+    }
+    along += len;
+  }
+  const reach = TOWN_BROOK.hw + 8;
+  const x0 = Math.floor(Math.min(...cx) - reach);
+  const y0 = Math.floor(Math.min(...cy) - reach);
+  const w = Math.ceil(Math.max(...cx) + reach) - x0;
+  const h = Math.ceil(Math.max(...cy) + reach) - y0;
+  const v = new Float32Array(w * h).fill(999);
+  const sAt = new Float32Array(w * h);
+  // Stamp across the river at every step: each pixel keeps the nearest way across
+  for (let i = 0; i < cx.length; i++) {
+    for (let u = -(hw[i] + 5); u < hw[i] + 4; u += 0.5) {
+      const x = Math.round(cx[i] + nx[i] * u) - x0;
+      const y = Math.round(cy[i] + ny[i] * u) - y0;
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      const k = y * w + x;
+      if (Math.abs(u) < Math.abs(v[k])) {
+        v[k] = u;
+        sAt[k] = i * STEP;
+      }
+    }
+  }
+  brookLaid = { x0, y0, w, h, v, s: sAt, cx, cy, nx, ny, hw, length: cx.length * STEP };
+  return brookLaid;
 }
 
-/** Along the town's river (x along it, `v` across it: 0 its top, 1 its bottom): lumps on its bed, ripples, rocks, lily pads, reeds on the far bank */
+/** Where the town's river is drawn (sprite pixels of the town): its box */
+export function brookBox(): { x0: number; y0: number; x1: number; y1: number } {
+  const b = layBrook();
+  return { x0: b.x0, y0: b.y0, x1: b.x0 + b.w, y1: b.y0 + b.h };
+}
+
+/** A point of the town's river (sprite pixels of the town): `s` along it, `u` across it (-1 its town side, 1 its far side) */
+export function brookPoint(s: number, u: number): { x: number; y: number } {
+  const b = layBrook();
+  const i = Math.max(0, Math.min(b.cx.length - 1, Math.round(s / STEP)));
+  return { x: b.cx[i] + b.nx[i] * u * b.hw[i], y: b.cy[i] + b.ny[i] * u * b.hw[i] };
+}
+
+/** How long the town's river is (sprite pixels) */
+export const brookLength = () => layBrook().length;
+
+/** Along the town's river (`s` along it, `u` across it): lumps on its bed, ripples, rocks, lily pads by the far bank, reeds on it */
 const BROOK_LUMPS = (() => {
   const r = seeded(83);
-  return Array.from({ length: 170 }, () => ({ x: Math.floor(r() * 1320), v: 0.15 + r() * 0.75, w: 3 + Math.floor(r() * 6), h: r() < 0.5 ? 2 : 3 }));
+  return Array.from({ length: 70 }, () => ({ s: r() * 400, u: r() * 1.5 - 0.75, w: 3 + Math.floor(r() * 5), h: r() < 0.5 ? 2 : 3 }));
 })();
 const BROOK_RIPPLES = (() => {
   const r = seeded(97);
-  return Array.from({ length: 80 }, () => ({ x: Math.floor(r() * 1320), v: 0.2 + r() * 0.65, w: 3 + Math.floor(r() * 3), phase: Math.floor(r() * RIVER_FRAMES) }));
+  return Array.from({ length: 34 }, () => ({ s: r() * 400, u: r() * 1.3 - 0.65, w: 3 + Math.floor(r() * 3), phase: Math.floor(r() * RIVER_FRAMES) }));
 })();
 const BROOK_ROCKS = [
-  { x: 262, v: 0.3, w: 6 },
-  { x: 742, v: 0.62, w: 8 },
-  { x: 1046, v: 0.32, w: 5 },
+  { s: 70, u: -0.35, w: 6 },
+  { s: 190, u: 0.4, w: 5 },
 ];
-const BROOK_PADS = [96, 104, 452, 468, 830, 842, 1110];
-const BROOK_REEDS = [40, 300, 520, 680, 905, 1150];
+const BROOK_PADS = [40, 46, 150, 250, 258];
+const BROOK_REEDS = [20, 110, 205];
 
 /**
- * The town's river from column x0 to x1 of `g` (`ox`: how far along the river g's column 0 is), in
- * one frame of its flow: earth where it cuts into the town's bank, a strip of sand and pebbles on the
- * far bank, grass hanging over both, the near bank's shadow on the water and shallows along the far
- * side, lumps on its bed, ripples running to the right (downstream), rocks with foam, lily pads and
- * reeds by the far bank. `river`: the column of g where the riverside begins, when the river by the
- * castle is drawn there: the water runs into it and the banks end at its bank.
+ * The town's river, in one frame of its flow, into `g` whose column 0 is the town's column `ox`
+ * (sprite pixels; rows are the town's): earth where it cuts into the town's bank, a strip of sand
+ * and pebbles on the far bank, the near bank's shadow on the water and shallows along the far
+ * side, lumps on its bed, ripples running downstream, rocks with foam, lily pads and reeds by the
+ * far bank. `river`: g's column where the riverside begins, when the river by the castle is drawn
+ * there: the water runs into it and the banks end at its bank.
  */
-export function brook(g: G, x0: number, x1: number, ox: number, frame: number, river = Infinity): void {
-  // Where the river by the castle starts at a row (in g's columns): its water, and its west bank's outer edge
+export function brook(g: G, ox: number, frame: number, river = Infinity): void {
+  const b = layBrook();
+  const width = g.canvas.width;
+  // Where the river by the castle starts at a row (g's columns): its water, and its west bank's outer edge
   const waterEnd = (y: number) => (river === Infinity ? Infinity : river + banksAt(y).l + 2);
   const bankEnd = (y: number) => {
     if (river === Infinity) return Infinity;
     const { l, bend } = banksAt(y);
     return river + l - Math.round(Math.max(0, -bend) * 4) - Math.round(Math.max(0, bend) * 5) - 1;
   };
-  const inside = (x: number, y: number) => x >= x0 && x < x1 && x < waterEnd(y);
-  for (let x = x0; x < x1; x++) {
-    const { top, bottom } = brookAt(x + ox);
-    for (let y = top - 4; y <= bottom + 3; y++) {
-      const water = y >= top && y < bottom;
-      if (x >= (water ? waterEnd(y) : bankEnd(y))) continue;
+  const vAt = (x: number, y: number) => {
+    const bx = x - b.x0;
+    const by = y - b.y0;
+    return bx < 0 || by < 0 || bx >= b.w || by >= b.h ? 999 : b.v[by * b.w + bx];
+  };
+  for (let y = b.y0; y < b.y0 + b.h; y++) {
+    if (y < 0 || y >= PH) continue;
+    for (let x = b.x0; x < b.x0 + b.w; x++) {
+      const gx = x - ox;
+      if (gx < 0 || gx >= width) continue;
+      const k = (y - b.y0) * b.w + (x - b.x0);
+      const v = b.v[k];
+      if (v === 999) continue;
+      const h = b.hw[Math.round(b.s[k] / STEP)];
+      const water = v >= -h && v < h;
+      if (gx >= (water ? waterEnd(y) : bankEnd(y))) continue;
       let color: string;
-      if (y === top - 4) color = GREEN.line;
-      else if (y === top - 3) color = EARTH.top;
-      else if (y === top - 2) color = EARTH.mid;
-      else if (y === top - 1) color = EARTH.line;
-      else if (y === top) color = WATER.deep;
-      else if (y === top + 1) color = WATER.lump;
-      else if (y === bottom - 1) color = WATER.shallow;
-      else if (water) color = WATER.base;
-      else if (y < bottom + 3) {
-        const h = hash(x + ox, y);
-        color = h < 0.12 ? STONE.light : h < 0.3 ? SAND.mid : SAND.light;
+      if (v < -h - 4) color = hash(x, y) > 0.7 ? GREEN.base : GREEN.line;
+      else if (v < -h - 3) color = hash(x, y + 3) > 0.85 ? GREEN.base : EARTH.top;
+      else if (v < -h - 1) color = EARTH.mid;
+      else if (v < -h) color = EARTH.line;
+      else if (v < -h + 1) color = WATER.deep;
+      else if (v < -h + 2.5) color = WATER.lump;
+      else if (v < h - 1.5) color = WATER.base;
+      else if (v < h) color = WATER.shallow;
+      else if (v < h + 3) {
+        const q = hash(x, y);
+        color = q < 0.12 ? STONE.light : q < 0.3 ? SAND.mid : SAND.light;
       } else color = GREEN.line;
-      px(g, color, x, y);
-    }
-    // Grass hanging over the banks now and then, dark at its tip
-    const h = hash(x + ox, 11);
-    if (h > 0.62 && x < bankEnd(top - 4)) {
-      const len = 1 + Math.floor(hash(x + ox, 13) * 3);
-      px(g, GREEN.base, x, top - 4, 1, len);
-      px(g, GREEN.line, x, top - 4 + len);
-    } else if (h < 0.2 && x < bankEnd(bottom + 3)) {
-      const len = 1 + Math.floor(hash(x + ox, 17) * 2);
-      px(g, GREEN.base, x, bottom + 4 - len, 1, len);
-      px(g, GREEN.line, x, bottom + 3 - len);
+      px(g, color, gx, y);
     }
   }
-  /** A row of water from column x (along the river) w wide, at `v` across it (`dy` rows lower), inside the banks */
-  const inWater = (color: string, x: number, v: number, w: number, dy = 0) => {
-    for (let k = 0; k < w; k++) {
-      const cx = Math.round(x) - ox + k;
-      const { top, bottom } = brookAt(cx + ox);
-      const y = Math.round(top + 2 + v * (bottom - top - 3)) + dy;
-      if (y >= top + 2 && y < bottom - 1 && inside(cx, y)) px(g, color, cx, y);
+  /** A pixel of the water (not its edges), in g, if it is drawn here */
+  const dot = (color: string, x: number, y: number) => {
+    const rx = Math.round(x);
+    const ry = Math.round(y);
+    const v = vAt(rx, ry);
+    const gx = rx - ox;
+    if (Math.abs(v) < TOWN_BROOK.hw - 2 && gx >= 0 && gx < width && gx < waterEnd(ry)) px(g, color, gx, ry);
+  };
+  /** A short stroke along the river from `s`, at `u` across it, `dv` pixels further across */
+  const stroke = (color: string, s: number, u: number, len: number, dv = 0) => {
+    for (let j = 0; j < len; j++) {
+      const q = brookPoint(s + j, u);
+      const i = Math.max(0, Math.min(b.cx.length - 1, Math.round((s + j) / STEP)));
+      dot(color, q.x + b.nx[i] * dv, q.y + b.ny[i] * dv);
     }
   };
   // The bed: darker lumps, shifting a little from frame to frame
-  for (const [i, b] of BROOK_LUMPS.entries()) {
-    const x = b.x + (frame % 2 && i % 3 === 0 ? 1 : 0);
-    inWater(WATER.lump, x + 1, b.v, b.w - 2);
-    inWater(WATER.lump, x, b.v, b.w, 1);
-    if (b.h === 3) inWater(WATER.lump, x + 1, b.v, b.w - 2, 2);
+  for (const [i, l] of BROOK_LUMPS.entries()) {
+    const s = l.s + (frame % 2 && i % 3 === 0 ? 1 : 0);
+    stroke(WATER.lump, s + 1, l.u, l.w - 2);
+    stroke(WATER.lump, s, l.u, l.w, 1);
+    if (l.h === 3) stroke(WATER.lump, s + 1, l.u, l.w - 2, 2);
   }
-  // Ripples running downstream, to the right: each moves along over the frames, then starts again behind
-  for (const p of BROOK_RIPPLES) {
-    const age = (frame + p.phase) % RIVER_FRAMES;
-    const x = p.x + age * 4;
+  // Ripples running downstream: each moves along over the frames, then starts again behind
+  for (const r of BROOK_RIPPLES) {
+    const age = (frame + r.phase) % RIVER_FRAMES;
+    const s = r.s + age * 4;
     const color = age === 0 || age === RIVER_FRAMES - 1 ? WATER.shallow : WATER.light;
-    inWater(color, x, p.v, p.w - 2, 0);
-    inWater(color, x - 1, p.v, 1, 1);
-    inWater(color, x + p.w - 2, p.v, 1, -1);
+    stroke(color, s + 1, r.u, r.w - 2);
+    stroke(color, s, r.u, 1, -1);
+    stroke(color, s + r.w - 1, r.u, 1, -1);
   }
-  // Rocks, the water breaking white on their upstream side and trailing away downstream
+  // Rocks, the water breaking white upstream of them and trailing away downstream
   for (const k of BROOK_ROCKS) {
     const trail = 4 + (frame % 2) * 2;
     for (let j = 1; j <= trail; j++) {
-      inWater(WATER.light, k.x + k.w + j, k.v, 1, -1 - Math.floor(j / 2));
-      inWater(WATER.light, k.x + k.w + j, k.v, 1, 2 + Math.floor(j / 2));
+      stroke(WATER.light, k.s + k.w + j, k.u, 1, -2 - Math.floor(j / 2));
+      stroke(WATER.light, k.s + k.w + j, k.u, 1, 2 + Math.floor(j / 2));
     }
-    inWater(WATER.foam, k.x - 2, k.v, 2, 0);
-    inWater(WATER.light, k.x - 3, k.v, 1, 1);
-    const cx = k.x - ox;
-    if (cx + k.w < x0 || cx >= x1) continue;
-    const { top, bottom } = brookAt(k.x);
-    const y = Math.round(top + 2 + k.v * (bottom - top - 3));
-    for (let i = 0; i < k.w; i++) {
-      if (!inside(cx + i, y)) continue;
-      px(g, STONE.line, cx + i, y - 2, 1, 4);
-      px(g, i === 0 || i === k.w - 1 ? STONE.dark : STONE.mid, cx + i, y - 2, 1, 3);
+    stroke(WATER.foam, k.s - 2, k.u, 2, 0);
+    for (let j = 0; j < k.w; j++) {
+      for (let dv = -1; dv <= 1; dv++) stroke(j === 0 || j === k.w - 1 ? STONE.dark : dv < 0 ? STONE.pale : STONE.mid, k.s + j, k.u, 1, dv);
     }
-    for (let i = 1; i < k.w - 2; i++) if (inside(cx + i, y)) px(g, STONE.pale, cx + i, y - 2);
   }
   // Lily pads in the calm water by the far bank, one in flower
-  for (const [i, x] of BROOK_PADS.entries()) {
-    const cx = x - ox;
-    if (cx < x0 - 6 || cx >= x1) continue;
-    const { bottom } = brookAt(x);
-    const y = bottom - 4 - (i % 2) * 3;
-    const pad = (color: string, dx: number, dy: number, w: number) => {
-      for (let k = 0; k < w; k++) if (inside(cx + dx + k, y + dy)) px(g, color, cx + dx + k, y + dy);
-    };
-    pad('#2d6a30', 0, 1, 5);
-    pad('#3f8a3a', -1, 0, 7);
-    pad('#3f8a3a', 0, -1, 5);
-    pad(GREEN.blade, 1, -1, 2);
-    pad(WATER.base, 3, 0, 1);
+  for (const [i, s] of BROOK_PADS.entries()) {
+    const u = 0.62 - (i % 2) * 0.12;
+    stroke('#2d6a30', s, u, 5, 1);
+    stroke('#3f8a3a', s - 1, u, 7);
+    stroke('#3f8a3a', s, u, 5, -1);
+    stroke(GREEN.blade, s + 1, u, 2, -1);
     if (i === 2) {
-      pad('#f2b6cc', 1, -2, 3);
-      pad(SAND.white, 2, -3, 1);
-      pad(GOLD.light, 2, -2, 1);
+      stroke('#f2b6cc', s + 1, u, 3, -2);
+      stroke(GOLD.light, s + 2, u, 1, -2);
     }
   }
-  // Reeds along the far bank: stems up over the water's edge, light tips, a few brown heads
+  // Reeds on the far bank: stems up over the water's edge, light tips, a few brown heads
   const reeds = seeded(67);
-  for (const x0r of BROOK_REEDS) {
+  for (const s0 of BROOK_REEDS) {
     for (let k = 0; k < 7; k++) {
-      const x = x0r + k + Math.floor(reeds() * 2);
-      const cx = x - ox;
-      const h = 5 + Math.floor(reeds() * 7);
+      const q = brookPoint(s0 + k * 1.5, 1.1);
+      const x = Math.round(q.x);
+      const yb = Math.round(q.y);
+      const h = 5 + Math.floor(reeds() * 6);
       const head = reeds() < 0.35;
-      const { bottom } = brookAt(x);
-      if (cx < x0 || cx >= x1 || cx >= bankEnd(bottom)) continue;
-      px(g, '#2f5a2a', cx, bottom + 2 - h, 1, h);
-      px(g, GREEN.blade, cx, bottom + 2 - h);
-      if (head) px(g, EARTH.top, cx, bottom + 3 - h, 1, 3);
+      const gx = x - ox;
+      if (gx < 0 || gx >= width || gx >= bankEnd(yb)) continue;
+      px(g, '#2f5a2a', gx, yb - h, 1, h);
+      px(g, GREEN.blade, gx, yb - h);
+      if (head) px(g, EARTH.top, gx, yb - h + 1, 1, 3);
     }
   }
 }
+
 
 /** How far the town's edge reaches back over the square and out over the riverside, and where the grass is clear of it (sprite pixels) */
 const TOWN_EDGE = { back: 24, out: 100, grass: 40 };
