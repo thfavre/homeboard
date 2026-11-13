@@ -524,6 +524,8 @@ export interface WorldState {
   sheet: SheetInfo | null;
   shop?: ShopInfo;
   king?: KingInfo;
+  /** The town's own day: on or off (always day), and how many real minutes a whole day takes (the TV's town hall clock follows it) */
+  day?: { on: boolean; dayMin: number };
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
   /** Admin only */

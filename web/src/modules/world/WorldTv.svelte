@@ -2,13 +2,14 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-  import { CROSSING, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { CROSSING, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, hallLift, townMinutes, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { SQUARE_STREET, loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
+  import { drawTownHallClock, drawTownHallLight, townHallSwap } from './townHall.ts';
   import { drawLaughing, drawTalking, nodDip } from './chat.ts';
   import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
 
@@ -204,7 +205,7 @@
       // With the riverside, the square is built on past the screen's edge: its last house sticks out over the grass
       const screen = Math.ceil(WORLD.w / SPRITE_SCALE);
       const last = houseRow(SQUARE_HOUSES.seed, screen).at(-1)!;
-      const ground = squareGround(env, shopArt ? shopSwap(env, shopArt) : undefined, hall ? last.x + last.w + 40 : screen);
+      const ground = squareGround(env, townHallSwap(shopArt ? shopSwap(env, shopArt) : undefined), hall ? last.x + last.w + 40 : screen);
       g.drawImage(ground, 0, 0, screen, ground.height, 0, 0, screen * SPRITE_SCALE, ground.height * SPRITE_SCALE);
       edge = null;
       if (hall) {
@@ -501,7 +502,12 @@
       for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
       // The lamp posts light up through the veil, with a pool of light on the pavement under them
       for (const l of TOWN_SCENE.lamps) drawLampLight(g, l.x, l.y, dark, now);
+      drawTownHallLight(g, dark);
     }
+    // The town hall's clock shows the town's own time (the real one when its day is off)
+    const day = world?.day;
+    const local = new Date(now);
+    drawTownHallClock(g, day?.on ? townMinutes(now, day.dayMin) : local.getHours() * 60 + local.getMinutes() + local.getSeconds() / 60);
     // The throne room has its own light: the windows by day, its fires at any time
     // The throne glows from the moment the King opens the court, until he comes down from the dais
     const king = people.find((p) => p.id === world?.king?.id);
