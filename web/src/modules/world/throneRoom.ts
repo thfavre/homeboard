@@ -10,10 +10,11 @@ import type { Prop } from '../games/crowd/scene.ts';
  * battlements along its walls and bushes and flowers around it.
  *
  * The throne, the carpet's weave, the floor tiles, the potted trees, the bushes and the flowers are
- * LPC Revised art (web/public/crowd/env, see its CREDITS.txt), the reds recolored to one royal red.
- * Everything else (the grass, the river, the walls and towers, pillars, banners, windows, the dais,
- * the footstool, the braziers and their fire, the bridge and the path) is drawn here by hand in the
- * palettes of those sheets, lit from the top left, one sprite pixel at a time.
+ * LPC Revised art, the grass and the river LPC forest tiles (web/public/crowd/env, see its
+ * CREDITS.txt: the forest tiles are CC-BY-SA), the reds recolored to one royal red. Everything else
+ * (the walls and towers, pillars, banners, windows, the dais, the footstool, the braziers and their
+ * fire, the bridge and the path) is drawn here by hand in the palettes of those sheets, lit from the
+ * top left, one sprite pixel at a time.
  *
  * The ground (the riverside, then the hall: RIVERSIDE_ART and HALL_ART, shared/world.ts) is built
  * once in sprite pixels and drawn SPRITE_SCALE world units a pixel, like the square; what stands up,
@@ -38,13 +39,10 @@ const GOLD = { line: '#794117', dark: '#d19428', mid: '#e09c4c', light: '#f3c35f
 const IRON = { line: '#0f1218', dark: '#1b192b', mid: '#29253a', light: '#4b4b60', shine: '#6a7587' };
 /** The dark wood of the throne */
 const WOOD = { line: '#1a1213', dark: '#3e111a', mid: '#603429', light: '#7f4c31' };
-/** The grass sheet's green, a lighter and a darker one for its patches, its blades, and the dark of its edges */
-const GREEN = { base: '#468232', light: '#4f8c37', shade: '#3e7631', blade: '#75a743', dark: '#1c4525', line: '#19332d' };
-/** The pond sheet's water: its blue, the darker lumps and deep edges, the shallows, ripples and foam; the dark under the bridge's arch */
-const WATER = { base: '#2a8598', lump: '#217087', deep: '#18506f', shallow: '#3c9aa6', light: '#6cc0cc', foam: '#c9ecef' };
-const ARCH = '#16323a';
-/** The earth of the pond sheet's banks, where the river cuts into them */
-const EARTH = { top: '#6b3c2e', mid: '#603429', line: '#442725' };
+/** The forest grass's green, its leaves, a shade of it and the dark of its tufts */
+const GREEN = { base: '#2f8136', blade: '#499231', shade: '#276e2e', dark: '#1c4525' };
+/** The dark water under the bridge's arch */
+const ARCH = '#0d3b55';
 /** The towers' slate roofs */
 const SLATE = { line: '#1d1f33', dark: '#2e3352', mid: '#414b73', light: '#5a6a96', shine: '#7d8fb8' };
 
@@ -72,6 +70,30 @@ const BUSHES = [
   [64, 32],
 ] as const;
 const FLOWER_BUSHES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((c) => [c * 32, 64] as const);
+/** The forest sheet's tiles */
+const TILE = 32;
+/** Its grass, and its meadows in flower (now and then instead) */
+const MEADOW = [0, 0] as const;
+const MEADOWS = [32, 64, 96, 128].flatMap((x) => [0, 32, 64].map((y) => [x, y] as const));
+/**
+ * Its water in its three frames: a pond of 3 x 3 tiles (the edges and outer corners of the banks
+ * around water), the inner corners (2 x 2: the land in one corner) and water with rocks in it
+ */
+const POND = [
+  [128, 224],
+  [224, 224],
+  [320, 256],
+] as const;
+const INNER = [
+  [128, 320],
+  [192, 320],
+  [256, 320],
+] as const;
+const ROCKY = [
+  [320, 0],
+  [352, 0],
+  [384, 0],
+] as const;
 
 export interface HallArt {
   /** The hall's ground, in sprite pixels */
@@ -88,9 +110,9 @@ export interface HallArt {
 
 /** The river's moving strip (sprite pixels from the town's edge): the band it winds in and the bridge's ends */
 const RIVER_CUT = { x: R.river.x0 - 6, w: R.river.x1 - R.river.x0 + 12 };
-/** How many frames the river's flow takes, and how long each shows */
-const RIVER_FRAMES = 4;
-const RIVER_FRAME_MS = 210;
+/** How many frames the water's ripples take (the forest sheet's), and how long each shows */
+const RIVER_FRAMES = 3;
+const RIVER_FRAME_MS = 300;
 
 let loading: Promise<HallArt | null> | null = null;
 
@@ -112,15 +134,15 @@ export function loadHall(): Promise<HallArt | null> {
       img.onerror = () => reject(new Error('throne-front'));
       img.src = '/world/throne-front.png';
     });
-  const names = ['throne', 'carpet', 'pave-stone-diamond', 'planters', 'bush-round', 'flowers', 'water-sparkle-anim'] as const;
+  const names = ['throne', 'carpet', 'pave-stone-diamond', 'planters', 'bush-round', 'flowers', 'forest', 'water-sparkle-anim'] as const;
   loading ??= Promise.all([...names.map(load), front()])
-    .then(([throne, carpet, tiles, planters, bushes, flowers, sparkle, near]) => {
+    .then(([throne, carpet, tiles, planters, bushes, flowers, forest, sparkle, near]) => {
       const [tx, ty, tw, th] = THRONE_CUT;
       const back = recolored(throne, tx, ty, tw, th, CUSHION_SWAP);
       const g = back.getContext('2d')!;
       g.globalCompositeOperation = 'destination-out';
       g.drawImage(near, 0, 0);
-      const sheets: Sheets = { carpet, tiles, planters, bushes, flowers };
+      const sheets: Sheets = { carpet, tiles, planters, bushes, flowers, forest };
       const ground = buildGround(sheets);
       // The river's strip in each frame of the flow: cut from the ground, and from the riverside built again for the others
       const others = Array.from({ length: RIVER_FRAMES - 1 }, (_, k) => {
@@ -189,6 +211,7 @@ interface Sheets {
   planters: HTMLImageElement;
   bushes: HTMLImageElement;
   flowers: HTMLImageElement;
+  forest: HTMLImageElement;
 }
 
 /**
@@ -201,7 +224,7 @@ function buildGround(sheets: Sheets): HTMLCanvasElement {
   riverside(g, sheets, 0);
   g.save();
   g.translate(R.w, 0);
-  grass(g, 0, A.w, R.w, 77);
+  grass(g, sheets.forest, 0, A.w, 77);
   floor(g, sheets.tiles);
   dais(g);
   carpet(g, sheets.carpet);
@@ -227,45 +250,22 @@ function buildGround(sheets: Sheets): HTMLCanvasElement {
   return c;
 }
 
-/** A smooth noise over the ground, about -1 to 1, in patches a few dozen pixels across */
-function noise(x: number, y: number): number {
-  return (Math.sin(x * 0.047 + y * 0.029) + Math.sin(x * 0.019 - y * 0.053 + 1.7) + 0.6 * Math.sin(x * 0.091 + y * 0.071 + 4.1)) / 2.6;
-}
-
-/** A fixed pseudo-random number from 0 to 1 for a pixel (dithering, pebbles) */
-function hash(x: number, y: number): number {
-  const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-  return v - Math.floor(v);
-}
-
 /**
- * Grass from `x0` to `x1`, the whole height: the sheet's green in lighter and darker patches with
- * dithered edges, blades, tufts and small flowers in clusters. `ox` is how far x0 lies from the
- * riverside's left edge, so the patches run on across the riverside and the hall.
+ * The forest sheet's grass from `x0` to `x1`, the whole height, a meadow in flower here and there,
+ * and a few tufts. Its tiles line up across the riverside and the hall (the riverside is whole tiles wide).
  */
-function grass(g: G, x0: number, x1: number, ox: number, seed: number): void {
-  px(g, GREEN.base, x0, 0, x1 - x0, PH);
-  for (let y = 0; y < PH; y += 2) {
-    for (let x = x0; x < x1; x += 2) {
-      const v = noise(x + ox, y) + (hash(x + ox, y) - 0.5) * 0.3;
-      if (v > 0.4) px(g, GREEN.light, x, y, 2, 2);
-      else if (v < -0.4) px(g, GREEN.shade, x, y, 2, 2);
+function grass(g: G, sheet: HTMLImageElement, x0: number, x1: number, seed: number): void {
+  const r = seeded(seed);
+  for (let y = 0; y < PH; y += TILE) {
+    for (let x = x0; x < x1; x += TILE) {
+      const [sx, sy] = r() < 0.05 ? MEADOWS[Math.floor(r() * MEADOWS.length)] : MEADOW;
+      const w = Math.min(TILE, x1 - x);
+      g.drawImage(sheet, sx, sy, w, TILE, x, y, w, TILE);
     }
   }
-  const r = seeded(seed);
-  const w = x1 - x0;
-  const area = w * PH;
-  // Blades: little slanted strokes, thicker in the lighter patches
-  for (let i = 0; i < area / 60; i++) {
-    const x = x0 + 1 + Math.floor(r() * (w - 2));
-    const y = 1 + Math.floor(r() * (PH - 1));
-    if (r() > 0.5 + noise(x + ox, y) * 0.4) continue;
-    const lean = r() < 0.5 ? 1 : -1;
-    px(g, GREEN.blade, x, y);
-    px(g, GREEN.blade, x + lean, y - 1);
-  }
   // Tufts: spiky clumps, dark with light tips
-  for (let i = 0; i < area / 1500; i++) {
+  const w = x1 - x0;
+  for (let i = 0; i < (w * PH) / 2600; i++) {
     const tw = 5 + Math.floor(r() * 3);
     const x = x0 + Math.floor(r() * (w - tw));
     const y = 4 + Math.floor(r() * (PH - 4));
@@ -276,227 +276,104 @@ function grass(g: G, x0: number, x1: number, ox: number, seed: number): void {
     }
     px(g, GREEN.shade, x, y, tw, 1);
   }
-  // Small flowers, a few together: a dot of gold in four petals
-  const petals = [SAND.white, '#e7a0bf', '#a9c6ef', GOLD.light];
-  for (let i = 0; i < area / 7000; i++) {
-    const cx = x0 + 6 + r() * (w - 12);
-    const cy = 6 + r() * (PH - 12);
-    const color = petals[Math.floor(r() * petals.length)];
-    for (let k = 3 + Math.floor(r() * 4); k > 0; k--) {
-      const x = Math.round(cx + (r() - 0.5) * 16);
-      const y = Math.round(cy + (r() - 0.5) * 9);
-      if (x < x0 + 1 || x > x1 - 2) continue;
-      px(g, GREEN.dark, x, y + 2);
-      px(g, color, x - 1, y, 3, 1);
-      px(g, color, x, y - 1, 1, 3);
-      px(g, color === GOLD.light ? SAND.white : GOLD.light, x, y);
-    }
-  }
 }
-
-/** The middle of the river's band (sprite pixels of the riverside) */
-const RIVER_MID = (R.river.x0 + R.river.x1) / 2;
 
 /**
- * The river at a row of the riverside: its middle and half width, winding in two bends down the
- * screen, and how far it has swung to one side (-1 west to 1 east: the outer bank is on that side)
+ * The river's course on the corners of the riverside's tiles: for each row of corners, the first
+ * and last corner under water. It comes down in long straight runs that turn at right angles, with
+ * a bulge on the way, and runs straight under the bridge (rows 10 to 15).
  */
-function riverAt(y: number): { c: number; hw: number; bend: number } {
-  const c = RIVER_MID + 24 * Math.sin(y / 74 + 0.5) + 8 * Math.sin(y / 31 + 2.2);
-  const hw = 21 + 4 * Math.sin(y / 57 + 1.1) + 1.5 * Math.sin(y / 13);
-  return { c, hw, bend: Math.max(-1, Math.min(1, (c - RIVER_MID) / 26)) };
-}
-
-/** The river's banks at a row, a pixel or so off the smooth line so they do not look drawn with a ruler */
-function banksAt(y: number): { l: number; r: number; bend: number } {
-  const { c, hw, bend } = riverAt(y);
-  const jit = (s: number) => Math.round(Math.sin(y * 0.9 + s) * 0.6 + Math.sin(y * 0.37 + s * 2) * 0.7);
-  return { l: Math.round(c - hw + jit(0)), r: Math.round(c + hw + jit(9)), bend };
-}
+const COURSE: [number, number][] = [
+  [3, 5], [3, 5], [3, 5], [3, 5],
+  [1, 5],
+  [1, 3], [1, 3], [1, 3],
+  [1, 4],
+  [1, 3], [1, 3], [1, 3], [1, 3], [1, 3], [1, 3], [1, 3],
+  [1, 5],
+  [3, 5], [3, 5], [3, 5], [3, 5], [3, 5],
+];
+const courseAt = (j: number) => COURSE[Math.max(0, Math.min(COURSE.length - 1, j))];
+/** Whether the corner at column `i`, row `j` of the riverside's tiles is under water */
+const wet = (i: number, j: number) => {
+  const [a, b] = courseAt(j);
+  return i >= a && i <= b;
+};
+/** The tiles all under water that have rocks in them (column, row) */
+const ROCK_TILES = [
+  [4, 1],
+  [1, 9],
+  [3, 19],
+];
 
 /** Where the bridge reaches from and to: over the water at its rows, onto the banks */
 function bridgeSpan(): [number, number] {
   let lo = Infinity;
   let hi = -Infinity;
-  for (let y = R.bridge.y0 - 14; y <= R.bridge.y1 + 24; y++) {
-    const { c, hw } = riverAt(y);
-    lo = Math.min(lo, c - hw);
-    hi = Math.max(hi, c + hw);
+  for (let j = Math.floor((R.bridge.y0 - 14) / TILE); j <= Math.ceil((R.bridge.y1 + 24) / TILE); j++) {
+    const [a, b] = courseAt(j);
+    lo = Math.min(lo, a * TILE - 20);
+    hi = Math.max(hi, b * TILE + 20);
   }
-  return [Math.floor(lo) - 8, Math.ceil(hi) + 8];
+  return [lo, hi];
 }
 
 /**
- * The riverside (sprite pixels from the town's edge), in one frame of the river's flow: the grass,
- * the river winding down it, the path to the castle and the bridge carrying it over the water
+ * The riverside (sprite pixels from the town's edge), in one frame of the water: the grass, the
+ * river down it, the path to the castle and the bridge carrying it over the water
  */
 function riverside(g: G, sheets: Sheets, frame: number): void {
-  grass(g, 0, R.w, 0, 61);
-  // Where the square's paving ends: a dark edge, the grass growing over it
-  px(g, GREEN.line, 0, 0, 1, PH);
-  river(g, frame);
+  grass(g, sheets.forest, 0, R.w, 61);
+  river(g, sheets.forest, frame);
   const [x0, x1] = bridgeSpan();
   path(g, 0, x0 + 4);
   path(g, x1 - 4, R.w);
   bridge(g);
-  // A few flowering bushes in the grass, on whichever side of the river has room
+  // A few flowering bushes in the grass, on whichever side of the river has more room
   const r = seeded(19);
-  for (const y of [74, 196, 286, 560, 626]) {
-    const { l, r: rr } = banksAt(y);
-    const x = l > R.w - rr ? Math.round(l / 2) : Math.round((rr + R.w) / 2);
-    if (Math.min(x, R.w - x) < 12 || (x > l - 14 && x < rr + 14)) continue;
+  for (const y of [74, 196, 286, 560, 640]) {
+    const [a, b] = courseAt(Math.round(y / TILE));
+    const left = a * TILE - 14;
+    const right = R.w - (b * TILE + 14);
+    if (Math.max(left, right) < 30) continue;
+    const x = left >= right ? Math.round(left / 2) : Math.round(R.w - right / 2);
     const [fx, fy] = FLOWER_BUSHES[Math.floor(r() * FLOWER_BUSHES.length)];
     g.drawImage(sheets.flowers, fx, fy, 32, 32, x - 12, y - 24, 24, 24);
   }
 }
 
-/** Fill a row of the water from x to x + w, kept inside the banks at that row (rocks, lumps and ripples stay in the river) */
-function inWater(g: G, color: string, x: number, y: number, w = 1): void {
-  if (y < 0 || y >= PH) return;
-  const { l, r } = banksAt(y);
-  const a = Math.max(Math.round(x), l + 2);
-  const b = Math.min(Math.round(x + w), r - 1);
-  if (b > a) px(g, color, a, y, b - a, 1);
-}
-
-/** Lumps on the river's bed and its ripples, placed along the river (`u`: across it, -1 to 1) */
-const LUMPS = (() => {
-  const r = seeded(88);
-  return Array.from({ length: Math.round(PH / 5) }, () => ({ y: Math.floor(r() * PH), u: r() * 1.7 - 0.85, w: 3 + Math.floor(r() * 6), h: r() < 0.5 ? 2 : 3 }));
-})();
-const RIPPLES = (() => {
-  const r = seeded(91);
-  return Array.from({ length: 46 }, () => ({ y: Math.floor(r() * PH), u: r() * 1.4 - 0.7, w: 3 + Math.floor(r() * 3), phase: Math.floor(r() * RIVER_FRAMES) }));
-})();
-/** Rocks in the water (`u` across it) and lily pads by the calm inner banks */
-const ROCKS = [
-  { y: 132, u: 0.42, w: 7 },
-  { y: 238, u: -0.5, w: 5 },
-  { y: 548, u: 0.35, w: 8 },
-  { y: 640, u: -0.3, w: 6 },
-];
-
 /**
- * The river: earth where it cuts into the outer bank of a bend, a strip of sand and pebbles on the
- * inner one, shallows along the edges and the bank's shadow on the water (light from the left),
- * lumps on its bed, ripples running downstream (`frame` of the flow), rocks with foam around them,
- * lily pads and reeds in the calm water of the inner banks
+ * The river in the forest sheet's tiles, each picked by which of its four corners are under water:
+ * all of them the open water (or water with rocks), three an inner corner of the bank, two an edge,
+ * one an outer corner
  */
-function river(g: G, frame: number): void {
-  for (let y = 0; y < PH; y++) {
-    const { l, r, bend } = banksAt(y);
-    const east = Math.round(Math.max(0, bend) * 4);
-    const west = Math.round(Math.max(0, -bend) * 4);
-    // The banks: earth on the outer side, sand on the inner side
-    const bank = (x: number, w: number, outward: number, cut: number, sand: number) => {
-      if (cut) {
-        px(g, EARTH.mid, outward < 0 ? x - cut : x, y, cut, 1);
-        px(g, EARTH.top, outward < 0 ? x - cut : x + cut - 1, y);
-        px(g, EARTH.line, outward < 0 ? x - 1 : x, y);
-      } else if (sand) {
-        for (let k = 0; k < sand; k++) {
-          const sx = outward < 0 ? x - 1 - k : x + k;
-          const h = hash(sx, y);
-          px(g, h < 0.12 ? STONE.light : h < 0.3 ? SAND.mid : SAND.light, sx, y);
-        }
+function river(g: G, sheet: HTMLImageElement, frame: number): void {
+  const [px0, py0] = POND[frame];
+  const [ix, iy] = INNER[frame];
+  for (let j = 0; j * TILE < PH; j++) {
+    for (let i = 0; i * TILE < R.w; i++) {
+      const tl = wet(i, j);
+      const tr = wet(i + 1, j);
+      const bl = wet(i, j + 1);
+      const br = wet(i + 1, j + 1);
+      const n = +tl + +tr + +bl + +br;
+      if (!n) continue;
+      let sx: number;
+      let sy: number;
+      if (n === 4) {
+        const rocky = ROCK_TILES.some(([ri, rj]) => ri === i && rj === j);
+        [sx, sy] = rocky ? ROCKY[frame] : [px0 + TILE, py0 + TILE];
+      } else if (n === 3) {
+        // The inner corner with the land where the dry corner is
+        sx = ix + (!tr || !br ? TILE : 0);
+        sy = iy + (!bl || !br ? TILE : 0);
+      } else {
+        // The pond's tile with water on the same sides
+        const col = (tl || bl) && (tr || br) ? 1 : tr || br ? 0 : 2;
+        const row = (tl || tr) && (bl || br) ? 1 : bl || br ? 0 : 2;
+        sx = px0 + col * TILE;
+        sy = py0 + row * TILE;
       }
-      const edge = outward < 0 ? x - Math.max(cut, sand) - 1 : x + Math.max(cut, sand) + w - 1;
-      px(g, GREEN.line, edge, y);
-    };
-    bank(l, 0, -1, west, Math.round(Math.max(0, bend) * 5));
-    bank(r, 1, 1, east, Math.round(Math.max(0, -bend) * 5));
-    // The water: the bank's shadow down its west edge, shallows on the inner side of a bend
-    px(g, WATER.base, l, y, r - l, 1);
-    px(g, WATER.deep, l, y, 1, 1);
-    px(g, WATER.lump, l + 1, y, 2, 1);
-    px(g, WATER.deep, r - 1, y);
-    const shallow = Math.round(Math.abs(bend) * 3);
-    if (shallow) px(g, WATER.shallow, bend > 0 ? l + 3 : r - 1 - shallow, y, shallow, 1);
-  }
-  // Grass hanging over the banks: spikes every few rows, dark tipped
-  for (let y = 1; y < PH; y += 2) {
-    const { l, r, bend } = banksAt(y);
-    const h = hash(y, 5);
-    if (h < 0.55) continue;
-    const len = 1 + Math.floor(hash(y, 7) * 3);
-    const west = l - Math.round(Math.max(0, -bend) * 4) - Math.round(Math.max(0, bend) * 5);
-    const east = r + Math.round(Math.max(0, bend) * 4) + Math.round(Math.max(0, -bend) * 5);
-    if (h < 0.78) {
-      px(g, GREEN.base, west - 1, y, len, 1);
-      px(g, GREEN.line, west - 1 + len, y);
-    } else {
-      px(g, GREEN.base, east - len + 1, y, len, 1);
-      px(g, GREEN.line, east - len, y);
-    }
-  }
-  // The bed: darker lumps, shifting a little from frame to frame
-  for (const [i, b] of LUMPS.entries()) {
-    const { c, hw } = riverAt(b.y);
-    const x = Math.round(c + b.u * hw) + (frame % 2 && i % 3 === 0 ? 1 : 0);
-    inWater(g, WATER.lump, x + 1, b.y, b.w - 2);
-    inWater(g, WATER.lump, x, b.y + 1, b.w);
-    if (b.h === 3) inWater(g, WATER.lump, x + 1, b.y + 2, b.w - 2);
-  }
-  // Ripples running downstream: each moves down over the frames, then starts again higher up
-  for (const p of RIPPLES) {
-    const age = (frame + p.phase) % RIVER_FRAMES;
-    const y = p.y + age * 4;
-    const { c, hw } = riverAt(y);
-    const x = Math.round(c + p.u * hw);
-    const color = age === 0 || age === RIVER_FRAMES - 1 ? WATER.shallow : WATER.light;
-    inWater(g, color, x + 1, y, p.w - 2);
-    inWater(g, color, x, y - 1);
-    inWater(g, color, x + p.w - 1, y - 1);
-  }
-  // Rocks, the water breaking white upstream of them and trailing away downstream
-  for (const k of ROCKS) {
-    const { c, hw } = riverAt(k.y);
-    const x = Math.round(c + k.u * hw - k.w / 2);
-    const trail = 4 + (frame % 2) * 2;
-    for (let j = 1; j <= trail; j++) {
-      inWater(g, WATER.light, x - 1 - Math.floor(j / 2), k.y + 1 + j);
-      inWater(g, WATER.light, x + k.w + Math.floor(j / 2), k.y + 1 + j);
-    }
-    inWater(g, WATER.foam, x, k.y - 4, k.w);
-    inWater(g, WATER.light, x - 1, k.y - 3, k.w + 2);
-    px(g, STONE.line, x, k.y - 3, k.w, 4);
-    px(g, STONE.mid, x + 1, k.y - 3, k.w - 2, 3);
-    px(g, STONE.pale, x + 1, k.y - 3, Math.max(1, k.w - 4), 1);
-    px(g, STONE.dark, x + k.w - 2, k.y - 2, 1, 2);
-  }
-  // Lily pads in the calm water along the inner banks, one in flower
-  const pads = seeded(57);
-  let flowered = false;
-  for (let y = 20; y < PH - 10; y += 28) {
-    const { l, r, bend } = banksAt(y);
-    if (Math.abs(bend) < 0.45 || (y > R.bridge.y0 - 30 && y < R.bridge.y1 + 40)) continue;
-    for (let n = 0; n < 2; n++) {
-      const py = y + Math.floor(pads() * 12);
-      const pxx = bend > 0 ? l + 5 + Math.floor(pads() * 6) : r - 8 - Math.floor(pads() * 6);
-      inWater(g, '#2d6a30', pxx, py + 1, 5);
-      inWater(g, '#3f8a3a', pxx - 1, py, 7);
-      inWater(g, '#3f8a3a', pxx, py - 1, 5);
-      inWater(g, GREEN.blade, pxx + 1, py - 1, 2);
-      inWater(g, WATER.base, pxx + 3, py, 1);
-      if (!flowered && pads() < 0.4) {
-        flowered = true;
-        px(g, '#f2b6cc', pxx + 1, py - 2, 3, 2);
-        px(g, SAND.white, pxx + 2, py - 3);
-        px(g, GOLD.light, pxx + 2, py - 2);
-      }
-    }
-  }
-  // Reeds on the inner banks: stems, light tips, a few brown heads
-  const reeds = seeded(63);
-  for (const y of [96, 172, 268, 512, 600]) {
-    const { l, r, bend } = banksAt(y);
-    const x0 = bend > 0 ? l - 7 : r + 2;
-    for (let k = 0; k < 6; k++) {
-      const x = x0 + k + Math.floor(reeds() * 2);
-      const h = 5 + Math.floor(reeds() * 6);
-      px(g, '#2f5a2a', x, y - h, 1, h);
-      px(g, GREEN.blade, x, y - h);
-      if (reeds() < 0.35) px(g, EARTH.top, x, y - h + 1, 1, 3);
+      g.drawImage(sheet, sx, sy, TILE, TILE, i * TILE, j * TILE, TILE, TILE);
     }
   }
 }
@@ -569,9 +446,9 @@ function bridge(g: G): void {
     px(g, SAND.dark, x0, y + 3, w, 1);
     for (let x = x0 + (row % 2 ? 6 : 0); x < x1; x += 12) px(g, SAND.dark, x, y, 1, 3);
   }
-  const under = riverAt(face + fh);
-  const ax = Math.round(under.c);
-  const half = Math.round(under.hw) + 1;
+  const [ua, ub] = courseAt(Math.round((face + fh) / TILE));
+  const ax = Math.round(((ua + ub) / 2) * TILE);
+  const half = Math.round(((ub - ua) / 2) * TILE) + 12;
   for (let j = 0; j < fh; j++) {
     // The arch: as wide as the water at the bottom, rounding off upward
     const rr = Math.round(half * Math.sqrt(Math.max(0, 1 - ((fh - j) / (fh + 1)) ** 2)));
@@ -1314,14 +1191,14 @@ function standard(g: G, x: number, y: number, tall: number): void {
 /** World position of a point of the riverside's art */
 const onRiverside = (x: number, y: number) => ({ x: RIVERSIDE.x0 + x * S, y: y * S });
 
-/** Where the water glints (rows of the riverside and across the river, -1 to 1), and how far into the twinkle each one starts */
+/** Where the water glints (rows of the riverside's tile corners, and how far off the river's middle), and how far into the twinkle each one starts */
 const GLINTS = [
-  [92, -0.3, 0],
-  [252, 0.2, 2],
-  [330, -0.4, 1],
-  [524, 0.1, 3],
-  [612, 0.45, 2],
-  [180, -0.1, 1],
+  [2, -10, 0],
+  [5, 26, 2],
+  [9, -12, 1],
+  [17, 6, 3],
+  [20, -8, 2],
+  [7, 10, 1],
 ] as const;
 
 /**
@@ -1334,9 +1211,9 @@ export function drawRiver(g: G, art: HallArt, now: number): void {
   g.drawImage(strip, 0, 0, strip.width, strip.height, p.x, 0, strip.width * S, strip.height * S);
   const t = Math.floor(now / 160);
   g.globalAlpha = 0.75;
-  for (const [y, u, k] of GLINTS) {
-    const { c, hw } = riverAt(y);
-    const q = onRiverside(c + u * hw, y);
+  for (const [j, dx, k] of GLINTS) {
+    const [a, b] = courseAt(j);
+    const q = onRiverside(((a + b) / 2) * TILE + dx, j * TILE + 6);
     g.drawImage(art.sparkle, ((t + k) % 4) * 32, 32, 32, 32, Math.round(q.x - 16), Math.round(q.y - 16), 32, 32);
   }
   g.globalAlpha = 1;
