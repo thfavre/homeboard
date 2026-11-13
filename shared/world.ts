@@ -134,14 +134,14 @@ export const NOTICE_BOARD = { x: 148, y: 304 };
  * The town's own benches, where each stands (the middle of its bottom): in front of the potted tree
  * right of the barber, in place of the square's bench at `instead` (it would stand before the cafe's
  * porch; the square's other one is behind the town hall), on the square at the top left of the
- * fountain, and right of the bottom left tree facing right (toward the fountain, drawn by hand: the
+ * fountain, and just right of the bottom left tree's trunk facing right (toward the fountain, drawn by hand: the
  * city sheet has the bench only facing the front). `dir`: the way its sitter faces.
  */
 export const TOWN_BENCHES: { instead: number; list: { x: number; y: number; dir: WDir }[] } = {
   list: [
     { x: 1450, y: 184, dir: 2 },
     { x: 676, y: 468, dir: 2 },
-    { x: 545, y: 812, dir: 3 },
+    { x: 516, y: 792, dir: 3 },
   ],
   instead: 1200,
 };
