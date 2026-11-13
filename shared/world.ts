@@ -17,33 +17,36 @@ export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
 /**
  * The town hall in the top left corner of the square (drawn by the TV, web/src/modules/world/townHall.ts):
  * its left edge, width and height in sprite pixels, from the top of the screen down past the sidewalk
- * onto the square. It stands in front of the first house of the row, a little in from its left edge.
+ * onto the square. It stands over the first two houses of the row, as wide as both, so none of them shows.
  */
-export const TOWN_HALL = { x: Math.max(0, houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / SPRITE_SCALE))[0].x) + 4, w: 224, h: 170 };
+export const TOWN_HALL = (() => {
+  const [, second] = houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / SPRITE_SCALE));
+  return { x: 0, w: second.x + second.w, h: 220 };
+})();
 
 /**
- * The part of the square the town hall's front and steps stand on: a flat ellipse whose lower edge
- * follows the bottom of the steps in the middle and of the plinth at the wings, between the square's
- * left edge (nobody walks further left) and the building's right edge. Nobody walks over it.
+ * The part of the square the town hall's front and steps stand on: three flat ellipses side by side
+ * whose lower edges follow the bottom of the plinth and, in the middle, of the steps. The left one stops
+ * short of the square's left edge, leaving a narrow way up it (going around the hall there would
+ * otherwise lead out of the square); the right one reaches the building's right edge. Nobody walks
+ * over them.
  */
-function townHallFootprint(): { x: number; y: number; rx: number; ry: number } {
+function townHallFootprint(): { x: number; y: number; rx: number; ry: number }[] {
   const S = SPRITE_SCALE;
   const right = (TOWN_HALL.x + TOWN_HALL.w) * S;
-  const x = (TOWN_AREA.x0 + right) / 2;
-  const ry = 120;
-  const y = TOWN_HALL.h * S + 3 - ry;
-  // Wide enough to still reach the bottom of the plinth (14 sprite pixels above the steps' bottom) at its ends
-  const reach = (TOWN_HALL.h - 14) * S - y;
-  const rx = (right - x) / Math.sqrt(1 - (reach / ry) ** 2);
-  return { x, y, rx, ry };
+  const mid = (TOWN_HALL.x + TOWN_HALL.w / 2) * S;
+  const ry = 70;
+  const steps = TOWN_HALL.h * S + 3;
+  const y = steps - ry;
+  // How wide an ellipse is at the bottom of the plinth (14 sprite pixels above the steps' bottom), for its width there
+  const plinth = Math.sqrt(1 - (((TOWN_HALL.h - 14) * S - y) / ry) ** 2);
+  const side = (x: number, to: number) => ({ x, y, rx: Math.abs(to - x) / plinth, ry });
+  return [side(TOWN_AREA.x0 + 100, TOWN_AREA.x0 + 30), { x: mid, y, rx: 140, ry }, side((mid + right) / 2 - 10, right)];
 }
 
-export const TOWN_OBSTACLES = [...SPY_OBSTACLES, townHallFootprint()];
+export const TOWN_OBSTACLES = [...SPY_OBSTACLES, ...townHallFootprint()];
 /** Benches characters can sit on: where the square's benches stand, and where a sitter's feet land */
-export const BENCHES: { x: number; y: number }[] = [
-  { x: 400, y: 178 },
-  { x: 1200, y: 178 },
-];
+export const BENCHES: { x: number; y: number }[] = [{ x: 1200, y: 178 }];
 
 // ------------------------------------------------------------ the shops
 
