@@ -106,6 +106,9 @@ interface WorldSettings {
   lamplighter: boolean;
   /** Leaves now and then falling from the trees on the TV */
   leaves: boolean;
+  /** Each tree drops its next leaf after a random wait in this range */
+  leavesMinSec: number;
+  leavesMaxSec: number;
   /** The cafe throws a party every so many town days, from nightfall for so many town hours; this share of the town stays up for it (percent) */
   party: boolean;
   partyEveryDays: number;
@@ -283,6 +286,8 @@ export default defineModule<WorldSettings>({
     campfire: true,
     lamplighter: true,
     leaves: true,
+    leavesMinSec: 8,
+    leavesMaxSec: 20,
     party: true,
     partyEveryDays: 7,
     partyChancePct: 20,
@@ -660,6 +665,7 @@ export default defineModule<WorldSettings>({
         shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices(), unlockPieces: s.unlockPieces, secretPieces: s.secretPieces },
         day: { on: s.dayCycle, ...townClock() },
         leaves: s.leaves,
+        leavesSec: [s.leavesMinSec, s.leavesMaxSec],
         king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), pricing: kingPricing(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null, reigns },
       };
       if (role === 'admin') {
@@ -1296,6 +1302,8 @@ export default defineModule<WorldSettings>({
         campfire: typeof args.campfire === 'boolean' ? args.campfire : s.campfire,
         lamplighter: typeof args.lamplighter === 'boolean' ? args.lamplighter : s.lamplighter,
         leaves: typeof args.leaves === 'boolean' ? args.leaves : s.leaves,
+        leavesMinSec: Math.max(0.5, secs(args.leavesMinSec, s.leavesMinSec, 600)),
+        leavesMaxSec: Math.max(0.5, secs(args.leavesMaxSec, s.leavesMaxSec, 600)),
         party: typeof args.party === 'boolean' ? args.party : s.party,
         partyEveryDays: Math.max(1, Math.min(60, Math.round(num(args.partyEveryDays, s.partyEveryDays)))),
         partyChancePct: Math.max(0, Math.min(100, Math.round(num(args.partyChancePct, s.partyChancePct)))),

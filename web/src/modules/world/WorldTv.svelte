@@ -414,7 +414,7 @@
     // Leaves now and then coming off the trees: the ones that landed lie under everyone
     const leafy = !!env && world?.leaves !== false;
     if (leafy) {
-      leaves.update(step);
+      leaves.update(step, world?.leavesSec ?? [8, 20]);
       leaves.drawGround(g, env!);
     }
 

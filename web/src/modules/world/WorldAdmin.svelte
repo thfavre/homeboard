@@ -321,10 +321,21 @@
     <div class="line">
       <div>
         <strong>Falling leaves</strong>
-        <p class="faint small">Now and then a leaf comes off a tree, drifts down and lies on the ground for a moment before it fades. Only on the TV, and kept rare.</p>
+        <p class="faint small">Now and then a leaf comes off a tree, drifts down and lies on the ground for a moment before it fades. Only on the TV.</p>
       </div>
       <Toggle checked={mod.leaves !== false} label="Falling leaves" onchange={(v) => setOption('leaves', v)} />
     </div>
+    <div class="pair">
+      <label class="field">
+        <span>Each tree drops a leaf every (seconds)</span>
+        <input class="input" type="number" min="0.5" max="600" step="0.5" value={mod.leavesSec?.[0]} onchange={(e) => setSeconds('leavesMinSec', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>to (seconds)</span>
+        <input class="input" type="number" min="0.5" max="600" step="0.5" value={mod.leavesSec?.[1]} onchange={(e) => setSeconds('leavesMaxSec', e.currentTarget.value)} />
+      </label>
+    </div>
+    <p class="faint small">Every tree keeps its own timer: after each leaf it waits a random time in this range before the next one.</p>
   </Section>
 
   <Section title="Party at the cafe">

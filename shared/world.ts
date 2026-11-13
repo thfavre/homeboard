@@ -887,6 +887,8 @@ export interface WorldState {
   day?: { on: boolean } & TownClock;
   /** Leaves now and then falling from the trees on the TV */
   leaves?: boolean;
+  /** How long each tree waits before dropping its next leaf: from, to (seconds) */
+  leavesSec?: [number, number];
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
   /** Admin only */

@@ -4,8 +4,8 @@ import type { Env } from '../games/crowd/scene.ts';
 
 /**
  * Now and then a leaf comes off one of the town's trees: it drifts down from the crown, swaying and
- * turning over, lands near the trunk, lies there a moment and fades. Kept rare on purpose, a leaf
- * every few seconds over the whole square. The art is the LPC leaf recolors (web/public/crowd/env,
+ * turning over, lands near the trunk, lies there a moment and fades. Each tree keeps its own
+ * timer: its next leaf comes after a random wait in the range the admin sets. The art is the LPC leaf recolors (web/public/crowd/env,
  * see its CREDITS.txt): only its green row, like the trees, eleven single leaves in it.
  */
 
@@ -25,7 +25,8 @@ const CUTS: [number, number, number, number][] = [
 ];
 /** At the sprites' own scale, pixel for pixel like the rest of the town */
 const SIZE = SPRITE_SCALE;
-const MAX = 8;
+/** Never more than this many at once, whatever the range (a very short one would fill the square) */
+const MAX = 40;
 
 interface Leaf {
   x: number;
@@ -42,15 +43,24 @@ interface Leaf {
 
 export class FallingLeaves {
   private leaves: Leaf[] = [];
-  private wait = 2;
+  /** Per tree: seconds until it drops its next leaf (each starts at its own point in the range) */
+  private waits: number[] | null = null;
 
-  /** Move them on by `dt` seconds (and maybe pick a new one off a tree) */
-  update(dt: number): void {
-    this.wait -= dt;
-    if (this.wait <= 0) {
-      this.wait = 2.5 + Math.random() * 4;
-      if (this.leaves.length < MAX) this.spawn();
-    }
+  /** Move them on by `dt` seconds, and each tree whose wait is over drops a leaf (`range`: from, to in seconds) */
+  update(dt: number, range: [number, number]): void {
+    const lo = Math.max(0.5, Math.min(range[0], range[1]));
+    const hi = Math.max(lo, range[0], range[1]);
+    const next = () => lo + Math.random() * (hi - lo);
+    this.waits ??= TOWN_SCENE.trees.map(() => Math.random() * next());
+    this.waits.forEach((w, i) => {
+      // (a wait longer than the range allows, after the admin shortened it, is cut down to it)
+      w = Math.min(w, hi) - dt;
+      if (w <= 0) {
+        w = next();
+        if (this.leaves.length < MAX) this.spawn(i);
+      }
+      this.waits![i] = w;
+    });
     for (const l of this.leaves) {
       if (l.down !== null) {
         l.down += dt;
@@ -67,9 +77,9 @@ export class FallingLeaves {
     this.leaves = this.leaves.filter((l) => l.down === null || l.down < 6);
   }
 
-  /** A leaf lets go somewhere in a tree's crown */
-  private spawn(): void {
-    const t = TOWN_SCENE.trees[Math.floor(Math.random() * TOWN_SCENE.trees.length)];
+  /** A leaf lets go somewhere in tree `i`'s crown */
+  private spawn(i: number): void {
+    const t = TOWN_SCENE.trees[i];
     const size = t.size;
     const stem = ('stem' in t ? t.stem : undefined) ?? 1;
     // The crown (as the tree draws it): over the trunk, about 94 by 80 sheet pixels
