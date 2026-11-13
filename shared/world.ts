@@ -107,10 +107,8 @@ export interface Seat {
   ground?: boolean;
 }
 
-/** Places on the fountain's rim: two on its front, one on each side facing out (the sitter's bottom on the rim, checked on the TV) */
+/** Places on the fountain's rim: one on each side, facing out (the sitter's bottom on the rim, checked on the TV) */
 export const FOUNTAIN_SEATS: Seat[] = [
-  { x: 775, y: 578, dir: 2 },
-  { x: 825, y: 578, dir: 2 },
   // (no higher: the sitter would be drawn behind the fountain, which stands at y 545)
   { x: 740, y: 547, dir: 1 },
   { x: 860, y: 547, dir: 3 },
