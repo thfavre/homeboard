@@ -1,8 +1,7 @@
 Environment art of the crowd games (city square, street, props, ambient animals)
 Downloaded unchanged except for the file names. Each entry below names the files, the authors,
 the license we use them under, and where they come from. Where a page offers several licenses,
-the one named here is the one we chose (never CC-BY-SA or GPL, with one exception: the forest
-tiles of the throne room's riverside, which come under CC-BY-SA only, so they stay under it).
+the one named here is the one we chose (never CC-BY-SA or GPL).
 
 LPC Modern Streets
   Files: street-sidewalk.png (sidewalk_terrain.png), street-road.png (base_road_tile.png),
@@ -121,18 +120,7 @@ Pigeon (Blue Bird Rework)
   Authors: bluecarrot16
   https://opengameart.org/content/lpc-cats-and-dogs
 
-[LPC] Forest tiles: the grass and the river around the throne room
-  Files: forest.png (LPC_forest/forest_tiles.png)
-  License: CC-BY-SA 3.0 (the only exception here: this file and what is made from it stay under CC-BY-SA 3.0)
-  Authors: Reemax, with Lanea Zimmerman (Sharm), Hyptosis, Johann C, Manuel Riecke (MrBeast),
-           William Thompson (William.Thompsonj), Tuomo Untinen
-  Notes: grass, water and rock tiles based on LPC art by Lanea Zimmerman (Sharm); the rest as listed
-         in the pack's credits.txt (plants after Hyptosis, tall grass, logs, webs and nests by Tuomo
-         Untinen, juniper after Johann C, kettles and beds by Sharm and William Thompson)
-  https://opengameart.org/content/lpc-forest-tiles
-
 License texts:
   CC0 1.0:      https://creativecommons.org/publicdomain/zero/1.0/
   CC-BY 3.0:    https://creativecommons.org/licenses/by/3.0/
   OGA-BY 3.0:   https://opengameart.org/content/oga-by-30-faq
-  CC-BY-SA 3.0: https://creativecommons.org/licenses/by-sa/3.0/
