@@ -2,7 +2,7 @@
  * Draws the bra sheets (assets/lpc/spritesheets/torso/clothes/bra/female/) from the LPC "Sleeveless 2"
  * top, frame by frame, so it has every animation and the same pixel style. Seen from the front: two
  * straps from the shoulders down to two rounded cups, a V between them; from the back a straight band
- * under the straps; from the side a strap down to a rounded cup on the front of the chest, and a thin
+ * under the straps; from the side a strap from the top of the shoulder slanting down to a rounded cup on the front of the chest, and a thin
  * band from it to the back. Every cut edge gets the top's dark outline. Which way is
  * "up" in a frame (standing, sitting, lying hurt) comes from where the head is.
  *
@@ -28,6 +28,9 @@ const BACK = [0.46, 0.72]; // the band across the back
 const SIDE_CUP = { f: 0.12, t: 0.5, rf: 0.45, rt: 0.21 };
 const SIDE_BAND = [0.53, 0.72];
 const SIDE_BAND_FROM = 0.3;
+/** ... and the strap: across from the chest's front at the shoulder's top and where it meets the cup
+ * (this far down) */
+const SIDE_STRAP = { top: 0.8, low: 0.45, lowAt: 0.4 };
 /** Pixels from the chest's edge to the middle of a strap */
 const STRAP_IN = 2;
 /** Of the chest's width: each cup's half width around its middle */
@@ -96,7 +99,12 @@ for (const file of readdirSync(TOP).filter((f) => f.endsWith('.png'))) {
       // or one in the middle seen from the side
       const strapAt = (x: number, y: number) => {
         const c = across(x, y);
-        if (facing === 'side') return Math.abs(c - Math.round((c0 + c1) / 2)) <= 1;
+        if (facing === 'side') {
+          // From the top of the shoulder (toward the back) slanting down to the cup
+          const f = SIDE_STRAP.top + (SIDE_STRAP.low - SIDE_STRAP.top) * Math.min(1, t(x, y) / SIDE_STRAP.lowAt);
+          const mid = cy / F === 3 ? c1 - f * (c1 - c0) : c0 + f * (c1 - c0);
+          return Math.abs(c - Math.round(mid)) <= 1;
+        }
         return Math.abs(c - (c0 + STRAP_IN)) <= 1 || Math.abs(c - (c1 - STRAP_IN)) <= 1;
       };
       // Seen from the side: 0 at the chest's front, 1 at the back (the right-facing row looks right,
