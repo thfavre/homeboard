@@ -22,8 +22,6 @@ const PIN = '7392';
 const count = Math.max(1, Math.min(NAMES.length, Number(process.argv[2]) || 3));
 const port = Number(process.env.PORT) || 4300;
 const dataDir = process.env.HB_DATA_DIR || join(import.meta.dirname, '..', 'data');
-// The session code, read where the server keeps it (it is what the QR code on the TV carries)
-const code = JSON.parse(readFileSync(join(dataDir, 'session.json'), 'utf8')).code;
 
 const rpc = (s: Socket, module: string, method: string, args?: unknown) =>
   new Promise<any>((ok, ko) =>
@@ -36,15 +34,21 @@ for (const n of NAMES.slice(0, count)) {
   const name = `Bot ${n}`;
   const s = io(`http://localhost:${port}`, { auth: { role: 'guest' }, transports: ['websocket'] });
   // Also after a server restart: the socket reconnects and the bot joins again
-  s.on('connect', async () => {
+  const enter = async () => {
     try {
+      // The session code, where the server keeps it (the QR code on the TV carries it), read each
+      // time: the host may have changed it
+      const code = JSON.parse(readFileSync(join(dataDir, 'session.json'), 'utf8')).code;
       const joined = await rpc(s, 'core', 'join', { code, name, pin: PIN });
       s.auth = { role: 'guest', token: joined.token };
       if (!(await rpc(s, 'world', 'mine'))) await rpc(s, 'world', 'save', { choices: randomChoices() });
       console.log(`${name} is in town${joined.returning ? ' (back again)' : ''}`);
     } catch (e) {
-      console.log(`${name}: ${(e as Error).message}`);
+      // A server that is still starting does not know its modules yet: try again in a moment
+      console.log(`${name}: ${(e as Error).message}, trying again`);
+      setTimeout(() => s.connected && enter(), 3000);
     }
-  });
+  };
+  s.on('connect', enter);
 }
 console.log(`${count} bots on port ${port}. Ctrl-C takes them offline.`);
