@@ -29,6 +29,11 @@ runes, Vite, Express and Socket.IO. `npm run check` type checks everything; run 
 - Every option is controllable from the admin page. A module's Settings section goes near the
   top of its admin page, never at the bottom.
 - Keep the look polished and use the theme CSS variables (`web/src/themes/`), not fixed colors.
+- Town seats (benches, the fountain rim, logs, chairs): a seat's x, y is where the sitter's feet
+  land, and the sit pose draws the bottom about 13 sprite pixels above the feet (sideways about 3
+  behind them). Place the feet so the bottom lands on the seat's art (see `Seat` in
+  `shared/world.ts`), then check it on the TV from a canvas capture: never place a seat from
+  numbers alone.
 - Match the surrounding code: comment density, naming, plain sentences in comments.
 
 ## Testing without breaking a party

@@ -92,7 +92,13 @@ export function brookSide(x: number, y: number): number {
   return side * best;
 }
 
-/** A place to sit, and the way the sitter faces */
+/**
+ * A place to sit, and the way the sitter faces. x and y are where the sitter's FEET land, not the
+ * seat: the sit pose (the sit rows' last frame) draws the bottom about 13 sprite pixels above the
+ * feet and, sitting sideways, about 3 pixels behind them (on the ground, the first frame: lower).
+ * Place the feet so that point lands on the seat's art (a bench: feet 2 world units below the
+ * bench's bottom), and look at it on the TV before keeping it.
+ */
 export interface Seat {
   x: number;
   y: number;
@@ -235,7 +241,7 @@ export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number }[] 
  * potted tree on the right (the square's bench there would stand before the cafe's porch; the one
  * on the left is behind the town hall). See TOWN_BENCH.
  */
-export const BENCHES: { x: number; y: number }[] = [{ x: 1450, y: 194 }];
+export const BENCHES: { x: number; y: number }[] = [{ x: 1450, y: 186 }];
 /** The bench in front of the potted tree on the sidewalk, right of the barber: where it stands, in place of the square's bench at `instead` */
 export const TOWN_BENCH = { x: 1450, y: 184, instead: 1200 };
 
