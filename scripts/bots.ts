@@ -49,9 +49,11 @@ for (let b = 0; b < count; b++) {
       if (!(await rpc(s, 'world', 'mine'))) await rpc(s, 'world', 'save', { choices: randomChoices() });
       console.log(`${name} is in town${joined.returning ? ' (back again)' : ''}`);
     } catch (e) {
-      // A server still starting up, for one: try again in a moment
+      // A server still starting up, for one: try again in a moment, as a fresh visitor (the join may
+      // have gone through before what failed)
       console.log(`${name}: ${(e as Error).message}, trying again`);
-      setTimeout(() => s.connected && enter(), 3000);
+      s.disconnect();
+      setTimeout(() => s.connect(), 3000);
     }
   };
   s.on('connect', enter);

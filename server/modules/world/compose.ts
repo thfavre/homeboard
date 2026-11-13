@@ -188,8 +188,13 @@ export class Composer {
       let n = 0;
       for (const [key, r] of Object.entries<any>(rc)) {
         if (!key.startsWith('color_')) continue;
+        const first = r.material === 'body' || r.material === 'eye' || n === 0;
         const target = r.material === 'body' ? c.skin : r.material === 'eye' ? (item.eyes ?? 'brown') : n++ === 0 ? main : (accent ?? main);
-        if (target) swaps.push(await this.swapFor(r, target));
+        if (!target) continue;
+        // A second color the piece only gets from its first one (the pigtails' hair tie, drawn in
+        // cloth, given the hair color): one its material does not have keeps the art's own color
+        if (!first && !accent) swaps.push(...(await this.swapFor(r, target).then((s) => [s], () => [])));
+        else swaps.push(await this.swapFor(r, target));
       }
     } else if (def.variants?.length) {
       variant = main && def.variants.includes(main) ? main : def.variants[0];
