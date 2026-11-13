@@ -21,7 +21,7 @@ export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
  */
 export const TOWN_HALL = (() => {
   const [, second] = houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / SPRITE_SCALE));
-  return { x: 0, w: second.x + second.w, h: 220 };
+  return { x: 0, w: second.x + second.w, h: 254 };
 })();
 
 /**

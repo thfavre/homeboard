@@ -5,9 +5,10 @@ import { TOWN_HALL } from '$shared/world.ts';
  * The town hall: a stone building with a clock tower in the top left corner of the square, standing
  * over the first two houses of the row (it hides them whole), from the top of the screen down onto the
  * square. Seen from above and in front like the houses, and drawn at their scale (their doors are 32
- * pixels wide, their walls about 85 high), but twice as tall: a hipped slate roof with four chimneys
- * and six dormers, the clock tower rising through it to a pointed roof with gold pinnacles on its
- * corners, and below the eaves a front of two floors: in each wing three windows with flower boxes
+ * pixels wide, their walls about 85 high), but twice as tall and deep: a mansard roof, flat on top
+ * (a zinc deck with skylights, chimneys and an iron railing along its edge) and steep slate down
+ * its front and ends with six dormers; the clock tower rising through it, a belfry with its bell over
+ * the clock, a pointed roof with gold pinnacles on its corners; and below the eaves a front of two floors: in each wing three windows with flower boxes
  * over three tall arched ones, stones on the corners. In the middle the tower's bay comes down to the
  * ground: a tall window between two banners opening onto a balcony, the balcony on a portico of four
  * columns around the double door and its fanlight, a lantern on each side, steps down to the square.
@@ -38,38 +39,48 @@ const WOOD = { line: '#2a1610', dark: '#4a2a1c', mid: '#6b3d22', light: '#85502c
 const FRAME = { mid: '#e6e0d0', dark: '#a39c90' };
 const FACE = '#f4ecd6';
 
-/** The roof seen from above: its back eave (the top of the screen), its ridge (shorter than the eaves: a hipped roof) and its front eave, where the front wall begins */
-const ROOF = { back: 0, ridge: 18, inset: 40, eave: 56 };
+/**
+ * The mansard roof seen from above: its flat deck from the top of the screen down to `deck`, the
+ * steep front slope from there down to the front eave, where the front wall begins; the end slopes
+ * `inset` wide along the deck, narrowing to the corners
+ */
+const ROOF = { deck: 46, inset: 36, eave: 90 };
 const WALL_TOP = ROOF.eave + 5;
 /** The bottom of the front wall, where the plinth begins (the plinth ends 10 pixels lower, the steps 24) */
 const PLINTH = H - 24;
 /** The band of stone between the two floors */
-const STRING = 124;
+const STRING = WALL_TOP + 63;
 /** The tower: its walls up from the front wall through the roof, the cornice its pointed roof stands on */
 const TOWER_X0 = MID - 32;
 const TOWER_X1 = MID + 32;
 const TOWER_TOP = 20;
 /** The ground floor's tall windows: left edge and size, arched at the top */
-const WIN = { y: 140, w: 26, h: 46 };
+const WIN = { y: WALL_TOP + 79, w: 26, h: 46 };
 const WIN_XS = [14, 54, 94].flatMap((x) => [x, W - x - WIN.w]);
 /** The upper floor's windows over them, each on a flower box */
-const UPPER = { y: 76, w: 22, h: 34 };
+const UPPER = { y: WALL_TOP + 15, w: 22, h: 34 };
 /** The tower's tall window onto the balcony, arched like the ground floor's */
-const FRENCH = { x: MID - 12, y: 72, w: 24, h: 45 };
-/** The dormers on the roof's front slope and the chimneys on its back slope: their left edges */
+const FRENCH = { x: MID - 12, y: WALL_TOP + 11, w: 24, h: 45 };
+/** The dormers on the roof's front slope, the chimneys and skylights on its deck: their left edges */
 const DORMER_XS = [44, 84, 124].flatMap((x) => [x, W - x - 16]);
-const CHIMNEY_XS = [34, 112].flatMap((x) => [x, W - x - 7]);
+const CHIMNEY_XS = [46, 136].flatMap((x) => [x, W - x - 7]);
+const SKYLIGHT = { y: 12, w: 40, h: 18 };
+const SKYLIGHT_XS = [72].flatMap((x) => [x, W - x - SKYLIGHT.w]);
+/** The belfry's arched opening, under the tower's cornice: its top and size */
+const BELFRY = { y: TOWER_TOP + 6, w: 20, h: 20 };
 /** The clock: its middle and the radius of its face */
-const CLOCK = { x: MID, y: 40, r: 13 };
+const CLOCK = { x: MID, y: WALL_TOP - 25, r: 13 };
 /** The double door under the balcony, between the columns: the top of its arched fanlight, where the leaves begin, its bottom */
-const DOOR = { x: MID - 20, y: 138, w: 40, leaves: 158, bottom: PLINTH };
+const DOOR = { x: MID - 20, y: WALL_TOP + 77, w: 40, leaves: WALL_TOP + 97, bottom: PLINTH };
 /** The portico's lintel on the columns, the height of the balcony's balustrade on it, and the portico's edges */
 const LINTEL = DOOR.y - 10;
 const BALUSTRADE = 11;
 const PORTICO = { x0: DOOR.x - 18, x1: DOOR.x + DOOR.w + 18 };
 /** The lanterns on the wall each side of the portico: their left edges, and their top */
 const LANTERN_XS = [PORTICO.x0 - 9, PORTICO.x1 + 3];
-const LANTERN_Y = 146;
+const LANTERN_Y = WALL_TOP + 85;
+/** The deck's zinc sheets */
+const ZINC = { line: '#2b2e3d', dark: '#5a6074', mid: '#737b91', light: '#8f97ab', shine: '#a9b0c2' };
 /** The banners' red, the flowers in the boxes and their leaves */
 const BANNER = { dark: '#5e1a22', mid: '#9b2a32', light: '#c2434a' };
 const FLOWERS = ['#d9475a', '#f08aa0', '#f3c35f'];
@@ -293,30 +304,99 @@ function spire(g: CanvasRenderingContext2D): void {
 }
 
 /**
- * The hipped roof seen from above: the back slope (foreshortened, catching the light) from the back
- * eave up to the ridge, the front slope from the ridge down to the front eave, and a triangle at
- * each end (the left one lit, the right one in shade). Rows of slates across, a light ridge cap.
+ * The mansard roof seen from above: the flat deck of zinc sheets (standing seams down it, a joint
+ * across every so often, staggered), the steep front slope of slate rows below it, and a slope at
+ * each end, as wide as `inset` along the deck and narrowing down to the corners (the left one lit,
+ * the right one in shade). A curb runs along the deck's front edge.
  */
 function roof(g: CanvasRenderingContext2D): void {
-  const { back, ridge, inset, eave } = ROOF;
-  for (let y = back; y < eave; y++) {
-    // How far in from each side the end slopes reach at this height
-    const side = y < ridge ? Math.round((inset * (y - back)) / (ridge - back)) : Math.round((inset * (eave - y)) / (eave - ridge));
-    const front = y >= ridge;
-    const row = front ? (eave - y) % 5 === 0 : (y - back) % 4 === 0;
-    px(g, front ? (row ? SLATE.dark : SLATE.mid) : row ? SLATE.mid : SLATE.light, side, y, W - 2 * side, 1);
+  const { deck, inset, eave } = ROOF;
+  // The deck
+  px(g, ZINC.mid, inset, 0, W - 2 * inset, deck);
+  for (let x = inset + 6; x < W - inset; x += 12) {
+    px(g, ZINC.shine, x, 0, 1, deck);
+    px(g, ZINC.dark, x + 1, 0, 1, deck);
+  }
+  for (let y = 9; y < deck; y += 10) {
+    const shift = Math.floor(y / 10) % 2 ? 6 : 0;
+    for (let x = inset + 1 + shift; x < W - inset; x += 12) px(g, ZINC.light, x, y, 5, 1);
+  }
+  px(g, ZINC.dark, inset, deck - 2, W - 2 * inset, 2);
+  // The slopes: the ends all the way down, the front below the deck
+  for (let y = 0; y < eave; y++) {
+    const side = y < deck ? inset : Math.round((inset * (eave - y)) / (eave - deck));
+    const row = y < deck ? y % 5 === 0 : (eave - y) % 5 === 0;
+    if (y >= deck) px(g, row ? SLATE.dark : SLATE.mid, side, y, W - 2 * side, 1);
     px(g, row ? SLATE.mid : SLATE.light, 0, y, side, 1);
     px(g, row ? SLATE.line : SLATE.dark, W - side, y, side, 1);
-    // The hip lines from the ridge's ends down to the corners
+    // Where the end slopes meet the deck and the front slope
     px(g, SLATE.line, side, y, 1, 1);
     px(g, SLATE.line, W - side - 1, y, 1, 1);
   }
-  px(g, SLATE.line, 0, back - 1, W, 1);
-  px(g, '#8a90aa', inset, ridge - 1, W - 2 * inset, 2);
-  px(g, SLATE.line, inset, ridge + 1, W - 2 * inset, 1);
+  // The curb along the deck's front edge, catching the light
+  px(g, '#8a90aa', inset, deck, W - 2 * inset, 2);
+  px(g, SLATE.line, inset, deck + 2, W - 2 * inset, 1);
   // The gutter along the front eave
   px(g, SLATE.line, 0, eave, W, 1);
   px(g, SLATE.dark, 0, eave + 1, W, 1);
+}
+
+/** The iron railing along the deck's front edge: a rail on thin bars, a spike on every other one, a post with a gold knob at each end */
+function railing(g: CanvasRenderingContext2D): void {
+  const { deck, inset } = ROOF;
+  px(g, SLATE.line, inset, deck - 5, W - 2 * inset, 1);
+  for (let x = inset + 1, k = 0; x < W - inset; x += 3, k++) {
+    px(g, SLATE.line, x, deck - 5, 1, 5);
+    if (k % 2 === 0) px(g, SLATE.line, x, deck - 7, 1, 2);
+  }
+  for (const x of [inset, W - inset - 2]) {
+    px(g, SLATE.line, x, deck - 8, 2, 8);
+    px(g, GOLD.m, x, deck - 9, 2, 1);
+  }
+}
+
+/** A skylight on the deck: a raised frame round glass panes, a gleam, its shadow on the zinc */
+function skylight(g: CanvasRenderingContext2D, x: number): void {
+  const { y, w, h } = SKYLIGHT;
+  px(g, 'rgba(10,10,20,0.3)', x + 2, y + 2, w + 1, h + 1);
+  px(g, ZINC.line, x - 1, y - 1, w + 2, h + 2);
+  px(g, ZINC.shine, x, y, w, h);
+  px(g, ZINC.dark, x + 1, y + h - 2, w - 1, 2);
+  px(g, GLASS.mid, x + 2, y + 2, w - 4, h - 4);
+  for (let k = 1; k < 4; k++) px(g, ZINC.light, x + 2 + ((w - 4) * k) / 4, y + 2, 1, h - 4);
+  px(g, ZINC.light, x + 2, y + h / 2 - 1, w - 4, 1);
+  px(g, GLASS.light, x + 4, y + 4, 1, 3);
+  px(g, GLASS.light, x + 5, y + 4, 2, 1);
+  px(g, GLASS.light, x + 4 + (w - 4) / 2, y + 4, 1, 2);
+}
+
+/** The belfry: an arched opening in the tower, dark inside, its bell hanging in it, a little balustrade across its foot */
+function belfry(g: CanvasRenderingContext2D): void {
+  const { y, w, h } = BELFRY;
+  const r = w / 2;
+  const x = MID - r;
+  const cx = MID - 0.5;
+  arch(g, TOWER.line, cx, y + r, r + 3);
+  px(g, TOWER.line, x - 3, y + r, w + 6, h - r);
+  arch(g, TOWER.shine, cx, y + r, r + 2);
+  px(g, TOWER.shine, x - 2, y + r, w + 4, h - r);
+  arch(g, '#1d1a26', cx, y + r, r);
+  px(g, '#1d1a26', x, y + r, w, h - r);
+  // The bell: a gold dome flaring at its mouth, lit on its left, a clapper under it
+  px(g, WOOD.dark, x + 2, y + 4, w - 4, 2);
+  const bell = y + 6;
+  for (let k = 0; k < 9; k++) {
+    const half = k < 5 ? 2 + Math.round(k * 0.6) : 4 + (k - 4);
+    px(g, GOLD.m, MID - half, bell + k, half * 2, 1);
+    px(g, GOLD.l, MID - half, bell + k, Math.max(1, Math.round(half * 0.6)), 1);
+    px(g, GOLD.o, MID + half - 1, bell + k, 1, 1);
+  }
+  px(g, GOLD.o, MID - 8, bell + 9, 16, 1);
+  px(g, GOLD.o, MID - 1, bell + 10, 2, 2);
+  // The balustrade across the opening's foot, a sill under it
+  px(g, TOWER.mid, x, y + h - 5, w, 1);
+  for (let k = x + 1; k < x + w; k += 3) px(g, TOWER.light, k, y + h - 4, 2, 4);
+  band(g, TOWER, x - 4, y + h, w + 8, 3);
 }
 
 /** A chimney on the roof: stone, a cap, its shadow on the slates */
@@ -332,7 +412,7 @@ function chimney(g: CanvasRenderingContext2D, x: number, top: number): void {
 
 /** A dormer on the front slope: a little gable roof over a small window */
 function dormer(g: CanvasRenderingContext2D, x: number): void {
-  const y = ROOF.ridge + 8;
+  const y = ROOF.deck + 14;
   px(g, 'rgba(10,10,20,0.3)', x + 16, y + 2, 3, 15);
   px(g, STONE.mid, x, y + 6, 16, 12);
   px(g, STONE.line, x, y + 6, 1, 12);
@@ -394,10 +474,12 @@ function build(): HTMLCanvasElement {
   c.height = H;
   const g = c.getContext('2d')!;
   roof(g);
-  for (const x of CHIMNEY_XS) chimney(g, x, ROOF.back + 1);
+  for (const x of SKYLIGHT_XS) skylight(g, x);
+  for (const x of CHIMNEY_XS) chimney(g, x, 2);
+  railing(g);
   for (const x of DORMER_XS) dormer(g, x);
   // The tower above the roof: lighter stone, quoins on its corners, its shadow on the roof, its
-  // pointed roof on a cornice with a pinnacle on each corner, the clock
+  // pointed roof on a cornice with a pinnacle on each corner, the belfry, a band, the clock
   px(g, 'rgba(10,10,20,0.3)', TOWER_X1 + 1, TOWER_TOP + 4, 6, ROOF.eave - TOWER_TOP - 4);
   wall(g, TOWER, TOWER_X0, TOWER_TOP, TOWER_X1, WALL_TOP);
   quoins(g, TOWER, TOWER_X0, TOWER_TOP, WALL_TOP, true);
@@ -408,6 +490,8 @@ function build(): HTMLCanvasElement {
   band(g, TOWER, TOWER_X0 - 3, TOWER_TOP - 3, TOWER_X1 - TOWER_X0 + 6, 5);
   pinnacle(g, TOWER_X0 - 2, TOWER_TOP - 6);
   pinnacle(g, TOWER_X1 + 1, TOWER_TOP - 6);
+  belfry(g);
+  band(g, TOWER, TOWER_X0 - 1, CLOCK.y - CLOCK.r - 8, TOWER_X1 - TOWER_X0 + 2, 3);
   clockFace(g);
   // The front: the stone wall with a band between the floors and stones on its corners, the tower's
   // bay in lighter stone down its middle, a cornice with dentils over it all, a plinth and the base
@@ -457,7 +541,7 @@ let built: HTMLCanvasElement | null = null;
 /** Draw the building over the square's ground and its row of houses (world units), with its shadow on the ground to the right */
 export function drawTownHall(g: CanvasRenderingContext2D): void {
   g.fillStyle = 'rgba(10,10,25,0.28)';
-  g.fillRect((X0 + W) * S, (ROOF.back + 4) * S, 6 * S, (PLINTH + 10 - ROOF.back - 4) * S);
+  g.fillRect((X0 + W) * S, 4 * S, 6 * S, (PLINTH + 6) * S);
   g.drawImage((built ??= build()), X0 * S, 0, W * S, H * S);
 }
 
