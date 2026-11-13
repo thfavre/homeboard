@@ -1,9 +1,45 @@
-import { BENCHES, darknessAt, minuteOf, minutesFrom, type DayNight, CARPET_START, CARPET_Y, CROSSING, DAIS_FOOT, PRAY_HALL_COLS, PRAY_ROWS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, TOWN_SCENE, WANIM, praySpots, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
+import {
+  BENCHES,
+  BOARD_SPOTS,
+  CAFE,
+  CAMPFIRE,
+  CARPET_START,
+  CARPET_Y,
+  CROSSING,
+  DAIS_FOOT,
+  FIRE_SEATS,
+  FISH_SPOTS,
+  FOUNTAIN_SEATS,
+  PRAY_HALL_COLS,
+  PRAY_ROWS,
+  THRONE_SEAT,
+  THRONE_STAND,
+  TOWN,
+  TOWN_AREA,
+  TOWN_OBSTACLES,
+  TOWN_PLACES,
+  TOWN_SCENE,
+  WANIM,
+  darknessAt,
+  minuteOf,
+  minutesFrom,
+  partyAt,
+  praySpots,
+  type DayNight,
+  type PlaceId,
+  type Seat,
+  type TownFrame,
+  type WDir,
+} from '../../../shared/world.ts';
 
 /**
- * The life of the town: characters wander the ground band, stop for a while, sit on benches, pet
- * the cat, walk up to each other and chat for a while; a guest away for too long walks to the edge,
- * lies down to sleep and slowly fades out.
+ * The life of the town: characters wander the ground band, stop for a while, sit on benches or on
+ * the fountain's rim, have a coffee on the cafe's terrace, read the notice board, fish from the
+ * river's bank, sit by the campfire (lit at night), pet the cat, walk up to each other and chat for
+ * a while; a guest away for too long walks to the edge, lies down to sleep and slowly fades out.
+ * At nightfall someone goes round the lamp posts and lights them one by one (and puts them out in
+ * the morning). Every few nights the cafe throws a party: many stay up for it, dance inside (seen
+ * through its window) or stand outside with a drink.
  * The town has its own short day, a few minutes long (set by the host): each character goes to bed at its own
  * time after dusk and gets up at its own time around dawn, different every night, while a few
  * night owls stay up until morning and sleep in instead.
@@ -30,7 +66,47 @@ const ACTIVITIES = {
   bench: { radius: 540, capacity: 1 },
   /** Someone to chat with, standing around or wandering (two at a time, any number of pairs) */
   chat: { radius: 380, capacity: 2 },
+  /** The fountain's rim and the notice board (one on each of their places); the cafe, the river and the campfire are seen from the whole town */
+  fountain: { radius: 620 },
+  board: { radius: 700 },
 };
+/**
+ * Each time a character picks something to do, the chance of each activity, tried in this order
+ * (one that is off, or has no room left, is skipped). The fountain's rim is less sought than a
+ * bench; the fire draws more at night, when it burns.
+ */
+const CHANCE = { bench: 0.14, fountain: 0.035, cat: 0.1, cafe: 0.1, board: 0.05, fish: 0.07, fire: 0.045, fireAtNight: 0.25 };
+/** How long a character sits on each kind of seat (ms, a random time in the range); longer by the fire at night */
+const SEAT_MS: Record<SeatAt | 'fireNight', [number, number]> = {
+  fountain: [8000, 22_000],
+  cafe: [14_000, 34_000],
+  fire: [12_000, 28_000],
+  fireNight: [25_000, 55_000],
+};
+const SEATS: Record<SeatAt, Seat[]> = { fountain: FOUNTAIN_SEATS, cafe: CAFE.seats, fire: FIRE_SEATS };
+/** The cafe's terrace is open while it is lighter than this (or during a party); the campfire burns while it is darker */
+const CAFE_OPEN_DARK = 0.5;
+const FIRE_DARK = 0.3;
+/** Reading the notice board */
+const READ_MS: [number, number] = [4000, 9000];
+/** Fishing: how long, the share of tries with a bite, the bite (the float bobbing) and the fish held up */
+const FISH_MS: [number, number] = [22_000, 48_000];
+const BITE_SHARE = 0.55;
+const BITE_MS = 1400;
+const CATCH_MS = 2400;
+/** The lamps are lit from this darkness on (and put out below it) */
+const LAMPS_DARK = 0.3;
+/** The lamplighter stands this far left of a lamp post, and holds the pole up to it this long */
+const LAMP_REACH = 24;
+const LIGHT_MS = 1500;
+/** Nobody free to light them this long (or the lamplighter is off): the lamps switch themselves, one this often */
+const LAMP_WAIT_MS = 15_000;
+const LAMP_AUTO_MS = 1100;
+/** During a party: the chance a character free to pick something goes to it, the share going inside (if there is room), how long inside and outside */
+const PARTY_CHANCE = 0.7;
+const PARTY_INSIDE = 0.55;
+const PARTY_INSIDE_MS: [number, number] = [16_000, 34_000];
+const PARTY_OUTSIDE_MS: [number, number] = [12_000, 28_000];
 /** Two characters chatting stand this far apart, facing each other */
 const CHAT_GAP = 42;
 /** A tree's crown hides who stands behind it: this far to each side of the trunk, and up from it */
@@ -96,7 +172,50 @@ type Doing =
   | { kind: 'pray'; spot: number; until: number; knelt: boolean }
   | { kind: 'goChat'; with: string; tx: number; ty: number; since: number }
   | Chat
-  | Visit;
+  | Visit
+  | { kind: 'goSeat'; at: SeatAt; seat: number }
+  | { kind: 'seated'; at: SeatAt; seat: number; until: number }
+  | { kind: 'goRead'; spot: number }
+  | { kind: 'read'; spot: number; until: number }
+  | { kind: 'goFish'; spot: number }
+  | Fishing
+  | Lamps
+  | Party;
+
+/** The seats besides the benches: the fountain's rim, the cafe's chairs, the logs by the campfire */
+type SeatAt = 'fountain' | 'cafe' | 'fire';
+
+/** Fishing from the bank until `until`; a fish bites at `bite` (0: none this time), is pulled out and held up, then they go */
+interface Fishing {
+  kind: 'fish';
+  spot: number;
+  until: number;
+  bite: number;
+}
+
+/**
+ * The lamplighter's round: to lamp `lamp`, then holding the pole up to it from `at` (0: still on the
+ * way), lighting it (`lit`) or putting it out, then on to the nearest lamp left
+ */
+interface Lamps {
+  kind: 'lamps';
+  lamp: number;
+  at: number;
+  lit: boolean;
+}
+
+/**
+ * At the cafe's party. go: to the door (a place inside is held, `slot`), enter, inside dancing until
+ * `until`, exit. terrace: to a spot outside (`slot`), then stand there with a drink until `until`.
+ * `cut`: called away while going in, the time inside is cut to this.
+ */
+interface Party {
+  kind: 'party';
+  phase: 'go' | 'enter' | 'inside' | 'exit' | 'terrace' | 'stand';
+  slot: number;
+  until: number;
+  cut: number;
+}
 
 /**
  * Two characters talking: `with` is the other one, who has the same chat. Until both stand in
@@ -264,6 +383,12 @@ export interface TownOptions {
   nightSleep: boolean;
   bedtimeSpreadMin: number;
   nightOwls: number;
+  /** Which of the town's things to do are on */
+  activities: { cafe: boolean; fountain: boolean; board: boolean; fish: boolean; fire: boolean };
+  /** Someone lights the lamps at nightfall (off: they light themselves) */
+  lamplighter: boolean;
+  /** The cafe's party night: on its own every so many days, for so many town hours from nightfall, and the share who stay up for it (0..1) */
+  party: { on: boolean; everyDays: number; hours: number; goers: number };
 }
 
 /** A number in 0..1 from a text, always the same for the same text (FNV-1a) */
@@ -307,6 +432,9 @@ const idle = (now: number, a: number, b: number): Doing => ({ kind: 'idle', unti
 
 /** Walking time to a point (ms) */
 const walkMs = (w: Walker, x: number, y: number) => (Math.hypot(x - w.x, y - w.y) / WALK_UPS) * 1000;
+
+/** Inside the cafe at the party, or going through its door: nothing else starts until it is out */
+const inCafe = (w: Walker) => w.doing.kind === 'party' && (w.doing.phase === 'enter' || w.doing.phase === 'inside' || w.doing.phase === 'exit');
 
 /** A walk ends naturally anywhere: stop, look around for a moment */
 const stopWalking = (_d: Doing, w: Walker, now: number, ms: number) => {
@@ -407,7 +535,20 @@ function randSpot() {
 
 export class TownSim {
   private walkers = new Map<string, Walker>();
-  private cat = { x: 500, y: 760, dir: 3 as WDir, doing: { kind: 'idle', until: 0 } as Doing, petted: false };
+  private cat = { x: 500, y: 700, dir: 3 as WDir, doing: { kind: 'idle', until: 0 } as Doing, petted: false };
+  /** Which lamp posts are lit; since when some wait for the lamplighter (0: none waits), and when one last switched itself */
+  private lampLit = TOWN_SCENE.lamps.map(() => false);
+  private lampWait = 0;
+  private lampAuto = 0;
+  /** A party the host started: until when on the town's clock (minutes), and since when (its name) */
+  private partyUntil = 0;
+  private partyFrom = 0;
+  /** The party night the host ended early (its name), so it does not start again */
+  private partyStopped: string | null = null;
+  /** The party now and its name (null: none), and the town's clock and the party's length at the last tick */
+  private partyNow: { night: string } | null = null;
+  private lastMinutes = 0;
+  private lastPartyHours = 5;
   private last = Date.now();
   /** The King the throne is kept for */
   private king: string | null = null;
@@ -454,6 +595,34 @@ export class TownSim {
     pray: { priority: PRIORITY.ceremony, left: () => Infinity },
     goSleep: { priority: PRIORITY.rest, left: () => Infinity },
     sleep: { priority: PRIORITY.rest, left: () => Infinity },
+    // A seat or the notice board is casual, like a bench
+    goSeat: { priority: PRIORITY.casual, left: (d, w) => walkMs(w, SEATS[d.at][d.seat].x, SEATS[d.at][d.seat].y), wrapUp: stopWalking, quickStop: pauseFor },
+    seated: { priority: PRIORITY.casual, left: (d, _w, now) => d.until - now, wrapUp: sooner, quickStop: sooner },
+    goRead: { priority: PRIORITY.casual, left: (d, w) => walkMs(w, BOARD_SPOTS[d.spot].x, BOARD_SPOTS[d.spot].y), wrapUp: stopWalking, quickStop: pauseFor },
+    read: { priority: PRIORITY.casual, left: (d, _w, now) => d.until - now, wrapUp: sooner, quickStop: sooner },
+    // Fishing ends whenever, but a fish on the line is landed first
+    goFish: { priority: PRIORITY.activity, left: (d, w) => walkMs(w, FISH_SPOTS[d.spot].x, FISH_SPOTS[d.spot].y), wrapUp: stopWalking },
+    fish: {
+      priority: PRIORITY.activity,
+      left: (d, _w, now) => d.until - now,
+      wrapUp: (d, _w, now, ms) => {
+        if (d.bite && d.bite <= now) return;
+        d.bite = 0;
+        d.until = Math.min(d.until, now + ms);
+      },
+    },
+    // The lamplighter hands the round over to someone else (the lamps left wait for the next one)
+    lamps: { priority: PRIORITY.activity, left: () => 60_000, wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
+    // The party: off on the way, a little sooner out of the cafe or away from the terrace
+    party: {
+      priority: PRIORITY.activity,
+      left: (d, w, now) => (d.phase === 'inside' || d.phase === 'stand' ? d.until - now : d.phase === 'go' || d.phase === 'terrace' ? walkMs(w, CAFE.door.x, CAFE.door.y) : 1000),
+      wrapUp: (d, w, now, ms) => {
+        if (d.phase === 'go' || d.phase === 'terrace') stopWalking(d, w, now, ms);
+        else if (d.phase === 'inside' || d.phase === 'stand') d.until = Math.min(d.until, now + ms);
+        else if (d.phase === 'enter') d.cut = now + ms;
+      },
+    },
   };
 
   /** The rule of what a character is doing now */
@@ -464,7 +633,7 @@ export class TownSim {
   /** Make a guest's character cheer for a moment (a win, a purchase), unless it is busy with something that cannot be cut short */
   cheer(id: string): void {
     const w = this.walkers.get(id);
-    if (!w || (!this.rule(w).wrapUp && w.doing.kind !== 'cheer')) return;
+    if (!w || (!this.rule(w).wrapUp && w.doing.kind !== 'cheer') || inCafe(w)) return;
     w.doing = { kind: 'cheer', until: Date.now() + 2600 };
   }
 
@@ -477,6 +646,7 @@ export class TownSim {
     this.stepCeremony(now, o);
     const darkTarget = darknessAt(o.dayNight, ((o.localMinutes % 1440) + 1440) % 1440);
     this.dark = this.dark < 0 ? darkTarget : this.dark + Math.max(-dt / DARK_FADE_S, Math.min(dt / DARK_FADE_S, darkTarget - this.dark));
+    this.stepParty(o);
 
     const seen = new Set<string>();
     for (const r of roster) {
@@ -485,8 +655,9 @@ export class TownSim {
       const away = !r.online && r.awayMs > o.sleepAfterMs;
       const shouldFade = !r.online && r.awayMs > o.sleepAfterMs + o.fadeAfterMs;
       const errands = r.errands ?? [];
-      // Asleep for the night, unless the guest just picked a new look: up to go and get it, back to bed after
-      const night = !away && !errands.length && asleepForTheNight(r.id, o);
+      // Asleep for the night, unless the guest just picked a new look: up to go and get it, back to
+      // bed after. The ones staying up for the party go to bed once it is over.
+      const night = !away && !errands.length && asleepForTheNight(r.id, o) && !this.upForParty(r.id, o);
       const shouldSleep = away || night;
       if (!w) {
         // Nobody sees a character that is not in the town: it takes its new look at once
@@ -504,7 +675,8 @@ export class TownSim {
       w.noCheer = !!r.noCheer;
       w.errands = errands;
       // An outfit change mid-sit (or mid-pet) would show missing art: stand up
-      if (w.noSit && (w.doing.kind === 'sit' || w.doing.kind === 'goBench' || w.doing.kind === 'pet' || w.doing.kind === 'goPet')) {
+      const k = w.doing.kind;
+      if (w.noSit && (k === 'sit' || k === 'goBench' || k === 'pet' || k === 'goPet' || k === 'seated' || k === 'goSeat')) {
         w.doing = { kind: 'idle', until: now + 400 };
       }
       // The title went to someone else: down from the throne. The new King, kneeling with the others: up, the throne is waiting
@@ -518,11 +690,14 @@ export class TownSim {
       }
       // Off to sleep, unless busy with something that cannot be cut short (a shop visit is finished
       // first), and never during a ceremony: those away sleep once it is over
-      if (shouldSleep && !this.ceremony && w.doing.kind !== 'sleep' && w.doing.kind !== 'goSleep' && this.rule(w).wrapUp) {
+      // (one inside the cafe at the party comes out first)
+      if (shouldSleep && !this.ceremony && w.doing.kind !== 'sleep' && w.doing.kind !== 'goSleep' && this.rule(w).wrapUp && !inCafe(w)) {
         // Walk to the nearest edge of the town and lie down there (on the right, clear of the way to the throne room's carpet)
         const right = w.x >= TOWN.w / 2;
+        // (and above the campfire's corner, nobody lies across its logs)
         let ty = rand(TOWN_AREA.y0 + 40, TOWN_AREA.y1 - 20);
         if (right && Math.abs(ty - CARPET_Y) < 70) ty = CARPET_Y + (ty < CARPET_Y ? -1 : 1) * rand(70, 110);
+        if (right && ty > CAMPFIRE.y - 90) ty = rand(TOWN_AREA.y0 + 40, CARPET_Y - 70);
         w.doing = { kind: 'goSleep', tx: right ? rand(TOWN.w - 90, TOWN.w - 30) : rand(30, 90), ty, night };
       }
       // Asleep for the night when the guest leaves (or the other way around): stays in bed, for the new reason
@@ -552,6 +727,7 @@ export class TownSim {
     }
     this.separate();
     this.stepCat(now, dt);
+    this.stepLamps(now, o);
     this.nightSleepers = 0;
     for (const w of this.walkers.values()) if ((w.doing.kind === 'sleep' || w.doing.kind === 'goSleep') && w.doing.night) this.nightSleepers++;
 
@@ -564,6 +740,11 @@ export class TownSim {
         // Seen through the shop window: x is the place inside, y the window's bottom
         const p = TOWN_PLACES[d.place];
         a.push(Math.round(p.seats[d.seat]), Math.round(p.window.y + p.window.h), WANIM.inside, this.insideDir(w, d, now), Math.round(w.alpha * 100));
+      } else if (d.kind === 'party' && d.phase === 'inside') {
+        // Dancing behind the cafe's window: x the place in it, y the window's bottom, turning now and then
+        const turns: WDir[] = [2, 2, 1, 2, 3, 2, 0, 2];
+        const dir = turns[Math.floor((now + w.id.charCodeAt(0) * 131) / 1300) % turns.length];
+        a.push(Math.round(CAFE.inside[d.slot]), Math.round(CAFE.window.y + CAFE.window.h), WANIM.dance, dir, Math.round(w.alpha * 100));
       } else {
         a.push(Math.round(w.x), Math.round(w.y), this.animOf(w, now), w.dir, Math.round(w.alpha * this.doorAlpha(w) * 100));
       }
@@ -576,6 +757,8 @@ export class TownSim {
       cat: { x: Math.round(this.cat.x), y: Math.round(this.cat.y), dir: this.cat.dir, walk: this.cat.doing.kind === 'wander' && !someonePets, hearts: someonePets },
       cam: Math.round(this.camAt(now) * 1000) / 1000,
       dark: Math.round(Math.max(0, this.dark) * 1000) / 1000,
+      lamps: this.lampLit.reduce((bits, lit, i) => bits | (lit ? 1 << i : 0), 0),
+      party: !!this.partyNow,
     };
   }
 
@@ -591,7 +774,19 @@ export class TownSim {
       case 'goHall':
       case 'goPray':
       case 'goChat':
+      case 'goSeat':
+      case 'goRead':
+      case 'goFish':
         return WANIM.walk;
+      case 'seated':
+        return WANIM.perch;
+      case 'fish':
+        if (!d.bite || now < d.bite) return WANIM.fish;
+        return now < d.bite + BITE_MS ? WANIM.bite : now < d.bite + BITE_MS + CATCH_MS ? WANIM.catch : WANIM.idle;
+      case 'lamps':
+        return d.at ? WANIM.light : WANIM.walk;
+      case 'party':
+        return d.phase === 'stand' ? WANIM.drink : this.partyWalking(w, d) ? WANIM.walk : WANIM.idle;
       // The King before the throne: standing until all are there, his hands up to open the court,
       // a step back to the seat, seated, and up to cheer every few seconds. Whatever he wears: a piece without art for these poses is
       // just not drawn while they last.
@@ -702,7 +897,7 @@ export class TownSim {
     if (now - w.anchor.at < STUCK_MS) return;
     w.anchor.at = now;
     const k = w.doing.kind;
-    if (k === 'wander' || k === 'goBench' || k === 'goPet' || k === 'goChat') w.doing = idle(now, 300, 1200);
+    if (k === 'wander' || k === 'goBench' || k === 'goPet' || k === 'goChat' || k === 'goSeat' || k === 'goRead' || k === 'goFish') w.doing = idle(now, 300, 1200);
     else w.through = now + THROUGH_MS;
   }
 
@@ -730,7 +925,10 @@ export class TownSim {
           w.doing = { kind: 'visit', place: w.errands[0], phase: 'go', seat: -1, since: 0, until: 0, dressAt: 0, dressed: false };
           break;
         }
+        // A party on: most go to it
+        if (this.partyNow && Math.random() < PARTY_CHANCE && this.goParty(w)) break;
         if (Math.random() < o.chatChance && this.startChat(w, now)) break;
+        if (this.pickActivity(w, o)) break;
         const roll = Math.random();
         const all = [...this.walkers.values()];
         // Benches this character can see with a seat left (sitting there, or walking to it, takes the seat)
@@ -745,10 +943,10 @@ export class TownSim {
         // (a cat that stopped in the fountain or under a tree is out of reach)
         const catInSight =
           !w.noSit && petters < ACTIVITIES.petCat.capacity && Math.hypot(this.cat.x - w.x, this.cat.y - w.y) < ACTIVITIES.petCat.radius && !blocked(this.cat.x, this.cat.y, STAND_CLEAR);
-        if (roll < 0.14 && benches.length) {
+        if (roll < CHANCE.bench && benches.length) {
           const b = benches[Math.floor(Math.random() * benches.length)];
           w.doing = { kind: 'goBench', bench: b.i };
-        } else if (roll < 0.24 && catInSight) {
+        } else if (roll < CHANCE.bench + CHANCE.cat && catInSight) {
           w.doing = { kind: 'goPet' };
         } else {
           const t = randSpot();
@@ -816,6 +1014,57 @@ export class TownSim {
       }
       case 'sit':
         if (now >= d.until) w.doing = { kind: 'idle', until: now + rand(500, 2000) };
+        break;
+      case 'goSeat': {
+        const s = SEATS[d.at][d.seat];
+        // Taken by someone faster, or the place closed on the way (the cafe at night, a party starting): never mind
+        if (this.seatTaken(d.at, d.seat, w) || (d.at === 'cafe' && !this.cafeOpen())) {
+          w.doing = idle(now, 300, 1200);
+          break;
+        }
+        if (this.walkTo(w, s.x, s.y, WALK_UPS, dt)) {
+          Object.assign(w, { x: s.x, y: s.y, dir: s.dir });
+          const night = d.at === 'fire' && this.dark >= FIRE_DARK;
+          const [a, b] = SEAT_MS[night ? 'fireNight' : d.at];
+          w.doing = { kind: 'seated', at: d.at, seat: d.seat, until: now + rand(a, b) };
+        }
+        break;
+      }
+      case 'seated':
+        if (now >= d.until) w.doing = idle(now, 500, 2000);
+        break;
+      case 'goRead': {
+        const s = BOARD_SPOTS[d.spot];
+        if (this.walkTo(w, s.x, s.y, WALK_UPS, dt)) {
+          Object.assign(w, { x: s.x, y: s.y, dir: 0 });
+          w.doing = { kind: 'read', spot: d.spot, until: now + rand(READ_MS[0], READ_MS[1]) };
+        }
+        break;
+      }
+      case 'read':
+        if (now >= d.until) w.doing = idle(now, 500, 1800);
+        break;
+      case 'goFish': {
+        const s = FISH_SPOTS[d.spot];
+        if (this.walkTo(w, s.x, s.y, WALK_UPS, dt)) {
+          Object.assign(w, { x: s.x, y: s.y, dir: 2 });
+          const until = now + rand(FISH_MS[0], FISH_MS[1]);
+          // Now and then a fish bites: pulled out and held up, then home with it (never with clothes that cannot cheer)
+          const bite = !w.noCheer && Math.random() < BITE_SHARE ? now + rand(6000, until - now - 3000) : 0;
+          w.doing = { kind: 'fish', spot: d.spot, until: bite ? bite + BITE_MS + CATCH_MS + 400 : until, bite };
+        }
+        break;
+      }
+      case 'fish':
+        w.dir = 2;
+        // Done: back up the bank onto the square
+        if (now >= d.until) w.doing = { kind: 'wander', tx: w.x + rand(-60, 60), ty: TOWN_AREA.y1 - rand(10, 70) };
+        break;
+      case 'lamps':
+        this.stepLamplighter(w, d, now, dt);
+        break;
+      case 'party':
+        this.stepPartyGoer(w, d, now, dt);
         break;
       case 'goSleep':
         if (this.walkTo(w, d.tx, d.ty, WALK_UPS, dt)) w.doing = { kind: 'sleep', night: d.night };
@@ -973,7 +1222,7 @@ export class TownSim {
       { who: right, x: mx + CHAT_GAP / 2 },
     ];
     // Not across the river, nor where something stands, nor hidden behind a tree's crown
-    const hidden = (x: number) => TOWN_SCENE.trees.some((t) => Math.abs(x - t.x) < CROWN.half && my < t.y && my > t.y - CROWN.up);
+    const hidden = (x: number) => TOWN_SCENE.trees.some((t) => Math.abs(x - t.x) < CROWN.half * t.size && my < t.y && my > t.y - CROWN.up * t.size);
     if (spots.some((s) => blocked(s.x, my, STAND_CLEAR) || bridgeWay(s.who, s.x) || hidden(s.x))) return false;
     for (const s of spots) {
       s.who.doing = { kind: 'goChat', with: (s.who === w ? o : w).id, tx: s.x, ty: my, since: now };
@@ -1137,6 +1386,255 @@ export class TownSim {
     return { kind: 'wander', tx: t.x, ty: t.y };
   }
 
+  // ------------------------------------------------------------ the town's places
+
+  /**
+   * Maybe off to one of the town's places: the fountain's rim, the cafe's terrace, the notice board,
+   * the river's bank, the campfire, each with its chance (see CHANCE). One that is off, out of sight
+   * or full is not gone to this time. False: none of them this time.
+   */
+  private pickActivity(w: Walker, o: TownOptions): boolean {
+    const a = o.activities;
+    const seat = (at: SeatAt, radius: number): Doing | null => {
+      const free = SEATS[at].map((s, i) => ({ ...s, i })).filter((s) => !this.seatTaken(at, s.i, w) && (!radius || Math.hypot(s.x - w.x, s.y - w.y) < radius));
+      return free.length ? { kind: 'goSeat', at, seat: free[Math.floor(Math.random() * free.length)].i } : null;
+    };
+    const spot = (list: { x: number; y: number }[], taken: (o: Walker, i: number) => boolean, radius: number): number => {
+      const free = list.map((s, i) => ({ ...s, i })).filter((s) => ![...this.walkers.values()].some((o) => o !== w && taken(o, s.i)) && (!radius || Math.hypot(s.x - w.x, s.y - w.y) < radius));
+      return free.length ? free[Math.floor(Math.random() * free.length)].i : -1;
+    };
+    const options: [boolean, number, () => Doing | null][] = [
+      [a.fountain && !w.noSit, CHANCE.fountain, () => seat('fountain', ACTIVITIES.fountain.radius)],
+      [a.cafe && !w.noSit && this.cafeOpen(), CHANCE.cafe, () => seat('cafe', 0)],
+      [
+        a.board,
+        CHANCE.board,
+        () => {
+          const i = spot(BOARD_SPOTS, (o, i) => (o.doing.kind === 'goRead' || o.doing.kind === 'read') && o.doing.spot === i, ACTIVITIES.board.radius);
+          return i < 0 ? null : { kind: 'goRead', spot: i };
+        },
+      ],
+      [
+        a.fish,
+        CHANCE.fish,
+        () => {
+          const i = spot(FISH_SPOTS, (o, i) => (o.doing.kind === 'goFish' || o.doing.kind === 'fish') && o.doing.spot === i, 0);
+          return i < 0 ? null : { kind: 'goFish', spot: i };
+        },
+      ],
+      [a.fire && !w.noSit, this.dark >= FIRE_DARK ? CHANCE.fireAtNight : CHANCE.fire, () => seat('fire', 0)],
+    ];
+    let roll = Math.random();
+    for (const [on, chance, start] of options) {
+      if (roll < chance) {
+        const d = on ? start() : null;
+        if (d) w.doing = d;
+        return !!d;
+      }
+      roll -= chance;
+    }
+    return false;
+  }
+
+  /** Someone else sits on this seat, or is on the way to it */
+  private seatTaken(at: SeatAt, seat: number, except: Walker): boolean {
+    for (const o of this.walkers.values()) {
+      if (o === except) continue;
+      const d = o.doing;
+      if ((d.kind === 'goSeat' || d.kind === 'seated') && d.at === at && d.seat === seat) return true;
+    }
+    return false;
+  }
+
+  /** The cafe's terrace is open: in the day, and on a party night */
+  private cafeOpen(): boolean {
+    return this.dark < CAFE_OPEN_DARK || !!this.partyNow;
+  }
+
+  // ------------------------------------------------------------ the lamplighter
+
+  /** The lamp nearest a point that is not lit (`lit`) or not out yet (-1: none left) */
+  private nextLamp(x: number, y: number, lit: boolean): number {
+    let best = -1;
+    let dist = Infinity;
+    TOWN_SCENE.lamps.forEach((l, i) => {
+      const d = Math.hypot(l.x - x, l.y - y);
+      if (this.lampLit[i] !== lit && d < dist) [best, dist] = [i, d];
+    });
+    return best;
+  }
+
+  /**
+   * The lamp posts are lit from nightfall and put out in the morning. Someone free (the one nearest
+   * a lamp left) goes round them with a pole; with the lamplighter off, during a ceremony, or nobody
+   * free for a while, they switch themselves, one after the other.
+   */
+  private stepLamps(now: number, o: TownOptions): void {
+    const want = this.dark >= LAMPS_DARK;
+    if (!this.lampLit.some((lit) => lit !== want)) {
+      this.lampWait = 0;
+      return;
+    }
+    const all = [...this.walkers.values()];
+    if (all.some((w) => w.doing.kind === 'lamps' && w.doing.lit === want)) return;
+    this.lampWait ||= now;
+    if (o.lamplighter && !this.ceremony && now - this.lampWait < LAMP_WAIT_MS) {
+      let best: Walker | null = null;
+      let lamp = -1;
+      let dist = Infinity;
+      for (const w of all) {
+        const free = (w.doing.kind === 'idle' || w.doing.kind === 'wander') && !w.errands.length && !w.fading && w.x >= TOWN_AREA.x0 && w.x <= TOWN_AREA.x1;
+        if (!free) continue;
+        const j = this.nextLamp(w.x, w.y, want);
+        const d = j < 0 ? Infinity : Math.hypot(TOWN_SCENE.lamps[j].x - w.x, TOWN_SCENE.lamps[j].y - w.y);
+        if (d < dist) [best, lamp, dist] = [w, j, d];
+      }
+      if (best) {
+        best.doing = { kind: 'lamps', lamp, at: 0, lit: want };
+        best.wrapped = null;
+      }
+    } else if (now - this.lampAuto >= LAMP_AUTO_MS) {
+      this.lampLit[this.lampLit.findIndex((lit) => lit !== want)] = want;
+      this.lampAuto = now;
+    }
+  }
+
+  /** The lamplighter's round: to the nearest lamp left, the pole up to it for a moment, then on to the next */
+  private stepLamplighter(w: Walker, d: Lamps, now: number, dt: number): void {
+    // The light turned while on the round (or the last lamp is done): it ends here
+    if ((this.dark >= LAMPS_DARK) !== d.lit) {
+      w.doing = idle(now, 300, 900);
+      return;
+    }
+    if (!d.at && this.lampLit[d.lamp] === d.lit) {
+      const j = this.nextLamp(w.x, w.y, d.lit);
+      if (j < 0) {
+        w.doing = idle(now, 600, 1600);
+        return;
+      }
+      d.lamp = j;
+    }
+    const l = TOWN_SCENE.lamps[d.lamp];
+    if (!d.at) {
+      if (this.walkTo(w, l.x - LAMP_REACH, l.y + 3, WALK_UPS, dt)) {
+        Object.assign(w, { x: l.x - LAMP_REACH, y: l.y + 3, dir: 3 });
+        d.at = now;
+      }
+    } else if (now - d.at >= LIGHT_MS) {
+      this.lampLit[d.lamp] = d.lit;
+      d.at = 0;
+    }
+  }
+
+  // ------------------------------------------------------------ the party
+
+  /** Whether a party is on at the cafe: one the host started, or one on its own on its night (unless the host ended it) */
+  private stepParty(o: TownOptions): void {
+    this.lastMinutes = o.localMinutes;
+    this.lastPartyHours = o.party.hours;
+    if (o.localMinutes < this.partyUntil) {
+      this.partyNow = { night: `now${this.partyFrom}` };
+      return;
+    }
+    const p = o.party.on && o.dayNight.on ? partyAt(o.localMinutes, o.dayNight.dusk, o.party.everyDays, o.party.hours) : null;
+    this.partyNow = p?.on && `${p.night}` !== this.partyStopped ? { night: `${p.night}` } : null;
+  }
+
+  /** This guest's character stays up for the party (the same ones all through one party) */
+  private upForParty(id: string, o: TownOptions): boolean {
+    return !!this.partyNow && hash01(`${id}:${this.partyNow.night}:party`) < o.party.goers;
+  }
+
+  /** A party is on at the cafe */
+  get partyOn(): boolean {
+    return !!this.partyNow;
+  }
+
+  /** The host throws a party now, for the party's usual length. False: one is on already */
+  startParty(): boolean {
+    if (this.partyNow) return false;
+    this.partyFrom = this.lastMinutes;
+    this.partyUntil = this.lastMinutes + this.lastPartyHours * 60;
+    this.partyNow = { night: `now${this.partyFrom}` };
+    return true;
+  }
+
+  /** The host ends the party now: everyone comes out and goes on (to bed, at night) */
+  endParty(): void {
+    if (!this.partyNow) return;
+    if (this.lastMinutes < this.partyUntil) this.partyUntil = 0;
+    else this.partyStopped = this.partyNow.night;
+    this.partyNow = null;
+  }
+
+  /** Off to the party: a place inside to dance (the window shows them), or out on the terrace with a drink. False: no room left */
+  private goParty(w: Walker): boolean {
+    if (this.ceremony) return false;
+    const inside = this.partyPlace(true);
+    const outside = this.partyPlace(false);
+    if (inside >= 0 && (outside < 0 || Math.random() < PARTY_INSIDE)) w.doing = { kind: 'party', phase: 'go', slot: inside, until: 0, cut: 0 };
+    else if (outside >= 0) w.doing = { kind: 'party', phase: 'terrace', slot: outside, until: 0, cut: 0 };
+    else return false;
+    return true;
+  }
+
+  /** A free place at the party, inside the cafe or out on its terrace (-1: none) */
+  private partyPlace(inside: boolean): number {
+    const taken = new Set<number>();
+    for (const o of this.walkers.values()) {
+      const d = o.doing;
+      if (d.kind !== 'party' || d.phase === 'exit') continue;
+      if ((d.phase === 'go' || d.phase === 'enter' || d.phase === 'inside') === inside) taken.add(d.slot);
+    }
+    const free = (inside ? CAFE.inside : CAFE.terrace).map((_, i) => i).filter((i) => !taken.has(i));
+    return free.length ? free[Math.floor(Math.random() * free.length)] : -1;
+  }
+
+  /** On the move at the party (else dancing inside, or standing with a drink) */
+  private partyWalking(_w: Walker, d: Party): boolean {
+    return d.phase !== 'inside' && d.phase !== 'stand';
+  }
+
+  private stepPartyGoer(w: Walker, d: Party, now: number, dt: number): void {
+    // Over (the night ends, the host ends it): out of the cafe, off the terrace
+    const over = !this.partyNow;
+    switch (d.phase) {
+      case 'go':
+        if (over) w.doing = idle(now, 300, 900);
+        else if (this.walkTo(w, CAFE.front.x, CAFE.front.y, WALK_UPS, dt)) d.phase = 'enter';
+        break;
+      case 'enter':
+        if (this.walkTo(w, CAFE.door.x, CAFE.door.y, WALK_UPS, dt)) {
+          const stay = now + rand(PARTY_INSIDE_MS[0], PARTY_INSIDE_MS[1]);
+          Object.assign(d, { phase: 'inside', until: d.cut ? Math.min(stay, d.cut) : stay });
+        }
+        break;
+      case 'inside':
+        if (now >= d.until || over) {
+          d.phase = 'exit';
+          w.dir = 2;
+        }
+        break;
+      case 'exit':
+        // Out, and a step aside from the door
+        if (this.walkTo(w, CAFE.front.x + (w.id.charCodeAt(0) % 2 ? 36 : -36), CAFE.front.y + 18, WALK_UPS, dt)) w.doing = idle(now, 800, 2000);
+        break;
+      case 'terrace': {
+        const s = CAFE.terrace[d.slot];
+        if (over) w.doing = idle(now, 300, 900);
+        else if (this.walkTo(w, s.x, s.y, WALK_UPS, dt)) {
+          Object.assign(w, { x: s.x, y: s.y, dir: s.dir });
+          Object.assign(d, { phase: 'stand', until: now + rand(PARTY_OUTSIDE_MS[0], PARTY_OUTSIDE_MS[1]) });
+        }
+        break;
+      }
+      case 'stand':
+        w.dir = CAFE.terrace[d.slot].dir;
+        if (now >= d.until || over) w.doing = idle(now, 600, 1600);
+        break;
+    }
+  }
+
   // ------------------------------------------------------------ shop visits
 
   /** What calls this character away (the ceremony, a shop trip), or null when nothing does */
@@ -1260,6 +1758,7 @@ export class TownSim {
   /** Going through a shop door: faded by how close to it */
   private doorAlpha(w: Walker): number {
     const d = w.doing;
+    if (d.kind === 'party') return d.phase === 'enter' || d.phase === 'exit' ? Math.max(0, Math.min(1, Math.hypot(w.x - CAFE.door.x, w.y - CAFE.door.y) / DOOR_FADE)) : 1;
     if (d.kind !== 'visit' || (d.phase !== 'enter' && d.phase !== 'exit')) return 1;
     const p = TOWN_PLACES[d.place];
     return Math.max(0, Math.min(1, Math.hypot(w.x - p.door.x, w.y - p.door.y) / DOOR_FADE));
@@ -1286,7 +1785,12 @@ export class TownSim {
         w.doing.kind !== 'descend' &&
         !(w.doing.kind === 'goThrone' && w.doing.onCarpet) &&
         w.doing.kind !== 'pray' &&
-        !(w.doing.kind === 'visit' && (w.doing.phase === 'enter' || w.doing.phase === 'inside' || w.doing.phase === 'exit')),
+        !(w.doing.kind === 'visit' && (w.doing.phase === 'enter' || w.doing.phase === 'inside' || w.doing.phase === 'exit')) &&
+        // Nor on a seat, fishing on the bank, at a lamp with the pole, at the party past its door or in their spot on the terrace
+        w.doing.kind !== 'seated' &&
+        w.doing.kind !== 'fish' &&
+        !(w.doing.kind === 'lamps' && w.doing.at) &&
+        !(w.doing.kind === 'party' && w.doing.phase !== 'go' && w.doing.phase !== 'terrace'),
     );
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
@@ -1299,8 +1803,8 @@ export class TownSim {
         const push = ((PERSONAL_SPACE - d) / d) * 0.5;
         a.x = clampX(a.x - dx * push, a.x);
         b.x = clampX(b.x + dx * push, b.x);
-        a.y = clampY(a.y - (dy / 2.2) * push);
-        b.y = clampY(b.y + (dy / 2.2) * push);
+        a.y = clampY(a.y - (dy / 2.2) * push, a.y);
+        b.y = clampY(b.y + (dy / 2.2) * push, b.y);
       }
     }
     // Pushed into the fountain: back out to its edge; pushed off the bridge: back onto it
@@ -1336,4 +1840,5 @@ export class TownSim {
 
 /** Keep a pushed character on the square; one out in the throne room (`from`: where it was) stays out there, short of the dais */
 const clampX = (x: number, from: number) => Math.max(TOWN_AREA.x0, Math.min(from > TOWN_AREA.x1 ? Math.max(from, DAIS_FOOT - 20) : TOWN_AREA.x1, x));
-const clampY = (y: number) => Math.max(TOWN_AREA.y0, Math.min(TOWN_AREA.y1, y));
+/** Keep a pushed character on the square; one down on the river's bank (`from`: where it was) is not pushed further down */
+const clampY = (y: number, from: number) => Math.max(TOWN_AREA.y0, Math.min(Math.max(TOWN_AREA.y1, from), y));

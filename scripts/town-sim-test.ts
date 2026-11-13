@@ -66,6 +66,10 @@ const opts: TownOptions = {
   nightSleep: true,
   bedtimeSpreadMin: 180,
   nightOwls: 0.2,
+  activities: { cafe: true, fountain: true, board: true, fish: true, fire: true },
+  lamplighter: true,
+  // A party every other night, so a two hour test sees one
+  party: { on: true, everyDays: 2, hours: 5, goers: 0.7 },
 };
 /** The share of characters asleep for the night at 3:00, at 9:00 (the night owls) and at noon, each day */
 const atNight: number[] = [];
@@ -86,8 +90,13 @@ const stats = { chats: 0, ceremonies: 0, visits: 0, maxKindMs: {} as Record<stri
 const LIMIT: Record<string, number> = {
   idle: 15_000, wander: 60_000, goBench: 60_000, sit: 30_000, goPet: 45_000, pet: 10_000, goChat: 20_000, chat: 40_000,
   cheer: 4000, goSleep: 90_000, visit: 120_000, goThrone: 120_000, descend: 60_000, goHall: 120_000, goPray: 120_000,
+  goSeat: 60_000, seated: 60_000, goRead: 60_000, read: 10_000, goFish: 60_000, fish: 50_000, lamps: 150_000, party: 90_000,
 };
 
+/** How often each activity was started, the lamps lit at 23:00 and at 10:00 each day, the most dancing at the party at once */
+const started: Record<string, number> = {};
+const lampsAt: string[] = [];
+let dancersMax = 0;
 const sec = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 const start = clock;
 let lastCeremony = clock;
@@ -126,6 +135,10 @@ while (clock < end) {
   if (before < 180 && minute >= 180) atNight.push(asleep());
   if (before < 540 && minute >= 540) atMorning.push(asleep());
   if (before < 720 && minute >= 720 && clock - start > DAY_MS / 2) atNoon.push(asleep());
+  const lit = (bits = frame.lamps ?? 0) => bits.toString(2).split('1').length - 1;
+  if (before < 1380 && minute >= 1380) lampsAt.push(`23:00 ${lit()}`);
+  if (before < 600 && minute >= 600) lampsAt.push(`10:00 ${lit()}`);
+  dancersMax = Math.max(dancersMax, frame.a.filter((_, i) => i % FRAME_STRIDE === 2).filter((a) => a === WANIM.dance).length);
   for (const [id, w] of simAny.walkers as Map<string, any>) {
     (kinds.get(id) ?? kinds.set(id, new Set()).get(id)!).add(w.doing.kind);
     if (prevKinds.get(id) === 'goChat' && w.doing.kind === 'idle') chatGiveUps++;
@@ -165,6 +178,8 @@ while (clock < end) {
       if (t) stats.maxKindMs[t.kind] = Math.max(stats.maxKindMs[t.kind] ?? 0, clock - t.since);
       if (kind === 'chat') stats.chats++;
       if (kind === 'visit') stats.visits++;
+      started[kind] = (started[kind] ?? 0) + 1;
+      if (kind === 'seated') started[`seated ${d.at}`] = (started[`seated ${d.at}`] ?? 0) + 1;
       t = { kind, since: clock, x: w.x, y: w.y, stillSince: clock };
       track.set(id, t);
     }
@@ -197,7 +212,8 @@ while (clock < end) {
     const inTown = w.x >= TOWN_AREA.x0 - 30 && w.x <= TOWN_AREA.x1 + 30;
     const inHall = w.x > CROSSING.x1;
     if (w.x > CROSSING.x0 + 4 && w.x < CROSSING.x1 - 4 && (w.y < CROSSING.y0 - 4 || w.y > CROSSING.y1 + 4)) report('in the river off the bridge', where);
-    if ((w.y < TOWN_AREA.y0 - 40 || w.y > TOWN_AREA.y1 + 10) && !(d.kind === 'visit')) report('off the square (y)', where);
+    // (the anglers stand on the river's bank, below the square, and walk back up from it; a visit or the party goes up to a door)
+    if ((w.y < TOWN_AREA.y0 - 40 || w.y > TOWN_AREA.y1 + 45) && !(d.kind === 'visit' || d.kind === 'party')) report('off the square (y)', where);
     if (!inTown && !inHall && !(w.x > TOWN_AREA.x1) && !(w.x < TOWN_AREA.x0 && (d.kind === 'wander' || d.kind === 'goSleep' || d.kind === 'sleep' || w.x >= 20))) report('off the square (x)', where);
     if (w.x > DAIS_FOOT + 60 && d.kind !== 'throne' && d.kind !== 'descend' && d.kind !== 'goThrone') report('on the dais without being King', where);
     // A chat with someone who is not chatting back
@@ -220,6 +236,8 @@ console.log(`away guests not asleep in time: ${sleepLate.length}`);
 console.log(`asleep for the night at 3:00: ${atNight.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; at 9:00: ${atMorning.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; at noon: ${atNoon.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; dark now ${frame!.dark}`);
 const never = (k: string) => [...kinds].filter(([id, set]) => !set.has(k) && !(Number(id.slice(1)) % 9 === 0 && (k === 'sit' || k === 'pet'))).length;
 console.log(`characters that never: sat ${never('sit')}, petted ${never('pet')}, chatted ${never('chat')}, wandered ${never('wander')}`);
+console.log('started:', started);
+console.log(`lamps lit: ${lampsAt.join(', ')}; most dancing at once: ${dancersMax}`);
 console.log('longest per activity:', Object.fromEntries(Object.entries(stats.maxKindMs).map(([k, v]) => [k, sec(v)])));
 if (!problems.size) console.log('no problems');
 for (const [k, p] of [...problems].sort((a, b) => b[1].n - a[1].n)) console.log(`${String(p.n).padStart(5)}  ${k}   e.g. ${p.example}`);

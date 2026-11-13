@@ -143,7 +143,7 @@ function board(g: CanvasRenderingContext2D, img: HTMLImageElement, c: Cut, x: nu
 }
 
 /** An awning of any width: the ends of the middle piece kept, its scalloped middle repeated */
-function awning(g: CanvasRenderingContext2D, img: HTMLImageElement, c: Cut, x: number, y: number, w: number): void {
+export function awning(g: CanvasRenderingContext2D, img: HTMLImageElement, c: Cut, x: number, y: number, w: number): void {
   const [sx, sy, sw, sh] = c;
   const end = 7;
   g.drawImage(img, sx, sy, end, sh, x, y, end, sh);

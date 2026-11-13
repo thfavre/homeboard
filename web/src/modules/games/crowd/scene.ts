@@ -55,7 +55,7 @@ export function loadEnv(): Promise<Env | null> {
 
 /** A part of a sheet: x, y, width, height in its pixels */
 export type Cut = [number, number, number, number];
-const CUT = {
+export const CUT = {
   houseA: [24, 0, 208, 201] as Cut,
   houseB: [23, 0, 144, 192] as Cut,
   housePaneled: [0, 0, 160, 160] as Cut,
@@ -72,7 +72,7 @@ const CUT = {
 };
 
 /** Draw a cut of a sheet with its bottom middle at (x, y), `scale` world units a pixel */
-function put(g: CanvasRenderingContext2D, img: HTMLImageElement, c: Cut, x: number, y: number, scale = S, dx = 0) {
+export function put(g: CanvasRenderingContext2D, img: HTMLImageElement, c: Cut, x: number, y: number, scale = S, dx = 0) {
   const w = c[2] * scale;
   const h = c[3] * scale;
   g.drawImage(img, c[0], c[1], c[2], c[3], Math.round(x - w / 2 + dx), Math.round(y - h), Math.round(w), Math.round(h));
@@ -239,24 +239,26 @@ export interface Prop {
   ground?(g: CanvasRenderingContext2D, now: number): void;
 }
 
-function tree(env: Env, x: number, y: number, spring: boolean, phase: number): Prop {
+/** A tree, `size` times the art's size (the town's trees are not all alike) */
+export function tree(env: Env, x: number, y: number, spring: boolean, phase: number, size = 1): Prop {
+  const k = S * size;
   return {
     y,
     hit(hx, hy) {
       // The leaves: an ellipse over the trunk
-      const cy = y - 44 * S - 40 * S;
-      return ((hx - x) / (47 * S)) ** 2 + ((hy - cy) / (40 * S)) ** 2 < 1 ? 'leaves' : null;
+      const cy = y - 44 * k - 40 * k;
+      return ((hx - x) / (47 * k)) ** 2 + ((hy - cy) / (40 * k)) ** 2 < 1 ? 'leaves' : null;
     },
     ground(g) {
       g.globalAlpha = 0.5;
-      put(g, env['tree-shadows'], CUT.treeShadow, x + 6, y + 14);
+      put(g, env['tree-shadows'], CUT.treeShadow, x + 6 * size, y + 14 * size, k);
       g.globalAlpha = 1;
     },
     draw(g, now) {
       // The trunk, and the leaves swaying a pixel in the wind
-      put(g, env['tree-trunks'], CUT.trunk, x, y + 4);
-      const sway = Math.round(Math.sin(now / 1400 + phase) * 1.3) * S;
-      put(g, env['tree-canopies'], spring ? CUT.canopySpring : CUT.canopySummer, x, y - 44 * S, S, sway);
+      put(g, env['tree-trunks'], CUT.trunk, x, y + 4, k);
+      const sway = Math.round(Math.sin(now / 1400 + phase) * 1.3) * k;
+      put(g, env['tree-canopies'], spring ? CUT.canopySpring : CUT.canopySummer, x, y - 44 * k, k, sway);
     },
   };
 }
@@ -291,7 +293,7 @@ function lamp(env: Env, x: number, y: number): Prop {
 }
 
 /** The fountain, twice the size of the sprites so it fills the middle of the square, its water glinting */
-function fountain(env: Env, x: number, y: number): Prop {
+export function fountain(env: Env, x: number, y: number): Prop {
   const k = 2.1;
   return {
     y,
@@ -321,7 +323,7 @@ function fountain(env: Env, x: number, y: number): Prop {
   };
 }
 
-function still(img: HTMLImageElement, c: Cut, x: number, y: number): Prop {
+export function still(img: HTMLImageElement, c: Cut, x: number, y: number): Prop {
   return { y, draw: (g) => put(g, img, c, x, y) };
 }
 
@@ -341,7 +343,12 @@ export function squareProps(env: Env, keep: (x: number) => boolean = () => true)
   const out: Prop[] = [fountain(env, SPY_SCENE.fountain.x, SPY_SCENE.fountain.y)];
   SPY_SCENE.trees.forEach((t, k) => out.push(tree(env, t.x, t.y, k % 2 === 1, k * 1.7)));
   for (const l of SPY_SCENE.lamps) out.push(lamp(env, l.x, l.y));
-  // On the sidewalk along the houses: benches and plants
+  return [...out, ...sidewalkProps(env, keep)];
+}
+
+/** On the square's sidewalk along the houses: benches and plants (`keep`: which to keep, by their x) */
+export function sidewalkProps(env: Env, keep: (x: number) => boolean = () => true): Prop[] {
+  const out: Prop[] = [];
   for (const [x, kind] of [
     [150, 'topiary'],
     [400, 'bench'],
