@@ -885,6 +885,8 @@ export interface WorldState {
   king?: KingInfo;
   /** The town's own day: on or off (always day), and how many real minutes a whole day takes (the TV's town hall clock follows it) */
   day?: { on: boolean } & TownClock;
+  /** Leaves now and then falling from the trees on the TV */
+  leaves?: boolean;
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
   /** Admin only */

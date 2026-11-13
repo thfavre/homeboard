@@ -104,6 +104,8 @@ interface WorldSettings {
   campfire: boolean;
   /** Someone goes round the lamp posts at nightfall and lights them (off: they light themselves) */
   lamplighter: boolean;
+  /** Leaves now and then falling from the trees on the TV */
+  leaves: boolean;
   /** The cafe throws a party every so many town days, from nightfall for so many town hours; this share of the town stays up for it (percent) */
   party: boolean;
   partyEveryDays: number;
@@ -280,6 +282,7 @@ export default defineModule<WorldSettings>({
     fishReward: 5,
     campfire: true,
     lamplighter: true,
+    leaves: true,
     party: true,
     partyEveryDays: 7,
     partyChancePct: 20,
@@ -656,6 +659,7 @@ export default defineModule<WorldSettings>({
         sheet: store.data.sheet,
         shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices(), unlockPieces: s.unlockPieces, secretPieces: s.secretPieces },
         day: { on: s.dayCycle, ...townClock() },
+        leaves: s.leaves,
         king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), pricing: kingPricing(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null, reigns },
       };
       if (role === 'admin') {
@@ -1291,6 +1295,7 @@ export default defineModule<WorldSettings>({
         fishReward: price(args.fishReward, s.fishReward),
         campfire: typeof args.campfire === 'boolean' ? args.campfire : s.campfire,
         lamplighter: typeof args.lamplighter === 'boolean' ? args.lamplighter : s.lamplighter,
+        leaves: typeof args.leaves === 'boolean' ? args.leaves : s.leaves,
         party: typeof args.party === 'boolean' ? args.party : s.party,
         partyEveryDays: Math.max(1, Math.min(60, Math.round(num(args.partyEveryDays, s.partyEveryDays)))),
         partyChancePct: Math.max(0, Math.min(100, Math.round(num(args.partyChancePct, s.partyChancePct)))),

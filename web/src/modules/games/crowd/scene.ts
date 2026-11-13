@@ -30,6 +30,7 @@ const FILES = [
   'cats',
   'flowers',
   'bins',
+  'leaves',
 ] as const;
 export type EnvImage = (typeof FILES)[number];
 export type Env = Record<EnvImage, HTMLImageElement>;

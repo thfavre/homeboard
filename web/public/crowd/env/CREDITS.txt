@@ -127,7 +127,16 @@ LPC castle: the throne room's towers and the outside of its walls
   Notes: recolored on the TV from its warm grey to the throne room's blue-grey stone
   https://opengameart.org/content/lpc-castle
 
+[LPC] Leaf Recolor
+  Files: leaves.png (lpc leaf recolors.png)
+  License: CC-BY-SA 3.0, GPL 3.0
+  Authors: William.Thompsonj, after the leaves of Johann Charlot's LPC entry (Shoot'em up graphic kit)
+  Notes: the town's trees drop a leaf now and then on the TV
+  https://opengameart.org/content/lpc-leaf-recolor
+
 License texts:
   CC0 1.0:      https://creativecommons.org/publicdomain/zero/1.0/
   CC-BY 3.0:    https://creativecommons.org/licenses/by/3.0/
+  CC-BY-SA 3.0: https://creativecommons.org/licenses/by-sa/3.0/
+  GPL 3.0:      https://www.gnu.org/licenses/gpl-3.0.html
   OGA-BY 3.0:   https://opengameart.org/content/oga-by-30-faq

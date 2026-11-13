@@ -11,6 +11,7 @@
   import { GREEN_TOP, brookFrames, drawBrook, drawBrookGlints, townGround } from './townGround.ts';
   import { drawCup, drawFireLight, drawKindling, lampLevel, townNow, townProps } from './townScene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
+  import { FallingLeaves } from './leaves.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
@@ -95,6 +96,7 @@
   /** Two small canvases to read a character's pixels from, the old look and the new */
   let scratch: CanvasRenderingContext2D[] | null = null;
   const pigeons = untrack(() => new Pigeons(3, TOWN_AREA));
+  const leaves = new FallingLeaves();
   let lastDraw = 0;
   /** When the King opened the court (his hands up before the throne): the throne glows from then on, until he comes down from the dais */
   let courtSince: number | null = null;
@@ -409,6 +411,12 @@
     // fountain), over the characters' own shadows: whoever sits on a log casts its shadow under it
     for (const p of standingProps) p.ground?.(g, now);
     for (const p of inHall) p.ground?.(g, now);
+    // Leaves now and then coming off the trees: the ones that landed lie under everyone
+    const leafy = !!env && world?.leaves !== false;
+    if (leafy) {
+      leaves.update(step);
+      leaves.drawGround(g, env!);
+    }
 
     /** The sheets of a character: its own, the previous one while a new look loads (and while it changes in a shop) */
     const sheetOf = (id: string, inShop: boolean) => {
@@ -575,6 +583,7 @@
       else drawPerson(people[pi++]);
     }
     pigeons.drawAir(g, env);
+    if (leafy) leaves.drawAir(g, env!, now);
 
     // The evening lies over the square (the lamps keep their glow). The server keeps the time of
     // day the host set, and sends how dark it is with every frame.

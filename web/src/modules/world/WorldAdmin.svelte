@@ -318,6 +318,13 @@
         </label>
       {/if}
     {/each}
+    <div class="line">
+      <div>
+        <strong>Falling leaves</strong>
+        <p class="faint small">Now and then a leaf comes off a tree, drifts down and lies on the ground for a moment before it fades. Only on the TV, and kept rare.</p>
+      </div>
+      <Toggle checked={mod.leaves !== false} label="Falling leaves" onchange={(v) => setOption('leaves', v)} />
+    </div>
   </Section>
 
   <Section title="Party at the cafe">
