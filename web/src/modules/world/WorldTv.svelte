@@ -568,7 +568,7 @@
     // The town hall's clock shows the town's own time (the real one when its day is off)
     const day = world?.day;
     const local = new Date(now);
-    drawTownHallClock(g, day?.on ? townMinutes(now, day.dayMin) : local.getHours() * 60 + local.getMinutes() + local.getSeconds() / 60);
+    drawTownHallClock(g, day?.on ? townMinutes(now, day) : local.getHours() * 60 + local.getMinutes() + local.getSeconds() / 60);
     // The throne room has its own light: the windows by day, its fires at any time
     // The throne glows from the moment the King opens the court, until he comes down from the dais
     const king = people.find((p) => p.id === world?.king?.id);

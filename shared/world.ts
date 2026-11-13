@@ -507,8 +507,48 @@ export function partyAt(minute: number, dusk: string, everyDays: number, hours: 
 
 // ------------------------------------------------------------ day and night
 
-/** The town's own clock: minutes into its days, a whole day every `dayMin` real minutes (the same on every server start) */
-export const townMinutes = (now: number, dayMin: number) => (now / (Math.max(1, dayMin) * 60_000)) * 1440;
+/**
+ * How the town's own clock runs: a whole day every `dayMin` real minutes, the night (from dusk to
+ * dawn, "HH:MM") going by `nightSpeed` times faster than the day, so the day lasts longer
+ */
+export interface TownClock {
+  dayMin: number;
+  dusk: string;
+  dawn: string;
+  nightSpeed: number;
+}
+
+/** The share of a day's real time spent in its daylight part, and the day's and the night's length (town minutes) */
+function clockParts(c: TownClock): { share: number; day: number; night: number } {
+  const day = minutesFrom(minuteOf(c.dawn), minuteOf(c.dusk));
+  const night = 1440 - day;
+  // No night (or no day): the clock runs evenly
+  if (!day || !night) return { share: day ? 1 : 0, day: day || 1440, night };
+  return { share: day / (day + night / Math.max(0.1, c.nightSpeed)), day, night };
+}
+
+/**
+ * The town's own clock: minutes into its days, from real time (the same on every server start).
+ * Each day begins at dawn; its daylight takes the larger share of the real time, its night the rest.
+ */
+export function townMinutes(now: number, c: TownClock): number {
+  const { share, day, night } = clockParts(c);
+  const cycles = now / (Math.max(1, c.dayMin) * 60_000);
+  const k = Math.floor(cycles);
+  const p = cycles - k;
+  const base = k * 1440 + minuteOf(c.dawn);
+  return p < share ? base + (p / share) * day : base + day + ((p - share) / (1 - share)) * night;
+}
+
+/** When (real time, ms) the town's clock shows `minute` (counted as townMinutes counts) */
+export function realAt(minute: number, c: TownClock): number {
+  const { share, day, night } = clockParts(c);
+  const rel = minute - minuteOf(c.dawn);
+  const k = Math.floor(rel / 1440);
+  const r = rel - k * 1440;
+  const p = r < day ? (r / day) * share : share + ((r - day) / night) * (1 - share);
+  return (k + p) * Math.max(1, c.dayMin) * 60_000;
+}
 
 /** A minute of the day as "HH:MM" */
 export function clockOf(minute: number): string {
@@ -796,7 +836,7 @@ export interface WorldState {
   shop?: ShopInfo;
   king?: KingInfo;
   /** The town's own day: on or off (always day), and how many real minutes a whole day takes (the TV's town hall clock follows it) */
-  day?: { on: boolean; dayMin: number };
+  day?: { on: boolean } & TownClock;
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
   /** Admin only */
@@ -827,6 +867,7 @@ export interface WorldState {
   ceremonyGraceSec?: number;
   dayCycle?: boolean;
   dayMin?: number;
+  nightSpeed?: number;
   dusk?: string;
   dawn?: string;
   twilightMin?: number;

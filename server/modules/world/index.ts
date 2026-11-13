@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { LOOK_PARTS, kingPriceAt, lookCost, partyAt, validChoices, type AvatarChoices, type CeremonyHold, townMinutes, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, kingPriceAt, lookCost, partyAt, validChoices, type AvatarChoices, type CeremonyHold, townMinutes, realAt, type TownClock, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, notForTheKing, starterPieces, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -78,6 +78,8 @@ interface WorldSettings {
   /** The town has its own short day (off: always day): a whole day goes by in `dayMin` minutes, night from dusk to dawn on its clock ("HH:MM") */
   dayCycle: boolean;
   dayMin: number;
+  /** The night goes by this many times faster than the day */
+  nightSpeed: number;
   dusk: string;
   dawn: string;
   /** The light changes over this long around dusk and dawn (minutes) */
@@ -250,6 +252,7 @@ export default defineModule<WorldSettings>({
     ceremonyGraceSec: 20,
     dayCycle: true,
     dayMin: 30,
+    nightSpeed: 1.5,
     dusk: '22:00',
     dawn: '06:00',
     twilightMin: 90,
@@ -523,12 +526,19 @@ export default defineModule<WorldSettings>({
      */
     const sheetUrl = (hash: string) => `${ctx.mediaUrl(`sheets/${hash}.png`)}?rows=${Object.keys(sheetInfos[hash]?.rows ?? {}).length}`;
 
+    /** How the town's clock runs (evenly with day and night off: the night's speed is no matter then) */
+    const townClock = (): TownClock => {
+      const s = ctx.settings.get();
+      return { dayMin: s.dayMin, dusk: s.dusk, dawn: s.dawn, nightSpeed: s.dayCycle ? s.nightSpeed : 1 };
+    };
+
     /** When the next party at the cafe starts on its own (server time; null: one is on, they are off, or the town has no night) */
     const partyNext = (now: number): number | null => {
       const s = ctx.settings.get();
       if (!s.party || !s.dayCycle) return null;
-      const p = partyAt(townMinutes(now, s.dayMin), s.dusk, s.partyEveryDays, s.partyHours);
-      return p.on ? null : now + (p.startsIn / 1440) * s.dayMin * 60_000;
+      const m = townMinutes(now, townClock());
+      const p = partyAt(m, s.dusk, s.partyEveryDays, s.partyHours);
+      return p.on ? null : realAt(m + p.startsIn, townClock());
     };
 
     // ------------------------------------------------------------ the ceremony
@@ -595,7 +605,7 @@ export default defineModule<WorldSettings>({
         characters,
         sheet: store.data.sheet,
         shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices(), unlockPieces: s.unlockPieces, secretPieces: s.secretPieces },
-        day: { on: s.dayCycle, dayMin: s.dayMin },
+        day: { on: s.dayCycle, ...townClock() },
         king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), pricing: kingPricing(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null, reigns },
       };
       if (role === 'admin') {
@@ -632,6 +642,7 @@ export default defineModule<WorldSettings>({
           ceremonyHold: s.ceremony ? ceremonyHold() : null,
           dayCycle: s.dayCycle,
           dayMin: s.dayMin,
+          nightSpeed: s.nightSpeed,
           dusk: s.dusk,
           dawn: s.dawn,
           twilightMin: s.twilightMin,
@@ -1049,7 +1060,7 @@ export default defineModule<WorldSettings>({
         courtMs: s.ceremonySec * 1000,
         graceMs: s.ceremonyGraceSec * 1000,
         dayNight: { on: s.dayCycle, dusk: s.dusk, dawn: s.dawn, twilightMin: s.twilightMin },
-        localMinutes: townMinutes(now, s.dayMin),
+        localMinutes: townMinutes(now, townClock()),
         nightSleep: s.nightSleep,
         bedtimeSpreadMin: s.bedtimeSpreadMin,
         nightOwls: s.nightOwlPct / 100,
@@ -1204,6 +1215,7 @@ export default defineModule<WorldSettings>({
         ceremonyGraceSec: secs(args.ceremonyGraceSec, s.ceremonyGraceSec, 120),
         dayCycle: typeof args.dayCycle === 'boolean' ? args.dayCycle : s.dayCycle,
         dayMin: Math.max(5, Math.min(120, Math.round(num(args.dayMin, s.dayMin)))),
+        nightSpeed: Math.max(1, Math.min(5, Math.round(num(args.nightSpeed, s.nightSpeed) * 10) / 10)),
         dusk: timeOfDay(args.dusk) ?? s.dusk,
         dawn: timeOfDay(args.dawn) ?? s.dawn,
         twilightMin: Math.max(0, Math.min(240, Math.round(num(args.twilightMin, s.twilightMin)))),

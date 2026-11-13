@@ -73,7 +73,7 @@
     const dark = mod.darkNow ?? 0;
     const light = dark >= 0.95 ? 'Night' : dark <= 0.05 ? 'Day' : dark >= 0.5 ? 'Nightfall' : 'Daybreak';
     const sleepers = mod.nightSleepers ?? 0;
-    return `${light} in the town, ${clockOf(townMinutes(clockNow, mod.dayMin ?? 30))} on its clock. ${sleepers === 0 ? 'Nobody sleeps' : sleepers === 1 ? 'One character sleeps' : `${sleepers} characters sleep`} for the night.`;
+    return `${light} in the town, ${mod.day ? clockOf(townMinutes(clockNow, mod.day)) : ''} on its clock. ${sleepers === 0 ? 'Nobody sleeps' : sleepers === 1 ? 'One character sleeps' : `${sleepers} characters sleep`} for the night.`;
   });
 
   /** The town's places to go, each with its switch */
@@ -207,6 +207,11 @@
       <span>A whole day lasts (minutes, 5 to 120)</span>
       <input class="input" type="number" min="5" max="120" value={mod.dayMin} onchange={(e) => setAmount('dayMin', e.currentTarget.value)} />
     </label>
+    <label class="field">
+      <span>The night goes by faster (times, 1 to 5)</span>
+      <input class="input" type="number" min="1" max="5" step="0.1" value={mod.nightSpeed} onchange={(e) => setSeconds('nightSpeed', e.currentTarget.value)} />
+    </label>
+    <p class="faint small">At 1.5 the town's night hours pass one and a half times as fast as its day hours, so the day lasts longer on the TV. The whole day still takes the minutes above.</p>
     <div class="pair">
       <label class="field">
         <span>Night falls at (on the town's clock)</span>
