@@ -105,11 +105,11 @@ const COFFEE_MS: [number, number] = [3500, 7000];
 const COFFEE_COUNTER = [0.8, 0.66, 0.92];
 /**
  * The cafe's parasols: opened this many town minutes after dawn and folded this many after dusk
- * (a random time in each range, every day and table its own), by someone standing this far in front
- * of the table, for this long; nobody free to do it this long, it goes by itself
+ * (a random time in each range, every day and table its own), by someone standing this far behind
+ * the table (the parasol in front of them), for this long; nobody free to do it this long, it goes by itself
  */
 const PARASOL_DAY = { open: [30, 180] as [number, number], close: [-90, 45] as [number, number] };
-const PARASOL_REACH = 22;
+const PARASOL_REACH = -18;
 const PARASOL_MS = 1800;
 const PARASOL_WAIT_MS = 25_000;
 const KINDLE_WAIT_MS = 20_000;
