@@ -232,9 +232,9 @@ function buildGround(sheets: Sheets): HTMLCanvasElement {
   garden(g, sheets);
   const [sx, sy, sw, sh] = TOPIARY;
   for (const [x, y] of [
-    [A.dais[0].x + 22, A.dais[0].y1 + 62],
-    // Clear of the low tower at the front right corner
-    [TOWERS[3].x - 20, A.dais[0].y1 + 62],
+    [A.dais[0].x + 34, A.dais[0].y1 + 62],
+    // Partly behind the tower at the front right corner
+    [TOWERS[3].x - 8, A.dais[0].y1 + 62],
   ]) {
     g.fillStyle = 'rgba(14,10,24,0.26)';
     g.beginPath();
