@@ -1084,19 +1084,20 @@ function outerWalls(g: G, stone: HTMLCanvasElement): void {
 const TOWER_W = 64;
 const TOWER_FLOOR = 36;
 const TOWER_TALL = 172;
-const TOWER_LOW = 84;
+const TOWER_LOW = 100;
 /** Where the towers stand (in the hall's pixels: their left edge and their foot): two tall ones at the back, two low ones at the front */
 const TOWERS = [
-  { x: -22, foot: A.wall - 2, tall: true },
-  { x: A.w - TOWER_W, foot: A.wall - 2, tall: true },
-  { x: -22, foot: A.front + FRONT_FACE + 4, tall: false },
+  { x: -30, foot: A.wall + 4, tall: true },
+  { x: A.w - TOWER_W, foot: A.wall + 4, tall: true },
+  { x: -30, foot: A.front + FRONT_FACE + 4, tall: false },
   { x: A.w - TOWER_W, foot: A.front + FRONT_FACE + 4, tall: false },
 ];
 
 /**
  * A narrow round tower from the castle sheet: a floor of stone inside its parapet, the parapet seen
  * from above with the merlons on its far side, and its body with the merlons of its near side. A tall
- * one has a longer body (its middle courses once more), a low one only the top and the foot of it.
+ * one has a longer body (its middle courses once more), a low one its top, a course of its middle and
+ * its foot.
  */
 function castleTower(stone: HTMLCanvasElement, tall: boolean): HTMLCanvasElement {
   const T = CASTLE.tower;
@@ -1118,7 +1119,8 @@ function castleTower(stone: HTMLCanvasElement, tall: boolean): HTMLCanvasElement
     piece(by + 64, 48, top + 108);
   } else {
     piece(by, 26, top + 12);
-    piece(by + 82, 30, top + 38);
+    piece(by + 30, 16, top + 38);
+    piece(by + 82, 30, top + 54);
   }
   return c;
 }
