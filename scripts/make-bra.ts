@@ -21,9 +21,11 @@ const CUP_TOP_OUT = 0.28; // the cups' top at the straps
 const CUP_TOP_IN = 0.5; // ... dipping to this between them (the V)
 const CUP_EDGE = 0.66; // the cups' bottom at their sides
 const CUP_LOW = 0.84; // ... and at their lowest
-const BACK = [0.5, 0.7]; // the band across the back
-/** Of the width: the straps at each side, and each cup's half width around its middle */
-const STRAP_W = 0.2;
+const BACK = [0.46, 0.72]; // the band across the back
+const SIDE = [0.34, 0.78]; // the cup seen from the side
+/** Pixels from the chest's edge to the middle of a strap */
+const STRAP_IN = 2;
+/** Of the chest's width: each cup's half width around its middle */
 const CUP_HALF = 0.27;
 /** The rows of a four-way sheet, top to bottom */
 const FACING = ['back', 'side', 'front', 'side'] as const;
@@ -67,22 +69,39 @@ for (const file of readdirSync(TOP).filter((f) => f.endsWith('.png'))) {
       const along = (x: number, y: number) => -(x * up[0] + y * up[1]);
       const across = (x: number, y: number) => x * -up[1] + y * up[0];
       const as = px.map(([x, y]) => along(x, y));
-      const cs = px.map(([x, y]) => across(x, y));
-      const a0 = Math.min(...as);
       const a1 = Math.max(...as);
-      const c0 = Math.min(...cs);
-      const c1 = Math.max(...cs);
+      // The chest's width, measured halfway down: the shoulder caps (and arms raised with them) stick
+      // out past it and are not part of the bra
+      const mid0 = Math.min(...as);
+      const chest = px.filter(([x, y]) => {
+        const f = (along(x, y) - mid0) / Math.max(1, a1 - mid0);
+        return f >= 0.4 && f <= 0.7;
+      });
+      const c0 = Math.min(...chest.map(([x, y]) => across(x, y)));
+      const c1 = Math.max(...chest.map(([x, y]) => across(x, y)));
+      const inChest = (x: number, y: number) => across(x, y) >= c0 && across(x, y) <= c1;
+      // The shoulders: the top's highest point over the chest, not a raised shoulder cap
+      const a0 = Math.min(...px.filter(([x, y]) => inChest(x, y)).map(([x, y]) => along(x, y)));
       const t = (x: number, y: number) => (along(x, y) - a0) / Math.max(1, a1 - a0);
       const w = (x: number, y: number) => (across(x, y) - c0) / Math.max(1, c1 - c0);
       // Which side we see: from the sheet's row (one-row sheets face us), or narrow means the side
-      const facing = c1 - c0 < 10 ? 'side' : top.height >= 4 * F ? FACING[cy / F] : 'front';
+      // (climbing is seen from behind)
+      const facing = c1 - c0 < 10 ? 'side' : top.height >= 4 * F ? FACING[cy / F] : file === 'climb.png' ? 'back' : 'front';
+      // The straps: three pixels wide (outline, cloth, outline), a little in from the chest's edges,
+      // or one in the middle seen from the side
+      const strapAt = (x: number, y: number) => {
+        const c = across(x, y);
+        if (facing === 'side') return Math.abs(c - Math.round((c0 + c1) / 2)) <= 1;
+        return Math.abs(c - (c0 + STRAP_IN)) <= 1 || Math.abs(c - (c1 - STRAP_IN)) <= 1;
+      };
       const keep = (x: number, y: number) => {
-        if (!top.data[at(x, y) + 3]) return false;
+        if (!top.data[at(x, y) + 3] || !inChest(x, y)) return false;
         const tt = t(x, y);
         const ww = w(x, y);
-        const strap = (ww < STRAP_W || ww > 1 - STRAP_W) && tt < CUP_TOP_OUT + 0.1;
+        // From the shoulders down into the cups (or the band at the back)
+        const strap = strapAt(x, y) && tt < (facing === 'back' ? BACK[0] : CUP_TOP_IN) + 0.05;
         if (facing === 'back') return strap || (tt >= BACK[0] && tt <= BACK[1]);
-        if (facing === 'side') return (Math.abs(ww - 0.5) < 0.2 && tt < CUP_TOP_OUT + 0.1) || (tt >= CUP_TOP_OUT && tt <= CUP_LOW);
+        if (facing === 'side') return strap || (tt >= SIDE[0] && tt <= SIDE[1]);
         if (strap) return true;
         // The front: below the V of the cups' top, above their round bottoms
         const fromMid = Math.abs(ww - 0.5) * 2;
@@ -99,6 +118,18 @@ for (const file of readdirSync(TOP).filter((f) => f.endsWith('.png'))) {
         const d = top.data;
         if (d[i] + d[i + 1] + d[i + 2] < dark[0] + dark[1] + dark[2]) dark = [d[i], d[i + 1], d[i + 2]];
       }
+      // Its most used light color: the cloth, for the middle of the straps (where the top has the
+      // shade of its neckline). Light: in a small frame the outline can be the most used color
+      const sum = (i: number) => top.data[i] + top.data[i + 1] + top.data[i + 2];
+      const lightest = Math.max(...px.map(([x, y]) => sum(at(x, y))));
+      const counts = new Map<string, number>();
+      for (const [x, y] of px) {
+        const i = at(x, y);
+        if (sum(i) < (lightest + dark[0] + dark[1] + dark[2]) / 2) continue;
+        const k = `${top.data[i]},${top.data[i + 1]},${top.data[i + 2]}`;
+        counts.set(k, (counts.get(k) ?? 0) + 1);
+      }
+      const cloth = [...counts.entries()].sort((p, q) => q[1] - p[1])[0][0].split(',').map(Number);
       for (const [x, y] of px) {
         if (!keep(x, y)) continue;
         const i = at(x, y);
@@ -113,7 +144,11 @@ for (const file of readdirSync(TOP).filter((f) => f.endsWith('.png'))) {
           const ny = y + dy;
           return nx >= 0 && ny >= 0 && nx < F && ny < F && top.data[at(nx, ny) + 3] && !keep(nx, ny);
         });
-        const c = cut ? dark : [top.data[i], top.data[i + 1], top.data[i + 2]];
+        // A strap above the cups or band: cloth in its middle column, outline at both sides, whatever
+        // the top had there (the shade of its neckline)
+        const inStrap = strapAt(x, y) && t(x, y) < (facing === 'back' ? BACK[0] : facing === 'side' ? SIDE[0] : CUP_TOP_OUT);
+        const strapMid = inStrap && strapAt(x - up[1], y + up[0]) && strapAt(x + up[1], y - up[0]);
+        const c = inStrap ? (strapMid ? cloth : dark) : cut ? dark : [top.data[i], top.data[i + 1], top.data[i + 2]];
         out.data[i] = c[0];
         out.data[i + 1] = c[1];
         out.data[i + 2] = c[2];
