@@ -35,9 +35,14 @@ const sim = new TownSim({
     }
     errands.set(id, (errands.get(id) ?? []).filter((p) => p !== place));
   },
+  caught() {
+    fishCaught++;
+  },
 });
 const kinds = new Map<string, Set<string>>();
 let chatGiveUps = 0;
+/** Fish pulled out of the river */
+let fishCaught = 0;
 const courtShares: number[] = [];
 let lastPhase: string | null = null;
 let leaveAt = 0;
@@ -248,6 +253,7 @@ const never = (k: string) => [...kinds].filter(([id, set]) => !set.has(k) && !(N
 console.log(`characters that never: sat ${never('sit')}, petted ${never('pet')}, chatted ${never('chat')}, wandered ${never('wander')}`);
 console.log(`sleepers on top of each other at 3:00: ${stacked} pairs (sleepers ${bedsAt3.join(' ')})`);
 console.log('started:', started);
+console.log(`fish caught: ${fishCaught} in ${started.fish ?? 0} fishing trips`);
 console.log(`lamps lit: ${lampsAt.join(', ')}; most dancing at once: ${dancersMax}`);
 console.log('longest per activity:', Object.fromEntries(Object.entries(stats.maxKindMs).map(([k, v]) => [k, sec(v)])));
 if (!problems.size) console.log('no problems');

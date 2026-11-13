@@ -837,6 +837,8 @@ export interface WorldState {
   fountainSit?: boolean;
   noticeBoard?: boolean;
   fishing?: boolean;
+  /** What a caught fish brings its angler (the town's money) */
+  fishReward?: number;
   campfire?: boolean;
   lamplighter?: boolean;
   /** The cafe's party night: on its own every so many town days, from nightfall for so many town hours, and the share of the town that stays up for it (percent) */

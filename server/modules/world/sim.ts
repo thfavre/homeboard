@@ -77,7 +77,7 @@ const ACTIVITIES = {
  * (one that is off, or has no room left, is skipped). The fountain's rim is less sought than a
  * bench; the fire draws more at night, when it burns.
  */
-const CHANCE = { bench: 0.14, fountain: 0.035, cat: 0.1, cafe: 0.1, board: 0.05, fish: 0.07, fire: 0.045, fireAtNight: 0.25 };
+const CHANCE = { bench: 0.14, fountain: 0.035, cat: 0.1, cafe: 0.1, board: 0.05, fish: 0.04, fire: 0.045, fireAtNight: 0.25 };
 /** How long a character sits on each kind of seat (ms, a random time in the range); longer by the fire at night */
 const SEAT_MS: Record<SeatAt | 'fireNight', [number, number]> = {
   fountain: [8000, 22_000],
@@ -93,7 +93,7 @@ const FIRE_DARK = 0.3;
 const READ_MS: [number, number] = [4000, 9000];
 /** Fishing: how long, the share of tries with a bite, the bite (the float bobbing) and the fish held up */
 const FISH_MS: [number, number] = [22_000, 48_000];
-const BITE_SHARE = 0.55;
+const BITE_SHARE = 0.4;
 const BITE_MS = 1400;
 const CATCH_MS = 2400;
 /** The lamps are lit from this darkness on (and put out below it) */
@@ -187,12 +187,13 @@ type Doing =
 /** The seats besides the benches: the fountain's rim, the cafe's chairs, the logs by the campfire */
 type SeatAt = 'fountain' | 'cafe' | 'fire';
 
-/** Fishing from the bank until `until`; a fish bites at `bite` (0: none this time), is pulled out and held up, then they go */
+/** Fishing from the bank until `until`; a fish bites at `bite` (0: none this time), is pulled out (`landed`) and held up, then they go */
 interface Fishing {
   kind: 'fish';
   spot: number;
   until: number;
   bite: number;
+  landed?: boolean;
 }
 
 /**
@@ -426,6 +427,8 @@ export function asleepForTheNight(id: string, o: Pick<TownOptions, 'dayNight' | 
 export interface TownHooks {
   /** Halfway through a visit, and again on the way out: the character now wears what its guest picked for this shop */
   dress(id: string, place: PlaceId): void;
+  /** A fish on the line is pulled out of the water (once per fish) */
+  caught?(id: string): void;
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -1088,6 +1091,10 @@ export class TownSim {
       }
       case 'fish':
         w.dir = FISH_SPOTS[d.spot].side > 0 ? 3 : 1;
+        if (d.bite && !d.landed && now >= d.bite + BITE_MS) {
+          d.landed = true;
+          this.hooks.caught?.(w.id);
+        }
         if (now >= d.until) w.doing = idle(now, 600, 1800);
         break;
       case 'lamps':

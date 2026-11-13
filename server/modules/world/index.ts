@@ -92,6 +92,8 @@ interface WorldSettings {
   fountainSit: boolean;
   noticeBoard: boolean;
   fishing: boolean;
+  /** What a caught fish brings its angler (the town's money) */
+  fishReward: number;
   campfire: boolean;
   /** Someone goes round the lamp posts at nightfall and lights them (off: they light themselves) */
   lamplighter: boolean;
@@ -258,6 +260,7 @@ export default defineModule<WorldSettings>({
     fountainSit: true,
     noticeBoard: true,
     fishing: true,
+    fishReward: 5,
     campfire: true,
     lamplighter: true,
     party: true,
@@ -286,7 +289,7 @@ export default defineModule<WorldSettings>({
     const composer = new Composer(new LpcFiles());
     for (const [file, cr] of Object.entries(store.data.credits)) composer.credits.set(file, cr);
     const sheetsDir = ctx.mediaDir('sheets');
-    const sim = new TownSim({ dress: (id, place) => dress(id, place) });
+    const sim = new TownSim({ dress: (id, place) => dress(id, place), caught: (id) => caughtFish(id) });
 
     /** Builds by hash, so the same look is composited once even when asked twice at once */
     const building = new Map<string, Promise<SheetInfo>>();
@@ -639,6 +642,7 @@ export default defineModule<WorldSettings>({
           fountainSit: s.fountainSit,
           noticeBoard: s.noticeBoard,
           fishing: s.fishing,
+          fishReward: s.fishReward,
           campfire: s.campfire,
           lamplighter: s.lamplighter,
           party: s.party,
@@ -971,6 +975,20 @@ export default defineModule<WorldSettings>({
       }),
     );
 
+    /** A fish caught in the town's river: a small reward in the town's money, and the feed hears of it */
+    const caughtFish = (guestId: string) => {
+      const guest = ctx.session.guests.get(guestId);
+      const amount = Math.max(0, Math.round(ctx.settings.get().fishReward));
+      if (!guest || !amount) return;
+      wallets[guestId] = (wallets[guestId] ?? 0) + amount;
+      sendWallet(guestId);
+      store.save();
+      ctx.publish();
+      const name = ctx.settings.get().currencyName;
+      ctx.activity(`{name} caught a fish in the river (+${amount} ${name})`, { guest });
+      ctx.toast(guest, { text: `You caught a fish: ${amount} ${name}`, kind: 'success' });
+    };
+
     // Time in the town pays a small wage: the shop needs money moving without any bookkeeping
     setInterval(() => {
       if (!ctx.enabled()) return;
@@ -1196,6 +1214,7 @@ export default defineModule<WorldSettings>({
         fountainSit: typeof args.fountainSit === 'boolean' ? args.fountainSit : s.fountainSit,
         noticeBoard: typeof args.noticeBoard === 'boolean' ? args.noticeBoard : s.noticeBoard,
         fishing: typeof args.fishing === 'boolean' ? args.fishing : s.fishing,
+        fishReward: price(args.fishReward, s.fishReward),
         campfire: typeof args.campfire === 'boolean' ? args.campfire : s.campfire,
         lamplighter: typeof args.lamplighter === 'boolean' ? args.lamplighter : s.lamplighter,
         party: typeof args.party === 'boolean' ? args.party : s.party,

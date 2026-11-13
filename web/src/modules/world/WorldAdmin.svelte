@@ -81,7 +81,7 @@
     { key: 'cafe', name: 'Cafe terrace', about: 'Two tables outside the cafe, a chair on each side: characters sit down for a coffee in the day. It closes at night.' },
     { key: 'fountainSit', name: 'Fountain rim', about: 'Now and then someone sits on the rim of the fountain, less often than on a bench.' },
     { key: 'noticeBoard', name: 'Notice board', about: 'The board by the town hall: characters stop in front of it and read for a moment.' },
-    { key: 'fishing', name: 'Fishing', about: 'Anglers stand on the river bank with a rod. Sometimes a fish bites, and they pull it out and hold it up.' },
+    { key: 'fishing', name: 'Fishing', about: 'Anglers stand by the river and cast a rod. Sometimes a fish bites, they pull it out and hold it up, and earn a reward.' },
     {
       key: 'campfire',
       name: 'Campfire',
@@ -292,6 +292,12 @@
         </div>
         <Toggle checked={!!mod[p.key]} label={p.name} onchange={(v) => setOption(p.key, v)} />
       </div>
+      {#if p.key === 'fishing'}
+        <label class="field">
+          <span>A caught fish brings ({mod.shop?.currencyName})</span>
+          <input class="input" type="number" min="0" value={mod.fishReward} onchange={(e) => setAmount('fishReward', e.currentTarget.value)} />
+        </label>
+      {/if}
     {/each}
   </Section>
 
