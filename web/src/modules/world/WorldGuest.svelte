@@ -217,8 +217,17 @@
       <div class="group">
         <span class="label">Body</span>
         <div class="row">
+          <!-- Picking Female takes the facial hair off (it can be put back below) -->
           {#each ['male', 'female'] as const as b}
-            <button type="button" class="pick wide" class:on={choices.body === b} onclick={() => (choices.body = b)}>{b === 'male' ? 'Male' : 'Female'}</button>
+            <button
+              type="button"
+              class="pick wide"
+              class:on={choices.body === b}
+              onclick={() => {
+                if (b === 'female' && choices.body !== 'female') choices.beard = 'none';
+                choices.body = b;
+              }}>{b === 'male' ? 'Male' : 'Female'}</button
+            >
           {/each}
         </div>
       </div>
