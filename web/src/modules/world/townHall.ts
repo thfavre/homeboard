@@ -1,28 +1,28 @@
 import { SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-import type { HouseSwap } from '../games/crowd/scene.ts';
 
 /**
- * The town hall: a stone building with a clock tower, standing in the row of houses along the top
- * of the square, left of the clothes shop, in place of two of its houses. Arched windows in both
- * wings, two columns on each side of the door under the clock, steps up to it. The clock's hands
- * show the town's own time (see townMinutes), and at night its face and the windows light up.
+ * The town hall: a stone building with a clock tower in the top left corner of the square, standing
+ * in front of the first house of the row and a little further down than the houses. Seen from above
+ * and in front like the houses: a hipped slate roof with two chimneys and two dormers, the clock tower
+ * rising through it to a pointed roof, and below the eaves the front: two arched windows in each wing,
+ * two columns on each side of the door under the clock, steps down to the square. It casts its shadow
+ * on the ground. The clock's hands show the town's own time (see townMinutes), and at night its face
+ * and the windows light up.
  *
- * The building is drawn by hand once, one sprite pixel at a time, in sprite pixels from its top
- * left corner (y down to its bottom on the row's line); the TV draws it SPRITE_SCALE world units a
- * pixel, like the houses. The hands are drawn every frame, over it.
+ * The building is drawn by hand once, one sprite pixel at a time, in sprite pixels from its top left
+ * corner; the TV draws it SPRITE_SCALE world units a pixel over the square's ground, like the houses.
+ * The hands are drawn every frame, over it.
  */
 
 const S = SPRITE_SCALE;
-/** The two houses it stands in place of: the first left of the middle of the square, and the one after it */
-const ROW = houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / S));
-const FIRST = ROW.findIndex((h) => (h.x + h.w) * S > 300);
-const LEFT = ROW[FIRST];
-const RIGHT = ROW[FIRST + 1];
-/** Its size: from the first house's left edge to the second's right edge, as tall as the tallest house art (the top is off the screen) */
-const W = RIGHT.x + RIGHT.w - LEFT.x;
-const H = 160;
+/** The house of the row it stands in front of: the first one, in the corner */
+const HOUSE = houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / S))[0];
+/** Where it stands and its size: from the top of the screen down past the sidewalk (the houses end at SQUARE_HOUSES.bottom) */
+const X0 = Math.max(0, HOUSE.x) + 4;
+const W = 200;
+const H = 134;
 /** The middle, where the tower stands */
-const MID = Math.round(W / 2);
+const MID = W / 2;
 
 /** Stone lit from the top left, a slate roof, the tower's lighter stone, the clock's gold and face */
 const STONE = { line: '#3b3346', dark: '#857a88', mid: '#b3a594', light: '#d2c5ad', shine: '#e9dfc8' };
@@ -33,15 +33,23 @@ const GLASS = { dark: '#1f2a40', mid: '#2e3f5c', light: '#5d7a9a' };
 const WOOD = { line: '#2a1610', dark: '#4a2a1c', mid: '#6b3d22', light: '#85502c' };
 const FACE = '#f4ecd6';
 
-/** The wings' windows: left edge and size (sprite pixels of the building), arched at the top */
-const WIN = { y: 94, w: 18, h: 38 };
-const WIN_XS = [14, 47, 80].flatMap((x) => [x, W - x - WIN.w]);
+/** The roof seen from above: its back eave, its ridge (shorter than the eaves: a hipped roof) and its front eave, where the front wall begins */
+const ROOF = { back: 12, ridge: 30, inset: 34, eave: 64 };
+const WALL_TOP = ROOF.eave + 5;
+const PLINTH = 118;
+/** The tower: its walls up from the front wall through the roof, the cornice its pointed roof stands on */
+const TOWER_X0 = MID - 26;
+const TOWER_X1 = MID + 26;
+const TOWER_TOP = 22;
+/** The wings' windows: left edge and size, arched at the top */
+const WIN = { y: 78, w: 16, h: 32 };
+const WIN_XS = [12, 42].flatMap((x) => [x, W - x - WIN.w]);
+/** The dormers on the roof's front slope: their left edges */
+const DORMER_XS = [26, W - 26 - 16];
 /** The clock: its middle and the radius of its face */
-const CLOCK = { x: MID, y: 93, r: 16 };
-/** The tower, the door under the clock */
-const TOWER_X0 = MID - 37;
-const TOWER_X1 = MID + 37;
-const DOOR = { x: MID - 14, y: 122, w: 28, bottom: 150 };
+const CLOCK = { x: MID, y: 42, r: 13 };
+/** The door under the clock, between the columns */
+const DOOR = { x: MID - 10, y: 86, w: 20, bottom: 122 };
 
 function px(g: CanvasRenderingContext2D, color: string, x: number, y: number, w = 1, h = 1): void {
   g.fillStyle = color;
@@ -67,7 +75,7 @@ function wall(g: CanvasRenderingContext2D, p: typeof STONE, x0: number, y0: numb
   }
 }
 
-/** A band lit from the top (a cornice, a step, a sill): outline, shine, body, shade */
+/** A band lit from the top (a cornice, a step, a sill): shine, body, shade, outline */
 function band(g: CanvasRenderingContext2D, p: typeof STONE, x: number, y: number, w: number, h: number): void {
   px(g, p.mid, x, y, w, h);
   px(g, p.shine, x, y, w, 1);
@@ -77,34 +85,30 @@ function band(g: CanvasRenderingContext2D, p: typeof STONE, x: number, y: number
 
 /** A column with its base and capital, lit from the left */
 function column(g: CanvasRenderingContext2D, x: number, top: number, bottom: number): void {
-  band(g, TOWER, x - 1, top, 8, 3);
-  px(g, TOWER.mid, x, top + 3, 6, bottom - top - 6);
-  px(g, TOWER.line, x, top + 3, 1, bottom - top - 6);
-  px(g, TOWER.shine, x + 1, top + 3, 1, bottom - top - 6);
-  px(g, TOWER.light, x + 2, top + 3, 1, bottom - top - 6);
-  px(g, TOWER.dark, x + 4, top + 3, 1, bottom - top - 6);
-  px(g, TOWER.line, x + 5, top + 3, 1, bottom - top - 6);
-  band(g, TOWER, x - 1, bottom - 3, 8, 3);
+  band(g, TOWER, x - 1, top, 7, 3);
+  const h = bottom - top - 6;
+  px(g, TOWER.mid, x, top + 3, 5, h);
+  px(g, TOWER.line, x, top + 3, 1, h);
+  px(g, TOWER.shine, x + 1, top + 3, 1, h);
+  px(g, TOWER.dark, x + 3, top + 3, 1, h);
+  px(g, TOWER.line, x + 4, top + 3, 1, h);
+  band(g, TOWER, x - 1, bottom - 3, 7, 3);
 }
 
-/** An arched window: a stone surround with a keystone, dark glass with a cross of glazing bars and a gleam, a sill */
+/** An arched window: a stone surround with a keystone, dark glass with glazing bars and a gleam, a sill */
 function archWindow(g: CanvasRenderingContext2D, x: number): void {
   const { y, w, h } = WIN;
   const r = w / 2;
-  // The surround, a little wider than the opening
   disc(g, STONE.light, x + r - 0.5, y + r, r + 1.5);
   px(g, STONE.light, x - 2, y + r, w + 4, h - r);
   px(g, STONE.line, x - 2, y + r, 1, h - r);
-  // The glass
   disc(g, GLASS.mid, x + r - 0.5, y + r, r - 0.5);
   px(g, GLASS.mid, x, y + r, w, h - r);
   px(g, GLASS.dark, x, y + r, 2, h - r);
-  px(g, GLASS.light, x + 3, y + r + 2, 1, 10);
-  px(g, GLASS.light, x + 4, y + r + 1, 1, 4);
-  // Glazing bars
+  px(g, GLASS.light, x + 3, y + r + 2, 1, 8);
+  px(g, GLASS.light, x + 4, y + r + 1, 1, 3);
   px(g, STONE.dark, x + r - 1, y + 1, 1, h - 1);
-  px(g, STONE.dark, x, y + r + 8, w, 1);
-  // The keystone and the sill
+  px(g, STONE.dark, x, y + r + 7, w, 1);
   px(g, STONE.shine, x + r - 3, y - 3, 5, 5);
   px(g, STONE.dark, x + r - 3, y + 1, 5, 1);
   band(g, STONE, x - 3, y + h, w + 6, 3);
@@ -121,8 +125,82 @@ function clockFace(g: CanvasRenderingContext2D): void {
   disc(g, FACE, x, y, r - 2);
   for (let k = 0; k < 12; k++) {
     const a = (k / 12) * Math.PI * 2;
-    const long = k % 3 === 0 ? 4 : 2;
+    const long = k % 3 === 0 ? 3 : 1;
     for (let d = r - 3 - long + 1; d <= r - 3; d++) px(g, '#3a2c34', Math.round(x + Math.sin(a) * d), Math.round(y - Math.cos(a) * d));
+  }
+}
+
+/** The tower's pointed roof: slate rows narrowing up to a gold finial, lit on its left side */
+function spire(g: CanvasRenderingContext2D): void {
+  const full = TOWER_X1 - TOWER_X0 + 6;
+  for (let y = 4; y < TOWER_TOP - 3; y++) {
+    const t = (y - 4) / (TOWER_TOP - 7);
+    const w = Math.round(3 + (full / 2 - 3) * t) * 2;
+    const x = Math.round(MID - w / 2);
+    px(g, (y - 4) % 3 === 2 ? SLATE.dark : SLATE.mid, x, y, w, 1);
+    px(g, SLATE.light, x, y, Math.max(1, Math.round(w * 0.35)), 1);
+    px(g, SLATE.line, x, y, 1, 1);
+    px(g, SLATE.line, x + w - 1, y, 1, 1);
+  }
+  px(g, GOLD.o, MID - 1, 0, 2, 5);
+  px(g, GOLD.l, MID - 1, 0, 1, 4);
+  px(g, GOLD.m, MID - 2, 1, 4, 1);
+}
+
+/**
+ * The hipped roof seen from above: the back slope (foreshortened, catching the light) from the back
+ * eave up to the ridge, the front slope from the ridge down to the front eave, and a triangle at
+ * each end (the left one lit, the right one in shade). Rows of slates across, a light ridge cap.
+ */
+function roof(g: CanvasRenderingContext2D): void {
+  const { back, ridge, inset, eave } = ROOF;
+  for (let y = back; y < eave; y++) {
+    // How far in from each side the end slopes reach at this height
+    const side = y < ridge ? Math.round((inset * (y - back)) / (ridge - back)) : Math.round((inset * (eave - y)) / (eave - ridge));
+    const front = y >= ridge;
+    const row = front ? (eave - y) % 5 === 0 : (y - back) % 4 === 0;
+    px(g, front ? (row ? SLATE.dark : SLATE.mid) : row ? SLATE.mid : SLATE.light, side, y, W - 2 * side, 1);
+    px(g, row ? SLATE.mid : SLATE.light, 0, y, side, 1);
+    px(g, row ? SLATE.line : SLATE.dark, W - side, y, side, 1);
+    // The hip lines from the ridge's ends down to the corners
+    px(g, SLATE.line, side, y, 1, 1);
+    px(g, SLATE.line, W - side - 1, y, 1, 1);
+  }
+  px(g, SLATE.line, 0, back - 1, W, 1);
+  px(g, '#8a90aa', inset, ridge - 1, W - 2 * inset, 2);
+  px(g, SLATE.line, inset, ridge + 1, W - 2 * inset, 1);
+  // The gutter along the front eave
+  px(g, SLATE.line, 0, eave, W, 1);
+  px(g, SLATE.dark, 0, eave + 1, W, 1);
+}
+
+/** A chimney on the roof: stone, a cap, its shadow on the slates */
+function chimney(g: CanvasRenderingContext2D, x: number, top: number): void {
+  px(g, 'rgba(10,10,20,0.35)', x + 6, top + 4, 4, 12);
+  px(g, STONE.mid, x, top + 2, 7, 12);
+  px(g, STONE.shine, x + 1, top + 2, 1, 12);
+  px(g, STONE.dark, x + 5, top + 2, 1, 12);
+  px(g, STONE.line, x - 1, top + 13, 9, 1);
+  band(g, STONE, x - 1, top, 9, 3);
+  px(g, '#2a2430', x + 2, top, 3, 1);
+}
+
+/** A dormer on the front slope: a little gable roof over a small window */
+function dormer(g: CanvasRenderingContext2D, x: number): void {
+  const y = ROOF.ridge + 12;
+  px(g, 'rgba(10,10,20,0.3)', x + 16, y + 2, 3, 15);
+  px(g, STONE.mid, x, y + 6, 16, 12);
+  px(g, STONE.line, x, y + 6, 1, 12);
+  px(g, STONE.line, x + 15, y + 6, 1, 12);
+  px(g, STONE.line, x, y + 17, 16, 1);
+  px(g, STONE.light, x + 3, y + 8, 10, 8);
+  px(g, GLASS.mid, x + 4, y + 9, 8, 7);
+  px(g, GLASS.light, x + 5, y + 10, 1, 3);
+  px(g, STONE.dark, x + 7, y + 9, 1, 7);
+  for (let k = 0; k < 8; k++) {
+    px(g, k % 3 === 2 ? SLATE.dark : SLATE.mid, x + 8 - k - 1, y + k, (k + 1) * 2, 1);
+    px(g, SLATE.line, x + 8 - k - 1, y + k, 1, 1);
+    px(g, SLATE.line, x + 8 + k, y + k, 1, 1);
   }
 }
 
@@ -131,75 +209,82 @@ function build(): HTMLCanvasElement {
   c.width = W;
   c.height = H;
   const g = c.getContext('2d')!;
-  // The wings: a slate roof (mostly off the screen), a cornice with dentils, the stone wall and a darker plinth
-  px(g, SLATE.mid, 0, 40, W, 32);
-  for (let y = 44; y < 72; y += 5) px(g, SLATE.dark, 0, y, W, 1);
-  px(g, SLATE.light, 0, 70, W, 1);
-  band(g, STONE, 0, 72, W, 6);
-  for (let x = 1; x < W; x += 4) px(g, STONE.dark, x, 76, 2, 1);
-  wall(g, STONE, 0, 78, W, 142);
-  band(g, STONE, 0, 142, W, 8);
-  px(g, STONE.dark, 0, 150, W, 10);
-  px(g, STONE.line, 0, 150, W, 1);
+  roof(g);
+  chimney(g, 30, ROOF.back + 2);
+  chimney(g, W - 37, ROOF.back + 2);
+  for (const x of DORMER_XS) dormer(g, x);
+  // The front: a cornice with dentils under the eaves, the stone wall, a plinth and the base
+  band(g, STONE, 0, WALL_TOP - 4, W, 4);
+  for (let x = 1; x < W; x += 4) px(g, STONE.dark, x, WALL_TOP - 2, 2, 1);
+  wall(g, STONE, 0, WALL_TOP, W, PLINTH);
+  px(g, STONE.line, 0, WALL_TOP - 4, 1, H - WALL_TOP + 4);
+  px(g, STONE.line, W - 1, WALL_TOP - 4, 1, H - WALL_TOP + 4);
+  band(g, STONE, 0, PLINTH, W, 5);
+  px(g, STONE.dark, 0, PLINTH + 5, W, 5);
+  px(g, STONE.line, 0, PLINTH + 10, W, 1);
   for (const x of WIN_XS) archWindow(g, x);
-  // The tower: lighter stone up off the screen, quoins on its corners, its shadow on the right wing
-  wall(g, TOWER, TOWER_X0, 0, TOWER_X1, 150);
-  for (let y = 0; y < 150; y += 8) {
-    const long = (y / 8) % 2 ? 6 : 9;
+  // The tower: lighter stone up through the roof, quoins on its corners, its shadow on the roof and
+  // the right wing, its pointed roof on a cornice
+  px(g, 'rgba(10,10,20,0.3)', TOWER_X1 + 1, TOWER_TOP + 4, 6, ROOF.eave - TOWER_TOP - 4);
+  px(g, 'rgba(20,10,20,0.22)', TOWER_X1 + 1, WALL_TOP, 3, PLINTH - WALL_TOP);
+  wall(g, TOWER, TOWER_X0, TOWER_TOP, TOWER_X1, PLINTH);
+  for (let y = TOWER_TOP; y < PLINTH; y += 8) {
+    const long = ((y - TOWER_TOP) / 8) % 2 ? 5 : 8;
     px(g, TOWER.shine, TOWER_X0, y, long, 7);
     px(g, TOWER.light, TOWER_X1 - long, y, long, 7);
     px(g, TOWER.dark, TOWER_X0, y + 7, long, 1);
     px(g, TOWER.dark, TOWER_X1 - long, y + 7, long, 1);
   }
-  px(g, TOWER.line, TOWER_X0 - 1, 0, 1, 150);
-  px(g, TOWER.line, TOWER_X1, 0, 1, 150);
-  px(g, 'rgba(20,10,20,0.28)', TOWER_X1 + 1, 72, 4, 78);
-  band(g, TOWER, TOWER_X0 - 3, 68, TOWER_X1 - TOWER_X0 + 6, 5);
+  px(g, TOWER.line, TOWER_X0 - 1, TOWER_TOP, 1, PLINTH - TOWER_TOP);
+  px(g, TOWER.line, TOWER_X1, TOWER_TOP, 1, PLINTH - TOWER_TOP);
+  // Where the tower comes out of the roof: a band of lead flashing
+  px(g, SLATE.line, TOWER_X0 - 2, ROOF.eave - 1, TOWER_X1 - TOWER_X0 + 4, 1);
+  spire(g);
+  band(g, TOWER, TOWER_X0 - 3, TOWER_TOP - 3, TOWER_X1 - TOWER_X0 + 6, 5);
   clockFace(g);
-  // The portico: a lintel on two pairs of columns, the arched door between them, steps up to it
-  band(g, TOWER, DOOR.x - 20, 114, DOOR.w + 40, 5);
-  px(g, GOLD.m, MID - 6, 115, 12, 2);
-  px(g, GOLD.l, MID - 6, 115, 12, 1);
-  for (const x of [DOOR.x - 18, DOOR.x - 10, DOOR.x + DOOR.w + 4, DOOR.x + DOOR.w + 12]) column(g, x, 119, 150);
+  // The portico: a lintel on two pairs of columns, the arched door between them
+  const lintel = DOOR.y - 8;
+  band(g, TOWER, DOOR.x - 14, lintel, DOOR.w + 28, 5);
+  px(g, GOLD.m, MID - 5, lintel + 1, 10, 2);
+  px(g, GOLD.l, MID - 5, lintel + 1, 10, 1);
+  for (const x of [DOOR.x - 13, DOOR.x - 7, DOOR.x + DOOR.w + 2, DOOR.x + DOOR.w + 8]) column(g, x, lintel + 5, DOOR.bottom);
   const r = DOOR.w / 2;
   disc(g, TOWER.line, DOOR.x + r - 0.5, DOOR.y + r, r + 1);
   px(g, TOWER.line, DOOR.x - 1, DOOR.y + r, DOOR.w + 2, DOOR.bottom - DOOR.y - r);
   disc(g, WOOD.mid, DOOR.x + r - 0.5, DOOR.y + r, r - 1);
   px(g, WOOD.mid, DOOR.x, DOOR.y + r, DOOR.w, DOOR.bottom - DOOR.y - r);
   px(g, WOOD.line, MID - 1, DOOR.y + 1, 1, DOOR.bottom - DOOR.y - 1);
-  for (const x of [DOOR.x + 3, MID + 2]) {
-    px(g, WOOD.dark, x, DOOR.y + r + 1, 9, 9);
-    px(g, WOOD.light, x + 1, DOOR.y + r + 2, 8, 8);
-    px(g, WOOD.dark, x, DOOR.y + r + 13, 9, 9);
-    px(g, WOOD.light, x + 1, DOOR.y + r + 14, 8, 8);
+  for (const x of [DOOR.x + 2, MID + 2]) {
+    px(g, WOOD.dark, x, DOOR.y + r + 1, 6, 9);
+    px(g, WOOD.light, x + 1, DOOR.y + r + 2, 5, 8);
+    px(g, WOOD.dark, x, DOOR.y + r + 13, 6, 9);
+    px(g, WOOD.light, x + 1, DOOR.y + r + 14, 5, 8);
   }
-  px(g, GOLD.l, MID - 4, DOOR.y + r + 11, 2, 2);
-  px(g, GOLD.l, MID + 2, DOOR.y + r + 11, 2, 2);
-  band(g, STONE, DOOR.x - 24, 150, DOOR.w + 48, 4);
-  band(g, STONE, DOOR.x - 28, 154, DOOR.w + 56, 3);
-  band(g, STONE, DOOR.x - 32, 157, DOOR.w + 64, 3);
+  px(g, GOLD.l, MID - 3, DOOR.y + r + 11, 1, 2);
+  px(g, GOLD.l, MID + 1, DOOR.y + r + 11, 1, 2);
+  // Steps down to the square, each wider than the one above
+  band(g, STONE, DOOR.x - 18, DOOR.bottom, DOOR.w + 36, 4);
+  band(g, STONE, DOOR.x - 22, DOOR.bottom + 4, DOOR.w + 44, 4);
+  band(g, STONE, DOOR.x - 26, DOOR.bottom + 8, DOOR.w + 52, 4);
   return c;
 }
 
 let built: HTMLCanvasElement | null = null;
-const empty = (() => {
-  let e: HTMLCanvasElement | null = null;
-  return () => (e ??= Object.assign(document.createElement('canvas'), { width: 1, height: 1 }));
-})();
 
-/** The row of houses with the town hall in place of its two houses (and whatever else `inner` builds) */
-export function townHallSwap(inner?: HouseSwap): HouseSwap {
-  return (kind, x) => {
-    if (x === LEFT.x) return (built ??= build());
-    if (x === RIGHT.x) return empty();
-    return inner?.(kind, x) ?? null;
-  };
+/** Draw the building over the square's ground and its row of houses (world units), with its shadow on the ground to the right */
+export function drawTownHall(g: CanvasRenderingContext2D): void {
+  g.fillStyle = 'rgba(10,10,25,0.28)';
+  g.fillRect((X0 + W) * S, (ROOF.back + 4) * S, 6 * S, (PLINTH + 10 - ROOF.back - 4) * S);
+  g.drawImage((built ??= build()), X0 * S, 0, W * S, H * S);
 }
 
-/** World position of a sprite pixel of the building */
-const world = (x: number, y: number) => ({ x: (LEFT.x + x) * S, y: (SQUARE_HOUSES.bottom - H + y) * S });
+/** The building's left and right edges (world units): the sidewalk's plants and benches stay clear of it */
+export const TOWN_HALL_SPAN = { x0: X0 * S, x1: (X0 + W) * S };
 
-/** At night: the windows and the door's fanlight glow warm, and the clock's face is lit from behind */
+/** World position of a sprite pixel of the building */
+const world = (x: number, y: number) => ({ x: (X0 + x) * S, y: y * S });
+
+/** At night: the windows glow warm, and the clock's face is lit from behind */
 export function drawTownHallLight(g: CanvasRenderingContext2D, dark: number): void {
   if (dark <= 0.02) return;
   for (const x of WIN_XS) {
@@ -247,11 +332,11 @@ export function drawTownHallClock(g: CanvasRenderingContext2D, minute: number): 
   g.save();
   g.strokeStyle = '#2a1f2c';
   g.lineCap = 'round';
-  hand((minute % 720) / 720, r * 0.55, 2.6);
-  hand((minute % 60) / 60, r * 0.85, 1.7);
+  hand((minute % 720) / 720, r * 0.55, 2.4);
+  hand((minute % 60) / 60, r * 0.85, 1.6);
   g.fillStyle = GOLD.m;
   g.beginPath();
-  g.arc(c.x, c.y, 1.8, 0, Math.PI * 2);
+  g.arc(c.x, c.y, 1.6, 0, Math.PI * 2);
   g.fill();
   g.restore();
 }

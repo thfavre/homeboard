@@ -336,8 +336,8 @@ export function streetProps(env: Env): Prop[] {
   return out;
 }
 
-/** Everything that stands up on the spy square */
-export function squareProps(env: Env): Prop[] {
+/** Everything that stands up on the spy square (`keep`: which of the sidewalk's benches and plants to keep, by their x) */
+export function squareProps(env: Env, keep: (x: number) => boolean = () => true): Prop[] {
   const out: Prop[] = [fountain(env, SPY_SCENE.fountain.x, SPY_SCENE.fountain.y)];
   SPY_SCENE.trees.forEach((t, k) => out.push(tree(env, t.x, t.y, k % 2 === 1, k * 1.7)));
   for (const l of SPY_SCENE.lamps) out.push(lamp(env, l.x, l.y));
@@ -350,6 +350,7 @@ export function squareProps(env: Env): Prop[] {
     [1200, 'bench'],
     [1450, 'topiary'],
   ] as const) {
+    if (!keep(x)) continue;
     if (kind === 'bench') out.push(still(env.magecity, CUT.bench, x, 168));
     else out.push(still(env.planters, kind === 'fern' ? CUT.fern : CUT.topiary, x, 168));
   }
