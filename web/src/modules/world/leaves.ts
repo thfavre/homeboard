@@ -6,10 +6,10 @@ import type { Env } from '../games/crowd/scene.ts';
  * Now and then a leaf comes off one of the town's trees: it drifts down from the crown, swaying and
  * turning over, lands near the trunk, lies there a moment and fades. Kept rare on purpose, a leaf
  * every few seconds over the whole square. The art is the LPC leaf recolors (web/public/crowd/env,
- * see its CREDITS.txt): five rows of colours, eleven single leaves in each.
+ * see its CREDITS.txt): only its green row, like the trees, eleven single leaves in it.
  */
 
-/** The single leaves of a row (x, y, width, height in its pixels, within the row's 32 pixel band) */
+/** The single leaves of the green row, the sheet's first (x, y, width, height in its pixels) */
 const CUTS: [number, number, number, number][] = [
   [64, 1, 11, 9],
   [3, 5, 11, 7],
@@ -23,8 +23,6 @@ const CUTS: [number, number, number, number][] = [
   [17, 19, 10, 10],
   [38, 19, 9, 11],
 ];
-/** The rows: dark green, orange, red, brown (pink is left out). Most leaves come down green. */
-const ROWS = [0, 0, 0, 0, 0, 3, 3, 1, 2];
 /** At the sprites' own scale, pixel for pixel like the rest of the town */
 const SIZE = SPRITE_SCALE;
 const MAX = 8;
@@ -35,7 +33,6 @@ interface Leaf {
   /** Where it lands */
   floor: number;
   cut: number;
-  row: number;
   /** Its own phase for the sway and the turning over */
   phase: number;
   fall: number;
@@ -84,7 +81,6 @@ export class FallingLeaves {
       y: top + 30 * k + Math.sin(a) * 18 * k,
       floor: t.y + (Math.random() - 0.3) * 40,
       cut: Math.floor(Math.random() * CUTS.length),
-      row: ROWS[Math.floor(Math.random() * ROWS.length)],
       phase: Math.random() * Math.PI * 2,
       fall: 16 + Math.random() * 10,
       down: null,
@@ -115,7 +111,7 @@ export class FallingLeaves {
     g.globalAlpha = alpha;
     g.translate(Math.round(l.x), Math.round(l.y));
     g.scale(sx, 1);
-    g.drawImage(env.leaves, cx, cy + l.row * 32, cw, ch, -w / 2, -h, w, h);
+    g.drawImage(env.leaves, cx, cy, cw, ch, -w / 2, -h, w, h);
     g.restore();
   }
 }

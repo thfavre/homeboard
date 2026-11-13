@@ -131,7 +131,7 @@ LPC castle: the throne room's towers and the outside of its walls
   Files: leaves.png (lpc leaf recolors.png)
   License: CC-BY-SA 3.0, GPL 3.0
   Authors: William.Thompsonj, after the leaves of Johann Charlot's LPC entry (Shoot'em up graphic kit)
-  Notes: the town's trees drop a leaf now and then on the TV
+  Notes: the town's trees drop a leaf now and then on the TV (the green row only)
   https://opengameart.org/content/lpc-leaf-recolor
 
 License texts:
