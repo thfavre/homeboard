@@ -130,6 +130,20 @@ export const FIRE_SEATS: Seat[] = [
 
 /** The notice board at the foot of the town hall, left of its door and steps, and where its readers stand (facing it) */
 export const NOTICE_BOARD = { x: 148, y: 304 };
+
+/**
+ * The town's own benches, where each stands (the middle of its bottom): in front of the potted tree
+ * right of the barber, in place of the square's bench at `instead` (it would stand before the cafe's
+ * porch; the square's other one is behind the town hall), and on the square at the top left of the
+ * fountain
+ */
+export const TOWN_BENCHES = {
+  list: [
+    { x: 1450, y: 184 },
+    { x: 676, y: 468 },
+  ],
+  instead: 1200,
+};
 export const BOARD_SPOTS = [
   { x: 130, y: 334 },
   { x: 168, y: 334 },
@@ -225,7 +239,7 @@ function townHallFootprint(): { x: number; y: number; rx: number; ry: number }[]
 
 /**
  * Where nobody can stand: an ellipse on the ground around the fountain, the trees, the lamp posts,
- * the town hall's front, the notice board, the cafe's tables, the campfire and its logs
+ * the town hall's front, the notice board, the bench by the fountain, the cafe's tables, the campfire and its logs
  */
 export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number }[] = [
   SPY_OBSTACLES[0],
@@ -233,18 +247,17 @@ export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number }[] 
   ...TOWN_SCENE.lamps.map((l) => ({ x: l.x, y: l.y, rx: 12, ry: 7 })),
   ...townHallFootprint(),
   { x: NOTICE_BOARD.x, y: NOTICE_BOARD.y, rx: 30, ry: 7 },
+  // The bench by the fountain (the one on the sidewalk stands off the square)
+  { x: TOWN_BENCHES.list[1].x, y: TOWN_BENCHES.list[1].y - 9, rx: 40, ry: 7 },
   ...CAFE.tables.map((t) => ({ x: t.x, y: t.y, rx: 22, ry: 8 })),
   { x: CAMPFIRE.x, y: CAMPFIRE.y, rx: 25, ry: 12 },
   ...FIRE_LOGS.map((l) => (l.along === 'y' ? { x: l.x, y: l.y, rx: 6, ry: 25 } : { x: l.x, y: l.y, rx: 30, ry: 4 })),
 ];
 /**
- * The bench characters can sit on, where a sitter's feet land: the town's own, in front of the
- * potted tree on the right (the square's bench there would stand before the cafe's porch; the one
- * on the left is behind the town hall). See TOWN_BENCH.
+ * The benches characters can sit on, where a sitter's feet land: 2 below each bench's bottom (see
+ * Seat and TOWN_BENCHES)
  */
-export const BENCHES: { x: number; y: number }[] = [{ x: 1450, y: 186 }];
-/** The bench in front of the potted tree on the sidewalk, right of the barber: where it stands, in place of the square's bench at `instead` */
-export const TOWN_BENCH = { x: 1450, y: 184, instead: 1200 };
+export const BENCHES: { x: number; y: number }[] = TOWN_BENCHES.list.map((b) => ({ x: b.x, y: b.y + 2 }));
 
 // ------------------------------------------------------------ the shops
 
@@ -830,8 +843,21 @@ export interface Reign {
 /** Why a ceremony that is due has not started yet: the King is not in the town, a game is on the TV, or no TV is open */
 export type CeremonyHold = 'king' | 'game' | 'tv';
 
+/** How much faster the town's time can run (the TV's button goes round them) */
+export const TOWN_SPEEDS = [1, 2, 4] as const;
+
+/**
+ * The town's own time (ms) at a real time `now`: real time plus how far it ran ahead, `ahead` at
+ * the real time `at`, running `speed` times faster since (see WorldState.warp)
+ */
+export function townTime(now: number, warp: { speed: number; ahead: number; at: number } | undefined): number {
+  return warp ? now + warp.ahead + (warp.speed - 1) * (now - warp.at) : now;
+}
+
 export interface WorldState {
   characters: TownCharacter[];
+  /** The town's own time: how many times faster than real time it runs, and how far ahead it was at real time `at` (see townTime) */
+  warp?: { speed: number; ahead: number; at: number };
   sheet: SheetInfo | null;
   shop?: ShopInfo;
   king?: KingInfo;

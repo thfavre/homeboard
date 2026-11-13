@@ -605,7 +605,7 @@ export class TownSim {
   private partyNow: { night: string } | null = null;
   private lastMinutes = 0;
   private lastPartyHours = 5;
-  private last = Date.now();
+  private last = 0;
   /** The King the throne is kept for */
   private king: string | null = null;
   /** The ceremony, while one is on */
@@ -617,7 +617,11 @@ export class TownSim {
   /** Characters asleep for the night (not the ones whose guest is away) */
   private nightSleepers = 0;
 
-  constructor(private hooks: TownHooks) {}
+  /** `clock`: the town's time (ms), which can run faster than real time; real time by default */
+  constructor(
+    private hooks: TownHooks,
+    private clock: () => number = () => Date.now(),
+  ) {}
 
   private rules: Rules = {
     idle: { priority: PRIORITY.casual, left: (d, _w, now) => d.until - now, wrapUp: sooner },
@@ -692,13 +696,14 @@ export class TownSim {
   cheer(id: string): void {
     const w = this.walkers.get(id);
     if (!w || (!this.rule(w).wrapUp && w.doing.kind !== 'cheer') || inCafe(w)) return;
-    w.doing = { kind: 'cheer', until: Date.now() + 2600 };
+    w.doing = { kind: 'cheer', until: this.clock() + 2600 };
   }
 
   /** Advance the town and build the frame for the TV */
   tick(roster: RosterEntry[], o: TownOptions): TownFrame {
-    const now = Date.now();
-    const dt = Math.min(0.25, (now - this.last) / 1000);
+    const now = this.clock();
+    // (up to a second at once: with the town's time running fast the steps are longer)
+    const dt = this.last ? Math.min(1, (now - this.last) / 1000) : 0;
     this.last = now;
     this.king = o.king;
     this.stepCeremony(now, o);
@@ -1360,7 +1365,7 @@ export class TownSim {
   /** Start a ceremony: the camera moves over to the throne room and the King is called, the others after him. False: one is on already */
   startCeremony(): boolean {
     if (this.ceremony) return false;
-    const now = Date.now();
+    const now = this.clock();
     this.ceremony = { phase: 'gather', since: now, open: 0, spots: [] };
     this.moveCam(1, now, PAN_MS);
     return true;
@@ -1370,7 +1375,7 @@ export class TownSim {
   endCeremony(): void {
     const c = this.ceremony;
     if (!c || c.phase === 'leave') return;
-    const now = Date.now();
+    const now = this.clock();
     Object.assign(c, { phase: 'leave', since: now });
     this.moveCam(0, now, PAN_BACK_MS, LEAVE_PAUSE_MS);
   }

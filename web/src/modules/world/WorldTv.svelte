@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
+  import { FastForward } from '@lucide/svelte';
+  import { attempt, hb, onEvent, rpc, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-  import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, hallLift, townMinutes, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, TOWN_SPEEDS, hallLift, townMinutes, townTime, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { SQUARE_STREET, loadEnv, squareGround, type Env, type Prop } from '../games/crowd/scene.ts';
   import { DANCE_FEET, cafeArt, drawCafe, drawCafeLight, type CafeArt } from './cafe.ts';
@@ -27,6 +28,12 @@
    */
 
   const world = $derived(hb.modules.world as WorldState | undefined);
+  /** How many times faster than real time the town runs, and the button that goes round the speeds */
+  const speed = $derived(world?.warp?.speed ?? 1);
+  function faster() {
+    const i = TOWN_SPEEDS.indexOf(speed as (typeof TOWN_SPEEDS)[number]);
+    void attempt(() => rpc('world', 'setSpeed', { speed: TOWN_SPEEDS[(i + 1) % TOWN_SPEEDS.length] }));
+  }
 
   let canvas: HTMLCanvasElement;
   let wrap: HTMLDivElement;
@@ -260,12 +267,15 @@
     // The whole canvas: birds fly off above the town rectangle, into the letterbox bands
     g.clearRect(0, 0, cw, ch);
     g.imageSmoothingEnabled = false;
-    const now = serverNow();
-    const step = Math.min(0.1, Math.max(0, (now - lastDraw) / 1000));
+    const real = serverNow();
+    // The town's own time: it can run faster than real time (the button), and everything that moves
+    // on its own (walk cycles, water, fire, birds, lights) follows it
+    const now = townTime(real, world?.warp);
+    const step = Math.min(0.4, Math.max(0, (now - lastDraw) / 1000));
     lastDraw = now;
 
-    // The two frames around the drawn time; positions are mixed between them by id
-    const t = now - DELAY_MS;
+    // The two frames around the drawn time (they come by real time); positions are mixed between them by id
+    const t = real - DELAY_MS;
     let f0: TownFrame | null = null;
     let f1: TownFrame | null = null;
     for (const f of frames) {
@@ -378,9 +388,11 @@
         g.ellipse(p.x + s * 30, p.y + 2, 30, 7, 0, 0, Math.PI * 2);
       } else {
         // (sitting sideways the body is over the seat, behind the feet: its shadow goes there)
-        const sx = p.x + (p.anim === WANIM.perch ? (p.dir === 1 ? 5 : p.dir === 3 ? -5 : 0) * SPRITE_SCALE : 0);
-        g.moveTo(sx + 15, p.y - p.lift);
-        g.ellipse(sx, p.y - p.lift, 15, 5, 0, 0, Math.PI * 2);
+        const perch = p.anim === WANIM.perch;
+        const sx = p.x + (perch ? (p.dir === 1 ? 2 : p.dir === 3 ? -2 : 0) * SPRITE_SCALE : 0);
+        const sy = p.y - p.lift - (perch && (p.dir === 1 || p.dir === 3) ? 4 : 0);
+        g.moveTo(sx + 15, sy);
+        g.ellipse(sx, sy, 15, 5, 0, 0, Math.PI * 2);
       }
     }
     g.fill();
@@ -683,6 +695,9 @@
 
 <div class="town" bind:this={wrap}>
   <canvas bind:this={canvas}></canvas>
+  <button type="button" class="speed" class:on={speed > 1} aria-label="Town speed {speed} times" onclick={faster}>
+    <FastForward size={18} />{speed}×
+  </button>
 </div>
 
 <style>
@@ -700,5 +715,28 @@
     inset: 0;
     width: 100%;
     height: 100%;
+  }
+  /* The town's speed, top right: quiet at real speed, lit while sped up */
+  .speed {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
+    color: var(--text-dim);
+    font: 600 14px var(--font-body);
+    cursor: pointer;
+    opacity: 0.75;
+  }
+  .speed.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+    opacity: 1;
   }
 </style>

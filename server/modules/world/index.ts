@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { LOOK_PARTS, kingPriceAt, lookCost, partyAt, validChoices, type AvatarChoices, type CeremonyHold, townMinutes, realAt, type TownClock, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, TOWN_SPEEDS, kingPriceAt, lookCost, partyAt, validChoices, type AvatarChoices, type CeremonyHold, townMinutes, realAt, type TownClock, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, notForTheKing, starterPieces, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -164,6 +164,8 @@ interface WorldData {
   credits: Record<string, { authors: string[]; license: string; urls: string[]; notes?: string }>;
   /** The town's own money per guest */
   wallets?: Record<string, number>;
+  /** How far the town's time has run ahead of real time (ms), from the times it was sped up */
+  townAhead?: number;
   /** Bought pieces per guest, each an item in one color, kept forever (the starter pieces too) */
   owned?: Record<string, WornItem[]>;
   /** The starter pieces were handed to the avatars made before they existed */
@@ -292,7 +294,29 @@ export default defineModule<WorldSettings>({
     const composer = new Composer(new LpcFiles());
     for (const [file, cr] of Object.entries(store.data.credits)) composer.credits.set(file, cr);
     const sheetsDir = ctx.mediaDir('sheets');
-    const sim = new TownSim({ dress: (id, place) => dress(id, place), caught: (id) => caughtFish(id) });
+    /**
+     * The town's own time: real time, plus how far it ran ahead while sped up (the TV's button). The
+     * sim, the town's clock and everything on the TV run on it; it never goes back.
+     */
+    const warp = { speed: 1, ahead: store.data.townAhead ?? 0, at: Date.now() };
+    const townNow = () => {
+      const now = Date.now();
+      warp.ahead += (warp.speed - 1) * (now - warp.at);
+      warp.at = now;
+      return now + warp.ahead;
+    };
+    /** Run the town's time this many times faster (1: real time) */
+    const setSpeed = (v: unknown) => {
+      const speed = TOWN_SPEEDS.includes(Number(v) as (typeof TOWN_SPEEDS)[number]) ? Number(v) : 1;
+      townNow();
+      warp.speed = speed;
+      store.data.townAhead = warp.ahead;
+      store.save();
+      ctx.publish();
+      return { speed };
+    };
+
+    const sim = new TownSim({ dress: (id, place) => dress(id, place), caught: (id) => caughtFish(id) }, townNow);
 
     /** Builds by hash, so the same look is composited once even when asked twice at once */
     const building = new Map<string, Promise<SheetInfo>>();
@@ -536,9 +560,11 @@ export default defineModule<WorldSettings>({
     const partyNext = (now: number): number | null => {
       const s = ctx.settings.get();
       if (!s.party || !s.dayCycle) return null;
-      const m = townMinutes(now, townClock());
+      const t = townNow();
+      const m = townMinutes(t, townClock());
       const p = partyAt(m, s.dusk, s.partyEveryDays, s.partyHours);
-      return p.on ? null : realAt(m + p.startsIn, townClock());
+      // (in real time: the town's time runs `speed` times faster meanwhile)
+      return p.on ? null : now + (realAt(m + p.startsIn, townClock()) - t) / warp.speed;
     };
 
     // ------------------------------------------------------------ the ceremony
@@ -601,8 +627,10 @@ export default defineModule<WorldSettings>({
         })
         .filter((c): c is NonNullable<typeof c> => !!c);
       const s = ctx.settings.get();
+      townNow();
       const base: WorldState = {
         characters,
+        warp: { speed: warp.speed, ahead: warp.ahead, at: warp.at },
         sheet: store.data.sheet,
         shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices(), unlockPieces: s.unlockPieces, secretPieces: s.secretPieces },
         day: { on: s.dayCycle, ...townClock() },
@@ -1013,6 +1041,8 @@ export default defineModule<WorldSettings>({
       }
       store.save();
       ctx.publish();
+      // (the town's time, as far as it ran ahead: a restart does not take it back)
+      store.data.townAhead = warp.ahead;
     }, 60_000);
 
     // ------------------------------------------------------------ the town
@@ -1060,7 +1090,7 @@ export default defineModule<WorldSettings>({
         courtMs: s.ceremonySec * 1000,
         graceMs: s.ceremonyGraceSec * 1000,
         dayNight: { on: s.dayCycle, dusk: s.dusk, dawn: s.dawn, twilightMin: s.twilightMin },
-        localMinutes: townMinutes(now, townClock()),
+        localMinutes: townMinutes(townNow(), townClock()),
         nightSleep: s.nightSleep,
         bedtimeSpreadMin: s.bedtimeSpreadMin,
         nightOwls: s.nightOwlPct / 100,
@@ -1068,7 +1098,8 @@ export default defineModule<WorldSettings>({
         lamplighter: s.lamplighter,
         party: { on: s.party, everyDays: s.partyEveryDays, hours: s.partyHours, goers: s.partyGoersPct / 100 },
       });
-      ctx.emit('tv', 'frame', frame);
+      // The TV draws between frames by real time (the town's own runs in what they show)
+      ctx.emit('tv', 'frame', { ...frame, t: now });
       // The admin page shows how dark it is and who sleeps for the night: sent again when either changes
       const night = `${Math.round(sim.darkness * 20)}:${sim.sleepingForTheNight}:${sim.partyOn}`;
       if (sim.ceremonyPhase !== ceremonyPhase || night !== nightShown) {
@@ -1254,6 +1285,10 @@ export default defineModule<WorldSettings>({
       sim.endParty();
       ctx.publish();
     });
+
+    // The town's time faster or back to real time: the TV's button, and the admin page
+    ctx.onTv('setSpeed', (args) => setSpeed(args?.speed));
+    ctx.onAdmin('setSpeed', (args) => setSpeed(args?.speed));
 
     ctx.onAdmin('endCeremony', () => {
       sim.endCeremony();

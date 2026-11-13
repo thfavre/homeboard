@@ -6,7 +6,7 @@
   import Toggle from '$lib/ui/Toggle.svelte';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { SLOTS, TIERS, TIER_NAMES } from '$shared/wardrobe.ts';
-  import { LOOK_PARTS, LOOK_PART_NAMES, clockOf, kingPriceAt, townMinutes, type CeremonyHold, type WorldState } from '$shared/world.ts';
+  import { LOOK_PARTS, LOOK_PART_NAMES, TOWN_SPEEDS, clockOf, kingPriceAt, townMinutes, townTime, type CeremonyHold, type WorldState } from '$shared/world.ts';
   import Monarchy from './Monarchy.svelte';
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
@@ -73,7 +73,7 @@
     const dark = mod.darkNow ?? 0;
     const light = dark >= 0.95 ? 'Night' : dark <= 0.05 ? 'Day' : dark >= 0.5 ? 'Nightfall' : 'Daybreak';
     const sleepers = mod.nightSleepers ?? 0;
-    return `${light} in the town, ${mod.day ? clockOf(townMinutes(clockNow, mod.day)) : ''} on its clock. ${sleepers === 0 ? 'Nobody sleeps' : sleepers === 1 ? 'One character sleeps' : `${sleepers} characters sleep`} for the night.`;
+    return `${light} in the town, ${mod.day ? clockOf(townMinutes(townTime(clockNow, mod.warp), mod.day)) : ''} on its clock. ${sleepers === 0 ? 'Nobody sleeps' : sleepers === 1 ? 'One character sleeps' : `${sleepers} characters sleep`} for the night.`;
   });
 
   /** The town's places to go, each with its switch */
@@ -212,6 +212,17 @@
       <input class="input" type="number" min="1" max="5" step="0.1" value={mod.nightSpeed} onchange={(e) => setSeconds('nightSpeed', e.currentTarget.value)} />
     </label>
     <p class="faint small">At 1.5 the town's night hours pass one and a half times as fast as its day hours, so the day lasts longer on the TV. The whole day still takes the minutes above.</p>
+    <div class="line">
+      <div>
+        <strong>Town speed</strong>
+        <p class="faint small">Everything in the town runs this many times faster: the clock, the characters, the fire and the water. The TV has the same button in its top right corner.</p>
+      </div>
+      <div class="buttons">
+        {#each TOWN_SPEEDS as v (v)}
+          <button type="button" class="btn small" class:primary={(mod.warp?.speed ?? 1) === v} onclick={() => attempt(() => rpc('world', 'setSpeed', { speed: v }))}>{v}×</button>
+        {/each}
+      </div>
+    </div>
     <div class="pair">
       <label class="field">
         <span>Night falls at (on the town's clock)</span>
