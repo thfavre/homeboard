@@ -4,7 +4,7 @@
   import { enterFull, leaveFull, tvFull } from '../../tv/fullscreen.svelte.ts';
   import { attempt, hb, onEvent, rpc, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-  import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, TOWN_SPEEDS, hallLift, townMinutes, townTime, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, TREE_SHAKE, WANIM, TOWN_SPEEDS, hallLift, townMinutes, townTime, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { SQUARE_STREET, loadEnv, squareGround, type Env, type Prop } from '../games/crowd/scene.ts';
   import { DANCE_FEET, cafeArt, drawCafe, drawCafeDoor, drawCafeLight, type CafeArt } from './cafe.ts';
@@ -18,7 +18,7 @@
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
   import { MARGIN, townTop } from './townMargins.ts';
   import { TOWN_HALL_SPAN, drawTownHall, drawTownHallClock, drawTownHallLight } from './townHall.ts';
-  import { drawLaughing, drawTalking, nodDip } from './chat.ts';
+  import { drawAngerMark, drawLaughing, drawScolding, drawShaking, drawTalking, nodDip } from './chat.ts';
   import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
 
   /**
@@ -106,6 +106,10 @@
   let scratch: CanvasRenderingContext2D[] | null = null;
   const pigeons = untrack(() => new Pigeons(3, TOWN_AREA));
   const leaves = new FallingLeaves();
+  /** Since when someone shakes the tree by the bench (null: nobody), from the frames */
+  let shakeSince: number | null = null;
+  /** How far the shaken tree's crown is pushed aside now (sheet pixels): fast, back and forth */
+  const shakeSway = (now: number) => (shakeSince === null ? 0 : Math.round(Math.sin((now - shakeSince) / 45) * 2.4));
   let lastDraw = 0;
   /** When the King opened the court (his hands up before the throne): the throne glows from then on, until he comes down from the dais */
   let courtSince: number | null = null;
@@ -117,7 +121,11 @@
       shopArt = a;
       setShopArt(e, a);
       // (the falling leaves are drawn by the trees, under the crown, behind or in front of the trunk)
-      const layers = (k: number) => ({ behind: (g: CanvasRenderingContext2D, now: number) => leaves.drawTree(g, e!, k, false, now), front: (g: CanvasRenderingContext2D, now: number) => leaves.drawTree(g, e!, k, true, now) });
+      const layers = (k: number) => ({
+        behind: (g: CanvasRenderingContext2D, now: number) => leaves.drawTree(g, e!, k, false, now),
+        front: (g: CanvasRenderingContext2D, now: number) => leaves.drawTree(g, e!, k, true, now),
+        sway: (now: number) => (k === TREE_SHAKE.tree ? shakeSway(now) : 0),
+      });
       if (e) standingProps = townProps(e, (x) => x < TOWN_HALL_SPAN.x0 || x > TOWN_HALL_SPAN.x1, layers).sort((a, b) => a.y - b.y);
       if (e && a) cafe = cafeArt(e, a);
       brook = brookFrames();
@@ -445,8 +453,9 @@
     // Leaves now and then coming off the trees: the ones that landed lie under everyone
     const leafy = !!env && world?.leaves !== false;
     leaves.on = leafy;
+    shakeSince = f0?.shake ?? null;
     if (leafy) {
-      leaves.update(step, world?.leavesSec ?? [8, 20]);
+      leaves.update(step, world?.leavesSec ?? [8, 20], shakeSince === null ? null : TREE_SHAKE.tree);
       leaves.drawGround(g, env!);
     }
 
@@ -522,6 +531,11 @@
         drawKindling(g, now);
       } else if (p.anim === WANIM.dance && img && info && drawDancing(g, img, info, p.x, y, now, l.phase)) {
         // Dancing in the cafe
+      } else if (p.anim === WANIM.shake && img && info && drawShaking(g, img, info, p.x, y, p.dir, now - l.since)) {
+        // Shaking the tree by the bench, both hands on its trunk
+      } else if (p.anim === WANIM.scold && img && info && drawScolding(g, img, info, p.x, y, p.dir, now, l.phase)) {
+        // Telling off whoever shook the tree, an anger mark by the head (on the side away from them)
+        drawAngerMark(g, p.x + (p.dir === 3 ? -11 : 11) * SPRITE_SCALE, y - tallOf(img) + 11 * SPRITE_SCALE, now, p.alpha);
       } else {
         // (a listener in a chat nods now and then)
         const dip = p.anim === WANIM.listen ? nodDip(now, l.phase) : 0;
@@ -615,6 +629,7 @@
       else drawPerson(people[pi++]);
     }
     pigeons.drawAir(g, env);
+    if (leafy) leaves.drawAir(g, env!, now);
 
     // The evening lies over the square (the lamps keep their glow). The server keeps the time of
     // day the host set, and sends how dark it is with every frame.

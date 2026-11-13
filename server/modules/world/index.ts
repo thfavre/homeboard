@@ -106,6 +106,10 @@ interface WorldSettings {
   lamplighter: boolean;
   /** Leaves now and then falling from the trees on the TV */
   leaves: boolean;
+  /** Now and then someone shakes the tree over the bench next to it while somebody sits there: the chance each time a character picks something to do (percent), and the least time between two (town minutes) */
+  treeShake: boolean;
+  treeShakePct: number;
+  treeShakeGapMin: number;
   /** Each tree drops its next leaf after a random wait in this range */
   leavesMinSec: number;
   leavesMaxSec: number;
@@ -288,6 +292,9 @@ export default defineModule<WorldSettings>({
     leaves: true,
     leavesMinSec: 8,
     leavesMaxSec: 20,
+    treeShake: true,
+    treeShakePct: 4,
+    treeShakeGapMin: 20,
     party: true,
     partyEveryDays: 7,
     partyChancePct: 20,
@@ -717,6 +724,9 @@ export default defineModule<WorldSettings>({
           fishReward: s.fishReward,
           campfire: s.campfire,
           lamplighter: s.lamplighter,
+          treeShake: s.treeShake,
+          treeShakePct: s.treeShakePct,
+          treeShakeGapMin: s.treeShakeGapMin,
           party: s.party,
           partyEveryDays: s.partyEveryDays,
           partyChancePct: s.partyChancePct,
@@ -1135,6 +1145,7 @@ export default defineModule<WorldSettings>({
         nightOwls: s.nightOwlPct / 100,
         activities: { cafe: s.cafe, fountain: s.fountainSit, board: s.noticeBoard, fish: s.fishing, fire: s.campfire },
         lamplighter: s.lamplighter,
+        treeShake: { on: s.treeShake, chance: s.treeShakePct / 100, gapMs: s.treeShakeGapMin * 60_000 },
         party: { on: s.party, everyDays: s.partyEveryDays, chance: s.partyChancePct / 100, hours: s.partyHours, goers: s.partyGoersPct / 100 },
       });
       // The TV draws between frames by real time (the town's own runs in what they show)
@@ -1304,6 +1315,9 @@ export default defineModule<WorldSettings>({
         leaves: typeof args.leaves === 'boolean' ? args.leaves : s.leaves,
         leavesMinSec: Math.max(0.5, secs(args.leavesMinSec, s.leavesMinSec, 600)),
         leavesMaxSec: Math.max(0.5, secs(args.leavesMaxSec, s.leavesMaxSec, 600)),
+        treeShake: typeof args.treeShake === 'boolean' ? args.treeShake : s.treeShake,
+        treeShakePct: Math.max(0, Math.min(100, Math.round(num(args.treeShakePct, s.treeShakePct) * 10) / 10)),
+        treeShakeGapMin: Math.max(0, Math.min(1440, Math.round(num(args.treeShakeGapMin, s.treeShakeGapMin)))),
         party: typeof args.party === 'boolean' ? args.party : s.party,
         partyEveryDays: Math.max(1, Math.min(60, Math.round(num(args.partyEveryDays, s.partyEveryDays)))),
         partyChancePct: Math.max(0, Math.min(100, Math.round(num(args.partyChancePct, s.partyChancePct)))),

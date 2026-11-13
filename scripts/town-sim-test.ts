@@ -73,6 +73,8 @@ const opts: TownOptions = {
   nightOwls: 0.2,
   activities: { cafe: true, fountain: true, board: true, fish: true, fire: true },
   lamplighter: true,
+  // (often, to see it go wrong if it does)
+  treeShake: { on: true, chance: 0.1, gapMs: 60_000 },
   // A party every other night, so a two hour test sees one
   party: { on: true, everyDays: 2, chance: 0.2, hours: 7, goers: 0.7 },
 };
@@ -101,7 +103,7 @@ const stats = { chats: 0, ceremonies: 0, visits: 0, maxKindMs: {} as Record<stri
 const LIMIT: Record<string, number> = {
   idle: 15_000, wander: 60_000, goBench: 60_000, sit: 30_000, goPet: 45_000, pet: 10_000, goChat: 20_000, chat: 40_000,
   cheer: 4000, goSleep: 90_000, visit: 120_000, goThrone: 120_000, descend: 60_000, goHall: 120_000, goPray: 120_000,
-  goSeat: 60_000, seated: 60_000, goRead: 60_000, read: 10_000, goFish: 60_000, fish: 50_000, lamps: 150_000, party: 90_000, kindle: 60_000, parasol: 60_000, coffee: 60_000,
+  goSeat: 60_000, seated: 60_000, goRead: 60_000, read: 10_000, goFish: 60_000, fish: 50_000, lamps: 150_000, party: 90_000, kindle: 60_000, parasol: 60_000, coffee: 60_000, shake: 60_000,
 };
 
 /** How often each activity was started, the lamps lit at 23:00 and at 10:00 each day, the most dancing at the party at once */

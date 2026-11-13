@@ -336,6 +336,27 @@
       </label>
     </div>
     <p class="faint small">Every tree keeps its own timer: after each leaf it waits a random time in this range before the next one.</p>
+    <div class="line">
+      <div>
+        <strong>Shaking the tree</strong>
+        <p class="faint small">
+          While someone sits on the bench by the bottom left tree, another character may sneak up and shake the tree, showering them in leaves. The one on
+          the bench gets up and they meet below the tree: half the time they tell the shaker off, the other half both laugh about it.
+        </p>
+      </div>
+      <Toggle checked={!!mod.treeShake} label="Shaking the tree" onchange={(v) => setOption('treeShake', v)} />
+    </div>
+    <div class="pair">
+      <label class="field">
+        <span>Chance (percent)</span>
+        <input class="input" type="number" min="0" max="100" step="0.5" value={mod.treeShakePct} onchange={(e) => setSeconds('treeShakePct', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>At most once every (town minutes)</span>
+        <input class="input" type="number" min="0" max="1440" value={mod.treeShakeGapMin} onchange={(e) => setAmount('treeShakeGapMin', e.currentTarget.value)} />
+      </label>
+    </div>
+    <p class="faint small">The chance is tried each time a character picks something to do while that bench is taken.</p>
   </Section>
 
   <Section title="Party at the cafe">

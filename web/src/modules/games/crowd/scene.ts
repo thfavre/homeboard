@@ -244,10 +244,11 @@ export interface Prop {
   ground?(g: CanvasRenderingContext2D, now: number): void;
 }
 
-/** What a tree draws under its crown, behind its trunk and in front of it (the town's falling leaves) */
+/** What a tree draws under its crown, behind its trunk and in front of it (the town's falling leaves), and how far its crown is pushed aside besides the wind (sheet pixels: someone shaking it) */
 export interface TreeLayers {
   behind(g: CanvasRenderingContext2D, now: number): void;
   front(g: CanvasRenderingContext2D, now: number): void;
+  sway?(now: number): number;
 }
 
 /** A tree, `size` times the art's size (the town's trees are not all alike), `stem` the share of the trunk showing under the leaves */
@@ -271,7 +272,7 @@ export function tree(env: Env, x: number, y: number, spring: boolean, phase: num
       layers?.behind(g, now);
       put(g, env['tree-trunks'], CUT.trunk, x, y + 4, k);
       layers?.front(g, now);
-      const sway = Math.round(Math.sin(now / 1400 + phase) * 1.3) * k;
+      const sway = (Math.round(Math.sin(now / 1400 + phase) * 1.3) + (layers?.sway?.(now) ?? 0)) * k;
       put(g, env['tree-canopies'], spring ? CUT.canopySpring : CUT.canopySummer, x, y - crown, k, sway);
     },
   };
