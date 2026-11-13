@@ -320,9 +320,6 @@
       if (edge) g.drawImage(edge.canvas, edge.x * SPRITE_SCALE, 0, edge.canvas.width * SPRITE_SCALE, edge.canvas.height * SPRITE_SCALE);
       drawHallWall(g, now);
     }
-    // Shadows of the things standing up, on the ground under everyone
-    for (const p of standingProps) p.ground?.(g, now);
-    for (const p of inHall) p.ground?.(g, now);
 
     interface Person {
       id: string;
@@ -387,6 +384,10 @@
       }
     }
     g.fill();
+    // What lies on the ground (the logs by the fire, the chairs, the shadows of the trees and the
+    // fountain), over the characters' own shadows: whoever sits on a log casts its shadow under it
+    for (const p of standingProps) p.ground?.(g, now);
+    for (const p of inHall) p.ground?.(g, now);
 
     /** The sheets of a character: its own, the previous one while a new look loads (and while it changes in a shop) */
     const sheetOf = (id: string, inShop: boolean) => {
