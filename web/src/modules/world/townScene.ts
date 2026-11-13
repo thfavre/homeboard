@@ -558,7 +558,7 @@ export function townProps(env: Env, keep: (x: number) => boolean): Prop[] {
   const furled = buildParasol(false);
   for (const t of CAFE.tables) out.push(...cafeTable(table, chair, parasol, furled, t.x, t.y));
   const board = buildChalkboard();
-  out.push({ y: 176, draw: (g) => stand(g, board, CAFE.door.x - 40, 177) });
+  out.push({ y: 170, draw: (g) => stand(g, board, CAFE.door.x - 48, 171) });
   out.push(...campfire());
   return out;
 }
