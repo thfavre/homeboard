@@ -191,6 +191,8 @@ export const CATALOG: WardrobeItem[] = [
   { id: 'tshirt', name: 'T-shirt', slot: 'top', def: 'torso/shirts/shortsleeve/torso_clothes_tshirt', tier: 'cheap', colors: CLOTH },
   { id: 'vneck_tee', name: 'V-neck tee', slot: 'top', def: 'torso/shirts/shortsleeve/torso_clothes_tshirt_vneck', tier: 'cheap', colors: CLOTH },
   { id: 'scoop_tee', name: 'Scoop tee', slot: 'top', def: 'torso/shirts/shortsleeve/torso_clothes_tshirt_scoop', tier: 'cheap', colors: CLOTH },
+  // Drawn for Homeboard from the tank top (scripts/make-bra.ts); white is what a bare top shows
+  { id: 'bra', name: 'Bra', slot: 'top', def: 'torso/torso_clothes_bra', tier: 'cheap', colors: CLOTH, bodies: ['female'] },
   { id: 'tank_top', name: 'Tank top', slot: 'top', def: 'torso/shirts/sleeveless/torso_clothes_sleeveless2', tier: 'cheap', colors: CLOTH },
   { id: 'sleeveless_tee', name: 'Sleeveless tee', slot: 'top', def: 'torso/shirts/sleeveless/torso_clothes_sleeveless1', tier: 'cheap', colors: CLOTH },
   { id: 'vneck_tank', name: 'V-neck tank', slot: 'top', def: 'torso/shirts/sleeveless/torso_clothes_sleeveless2_vneck', tier: 'cheap', colors: CLOTH },
@@ -439,9 +441,9 @@ export const itemById =(id: string): WardrobeItem | undefined => CATALOG.find((i
 const CROWNLESS_HEADS = new Set(['pig_head', 'rabbit_head', 'mouse_head']);
 
 /**
- * Why the King cannot put this piece on while he holds the title, or null if he can. Skirts and
- * dresses without sit or cheer art would leave him in his underwear on the throne; a few costume
- * heads cannot wear the crown. Neck and back pieces just vanish for a moment, so they stay allowed.
+ * Why the King cannot buy or put on this piece while he holds the title, or null if he can. Skirts
+ * and dresses without sit or cheer art would leave him in his underwear on the throne; a few
+ * costume heads cannot wear the crown; no hat replaces the crown. Neck and back pieces just vanish for a moment, so they stay allowed.
  */
 export function notForTheKing(item: WardrobeItem | undefined): string | null {
   if (!item) return null;
@@ -449,6 +451,7 @@ export function notForTheKing(item: WardrobeItem | undefined): string | null {
     return 'Not fit for a King: you could not sit on your throne or greet your court in this';
   }
   if (item.slot === 'costume' && CROWNLESS_HEADS.has(item.id)) return 'Not fit for a King: the crown does not sit on this head';
+  if (item.slot === 'hat') return 'The King keeps the crown: no other hat while you reign';
   return null;
 }
 

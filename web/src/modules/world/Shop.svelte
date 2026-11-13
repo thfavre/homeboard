@@ -241,9 +241,7 @@
       if (!bought) return;
       wd = bought;
       void loadColored();
-      // The King's new hat waits in the wardrobe: the crown stays on
-      if (crowned && at === 'hat') toast({ text: 'Bought. It waits in your wardrobe: the King keeps the crown', kind: 'success' });
-      else await putOn(piece, at);
+      await putOn(piece, at);
     } finally {
       busy = false;
     }
