@@ -4,7 +4,7 @@ import { BENCHES, darknessAt, minuteOf, minutesFrom, type DayNight, CARPET_START
  * The life of the town: characters wander the ground band, stop for a while, sit on benches, pet
  * the cat, walk up to each other and chat for a while; a guest away for too long walks to the edge,
  * lies down to sleep and slowly fades out.
- * Night falls on the town at the time set by the host: each character goes to bed at its own
+ * The town has its own short day, a few minutes long (set by the host): each character goes to bed at its own
  * time after dusk and gets up at its own time around dawn, different every night, while a few
  * night owls stay up until morning and sleep in instead.
  * When a guest changes their look on the phone, the character walks to the shop for it (clothes or
@@ -257,7 +257,7 @@ export interface TownOptions {
   /** A ceremony: how long the King holds court once seated, and how long everyone has to finish what they are doing and go (ms) */
   courtMs: number;
   graceMs: number;
-  /** Day and night, and the time now: minutes since 1970 on the local clock (the town follows the wall clock, not UTC) */
+  /** Day and night, and the time now on the town's own clock (minutes, see townMinutes) */
   dayNight: DayNight;
   localMinutes: number;
   /** Characters go to bed at night: bedtimes spread over this many minutes around dusk, and this share are night owls (0..1) */
@@ -276,13 +276,11 @@ function hash01(text: string): number {
 /**
  * Whether a character sleeps for the night right now. Each one has its own bedtime, from a little
  * before dusk to the spread after it, and gets up around dawn, both different every night. Night
- * owls (the same ones every night) stay up and go to bed after dawn, for a few hours. Always night:
- * all but the owls sleep.
+ * owls (the same ones every night) stay up and go to bed after dawn, for a few hours.
  */
 export function asleepForTheNight(id: string, o: Pick<TownOptions, 'dayNight' | 'localMinutes' | 'nightSleep' | 'bedtimeSpreadMin' | 'nightOwls'>): boolean {
-  if (!o.nightSleep || o.dayNight.mode === 'day') return false;
+  if (!o.nightSleep || !o.dayNight.on) return false;
   const owl = hash01(`${id}:owl`) < o.nightOwls;
-  if (o.dayNight.mode === 'night') return !owl;
   const dusk = minuteOf(o.dayNight.dusk);
   const night = minutesFrom(dusk, minuteOf(o.dayNight.dawn));
   // Which night it is, and how far into it (counted from its lead before dusk)

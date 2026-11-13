@@ -6,7 +6,7 @@
   import Toggle from '$lib/ui/Toggle.svelte';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { SLOTS, TIERS, TIER_NAMES } from '$shared/wardrobe.ts';
-  import { LOOK_PARTS, LOOK_PART_NAMES, kingPriceAt, type CeremonyHold, type WorldState } from '$shared/world.ts';
+  import { LOOK_PARTS, LOOK_PART_NAMES, clockOf, kingPriceAt, townMinutes, type CeremonyHold, type WorldState } from '$shared/world.ts';
   import Monarchy from './Monarchy.svelte';
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
@@ -58,13 +58,22 @@
     setOption(key, input.value);
   }
 
+  // The town's own clock goes round fast: read again every second while its day is on
+  let clockNow = $state(serverNow());
+  $effect(() => {
+    if (!mod?.dayCycle) return;
+    const t = setInterval(() => (clockNow = serverNow()), 1000);
+    return () => clearInterval(t);
+  });
+
   /** How it looks in the town right now */
   const nightStatus = $derived.by(() => {
     if (!mod) return '';
+    if (!mod.dayCycle) return 'Always day in the town.';
     const dark = mod.darkNow ?? 0;
     const light = dark >= 0.95 ? 'Night' : dark <= 0.05 ? 'Day' : dark >= 0.5 ? 'Nightfall' : 'Daybreak';
     const sleepers = mod.nightSleepers ?? 0;
-    return `${light} in the town${mod.dayNight === 'clock' ? '' : ' (always)'}. ${sleepers === 0 ? 'Nobody sleeps' : sleepers === 1 ? 'One character sleeps' : `${sleepers} characters sleep`} for the night.`;
+    return `${light} in the town, ${clockOf(townMinutes(clockNow, mod.dayMin ?? 30))} on its clock. ${sleepers === 0 ? 'Nobody sleeps' : sleepers === 1 ? 'One character sleeps' : `${sleepers} characters sleep`} for the night.`;
   });
 
   function setSeconds(key: string, value: string) {
@@ -156,18 +165,21 @@
   </Section>
 
   <Section title="Day and night">
+    <div class="line">
+      <div>
+        <strong>Day and night</strong>
+        <p class="faint small">The town has its own short day on its own clock, round and round. Off: always day.</p>
+      </div>
+      <Toggle checked={!!mod.dayCycle} label="Day and night" onchange={(v) => setOption('dayCycle', v)} />
+    </div>
     <label class="field">
-      <span>Time of day</span>
-      <select class="input" value={mod.dayNight ?? 'clock'} onchange={(e) => setOption('dayNight', e.currentTarget.value)}>
-        <option value="clock">Follow the clock</option>
-        <option value="day">Always day</option>
-        <option value="night">Always night</option>
-      </select>
+      <span>A whole day lasts (minutes, 15 to 60)</span>
+      <input class="input" type="number" min="15" max="60" value={mod.dayMin} onchange={(e) => setAmount('dayMin', e.currentTarget.value)} />
     </label>
     <div class="pair">
       <label class="field">
-        <span>Night falls at (hours:minutes)</span>
-        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="21:30" value={mod.dusk} onchange={(e) => setTime('dusk', e.currentTarget)} />
+        <span>Night falls at (on the town's clock)</span>
+        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="20:00" value={mod.dusk} onchange={(e) => setTime('dusk', e.currentTarget)} />
       </label>
       <label class="field">
         <span>Day comes back at</span>
@@ -181,8 +193,8 @@
       <input class="input" type="number" min="0" max="240" value={mod.twilightMin} onchange={(e) => setAmount('twilightMin', e.currentTarget.value)} />
     </label>
     <p class="faint small">
-      The light fades over this long, half before and half after each time above. At night the square darkens, the shop windows and the lamp posts
-      light up. The town follows this computer's clock.
+      In town minutes: the light fades over this long, half before and half after each time above. At night the square darkens, the shop windows and
+      the lamp posts light up.
     </p>
     <div class="line">
       <div>
@@ -197,7 +209,7 @@
     </div>
     <div class="pair">
       <label class="field">
-        <span>Bedtimes spread over (minutes)</span>
+        <span>Bedtimes spread over (town minutes)</span>
         <input class="input" type="number" min="0" max="360" value={mod.bedtimeSpreadMin} onchange={(e) => setAmount('bedtimeSpreadMin', e.currentTarget.value)} />
       </label>
       <label class="field">
@@ -206,7 +218,7 @@
       </label>
     </div>
     <p class="faint small">
-      The first go to bed a little before night falls, the last this long after. Always night: everyone but the night owls sleeps.
+      The first go to bed a little before night falls, the last this long after.
     </p>
     <div class="current">
       <span class="status night">

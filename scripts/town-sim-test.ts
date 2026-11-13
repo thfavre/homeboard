@@ -1,7 +1,7 @@
 /**
  * Plays the town (server/modules/world/sim.ts) on a fake clock, hours in seconds, with many
  * characters: guests leave and come back, change their looks, cheer, and the King holds a ceremony
- * every 15 minutes, and a whole day goes by every hour (night from 21:30 to 07:00). It watches every step for trouble (walking on the spot, standing in the
+ * every 15 minutes, and a whole town day goes by every hour (night from 20:00 to 07:00). It watches every step for trouble (walking on the spot, standing in the
  * fountain, off the square, in the river, an activity that never ends, a chat partner who is not
  * chatting back) and measures how things go (shop trips, the ceremony, sleep, who sleeps at night, variety).
  *
@@ -61,7 +61,7 @@ const opts: TownOptions = {
   king: 'g1' as string | null,
   courtMs: 60_000,
   graceMs: 20_000,
-  dayNight: { mode: 'clock', dusk: '21:30', dawn: '07:00', twilightMin: 90 },
+  dayNight: { on: true, dusk: '20:00', dawn: '07:00', twilightMin: 90 },
   localMinutes: 12 * 60,
   nightSleep: true,
   bedtimeSpreadMin: 180,

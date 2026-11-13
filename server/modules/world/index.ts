@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
-import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type DayNightMode, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
+import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, townMinutes, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
 import { CATALOG, TIERS, itemById, notForTheKing, starterPieces, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
@@ -75,8 +75,9 @@ interface WorldSettings {
   ceremonySec: number;
   /** When a ceremony starts, everyone has this long to finish what they are doing and go (seconds) */
   ceremonyGraceSec: number;
-  /** The town's time of day: following the clock (night from dusk to dawn, "HH:MM"), or always day, or always night */
-  dayNight: DayNightMode;
+  /** The town has its own short day (off: always day): a whole day goes by in `dayMin` minutes, night from dusk to dawn on its clock ("HH:MM") */
+  dayCycle: boolean;
+  dayMin: number;
   dusk: string;
   dawn: string;
   /** The light changes over this long around dusk and dawn (minutes) */
@@ -232,8 +233,9 @@ export default defineModule<WorldSettings>({
     ceremonyTime: '21:00',
     ceremonySec: 60,
     ceremonyGraceSec: 20,
-    dayNight: 'clock',
-    dusk: '21:30',
+    dayCycle: true,
+    dayMin: 30,
+    dusk: '20:00',
     dawn: '07:00',
     twilightMin: 90,
     nightSleep: true,
@@ -593,7 +595,8 @@ export default defineModule<WorldSettings>({
           ceremonyPhase: sim.ceremonyPhase,
           ceremonyNext: s.ceremony ? ceremonyDue(Date.now()) : null,
           ceremonyHold: s.ceremony ? ceremonyHold() : null,
-          dayNight: s.dayNight,
+          dayCycle: s.dayCycle,
+          dayMin: s.dayMin,
           dusk: s.dusk,
           dawn: s.dawn,
           twilightMin: s.twilightMin,
@@ -983,8 +986,8 @@ export default defineModule<WorldSettings>({
         king: kingId(),
         courtMs: s.ceremonySec * 1000,
         graceMs: s.ceremonyGraceSec * 1000,
-        dayNight: { mode: s.dayNight, dusk: s.dusk, dawn: s.dawn, twilightMin: s.twilightMin },
-        localMinutes: (now - new Date(now).getTimezoneOffset() * 60_000) / 60_000,
+        dayNight: { on: s.dayCycle, dusk: s.dusk, dawn: s.dawn, twilightMin: s.twilightMin },
+        localMinutes: townMinutes(now, s.dayMin),
         nightSleep: s.nightSleep,
         bedtimeSpreadMin: s.bedtimeSpreadMin,
         nightOwls: s.nightOwlPct / 100,
@@ -1134,7 +1137,8 @@ export default defineModule<WorldSettings>({
         ceremonyTime: timeOfDay(args.ceremonyTime) ?? s.ceremonyTime,
         ceremonySec: Math.max(10, secs(args.ceremonySec, s.ceremonySec, 600)),
         ceremonyGraceSec: secs(args.ceremonyGraceSec, s.ceremonyGraceSec, 120),
-        dayNight: args.dayNight === 'clock' || args.dayNight === 'day' || args.dayNight === 'night' ? args.dayNight : s.dayNight,
+        dayCycle: typeof args.dayCycle === 'boolean' ? args.dayCycle : s.dayCycle,
+        dayMin: Math.max(15, Math.min(60, Math.round(num(args.dayMin, s.dayMin)))),
         dusk: timeOfDay(args.dusk) ?? s.dusk,
         dawn: timeOfDay(args.dawn) ?? s.dawn,
         twilightMin: Math.max(0, Math.min(240, Math.round(num(args.twilightMin, s.twilightMin)))),

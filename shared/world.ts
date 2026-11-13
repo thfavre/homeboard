@@ -236,12 +236,19 @@ export interface TownFrame {
 
 // ------------------------------------------------------------ day and night
 
-/** The town's time of day: following the clock, or always day, or always night */
-export type DayNightMode = 'clock' | 'day' | 'night';
+/** The town's own clock: minutes into its days, a whole day every `dayMin` real minutes (the same on every server start) */
+export const townMinutes = (now: number, dayMin: number) => (now / (Math.max(1, dayMin) * 60_000)) * 1440;
 
+/** A minute of the day as "HH:MM" */
+export function clockOf(minute: number): string {
+  const m = Math.floor(((minute % 1440) + 1440) % 1440);
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+/** The town's day: a short one that goes round in a few minutes, on its own clock (off: always day) */
 export interface DayNight {
-  mode: DayNightMode;
-  /** When night falls and when the day comes back ("HH:MM", 24 hours) */
+  on: boolean;
+  /** When night falls and when the day comes back on the town's clock ("HH:MM", 24 hours) */
   dusk: string;
   dawn: string;
   /** The light changes over this long, half before and half after each of those times (minutes) */
@@ -263,8 +270,7 @@ export const minutesFrom = (a: number, b: number) => (((b - a) % 1440) + 1440) %
  * down to fit.
  */
 export function darknessAt(d: DayNight, minute: number): number {
-  if (d.mode === 'day') return 0;
-  if (d.mode === 'night') return 1;
+  if (!d.on) return 0;
   const dusk = minuteOf(d.dusk);
   const dawn = minuteOf(d.dawn);
   const night = minutesFrom(dusk, dawn);
@@ -546,7 +552,8 @@ export interface WorldState {
   ceremonyTime?: string;
   ceremonySec?: number;
   ceremonyGraceSec?: number;
-  dayNight?: DayNightMode;
+  dayCycle?: boolean;
+  dayMin?: number;
   dusk?: string;
   dawn?: string;
   twilightMin?: number;
