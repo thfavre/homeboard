@@ -16,7 +16,7 @@
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
-  import { MARGIN, townBottom, townTop } from './townMargins.ts';
+  import { MARGIN, townTop } from './townMargins.ts';
   import { TOWN_HALL_SPAN, drawTownHall, drawTownHallClock, drawTownHallLight } from './townHall.ts';
   import { drawLaughing, drawTalking, nodDip } from './chat.ts';
   import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
@@ -232,8 +232,8 @@
   let bgKey = '';
   /** Where the town meets the grass (built with the ground once the throne room's art is there): drawn over the river's frames */
   let edge: { canvas: HTMLCanvasElement; x: number } | null = null;
-  /** The bands past the town's top and bottom (built with the ground), and how high each is (world units) */
-  let margins: { top: HTMLCanvasElement; bottom: HTMLCanvasElement } | null = null;
+  /** What lies past the town's top (built with the ground), and how high it is (world units) */
+  let above: HTMLCanvasElement | null = null;
   const BAND = MARGIN * SPRITE_SCALE;
   function background(): HTMLCanvasElement {
     const key = `${!!env}${!!shopArt}${!!hall}${!!cafe}`;
@@ -263,7 +263,7 @@
         g.drawImage(edge.canvas, edge.x * SPRITE_SCALE, 0, edge.canvas.width * SPRITE_SCALE, edge.canvas.height * SPRITE_SCALE);
       }
       bg = c;
-      margins = { top: townTop(env, swap), bottom: townBottom(env) };
+      above = townTop(env, swap);
     } else {
       // Until the art is there: plain stone
       const c = document.createElement('canvas');
@@ -314,26 +314,26 @@
     const mix = f0 && f1 && f1 !== f0 ? Math.max(0, Math.min(1, (t - f0.t) / (f1.t - f0.t))) : 0;
 
     // The camera: on the town, or moved to the right for the ceremony in the throne room (on
-    // whole screen pixels, so the ground does not shimmer as it slides)
+    // whole screen pixels, so the ground does not shimmer as it slides). The town sits on the
+    // screen's bottom: what room the screen's shape leaves is above it, where the roofs go on
     const k = Math.min(cw / TOWN.w, ch / TOWN.h);
     const cam = f0 ? (f0.cam ?? 0) + (f1 ? ((f1.cam ?? 0) - (f0.cam ?? 0)) * mix : 0) : 0;
     const shift = Math.round(Math.max(0, Math.min(1, cam)) * HALL_PAN * k);
     const away = shift > 0;
-    g.setTransform(k, 0, 0, k, (cw - TOWN.w * k) / 2 - shift, (ch - TOWN.h * k) / 2);
+    g.setTransform(k, 0, 0, k, (cw - TOWN.w * k) / 2 - shift, ch - TOWN.h * k);
     g.save();
     if (away) {
       // Moved over: only what the screen shows of both (nothing spills into the bands at the sides)
       g.beginPath();
-      g.rect(shift / k, -BAND, TOWN.w, TOWN.h + 2 * BAND);
+      g.rect(shift / k, -BAND, TOWN.w, TOWN.h + BAND);
       g.clip();
     }
 
     const ground = background();
-    // Past the town's top and bottom, in the bands the screen's shape leaves: the roofs and trees
-    // above, the street below (the town hall's top over the roofs)
-    if (margins) {
-      g.drawImage(margins.top, 0, 0, TOWN.w / SPRITE_SCALE, MARGIN, 0, -BAND, TOWN.w, BAND);
-      g.drawImage(margins.bottom, 0, 0, TOWN.w / SPRITE_SCALE, MARGIN, 0, TOWN.h, TOWN.w, BAND);
+    // Past the town's top, in the room the screen's shape leaves: the roofs in full and the trees
+    // behind them (the town hall's top over them)
+    if (above) {
+      g.drawImage(above, 0, 0, TOWN.w / SPRITE_SCALE, MARGIN, 0, -BAND, TOWN.w, BAND);
       g.save();
       g.beginPath();
       g.rect(0, -BAND, TOWN.w, BAND);
@@ -616,7 +616,7 @@
     // day the host set, and sends how dark it is with every frame.
     if (dark > 0.02) {
       g.fillStyle = `rgba(14,16,42,${0.44 * dark})`;
-      g.fillRect(0, -BAND, TOWN.w + (away ? HALL_PAN : 0), TOWN.h + 2 * BAND);
+      g.fillRect(0, -BAND, TOWN.w + (away ? HALL_PAN : 0), TOWN.h + BAND);
       // The shops stay lit inside
       for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
       // The lamp posts the lamplighter has lit shine through the veil, with a pool of light on the pavement under them
