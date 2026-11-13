@@ -1,6 +1,6 @@
 import { SPRITE_SCALE } from '$shared/crowd.ts';
 import { CAFE, CAMPFIRE, FIRE_LOGS, NOTICE_BOARD, TOWN_BENCHES, TOWN_SCENE, type WDir } from '$shared/world.ts';
-import { CUT, fountain, put, sidewalkProps, still, tree, type Env, type Prop } from '../games/crowd/scene.ts';
+import { CUT, fountain, put, sidewalkProps, still, tree, type Env, type Prop, type TreeLayers } from '../games/crowd/scene.ts';
 
 /**
  * What stands up on the town's square, drawn in depth order with the characters: the fountain, the
@@ -557,10 +557,13 @@ export function drawFireLight(g: G, dark: number, now: number): void {
 
 // ------------------------------------------------------------ all of them
 
-/** Everything that stands up on the town's square (`keep`: which of the sidewalk's benches and plants to keep, by their x) */
-export function townProps(env: Env, keep: (x: number) => boolean): Prop[] {
+/**
+ * Everything that stands up on the town's square (`keep`: which of the sidewalk's benches and plants
+ * to keep, by their x; `layers`: what each tree draws under its crown, by its index)
+ */
+export function townProps(env: Env, keep: (x: number) => boolean, layers?: (k: number) => TreeLayers): Prop[] {
   const out: Prop[] = [fountain(env, TOWN_SCENE.fountain.x, TOWN_SCENE.fountain.y)];
-  TOWN_SCENE.trees.forEach((t, k) => out.push(tree(env, t.x, t.y, k % 2 === 1, k * 1.7, t.size, 'stem' in t ? t.stem : 1)));
+  TOWN_SCENE.trees.forEach((t, k) => out.push(tree(env, t.x, t.y, k % 2 === 1, k * 1.7, t.size, 'stem' in t ? t.stem : 1, layers?.(k))));
   TOWN_SCENE.lamps.forEach((l, i) => out.push(lampPost(env, i, l.x, l.y)));
   // The sidewalk's benches and plants, but the bench before the cafe's porch: the town's own benches instead
   out.push(...sidewalkProps(env, (x) => keep(x) && x !== TOWN_BENCHES.instead));

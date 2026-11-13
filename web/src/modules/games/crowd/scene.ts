@@ -240,8 +240,14 @@ export interface Prop {
   ground?(g: CanvasRenderingContext2D, now: number): void;
 }
 
+/** What a tree draws under its crown, behind its trunk and in front of it (the town's falling leaves) */
+export interface TreeLayers {
+  behind(g: CanvasRenderingContext2D, now: number): void;
+  front(g: CanvasRenderingContext2D, now: number): void;
+}
+
 /** A tree, `size` times the art's size (the town's trees are not all alike), `stem` the share of the trunk showing under the leaves */
-export function tree(env: Env, x: number, y: number, spring: boolean, phase: number, size = 1, stem = 1): Prop {
+export function tree(env: Env, x: number, y: number, spring: boolean, phase: number, size = 1, stem = 1, layers?: TreeLayers): Prop {
   const k = S * size;
   const crown = 44 * k * stem;
   return {
@@ -258,7 +264,9 @@ export function tree(env: Env, x: number, y: number, spring: boolean, phase: num
     },
     draw(g, now) {
       // The trunk, and the leaves swaying a pixel in the wind
+      layers?.behind(g, now);
       put(g, env['tree-trunks'], CUT.trunk, x, y + 4, k);
+      layers?.front(g, now);
       const sway = Math.round(Math.sin(now / 1400 + phase) * 1.3) * k;
       put(g, env['tree-canopies'], spring ? CUT.canopySpring : CUT.canopySummer, x, y - crown, k, sway);
     },

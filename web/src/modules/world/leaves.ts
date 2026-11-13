@@ -3,10 +3,11 @@ import { TOWN_SCENE } from '$shared/world.ts';
 import type { Env } from '../games/crowd/scene.ts';
 
 /**
- * Now and then a leaf comes off one of the town's trees: it drifts down from the crown, swaying and
- * turning over, lands near the trunk, lies there a moment and fades. Each tree keeps its own
- * timer: its next leaf comes after a random wait in the range the admin sets. The art is the LPC leaf recolors (web/public/crowd/env,
- * see its CREDITS.txt): only its green row, like the trees, eleven single leaves in it.
+ * Now and then a leaf comes off one of the town's trees: it drifts down, swaying and turning over,
+ * hidden by the crown at first, then in front of the trunk or behind it, lands by the trunk, lies
+ * there a moment and fades. Each tree keeps its own timer: its next leaf comes after a random wait
+ * in the range the admin sets. The art is the LPC leaf recolors (web/public/crowd/env, see its
+ * CREDITS.txt): only its green row, like the trees, eleven single leaves in it.
  */
 
 /** The single leaves of the green row, the sheet's first (x, y, width, height in its pixels) */
@@ -34,6 +35,9 @@ interface Leaf {
   /** Where it lands */
   floor: number;
   cut: number;
+  /** The tree it came from, and whether it falls in front of its trunk or behind it */
+  tree: number;
+  front: boolean;
   /** Its own phase for the sway and the turning over */
   phase: number;
   fall: number;
@@ -45,6 +49,8 @@ export class FallingLeaves {
   private leaves: Leaf[] = [];
   /** Per tree: seconds until it drops its next leaf (each starts at its own point in the range) */
   private waits: number[] | null = null;
+  /** Off (the admin's switch): the trees draw none of them */
+  on = true;
 
   /** Move them on by `dt` seconds, and each tree whose wait is over drops a leaf (`range`: from, to in seconds) */
   update(dt: number, range: [number, number]): void {
@@ -86,10 +92,14 @@ export class FallingLeaves {
     const k = SPRITE_SCALE * size;
     const top = t.y - 44 * k * stem - 70 * k;
     const a = Math.random() * Math.PI * 2;
+    // One falling behind the trunk lands behind its foot, one in front of it before it
+    const front = Math.random() < 0.5;
     this.leaves.push({
       x: t.x + Math.cos(a) * 34 * k * Math.random(),
       y: top + 30 * k + Math.sin(a) * 18 * k,
-      floor: t.y + (Math.random() - 0.3) * 40,
+      floor: front ? t.y + 2 + Math.random() * 26 : t.y - 2 - Math.random() * 12,
+      tree: i,
+      front,
       cut: Math.floor(Math.random() * CUTS.length),
       phase: Math.random() * Math.PI * 2,
       fall: 16 + Math.random() * 10,
@@ -99,13 +109,18 @@ export class FallingLeaves {
 
   /** The ones lying on the ground, under everyone */
   drawGround(g: CanvasRenderingContext2D, env: Env): void {
+    if (!this.on) return;
     for (const l of this.leaves) if (l.down !== null) this.drawLeaf(g, env, l, 1, Math.max(0, Math.min(1, (6 - l.down) / 2)));
   }
 
-  /** The ones still in the air, over everyone */
-  drawAir(g: CanvasRenderingContext2D, env: Env, now: number): void {
+  /**
+   * The ones still in the air from tree `i`, drawn by the tree itself under its crown: those behind
+   * the trunk before it, those in front after it
+   */
+  drawTree(g: CanvasRenderingContext2D, env: Env, i: number, front: boolean, now: number): void {
+    if (!this.on) return;
     for (const l of this.leaves) {
-      if (l.down !== null) continue;
+      if (l.down !== null || l.tree !== i || l.front !== front) continue;
       // Turning over as it falls: squeezed flat and back, never quite to nothing
       const turn = Math.cos(now / 520 + l.phase);
       this.drawLeaf(g, env, l, Math.sign(turn || 1) * Math.max(0.25, Math.abs(turn)), 1);

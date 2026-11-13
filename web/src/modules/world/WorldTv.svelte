@@ -115,7 +115,9 @@
       env = e;
       shopArt = a;
       setShopArt(e, a);
-      if (e) standingProps = townProps(e, (x) => x < TOWN_HALL_SPAN.x0 || x > TOWN_HALL_SPAN.x1).sort((a, b) => a.y - b.y);
+      // (the falling leaves are drawn by the trees, under the crown, behind or in front of the trunk)
+      const layers = (k: number) => ({ behind: (g: CanvasRenderingContext2D, now: number) => leaves.drawTree(g, e!, k, false, now), front: (g: CanvasRenderingContext2D, now: number) => leaves.drawTree(g, e!, k, true, now) });
+      if (e) standingProps = townProps(e, (x) => x < TOWN_HALL_SPAN.x0 || x > TOWN_HALL_SPAN.x1, layers).sort((a, b) => a.y - b.y);
       if (e && a) cafe = cafeArt(e, a);
       brook = brookFrames();
     });
@@ -442,6 +444,7 @@
     for (const p of inHall) p.ground?.(g, now);
     // Leaves now and then coming off the trees: the ones that landed lie under everyone
     const leafy = !!env && world?.leaves !== false;
+    leaves.on = leafy;
     if (leafy) {
       leaves.update(step, world?.leavesSec ?? [8, 20]);
       leaves.drawGround(g, env!);
@@ -612,7 +615,6 @@
       else drawPerson(people[pi++]);
     }
     pigeons.drawAir(g, env);
-    if (leafy) leaves.drawAir(g, env!, now);
 
     // The evening lies over the square (the lamps keep their glow). The server keeps the time of
     // day the host set, and sends how dark it is with every frame.
