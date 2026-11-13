@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
-  import { BODY, SPRITE_SCALE, WORLD } from '$shared/crowd.ts';
+  import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
   import { CHAT_ICON, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
-  import { loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
+  import { SQUARE_STREET, loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
-  import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, type HallArt } from './throneRoom.ts';
+  import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
 
   /**
    * The town on the TV: the crowd games' square (same LPC environment art, same renderer), lived in
@@ -284,6 +284,8 @@
   // The ground, built once per art state: the town, and the river and the throne room to its right once their art is there
   let bg: HTMLCanvasElement | null = null;
   let bgKey = '';
+  /** Where the town meets the grass (built with the ground once the throne room's art is there): drawn over the river's frames */
+  let edge: { canvas: HTMLCanvasElement; x: number } | null = null;
   function background(): HTMLCanvasElement {
     const key = `${!!env}${!!shopArt}${!!hall}`;
     if (bg && bgKey === key) return bg;
@@ -293,9 +295,17 @@
       c.height = WORLD.h;
       const g = c.getContext('2d')!;
       g.imageSmoothingEnabled = false;
-      const ground = squareGround(env, shopArt ? shopSwap(env, shopArt) : undefined);
-      g.drawImage(ground, 0, 0, ground.width * 1.35, ground.height * 1.35);
-      if (hall) g.drawImage(hall.ground, RIVERSIDE.x0, 0, hall.ground.width * SPRITE_SCALE, hall.ground.height * SPRITE_SCALE);
+      // With the riverside, the square is built on past the screen's edge: its last house sticks out over the grass
+      const screen = Math.ceil(WORLD.w / SPRITE_SCALE);
+      const last = houseRow(SQUARE_HOUSES.seed, screen).at(-1)!;
+      const ground = squareGround(env, shopArt ? shopSwap(env, shopArt) : undefined, hall ? last.x + last.w + 40 : screen);
+      g.drawImage(ground, 0, 0, screen, ground.height, 0, 0, screen * SPRITE_SCALE, ground.height * SPRITE_SCALE);
+      edge = null;
+      if (hall) {
+        g.drawImage(hall.ground, RIVERSIDE.x0, 0, hall.ground.width * SPRITE_SCALE, hall.ground.height * SPRITE_SCALE);
+        edge = townEdge(ground, screen, last.x + last.w, SQUARE_STREET);
+        g.drawImage(edge.canvas, edge.x * SPRITE_SCALE, 0, edge.canvas.width * SPRITE_SCALE, edge.canvas.height * SPRITE_SCALE);
+      }
       bg = c;
     } else {
       // Until the art is there: plain stone
@@ -370,6 +380,7 @@
     const inHall = away && hall ? hallStanding : [];
     if (away && hall) {
       drawRiver(g, hall, now);
+      if (edge) g.drawImage(edge.canvas, edge.x * SPRITE_SCALE, 0, edge.canvas.width * SPRITE_SCALE, edge.canvas.height * SPRITE_SCALE);
       drawHallWall(g, now);
     }
     // Shadows of the things standing up, on the ground under everyone

@@ -1,4 +1,4 @@
-import { BODY, FRAME_PX, SPRITE_SCALE, WORLD, seeded } from '$shared/crowd.ts';
+import { BODY, FRAME_PX, SPRITE_SCALE, SQUARE_HOUSES, WORLD, seeded } from '$shared/crowd.ts';
 import { HALL, HALL_ART, RIVERSIDE, RIVERSIDE_ART, THRONE_SEAT, type SheetInfo } from '$shared/world.ts';
 import type { Prop } from '../games/crowd/scene.ts';
 
@@ -10,10 +10,11 @@ import type { Prop } from '../games/crowd/scene.ts';
  * battlements along its walls and bushes and flowers around it.
  *
  * The throne, the carpet's weave, the floor tiles, the potted trees, the bushes and the flowers are
- * LPC Revised art (web/public/crowd/env, see its CREDITS.txt), the reds recolored to one royal red.
- * Everything else (the grass, the river, the walls and towers, pillars, banners, windows, the dais,
- * the footstool, the braziers and their fire, the bridge and the path) is drawn here by hand in the
- * palettes of those sheets, lit from the top left, one sprite pixel at a time.
+ * LPC Revised art, the castle's towers and the outside of its walls LPC castle art (web/public/crowd/env,
+ * see its CREDITS.txt), the reds recolored to one royal red and the castle's warm grey stone to the
+ * hall's blue-grey. Everything else (the grass, the river, the inside of the walls, pillars, banners,
+ * windows, the dais, the footstool, the braziers and their fire, the bridge and the path) is drawn
+ * here by hand in the palettes of those sheets, lit from the top left, one sprite pixel at a time.
  *
  * The ground (the riverside, then the hall: RIVERSIDE_ART and HALL_ART, shared/world.ts) is built
  * once in sprite pixels and drawn SPRITE_SCALE world units a pixel, like the square; what stands up,
@@ -45,12 +46,26 @@ const WATER = { base: '#2a8598', lump: '#217087', deep: '#18506f', shallow: '#3c
 const ARCH = '#16323a';
 /** The earth of the pond sheet's banks, where the river cuts into them */
 const EARTH = { top: '#6b3c2e', mid: '#603429', line: '#442725' };
-/** The towers' slate roofs */
-const SLATE = { line: '#1d1f33', dark: '#2e3352', mid: '#414b73', light: '#5a6a96', shine: '#7d8fb8' };
 
 /** The carpet sheet's purple rug and the throne sheet's red cushions, in the royal red */
 const CARPET_SWAP: Record<string, string> = { '#1b192b': RED.line, '#382b33': RED.deep, '#4c3b64': RED.dark, '#655789': RED.mid, '#7c6ea6': RED.light };
 const CUSHION_SWAP: Record<string, string> = { '#6a1d16': RED.dark, '#7b2008': RED.mid, '#95381c': RED.light, '#b54936': RED.shine };
+/** The castle sheet's warm grey stone in the hall's blue-grey, dark to light (the bluish corner stones a little bluer) */
+const CASTLE_SWAP: Record<string, string> = {
+  '#31313e': STONE.line,
+  '#4b444c': STONE.deep,
+  '#454c44': STONE.deep,
+  '#4a5057': STONE.shade,
+  '#5e5252': STONE.dark,
+  '#525e5e': STONE.dark,
+  '#68767e': '#5c6a80',
+  '#7e7068': STONE.mid,
+  '#867e7f': '#76828f',
+  '#7e8685': '#76828f',
+  '#818b8b': STONE.light,
+  '#969293': STONE.light,
+  '#929695': STONE.light,
+};
 
 // ------------------------------------------------------------ cuts of the sheets
 
@@ -112,15 +127,15 @@ export function loadHall(): Promise<HallArt | null> {
       img.onerror = () => reject(new Error('throne-front'));
       img.src = '/world/throne-front.png';
     });
-  const names = ['throne', 'carpet', 'pave-stone-diamond', 'planters', 'bush-round', 'flowers', 'water-sparkle-anim'] as const;
+  const names = ['throne', 'carpet', 'pave-stone-diamond', 'planters', 'bush-round', 'flowers', 'castle', 'water-sparkle-anim'] as const;
   loading ??= Promise.all([...names.map(load), front()])
-    .then(([throne, carpet, tiles, planters, bushes, flowers, sparkle, near]) => {
+    .then(([throne, carpet, tiles, planters, bushes, flowers, castle, sparkle, near]) => {
       const [tx, ty, tw, th] = THRONE_CUT;
       const back = recolored(throne, tx, ty, tw, th, CUSHION_SWAP);
       const g = back.getContext('2d')!;
       g.globalCompositeOperation = 'destination-out';
       g.drawImage(near, 0, 0);
-      const sheets: Sheets = { carpet, tiles, planters, bushes, flowers };
+      const sheets: Sheets = { carpet, tiles, planters, bushes, flowers, castle };
       const ground = buildGround(sheets);
       // The river's strip in each frame of the flow: cut from the ground, and from the riverside built again for the others
       const others = Array.from({ length: RIVER_FRAMES - 1 }, (_, k) => {
@@ -189,6 +204,7 @@ interface Sheets {
   planters: HTMLImageElement;
   bushes: HTMLImageElement;
   flowers: HTMLImageElement;
+  castle: HTMLImageElement;
 }
 
 /**
@@ -209,8 +225,10 @@ function buildGround(sheets: Sheets): HTMLCanvasElement {
   g.translate(0, A.top);
   backWall(g);
   g.restore();
-  outerWalls(g);
-  towers(g);
+  const { castle } = sheets;
+  const stone = recolored(castle, 0, 0, castle.width, castle.height, CASTLE_SWAP);
+  outerWalls(g, stone);
+  towers(g, stone);
   garden(g, sheets);
   const [sx, sy, sw, sh] = TOPIARY;
   for (const [x, y] of [
@@ -343,8 +361,8 @@ function riverside(g: G, sheets: Sheets, frame: number): void {
   const r = seeded(19);
   for (const y of [74, 196, 286, 560, 626]) {
     const { l, r: rr } = banksAt(y);
-    const x = l > R.w - rr ? Math.round(l / 2) : Math.round((rr + R.w) / 2);
-    if (Math.min(x, R.w - x) < 12 || (x > l - 14 && x < rr + 14)) continue;
+    const x = l > R.w - rr ? Math.round((l + TOWN_EDGE.grass) / 2) : Math.round((rr + R.w) / 2);
+    if (x < TOWN_EDGE.grass + 12 || R.w - x < 12 || (x > l - 14 && x < rr + 14)) continue;
     const [fx, fy] = FLOWER_BUSHES[Math.floor(r() * FLOWER_BUSHES.length)];
     g.drawImage(sheets.flowers, fx, fy, 32, 32, x - 12, y - 24, 24, 24);
   }
@@ -501,6 +519,75 @@ function river(g: G, frame: number): void {
   }
 }
 
+/** How far the town's edge reaches back over the square and out over the riverside, and where the grass is clear of it (sprite pixels) */
+const TOWN_EDGE = { back: 24, out: 100, grass: 40 };
+
+/**
+ * Where the town meets the grass: the end of the square's ground (`town`, built wider than the
+ * screen: `from` is where the screen ends, `house` where the last house ends, `street` the foot of
+ * the sidewalk under the houses) laid over the riverside's grass. The last house shows whole, its
+ * sidewalk ends at its corner and the house throws its shadow on the grass; below, the paving breaks
+ * up into the grass in ragged slabs, a few loose ones lying out on it, grass growing in its cracks
+ * and over its edge. Drawn over the river's frames, at `x` (sprite pixels of the square).
+ */
+export function townEdge(town: HTMLCanvasElement, from: number, house: number, street: number): { canvas: HTMLCanvasElement; x: number } {
+  const B = TOWN_EDGE.back;
+  const [c, g] = canvas(B + TOWN_EDGE.out, PH);
+  const r = seeded(71);
+  // Where the paving ends on each row: in broken slabs, each a few rows high, the corner of the sidewalk at the top
+  const ends: number[] = [];
+  let step = 0;
+  let slab = 0;
+  for (let y = 0; y < PH; y++) {
+    if (y >= step) {
+      step = y + 6 + Math.floor(r() * 9);
+      slab = B + 6 + Math.floor(r() * 16) - (r() < 0.25 ? 10 : 0);
+    }
+    ends.push(y < SQUARE_HOUSES.bottom ? house - from + B : y < street + 3 ? house - from + B + 4 : slab);
+  }
+  for (let y = 0; y < PH; y++) g.drawImage(town, from - B, y, ends[y], 1, 0, y, ends[y], 1);
+  // The house's shadow on the grass, to its right, and the end of its sidewalk's curb
+  const corner = house - from + B;
+  veil(g, corner, 24, 6, SQUARE_HOUSES.bottom - 24, 0.28);
+  veil(g, corner + 4, SQUARE_HOUSES.bottom, 3, street - SQUARE_HOUSES.bottom + 3, 0.3);
+  px(g, '#9aa0a6', corner + 2, SQUARE_HOUSES.bottom, 2, street - SQUARE_HOUSES.bottom);
+  // Loose slabs out on the grass, cut from the paving itself, sunk a little at their edges
+  for (let y = street + 20; y < PH - 12; y += 18 + Math.floor(r() * 26)) {
+    const w = 6 + Math.floor(r() * 7);
+    const h = 4 + Math.floor(r() * 3);
+    const x = ends[y] + 3 + Math.floor(r() * 12);
+    if (x + w > B + TOWN_EDGE.grass - 2) continue;
+    g.drawImage(town, from - 40 - Math.floor(r() * 60), y, w, h, x, y, w, h);
+    px(g, 'rgba(14,10,24,0.35)', x, y + h, w, 1);
+    px(g, GREEN.line, x - 1, y, 1, h);
+    px(g, GREEN.blade, x + Math.floor(r() * w), y - 1, 2, 1);
+  }
+  for (let y = street + 3; y < PH; y++) {
+    const x = ends[y];
+    // The grass's dark edge along the paving, tufts hanging over it now and then
+    px(g, GREEN.line, x, y);
+    if (r() < 0.3) {
+      const len = 1 + Math.floor(r() * 3);
+      px(g, GREEN.base, x - len, y, len, 1);
+      px(g, GREEN.dark, x - len - 1, y);
+    }
+    // Grass in the paving's cracks: more of it the nearer the edge
+    for (let k = 0; k < 2; k++) {
+      const gx = Math.floor(B - 20 + r() * (x - B + 20));
+      if (r() > ((gx - (B - 20)) / (x - B + 20)) ** 2 * 0.5) continue;
+      px(g, GREEN.shade, gx, y, 2, 1);
+      px(g, GREEN.blade, gx + (r() < 0.5 ? 0 : 1), y - 1);
+    }
+  }
+  // Moss creeping over the slabs nearest the grass
+  for (let i = 0; i < 70; i++) {
+    const y = street + 6 + Math.floor(r() * (PH - street - 10));
+    const x = ends[y] - 2 - Math.floor(r() * 8);
+    px(g, 'rgba(70,130,50,0.35)', x, y, 2 + Math.floor(r() * 3), 1 + Math.floor(r() * 2));
+  }
+  return { canvas: c, x: from - B };
+}
+
 /** The path to the hall from `x0` to `x1`, along the bridge's line: slabs of warm stone, grass growing over its edges */
 function path(g: G, x0: number, x1: number): void {
   const r = seeded(x0 + 7);
@@ -609,7 +696,7 @@ function garden(g: G, sheets: Sheets): void {
     g.fill();
   };
   // Above the back wall: bushes in a loose row, a flower here and there between them
-  for (let x = TOWER.r * 2 + 16; x < A.w - TOWER.r * 2 - 12; x += 30 + Math.floor(r() * 18)) {
+  for (let x = TOWER_W + 6; x < A.w - TOWER_W - 6; x += 30 + Math.floor(r() * 18)) {
     const [bx, by] = BUSHES[Math.floor(r() * BUSHES.length)];
     const y = A.top - BACK_TOP - 2 - Math.floor(r() * 8);
     if (r() < 0.6) {
@@ -620,9 +707,9 @@ function garden(g: G, sheets: Sheets): void {
     g.drawImage(sheets.bushes, bx, by, 32, 32, x - 16, y - 30, 32, 32);
   }
   // Below the front wall: a bed of flowering bushes, two colors taking turns
-  const bed = A.front + FRONT_WALL + FRONT_FACE + 26;
+  const bed = A.front + FRONT_FACE + 28;
   const colors = [FLOWER_BUSHES[1], FLOWER_BUSHES[7]];
-  for (let x = TOWER.r * 2 + 14, k = 0; x < A.w - TOWER.r * 2 - 8; x += 26, k++) {
+  for (let x = TOWER_W + 6, k = 0; x < A.w - TOWER_W - 6; x += 26, k++) {
     const [fx, fy] = colors[k % 2];
     const y = bed + (k % 2) * 4;
     shadow(x, y, 11);
@@ -953,202 +1040,128 @@ function tallWindow(g: G, cx: number, top: number, w: number, h: number): void {
   veil(g, x - 3, top + h + 5, w + 8, 2, 0.3);
 }
 
-/** How thick the front wall shows from above, and how high its outer face is (sprite pixels) */
-const FRONT_WALL = 13;
-const FRONT_FACE = 24;
-/** How thick the back wall shows from above, over its face */
-const BACK_TOP = 12;
+/** How thick the walk along the top of the front wall shows, and how far below its edge its face ends (sprite pixels) */
+const FRONT_WALL = 12;
+const FRONT_FACE = 56;
+/** How high the battlements along the top of the back wall stand over its face */
+const BACK_TOP = 24;
+
+/** The castle sheet's tiles */
+const TILE = 32;
+/** Cuts of the castle sheet (LPC castle, 32 px tiles) */
+const CASTLE = {
+  /** The battlements along the top of a wall seen from above (their row): the left end, the middle, the right end turning down, and that side running on down */
+  top: { y: 64, left: 224, mid: 256, right: 288, side: 96 },
+  /** A straight wall's face (its rows: merlons along its top, then a course of stone): the left end, the middle, the right end with their corner stones */
+  face: { merlons: 160, course: 192, left: 224, mid: 256, right: 288 },
+  /** An arrow slit with its sill */
+  slit: [136, 84, 16, 32],
+  /**
+   * The round tower: its outer columns (a narrow tower), and the rows of its parapet seen from above,
+   * the merlons on its far side, and its body with the merlons of its near side
+   */
+  tower: { cols: [320, 384], ring: [16, 48], merlons: [64, 40], body: [144, 112] },
+} as const;
+
+/** A row of the castle sheet's 32 px tiles from x 0 to `w`: the left end, middles, the right end (always whole, at the far end) */
+function tileRow(g: G, sheet: CanvasImageSource, y: number, sy: number, h: number, w: number, left: number, mid: number, right: number): void {
+  for (let x = 0; x < w - TILE; x += TILE) g.drawImage(sheet, x === 0 ? left : mid, sy, TILE, h, x, y, TILE, h);
+  g.drawImage(sheet, right, sy, TILE, h, w - TILE, y, TILE, h);
+}
 
 /**
- * The walls seen from above: the tops of the thick back, right and front walls of dark stone, the
- * front wall's outer face down to the grass, and the top of the pier where it ends at the open side
+ * The castle's walls seen from outside and above: battlements along the top of the back wall, the
+ * top of the right wall running down to the front, and the front wall, its walk along the top and
+ * its face toward us, merlons along its edge and arrow slits, its shadow on the grass
  */
-function outerWalls(g: G): void {
-  const top = A.top - BACK_TOP;
-  const bottom = A.front + FRONT_WALL;
-  // The back wall's top, all along
-  px(g, STONE.shade, 0, top, A.w, BACK_TOP);
-  for (let bx = 0, col = 0; bx < A.w; bx += 22, col++) {
-    px(g, STONE.dark, bx + 1, top + 1, 20, BACK_TOP - 2);
-    veil(g, bx + 1, top + 1, 20, 1, 0.12, true);
-    if (col % 3 === 1) veil(g, bx + 1, top + 1, 20, BACK_TOP - 2, 0.1);
-  }
-  px(g, STONE.line, 0, top, A.w, 1);
-  // Its battlements along the outer edge, their faces toward the hall
-  for (let bx = 2; bx < A.w; bx += 11) merlon(g, bx, top - 5);
-  // The right wall's top, down to the front wall
+function outerWalls(g: G, stone: HTMLCanvasElement): void {
+  const T = CASTLE.top;
+  const F = CASTLE.face;
+  // The back wall's battlements (their stone sits on the top of its face)
+  tileRow(g, stone, A.top - 26, T.y, TILE, A.w, T.left, T.mid, T.right);
+  // The right wall's top: its stone, and the battlements' side running down along its edge
   const x = A.east;
-  const w = A.w - x;
-  px(g, STONE.shade, x, top, w, bottom - top);
-  for (let y = top - 6, row = 0; y < bottom; y += 20, row++) {
-    const by = Math.max(top + 1, y + 1);
-    const bh = Math.min(y + 19, bottom) - by;
-    if (bh <= 0) continue;
-    px(g, STONE.dark, x + 1, by, w - 1, bh);
-    veil(g, x + 1, by, w - 1, 1, 0.12, true);
-    if (row % 3 === 1) veil(g, x + 1, by, w - 1, bh, 0.1);
+  px(g, STONE.shade, x, A.top, A.w - x, A.front - A.top);
+  for (let y = A.top + 2, row = 0; y < A.front; y += 20, row++) {
+    px(g, STONE.dark, x + 1, y, A.w - x - 9, Math.min(18, A.front - y));
+    veil(g, x + 1, y, A.w - x - 9, 1, 0.12, true);
+    if (row % 3 === 1) veil(g, x + 1, y, A.w - x - 9, Math.min(18, A.front - y), 0.1);
   }
-  px(g, STONE.light, x, A.top, 1, bottom - A.top);
+  for (let y = A.top + 6; y < A.front; y += TILE) g.drawImage(stone, T.right, T.side, TILE, Math.min(TILE, A.front - y), A.w - TILE, y, TILE, Math.min(TILE, A.front - y));
   px(g, STONE.line, x - 1, A.wall, 1, A.front - A.wall);
-  for (let by = A.top + 2; by < bottom - 6; by += 11) {
-    px(g, STONE.line, A.w - 7, by, 7, 7);
-    px(g, STONE.light, A.w - 6, by + 1, 5, 2);
-    px(g, STONE.mid, A.w - 6, by + 3, 5, 3);
-  }
-  // The front wall: the same stone, laid along the bottom of the hall
-  const y = A.front;
-  px(g, STONE.shade, 0, y, A.w, FRONT_WALL);
+  // The front wall's walk, seen from above
+  const walk = A.front - FRONT_WALL;
+  px(g, STONE.shade, 0, walk, A.w, FRONT_WALL);
   for (let bx = 4, col = 0; bx < A.w; bx += 22, col++) {
-    px(g, STONE.dark, bx + 1, y + 2, 20, FRONT_WALL - 2);
-    veil(g, bx + 1, y + 2, 20, 1, 0.12, true);
-    if (col % 3 === 1) veil(g, bx + 1, y + 2, 20, FRONT_WALL - 2, 0.1);
+    px(g, STONE.dark, bx + 1, walk + 1, 20, FRONT_WALL - 2);
+    veil(g, bx + 1, walk + 1, 20, 1, 0.12, true);
+    if (col % 3 === 1) veil(g, bx + 1, walk + 1, 20, FRONT_WALL - 2, 0.1);
   }
-  px(g, STONE.light, 0, y + 1, A.w, 1);
-  px(g, STONE.line, 0, y, A.w, 1);
-  // Its outer face down to the grass: courses of stone in shade, a dark foot, its shadow on the grass
-  const face = y + FRONT_WALL;
-  px(g, STONE.dark, 0, face, A.w, FRONT_FACE);
-  for (let fy = face, row = 0; fy < face + FRONT_FACE; fy += 8, row++) {
-    px(g, STONE.shade, 0, fy + 7, A.w, 1);
-    veil(g, 0, fy, A.w, 1, 0.1, true);
-    for (let fx = row % 2 ? 0 : 13; fx < A.w; fx += 26) px(g, STONE.shade, fx, fy, 1, 7);
-  }
-  veil(g, 0, face, A.w, 3, 0.3);
-  px(g, STONE.line, 0, face + FRONT_FACE - 1, A.w, 1);
-  veil(g, 0, face + FRONT_FACE, A.w, 4, 0.3);
-  veil(g, 0, face + FRONT_FACE + 4, A.w, 3, 0.14);
-  // Battlements along its outer edge, their faces running on into the wall's face; arrow slits below
-  for (let bx = 4; bx < A.w; bx += 11) merlon(g, bx, face - 10);
-  for (let bx = 26; bx < A.w - 20; bx += 33) slit(g, bx, face + 6);
-  // Its end by the open side: the top of a pier, like the one at the back
-  px(g, STONE.line, 0, y - 5, 30, FRONT_WALL + 5);
-  px(g, STONE.mid, 1, y - 4, 28, FRONT_WALL + 3);
-  px(g, STONE.light, 1, y - 4, 28, 1);
-  px(g, STONE.light, 1, y - 4, 1, FRONT_WALL + 3);
-  px(g, STONE.dark, 15, y - 3, 1, FRONT_WALL + 2);
+  px(g, STONE.line, 0, walk, A.w, 1);
+  // Its face: merlons along its edge over a course of stone, another course under it, arrow slits
+  tileRow(g, stone, A.front - 8, F.merlons, TILE, A.w, F.left, F.mid, F.right);
+  tileRow(g, stone, A.front + 24, F.course, TILE, A.w, F.left, F.mid, F.right);
+  const [sx, sy, sw, sh] = CASTLE.slit;
+  for (let bx = TOWER_W + 20; bx < A.w - TOWER_W - 20; bx += 66) g.drawImage(stone, sx, sy, sw, sh, bx, A.front + 22, sw, sh);
+  // Its shadow on the grass
+  veil(g, 0, A.front + FRONT_FACE, A.w, 4, 0.3);
+  veil(g, 0, A.front + FRONT_FACE + 4, A.w, 3, 0.14);
 }
 
-/** A merlon of the battlements, its top lit, its face below in shade (top left at x, y) */
-function merlon(g: G, x: number, y: number): void {
-  px(g, STONE.line, x, y, 7, 8);
-  px(g, STONE.pale, x + 1, y + 1, 5, 1);
-  px(g, STONE.light, x + 1, y + 2, 5, 1);
-  px(g, STONE.dark, x + 1, y + 3, 5, 4);
-  px(g, STONE.mid, x + 1, y + 3, 1, 4);
-}
-
-/** An arrow slit in a wall's face: a dark cut with a lit edge, a little cross near its top */
-function slit(g: G, x: number, y: number): void {
-  px(g, STONE.line, x, y, 2, 10);
-  px(g, STONE.line, x - 1, y + 3, 4, 1);
-  px(g, STONE.pale, x - 1, y, 1, 10);
-}
-
-/** The towers at the castle's four corners: their size, and the height of the tall ones at the back and of their roofs */
-const TOWER = { r: 16, tall: 70, roof: 56, low: 30 };
-/** The middles of the towers' feet (in the hall's pixels): two tall ones at the back, two low ones at the front */
+/** The towers: as wide as two of the castle sheet's tiles, where their floor is (from their top), and how tall the tall ones and the low ones are */
+const TOWER_W = 64;
+const TOWER_FLOOR = 36;
+const TOWER_TALL = 172;
+const TOWER_LOW = 84;
+/** Where the towers stand (in the hall's pixels: their left edge and their foot): two tall ones at the back, two low ones at the front */
 const TOWERS = [
-  { x: TOWER.r + 1, foot: A.wall + 8, body: TOWER.tall, roof: TOWER.roof },
-  { x: A.w - TOWER.r - 1, foot: A.wall + 8, body: TOWER.tall, roof: TOWER.roof },
-  { x: TOWER.r + 1, foot: A.front + FRONT_WALL + FRONT_FACE + 6, body: TOWER.low, roof: 0 },
-  { x: A.w - TOWER.r - 1, foot: A.front + FRONT_WALL + FRONT_FACE + 6, body: TOWER.low, roof: 0 },
+  { x: -8, foot: A.wall + 10, tall: true },
+  { x: A.w - TOWER_W, foot: A.wall + 10, tall: true },
+  { x: -8, foot: A.front + FRONT_FACE + 4, tall: false },
+  { x: A.w - TOWER_W, foot: A.front + FRONT_FACE + 4, tall: false },
 ];
-/** How flat a tower's round shows from up here (the height of its ellipse to its width) */
-const FLAT = 0.38;
-
-function towers(g: G): void {
-  for (const t of TOWERS) tower(g, t.x, t.foot, TOWER.r, t.body, t.roof);
-}
-
-/** A filled ellipse in whole pixels, row by row */
-function ellipseRows(g: G, color: string, cx: number, cy: number, rx: number, ry: number): void {
-  for (let j = -ry; j <= ry; j++) {
-    const half = Math.round(rx * Math.sqrt(Math.max(0, 1 - (j / (ry + 0.5)) ** 2)));
-    if (half > 0) px(g, color, cx - half, cy + j, half * 2 + 1, 1);
-  }
-}
 
 /**
- * A round tower of the castle's stone, its foot's middle at (cx, foot), lit from the left: courses
- * of stone, an arrow slit, a crenellated parapet on corbels, and when `roof` (its height) a pointed
- * roof of slate with a golden trim and a golden finial (the flag on it waves: drawHallWall)
+ * A narrow round tower from the castle sheet: a floor of stone inside its parapet, the parapet seen
+ * from above with the merlons on its far side, and its body with the merlons of its near side. A tall
+ * one has a longer body (its middle courses once more), a low one only the top and the foot of it.
  */
-function tower(g: G, cx: number, foot: number, r: number, body: number, roof: number): void {
-  const ry = Math.round(r * FLAT);
-  const top = foot - body;
-  const curve = (dx: number, rr = r, h = ry) => Math.round(Math.sqrt(Math.max(0, 1 - (dx / (rr + 0.5)) ** 2)) * h);
-  const tone = (t: number, light = false) =>
-    t < -0.7 ? (light ? STONE.light : STONE.mid) : t < -0.3 ? (light ? STONE.pale : STONE.light) : t < 0.2 ? (light ? STONE.light : STONE.mid) : t < 0.6 ? (light ? STONE.mid : STONE.dark) : light ? STONE.dark : STONE.shade;
-  // Its shadow on the ground, to the right
-  g.fillStyle = 'rgba(14,10,24,0.28)';
-  g.beginPath();
-  g.ellipse(cx + 6, foot + 1, r + 4, ry + 2, 0, 0, Math.PI * 2);
-  g.fill();
-  // The body, column by column, from its top's curve down to its foot's
-  for (let dx = -r; dx <= r; dx++) {
-    const c = curve(dx);
-    px(g, tone(dx / r), cx + dx, top + c, 1, body);
-    px(g, STONE.line, cx + dx, foot + c, 1, 1);
-    // Courses: a joint every 8 px along the curve, the upright joints staggered
-    for (let y = 8; y < body; y += 8) {
-      px(g, 'rgba(14,10,24,0.32)', cx + dx, top + c + y);
-      if ((dx + r + ((y / 8) % 2) * 5) % 10 === 0) px(g, 'rgba(14,10,24,0.26)', cx + dx, top + c + y - 7, 1, 7);
-    }
+function castleTower(stone: HTMLCanvasElement, tall: boolean): HTMLCanvasElement {
+  const T = CASTLE.tower;
+  const [c, g] = canvas(TOWER_W, tall ? TOWER_TALL : TOWER_LOW);
+  const top = 16;
+  // The floor: stone flags in the shade of the parapet
+  for (let j = -8; j <= 8; j++) {
+    const half = Math.round(25 * Math.sqrt(1 - (j / 8.5) ** 2));
+    px(g, STONE.shade, TOWER_W / 2 - half, top + 20 + j, half * 2, 1);
   }
-  px(g, STONE.line, cx - r - 1, top, 1, body + 1);
-  px(g, STONE.line, cx + r + 1, top, 1, body + 1);
-  veil(g, cx - r, foot - 4, r * 2 + 1, 4, 0.15);
-  slit(g, cx - 4, top + Math.round(body * 0.35) + ry);
-  // Corbels under the parapet, which stands out a little all around
-  const pr = r + 2;
-  for (let dx = -pr + 1; dx < pr; dx += 3) px(g, STONE.line, cx + dx, top + curve(dx, pr) + 1, 2, 3);
-  const pt = top - 5;
-  for (let dx = -pr; dx <= pr; dx++) {
-    const c = curve(dx, pr, ry + 1);
-    px(g, tone(dx / pr, true), cx + dx, pt + c, 1, 6);
-    px(g, STONE.line, cx + dx, pt + c + 6, 1, 1);
+  for (let y = top + 14; y < top + 28; y += 5) px(g, STONE.deep, 10, y, TOWER_W - 20, 1);
+  const piece = (sy: number, h: number, y: number) => T.cols.forEach((sx, k) => g.drawImage(stone, sx, sy, TILE, h, k * TILE, y, TILE, h));
+  piece(T.ring[0], T.ring[1], top);
+  piece(T.merlons[0], T.merlons[1], top - 16);
+  const [by] = T.body;
+  if (tall) {
+    piece(by, 64, top + 12);
+    piece(by + 32, 32, top + 76);
+    piece(by + 64, 48, top + 108);
+  } else {
+    piece(by, 26, top + 12);
+    piece(by + 82, 30, top + 38);
   }
-  px(g, STONE.line, cx - pr - 1, pt - 1, 1, 8);
-  px(g, STONE.line, cx + pr + 1, pt - 1, 1, 8);
-  // The ring of merlons: the far half behind, the near half in front
-  const merlons = Array.from({ length: 12 }, (_, k) => (k / 12) * Math.PI * 2).sort((a, b) => Math.sin(a) - Math.sin(b));
-  const ringMerlon = (a: number) => {
-    const mx = Math.round(cx + Math.cos(a) * (pr - 2));
-    const my = Math.round(pt + Math.sin(a) * ry);
-    px(g, STONE.line, mx - 2, my - 5, 5, 6);
-    px(g, STONE.pale, mx - 1, my - 4, 3, 1);
-    px(g, Math.cos(a) < 0 ? STONE.light : STONE.dark, mx - 1, my - 3, 3, 3);
-  };
-  if (!roof) {
-    ellipseRows(g, STONE.line, cx, pt, pr, ry + 1);
-    ellipseRows(g, STONE.light, cx, pt, pr - 1, ry);
-    ellipseRows(g, STONE.shade, cx, pt + 1, pr - 4, ry - 2);
-    for (const a of merlons) ringMerlon(a);
-    return;
+  return c;
+}
+
+function towers(g: G, stone: HTMLCanvasElement): void {
+  const art = { tall: castleTower(stone, true), low: castleTower(stone, false) };
+  for (const t of TOWERS) {
+    const img = t.tall ? art.tall : art.low;
+    // Its shadow on the ground, to the right
+    g.fillStyle = 'rgba(14,10,24,0.28)';
+    g.beginPath();
+    g.ellipse(t.x + TOWER_W / 2 + 6, t.foot - 6, TOWER_W / 2 + 2, 9, 0, 0, Math.PI * 2);
+    g.fill();
+    g.drawImage(img, t.x, t.foot - img.height);
   }
-  for (const a of merlons) if (Math.sin(a) < 0) ringMerlon(a);
-  // The roof: a cone from the parapet up to its tip, the slate in rows of scales, a golden trim along its eave
-  const rr = pr - 1;
-  const tip = pt - roof;
-  for (let dx = -rr; dx <= rr; dx++) {
-    const t = dx / rr;
-    const from = Math.round(tip + roof * Math.abs(t) * 0.9);
-    const eave = pt + curve(dx, rr, ry);
-    const color = t < -0.5 ? SLATE.light : t < -0.1 ? SLATE.shine : t < 0.35 ? SLATE.light : t < 0.7 ? SLATE.mid : SLATE.dark;
-    px(g, color, cx + dx, from, 1, eave - from);
-    for (let y = eave - 4; y > from; y -= 5) {
-      px(g, SLATE.dark, cx + dx, y);
-      if ((dx + Math.round((eave - y) / 5) * 2) % 4 === 0) px(g, SLATE.dark, cx + dx, y - 2, 1, 2);
-    }
-    px(g, SLATE.line, cx + dx, from - 1);
-    px(g, GOLD.dark, cx + dx, eave - 1);
-    px(g, GOLD.light, cx + dx, eave - 2);
-    px(g, SLATE.line, cx + dx, eave);
-  }
-  for (const a of merlons) if (Math.sin(a) >= 0) ringMerlon(a);
-  // The finial
-  px(g, GOLD.line, cx - 1, tip - 4, 3, 5);
-  px(g, GOLD.light, cx, tip - 4, 1, 4);
 }
 
 // ------------------------------------------------------------ what stands up and burns (every frame)
@@ -1194,7 +1207,7 @@ function glow(g: G, x: number, y: number, radius: number, strength: number, now:
 /** Where the torches on the back wall's pillars burn (sprite pixels: the flame's foot) */
 const TORCHES: { x: number; y: number }[] = (() => {
   const out: { x: number; y: number }[] = [];
-  for (let cx = 46; cx < A.east - 12; cx += 68) out.push({ x: cx, y: A.top + 74 });
+  for (let cx = 46; cx < A.east - 12; cx += 68) if (cx > TOWERS[0].x + TOWER_W + 6 && cx < TOWERS[1].x - 6) out.push({ x: cx, y: A.top + 74 });
   return out;
 })();
 
@@ -1352,11 +1365,11 @@ export function drawHallWall(g: G, now: number): void {
     sconce(g, p.x, p.y);
     flame(g, p.x, p.y + 1, now, k);
   });
-  // The flags on the tall towers' roofs, waving
+  // The flags on the tall towers, waving
   TOWERS.forEach((t, k) => {
-    if (!t.roof) return;
-    const tip = at(t.x, t.foot - t.body - 5 - t.roof - 4);
-    flag(g, tip.x, tip.y, now, k);
+    if (!t.tall) return;
+    const p = at(t.x + TOWER_W / 2, t.foot - TOWER_TALL + TOWER_FLOOR);
+    flag(g, p.x, p.y, now, k);
   });
 }
 

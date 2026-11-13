@@ -98,8 +98,8 @@ export const HALL_ART = {
   /** The top of the back wall (its face, seen from inside), and its foot */
   top: 64,
   wall: 192,
-  /** The top edge of the front wall, along the bottom of the hall */
-  front: 590,
+  /** The front wall's outer edge along the bottom of the hall (its walk lies above it, its face below) */
+  front: 580,
   /** The red carpet, from the hall's open side to the throne: its top and bottom edge */
   carpet: { y0: 366, y1: 442 },
   /**
@@ -125,9 +125,9 @@ export const HALL_ART = {
  * wades through the water: whoever has to get across takes the bridge.
  */
 export const RIVERSIDE_ART = {
-  w: 156,
-  /** The band the river winds down in, its banks included */
-  river: { x0: 14, x1: 142 },
+  w: 190,
+  /** The band the river winds down in, its banks included (clear of the town's last house, which sticks out over the grass) */
+  river: { x0: 40, x1: 176 },
   /** The bridge's deck between its two parapets: its top and bottom edge */
   bridge: { y0: 368, y1: 440 },
 };

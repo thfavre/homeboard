@@ -107,11 +107,11 @@ function houses(g: CanvasRenderingContext2D, env: Env, bottom: number, seed: num
   }
 }
 
-/** A band of sidewalk slabs from y0 to y1 (sprite pixels) with its curb at the bottom */
-function sidewalk(g: CanvasRenderingContext2D, env: Env, y0: number, y1: number) {
+/** A band of sidewalk slabs from y0 to y1 (sprite pixels) with its curb at the bottom, `width` long */
+function sidewalk(g: CanvasRenderingContext2D, env: Env, y0: number, y1: number, width = PW) {
   const img = env['street-sidewalk'];
   for (let y = y0; y < y1; y += 32) {
-    for (let x = 0; x < PW; x += 32) {
+    for (let x = 0; x < width; x += 32) {
       const v = ((x / 32) % 2) * 32;
       const w = (((y - y0) / 32) % 2) * 32;
       g.drawImage(img, 192 + v, 160 + w, 32, Math.min(32, y1 - y), x, y, 32, Math.min(32, y1 - y));
@@ -119,9 +119,9 @@ function sidewalk(g: CanvasRenderingContext2D, env: Env, y0: number, y1: number)
   }
   // The curb: a light edge and its shadow on the ground below
   g.fillStyle = '#9aa0a6';
-  g.fillRect(0, y1 - 3, PW, 3);
+  g.fillRect(0, y1 - 3, width, 3);
   g.fillStyle = 'rgba(0,0,0,0.35)';
-  g.fillRect(0, y1, PW, 3);
+  g.fillRect(0, y1, width, 3);
 }
 
 /** The race street: houses, a sidewalk, the road with its lane marks, the start and finish lines */
@@ -183,32 +183,42 @@ export function streetGround(env: Env, startX: number, finishX: number, font: st
 }
 
 /** The spy square (and the town, with its shops swapped in): houses, a sidewalk, stone slabs, a light frame of stone around the fountain */
-export function squareGround(env: Env, swap?: HouseSwap): HTMLCanvasElement {
+/** Where the square's sidewalk ends, below its houses (sprite pixels) */
+export const SQUARE_STREET = 128;
+
+/**
+ * The square's ground in sprite pixels. `width` builds it wider than the screen, to show what goes on
+ * past its right edge (the last house sticks out: the town's TV view draws it over the riverside).
+ */
+export function squareGround(env: Env, swap?: HouseSwap, width = PW): HTMLCanvasElement {
   const c = document.createElement('canvas');
-  c.width = PW;
+  c.width = width;
   c.height = PH;
   const g = c.getContext('2d')!;
   g.imageSmoothingEnabled = false;
   const r = seeded(9);
+  const past = seeded(19);
   const slabs = env['pave-stone-slabs'];
   const fx = SPY_SCENE.fountain.x / S;
   const fy = SPY_SCENE.fountain.y / S;
   for (let y = 0; y < PH; y += 32) {
-    for (let x = 0; x < PW; x += 32) {
+    for (let x = 0; x < width; x += 32) {
       // Grey slabs, a light rectangle of stone around the fountain framed by darker slabs, light stone
       // along the edges of the square
       const dx = Math.abs(x + 16 - fx);
       const dy = Math.abs(y + 16 - fy);
       const inner = dx < 150 && dy < 90;
       const frame = !inner && dx < 182 && dy < 122;
-      const edge = x < 40 || x > PW - 72 || y > PH - 40;
-      const col = inner || frame || edge ? Math.floor(r() * 2) : 2 + Math.floor(r() * 2);
-      const row = frame ? 4 + Math.floor(r() * 2) : inner || edge ? Math.floor(r() * 2) : Math.floor(r() * 4);
+      const edge = x < 40 || (x > PW - 72 && x < PW) || y > PH - 40;
+      // Past the screen's edge from its own numbers, so the square looks the same however wide it is built
+      const rand = x < PW ? r : past;
+      const col = inner || frame || edge ? Math.floor(rand() * 2) : 2 + Math.floor(rand() * 2);
+      const row = frame ? 4 + Math.floor(rand() * 2) : inner || edge ? Math.floor(rand() * 2) : Math.floor(rand() * 4);
       g.drawImage(slabs, col * 32, row * 32, 32, 32, x, y, 32, 32);
     }
   }
   houses(g, env, SQUARE_HOUSES.bottom, SQUARE_HOUSES.seed, swap);
-  sidewalk(g, env, SQUARE_HOUSES.bottom, 128);
+  sidewalk(g, env, SQUARE_HOUSES.bottom, SQUARE_STREET, width);
   return c;
 }
 
