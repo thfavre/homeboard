@@ -233,7 +233,8 @@ function buildGround(sheets: Sheets): HTMLCanvasElement {
   const [sx, sy, sw, sh] = TOPIARY;
   for (const [x, y] of [
     [A.dais[0].x + 22, A.dais[0].y1 + 62],
-    [A.east - 24, A.dais[0].y1 + 62],
+    // Clear of the low tower at the front right corner
+    [TOWERS[3].x - 20, A.dais[0].y1 + 62],
   ]) {
     g.fillStyle = 'rgba(14,10,24,0.26)';
     g.beginPath();
@@ -870,8 +871,6 @@ function backWall(g: G): void {
     }
   }
   for (let k = 0; first + k * step < x1 - 12; k++) pillar(g, first + k * step, 0, wall + 6, 22);
-  // The corner by the open side: a pier of lighter stone, a step out of the wall
-  pier(g, 0, -BACK_TOP - 2, 30, wall + 10);
 }
 
 /** A round pillar from `top` down to its foot at `bottom`, lit from the left, a golden ring under the torch it carries */
@@ -915,25 +914,6 @@ function pillar(g: G, cx: number, top: number, bottom: number, w: number): void 
   px(g, STONE.pale, x - 3, shaftBottom + 6, w + 6, 1);
   px(g, STONE.mid, x + w - 4, shaftBottom + 7, 7, 4);
   veil(g, x - 2, bottom, w + 8, 2, 0.3);
-}
-
-/** A square pier of lighter stone (the corner of the hall by its open side) */
-function pier(g: G, x: number, top: number, w: number, bottom: number): void {
-  const r = seeded(12);
-  px(g, STONE.line, x, top, w, bottom - top);
-  for (let y = bottom - 14, row = 0; y > top - 14; y -= 14, row++) {
-    const half = row % 2 ? Math.round(w / 2) : 0;
-    for (const [bx, bw] of half ? [[x, half - 1], [x + half, w - half - 1]] : [[x, w - 1]]) {
-      px(g, STONE.mid, bx, y, bw, 13);
-      if (r() < 0.4) veil(g, bx, y, bw, 13, 0.08);
-      px(g, STONE.light, bx, y, bw, 1);
-      px(g, STONE.light, bx, y, 1, 13);
-      px(g, STONE.dark, bx, y + 12, bw, 1);
-    }
-  }
-  // Its shadow on the wall and the floor to its right
-  veil(g, x + w, top, 6, bottom - top - 10, 0.3);
-  veil(g, x + 2, bottom, w + 4, 3, 0.3);
 }
 
 /** A small crown in gold, 13 x 8 sprite pixels (the banners' emblem) */
@@ -1107,9 +1087,9 @@ const TOWER_TALL = 172;
 const TOWER_LOW = 84;
 /** Where the towers stand (in the hall's pixels: their left edge and their foot): two tall ones at the back, two low ones at the front */
 const TOWERS = [
-  { x: -22, foot: A.wall + 10, tall: true },
-  { x: A.w - TOWER_W, foot: A.wall + 10, tall: true },
-  { x: -8, foot: A.front + FRONT_FACE + 4, tall: false },
+  { x: -22, foot: A.wall - 2, tall: true },
+  { x: A.w - TOWER_W, foot: A.wall - 2, tall: true },
+  { x: -22, foot: A.front + FRONT_FACE + 4, tall: false },
   { x: A.w - TOWER_W, foot: A.front + FRONT_FACE + 4, tall: false },
 ];
 
