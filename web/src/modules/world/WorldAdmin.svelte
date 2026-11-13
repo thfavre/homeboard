@@ -173,8 +173,8 @@
       <Toggle checked={!!mod.dayCycle} label="Day and night" onchange={(v) => setOption('dayCycle', v)} />
     </div>
     <label class="field">
-      <span>A whole day lasts (minutes, 15 to 60)</span>
-      <input class="input" type="number" min="15" max="60" value={mod.dayMin} onchange={(e) => setAmount('dayMin', e.currentTarget.value)} />
+      <span>A whole day lasts (minutes, 5 to 120)</span>
+      <input class="input" type="number" min="5" max="120" value={mod.dayMin} onchange={(e) => setAmount('dayMin', e.currentTarget.value)} />
     </label>
     <div class="pair">
       <label class="field">

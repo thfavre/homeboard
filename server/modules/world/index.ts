@@ -1138,7 +1138,7 @@ export default defineModule<WorldSettings>({
         ceremonySec: Math.max(10, secs(args.ceremonySec, s.ceremonySec, 600)),
         ceremonyGraceSec: secs(args.ceremonyGraceSec, s.ceremonyGraceSec, 120),
         dayCycle: typeof args.dayCycle === 'boolean' ? args.dayCycle : s.dayCycle,
-        dayMin: Math.max(15, Math.min(60, Math.round(num(args.dayMin, s.dayMin)))),
+        dayMin: Math.max(5, Math.min(120, Math.round(num(args.dayMin, s.dayMin)))),
         dusk: timeOfDay(args.dusk) ?? s.dusk,
         dawn: timeOfDay(args.dawn) ?? s.dawn,
         twilightMin: Math.max(0, Math.min(240, Math.round(num(args.twilightMin, s.twilightMin)))),
