@@ -98,9 +98,13 @@ export function houseArt(env: Env, kind: HouseKind): [HTMLImageElement, Cut] {
  */
 export type HouseSwap = (kind: HouseKind, x: number) => CanvasImageSource | null;
 
-/** A row of houses along the top, bottom at `bottom` (sprite pixels), cut off by the top of the screen */
-function houses(g: CanvasRenderingContext2D, env: Env, bottom: number, seed: number, swap?: HouseSwap) {
+/**
+ * A row of houses along the top, bottom at `bottom` (sprite pixels), cut off by the top of the
+ * screen. `from`: only the houses from there on (the town's TV draws their roofs above the screen)
+ */
+export function houses(g: CanvasRenderingContext2D, env: Env, bottom: number, seed: number, swap?: HouseSwap, from = -Infinity) {
   for (const h of houseRow(seed, PW)) {
+    if (h.x < from) continue;
     const [img, c] = houseArt(env, h.kind);
     const instead = swap?.(h.kind, h.x);
     if (instead) g.drawImage(instead, h.x, bottom - c[3]);

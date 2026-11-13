@@ -16,6 +16,7 @@
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
+  import { MARGIN, townBottom, townTop } from './townMargins.ts';
   import { TOWN_HALL_SPAN, drawTownHall, drawTownHallClock, drawTownHallLight } from './townHall.ts';
   import { drawLaughing, drawTalking, nodDip } from './chat.ts';
   import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
@@ -231,6 +232,9 @@
   let bgKey = '';
   /** Where the town meets the grass (built with the ground once the throne room's art is there): drawn over the river's frames */
   let edge: { canvas: HTMLCanvasElement; x: number } | null = null;
+  /** The bands past the town's top and bottom (built with the ground), and how high each is (world units) */
+  let margins: { top: HTMLCanvasElement; bottom: HTMLCanvasElement } | null = null;
+  const BAND = MARGIN * SPRITE_SCALE;
   function background(): HTMLCanvasElement {
     const key = `${!!env}${!!shopArt}${!!hall}${!!cafe}`;
     if (bg && bgKey === key) return bg;
@@ -259,6 +263,7 @@
         g.drawImage(edge.canvas, edge.x * SPRITE_SCALE, 0, edge.canvas.width * SPRITE_SCALE, edge.canvas.height * SPRITE_SCALE);
       }
       bg = c;
+      margins = { top: townTop(env, swap), bottom: townBottom(env) };
     } else {
       // Until the art is there: plain stone
       const c = document.createElement('canvas');
@@ -271,23 +276,6 @@
     }
     bgKey = key;
     return bg;
-  }
-
-  /**
-   * What of the town always shows on the TV (world units): the square where everyone walks and the
-   * buildings' fronts. The strips around it (the left of the town hall, the paving at the sides, the
-   * roof tops, the bottom row) are only shown when the screen's shape has room for them. Narrow
-   * enough to fill the town's box next to the side cards on a 16:9 TV (about 1.53 wide)
-   */
-  const TOWN_MUST = { x0: 110, x1: 1490, y0: 20, y1: 885 };
-
-  /**
-   * Where the view starts along one axis (world units), `view` long: bigger than the town, the town
-   * in the middle (bands on both sides); smaller, centered on what must show, kept inside the town
-   */
-  function viewStart(view: number, size: number, must0: number, must1: number): number {
-    if (view >= size) return (size - view) / 2;
-    return Math.max(0, Math.min(size - view, (must0 + must1) / 2 - view / 2));
   }
 
   function draw(): void {
@@ -327,24 +315,32 @@
 
     // The camera: on the town, or moved to the right for the ceremony in the throne room (on
     // whole screen pixels, so the ground does not shimmer as it slides)
-    // The town fills the screen, its edges cut away as the screen's shape needs, but never into
-    // what must show (TOWN_MUST): only past that do bands show
-    const k = Math.min(Math.max(cw / TOWN.w, ch / TOWN.h), cw / (TOWN_MUST.x1 - TOWN_MUST.x0), ch / (TOWN_MUST.y1 - TOWN_MUST.y0));
-    const ox = viewStart(cw / k, TOWN.w, TOWN_MUST.x0, TOWN_MUST.x1);
-    const oy = viewStart(ch / k, TOWN.h, TOWN_MUST.y0, TOWN_MUST.y1);
+    const k = Math.min(cw / TOWN.w, ch / TOWN.h);
     const cam = f0 ? (f0.cam ?? 0) + (f1 ? ((f1.cam ?? 0) - (f0.cam ?? 0)) * mix : 0) : 0;
     const shift = Math.round(Math.max(0, Math.min(1, cam)) * HALL_PAN * k);
     const away = shift > 0;
-    g.setTransform(k, 0, 0, k, -ox * k - shift, -oy * k);
+    g.setTransform(k, 0, 0, k, (cw - TOWN.w * k) / 2 - shift, (ch - TOWN.h * k) / 2);
     g.save();
     if (away) {
-      // Moved over: only what the screen shows of both (nothing spills into the letterbox bands)
+      // Moved over: only what the screen shows of both (nothing spills into the bands at the sides)
       g.beginPath();
-      g.rect(shift / k, 0, TOWN.w, TOWN.h);
+      g.rect(shift / k, -BAND, TOWN.w, TOWN.h + 2 * BAND);
       g.clip();
     }
 
     const ground = background();
+    // Past the town's top and bottom, in the bands the screen's shape leaves: the roofs and trees
+    // above, the street below (the town hall's top over the roofs)
+    if (margins) {
+      g.drawImage(margins.top, 0, 0, TOWN.w / SPRITE_SCALE, MARGIN, 0, -BAND, TOWN.w, BAND);
+      g.drawImage(margins.bottom, 0, 0, TOWN.w / SPRITE_SCALE, MARGIN, 0, TOWN.h, TOWN.w, BAND);
+      g.save();
+      g.beginPath();
+      g.rect(0, -BAND, TOWN.w, BAND);
+      g.clip();
+      drawTownHall(g);
+      g.restore();
+    }
     if (ground.width < TOWN.w) g.drawImage(ground, 0, 0, TOWN.w, TOWN.h);
     else if (away) g.drawImage(ground, 0, 0);
     else g.drawImage(ground, 0, 0, TOWN.w, TOWN.h, 0, 0, TOWN.w, TOWN.h);
@@ -620,7 +616,7 @@
     // day the host set, and sends how dark it is with every frame.
     if (dark > 0.02) {
       g.fillStyle = `rgba(14,16,42,${0.44 * dark})`;
-      g.fillRect(0, 0, TOWN.w + (away ? HALL_PAN : 0), TOWN.h);
+      g.fillRect(0, -BAND, TOWN.w + (away ? HALL_PAN : 0), TOWN.h + 2 * BAND);
       // The shops stay lit inside
       for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
       // The lamp posts the lamplighter has lit shine through the veil, with a pool of light on the pavement under them
