@@ -2,9 +2,9 @@
  * Draws the bra sheets (assets/lpc/spritesheets/torso/clothes/bra/female/) from the LPC "Sleeveless 2"
  * top, frame by frame, so it has every animation and the same pixel style. Seen from the front: two
  * straps from the shoulders down to two rounded cups, a V between them; from the back a straight band
- * under the straps; from the side a strap from the top of the shoulder slanting down to a rounded cup on the front of the chest, and a thin
- * band from it to the back. Every cut edge gets the top's dark outline. Which way is
- * "up" in a frame (standing, sitting, lying hurt) comes from where the head is.
+ * under the straps; from the side a strap from the top of the shoulder slanting down to a rounded cup
+ * on the front of the chest, and a thin band from it to the back. Every cut edge gets a shade of the
+ * cloth. Which way is "up" in a frame (standing, sitting, lying hurt) comes from where the head is.
  *
  *   npx tsx scripts/make-bra.ts
  */
@@ -35,6 +35,12 @@ const SIDE_STRAP = { top: 0.8, low: 0.45, lowAt: 0.4 };
 const STRAP_IN = 2;
 /** Of the chest's width: each cup's half width around its middle */
 const CUP_HALF = 0.27;
+/**
+ * The cut edges and the sides of the straps: a shade of the cloth, not the top's near-black outline
+ * (clothes in LPC shade their inner edges in their own color). One of the cloth palette's colors, so
+ * it follows the bra's color when it is recolored
+ */
+const EDGE = [149, 128, 128];
 /** The rows of a four-way sheet, top to bottom */
 const FACING = ['back', 'side', 'front', 'side'] as const;
 
@@ -168,7 +174,7 @@ for (const file of readdirSync(TOP).filter((f) => f.endsWith('.png'))) {
         const inStrap =
           strapAt(x, y) && (facing === 'side' ? !sideCup(x, y) && t(x, y) < SIDE_BAND[0] : t(x, y) < (facing === 'back' ? BACK[0] : CUP_TOP_OUT));
         const strapMid = inStrap && strapAt(x - up[1], y + up[0]) && strapAt(x + up[1], y - up[0]);
-        const c = inStrap ? (strapMid ? cloth : dark) : cut ? dark : [top.data[i], top.data[i + 1], top.data[i + 2]];
+        const c = inStrap ? (strapMid ? cloth : EDGE) : cut ? EDGE : [top.data[i], top.data[i + 1], top.data[i + 2]];
         out.data[i] = c[0];
         out.data[i + 1] = c[1];
         out.data[i + 2] = c[2];
