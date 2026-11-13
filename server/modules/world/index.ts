@@ -5,7 +5,7 @@ import { defineModule } from '../../core/module.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, kingPriceAt, lookCost, validChoices, type AvatarChoices, type CeremonyHold, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
-import { CATALOG, TIERS, itemById, notForTheKing, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
+import { CATALOG, TIERS, itemById, notForTheKing, starterPieces, openSlots, piecesOf, splitColor, validOutfit, validWorn, type Outfit, type Slot, type Tier, type WardrobeItem, type WornItem } from '../../../shared/wardrobe.ts';
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
@@ -128,8 +128,10 @@ interface WorldData {
   credits: Record<string, { authors: string[]; license: string; urls: string[]; notes?: string }>;
   /** The town's own money per guest */
   wallets?: Record<string, number>;
-  /** Bought pieces per guest, each an item in one color, kept forever */
+  /** Bought pieces per guest, each an item in one color, kept forever (the starter pieces too) */
   owned?: Record<string, WornItem[]>;
+  /** The starter pieces were handed to the avatars made before they existed */
+  startersGiven?: boolean;
   /** Saved outfits per guest, one per slot (null: an empty slot), put back on in one tap */
   saved?: Record<string, (Outfit | null)[]>;
   king?: KingData;
@@ -281,6 +283,23 @@ export default defineModule<WorldSettings>({
       store.save();
     };
     setInterval(cleanSheets, 10 * 60_000);
+
+    // Avatars made before the starter pieces: they get them, and wear them where the body was bare
+    // (the white shorts and the bra were drawn there before they were pieces). Once.
+    if (!store.data.startersGiven) {
+      for (const [id, a] of Object.entries(store.data.avatars)) {
+        giveStarters(id, a.choices.body);
+        const st = starterPieces(a.choices.body);
+        const dress = (o: Outfit) => {
+          if (!o.bottom && !o.dress) o.bottom = { ...st.bottom! };
+          if (st.top && !o.top && !o.dress) o.top = { ...st.top };
+        };
+        dress((a.outfit ??= {}));
+        if (a.town) dress(a.town.outfit);
+      }
+      store.data.startersGiven = true;
+      store.save();
+    }
 
     // Sheets made before they were measured one by one, before a row was added (kneeling), or named
     // another way (a look saved before the shop, a catalog change in the layers of a piece): draw
@@ -556,9 +575,17 @@ export default defineModule<WorldSettings>({
 
     /** The saved outfit, dropping pieces that do not fit this body (after a body change) */
     const outfitFor = (guestId: string, body: 'male' | 'female'): Outfit => {
+      // A new guest tries looks on in the starter pieces they are about to get
+      if (!store.data.avatars[guestId]) return starterPieces(body);
       const entries = Object.entries(store.data.avatars[guestId]?.outfit ?? {}).filter(([, w]) => validWorn(w, body));
       return Object.fromEntries(entries);
     };
+
+    /** Hand a guest the starter pieces they do not own yet */
+    function giveStarters(guestId: string, body: 'male' | 'female') {
+      const mine = (owned[guestId] ??= []);
+      for (const w of Object.values(starterPieces(body))) if (!mine.some((o) => o.id === w.id && o.color === w.color)) mine.push({ ...w });
+    }
 
     ctx.onGuest('preview', async (args, guest) => {
       const stored = store.data.avatars[guest.id];
@@ -624,6 +651,7 @@ export default defineModule<WorldSettings>({
           if (t.choices.eyes !== choices.eyes) setTown(guest.id, { choices: { ...t.choices, eyes: choices.eyes }, outfit: t.outfit });
         }
         if (!had) {
+          giveStarters(guest.id, choices.body);
           // Pocket money to get the first clothes with
           const start = Math.max(0, Math.round(ctx.settings.get().startMoney));
           if (start) {
@@ -945,11 +973,20 @@ export default defineModule<WorldSettings>({
       };
       check();
       // What the King cannot wear comes off with the crown (a dress or skirt unfit for the throne, a
-      // head the crown does not sit on): what is left is the look they started with there, the white
-      // underwear under a bare slot. Both on the phone and in the town, at once.
+      // head the crown does not sit on): the starter pieces go on in its place, as at the start. Both
+      // on the phone and in the town, at once.
+      const st = starterPieces(a.choices.body);
+      giveStarters(guest.id, a.choices.body);
       const fit = (o: Outfit): Outfit => {
         const out = { ...o };
-        for (const k of ['bottom', 'dress', 'costume'] as const) if (out[k] && notForTheKing(itemById(out[k]!.id))) delete out[k];
+        for (const k of ['bottom', 'dress', 'costume'] as const) {
+          if (!out[k] || !notForTheKing(itemById(out[k]!.id))) continue;
+          delete out[k];
+          if (k === 'dress') {
+            out.bottom = { ...st.bottom! };
+            if (st.top) out.top = { ...st.top };
+          } else if (k === 'bottom') out.bottom = { ...st.bottom! };
+        }
         return out;
       };
       const town = townOf(a);

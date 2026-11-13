@@ -59,8 +59,8 @@ interface Item {
 }
 
 /**
- * The items a guest's choices and outfit stand for. The white underwear (shorts and basic shoes,
- * and a bra on a female body) stays wherever the outfit leaves the body bare; a dress covers the bottom slot too. A costume
+ * The items a guest's choices and outfit stand for. Basic white shoes stay on bare feet (the white
+ * shorts and the bra are pieces every guest owns, see starterPieces); a dress covers the bottom slot too. A costume
  * head is drawn instead of the guest's own head, and takes their hair and beard off unless it is
  * drawn to wear them.
  */
@@ -68,8 +68,6 @@ function itemsOf(c: AvatarChoices, outfit: Outfit): Item[] {
   const costume = costumeOf(outfit);
   const items: Item[] = costume ? [] : [{ def: `head/heads/human/heads_human_${c.body}`, eyes: c.eyes }];
   if (!outfit.feet) items.push({ def: 'feet/shoes/feet_shoes_basic', color: 'white' });
-  if (!outfit.bottom && !outfit.dress) items.push({ def: 'legs/shorts/legs_shorts', color: 'white' });
-  if (c.body === 'female' && !outfit.top && !outfit.dress) items.push({ def: 'torso/torso_clothes_bra', color: 'white' });
   for (const worn of Object.values(outfit)) {
     const item = itemById(worn.id);
     if (item) items.push(...piecesOf(item, worn.color));
@@ -374,9 +372,9 @@ export function choicesHash(c: AvatarChoices, outfit: Outfit = {}): string {
   // Empty slots past the first eight (the slots added later) are left out, so adding a slot keeps
   // the names of the sheets already drawn
   while (worn.length > 8 && worn[worn.length - 1] === null) worn.pop();
-  // The bra under a bare top came later: only those looks get a new name (and are drawn again)
-  const under = c.body === 'female' && !outfit.top && !outfit.dress ? ['bra'] : [];
-  return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes, worn, ...under])).digest('hex').slice(0, 12);
+  // Bare legs (shorts that are a piece now, not drawn under every empty slot) get a new name
+  const bare = !outfit.bottom && !outfit.dress ? ['bare'] : [];
+  return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes, worn, ...bare])).digest('hex').slice(0, 12);
 }
 
 /** Swap the colors of an image in place (a color within 1 of a base color counts as that color) */

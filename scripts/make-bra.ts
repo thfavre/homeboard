@@ -1,8 +1,9 @@
 /**
  * Draws the bra sheets (assets/lpc/spritesheets/torso/clothes/bra/female/) from the LPC "Sleeveless 2"
- * top, frame by frame, so it has every animation and the same pixel style: the chest band is kept,
- * the part above it thins to two straps, and the new lower edge gets the top's dark outline. Which
- * way is "up" in a frame (standing, sitting, lying hurt) comes from where the head is.
+ * top, frame by frame, so it has every animation and the same pixel style. Seen from the front: two
+ * straps from the shoulders down to two rounded cups, a V between them; from the back a straight band
+ * under the straps; from the side the cup. Every cut edge gets the top's dark outline. Which way is
+ * "up" in a frame (standing, sitting, lying hurt) comes from where the head is.
  *
  *   npx tsx scripts/make-bra.ts
  */
@@ -15,11 +16,17 @@ const TOP = join(LPC, 'torso/clothes/sleeveless/sleeveless2/female');
 const HEAD = join(LPC, 'head/heads/human/female');
 const OUT = join(LPC, 'torso/clothes/bra/female');
 const F = 64;
-/** Of the top's length from the shoulders down: where the straps end and where the band ends */
-const STRAPS_TO = 0.3;
-const BAND_TO = 0.62;
-/** How much of the width at each side the straps keep */
-const STRAP_W = 0.26;
+/** Of the top's length from the shoulders down (0) to the waist (1) */
+const CUP_TOP_OUT = 0.28; // the cups' top at the straps
+const CUP_TOP_IN = 0.5; // ... dipping to this between them (the V)
+const CUP_EDGE = 0.66; // the cups' bottom at their sides
+const CUP_LOW = 0.84; // ... and at their lowest
+const BACK = [0.5, 0.7]; // the band across the back
+/** Of the width: the straps at each side, and each cup's half width around its middle */
+const STRAP_W = 0.2;
+const CUP_HALF = 0.27;
+/** The rows of a four-way sheet, top to bottom */
+const FACING = ['back', 'side', 'front', 'side'] as const;
 
 const read = (file: string) => PNG.sync.read(readFileSync(file));
 
@@ -67,15 +74,23 @@ for (const file of readdirSync(TOP).filter((f) => f.endsWith('.png'))) {
       const c1 = Math.max(...cs);
       const t = (x: number, y: number) => (along(x, y) - a0) / Math.max(1, a1 - a0);
       const w = (x: number, y: number) => (across(x, y) - c0) / Math.max(1, c1 - c0);
-      // Narrow seen from the side: one strap in the middle
-      const side = c1 - c0 < 10;
+      // Which side we see: from the sheet's row (one-row sheets face us), or narrow means the side
+      const facing = c1 - c0 < 10 ? 'side' : top.height >= 4 * F ? FACING[cy / F] : 'front';
       const keep = (x: number, y: number) => {
         if (!top.data[at(x, y) + 3]) return false;
         const tt = t(x, y);
-        if (tt > BAND_TO) return false;
-        if (tt >= STRAPS_TO) return true;
         const ww = w(x, y);
-        return side ? Math.abs(ww - 0.5) < 0.2 : ww < STRAP_W || ww > 1 - STRAP_W;
+        const strap = (ww < STRAP_W || ww > 1 - STRAP_W) && tt < CUP_TOP_OUT + 0.1;
+        if (facing === 'back') return strap || (tt >= BACK[0] && tt <= BACK[1]);
+        if (facing === 'side') return (Math.abs(ww - 0.5) < 0.2 && tt < CUP_TOP_OUT + 0.1) || (tt >= CUP_TOP_OUT && tt <= CUP_LOW);
+        if (strap) return true;
+        // The front: below the V of the cups' top, above their round bottoms
+        const fromMid = Math.abs(ww - 0.5) * 2;
+        const cupTop = CUP_TOP_IN - (CUP_TOP_IN - CUP_TOP_OUT) * fromMid;
+        const cupMid = ww < 0.5 ? 0.5 - CUP_HALF + 0.02 : 0.5 + CUP_HALF - 0.02;
+        const k = Math.min(1, Math.abs(ww - cupMid) / CUP_HALF);
+        const cupBottom = CUP_EDGE + (CUP_LOW - CUP_EDGE) * Math.sqrt(1 - k * k);
+        return tt >= cupTop && tt <= cupBottom;
       };
       // The darkest color of the top in this frame: its outline
       let dark = [255, 255, 255];

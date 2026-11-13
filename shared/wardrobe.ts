@@ -437,6 +437,14 @@ for (const item of CATALOG) {
 
 export const itemById =(id: string): WardrobeItem | undefined => CATALOG.find((i) => i.id === id);
 
+/**
+ * What every guest owns and wears from the start, for free: white shorts, and a bra on a female
+ * body. They are pieces like any other: "Nothing" in their slot takes them off.
+ */
+export function starterPieces(body: 'male' | 'female'): Outfit {
+  return body === 'female' ? { bottom: { id: 'shorts', color: 'white' }, top: { id: 'bra', color: 'white' } } : { bottom: { id: 'shorts', color: 'white' } };
+}
+
 /** Costume heads the crown does not sit on (their ears are in the way); the others wear it on top */
 const CROWNLESS_HEADS = new Set(['pig_head', 'rabbit_head', 'mouse_head']);
 
