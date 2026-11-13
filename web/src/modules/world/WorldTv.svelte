@@ -2,7 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-  import { CAFE, CROSSING, DAIS_FOOT, FISH_SPOTS, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, hallLift, townMinutes, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FISH_SPOTS, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, hallLift, townMinutes, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { SQUARE_STREET, loadEnv, squareGround, type Env, type Prop } from '../games/crowd/scene.ts';
   import { DANCE_FEET, cafeArt, drawCafe, drawCafeLight, type CafeArt } from './cafe.ts';
@@ -442,7 +442,7 @@
         // Chatting: both laughing
       } else if (p.anim === WANIM.cheer && p.dir === 1 && img && info && drawHailing(g, img, info, p.x, y, now - l.since)) {
         // The King before the throne, both hands up
-      } else if (p.anim === WANIM.perch && img && info && drawPerched(g, img, info, p.x, y, p.dir, now - l.since)) {
+      } else if (p.anim === WANIM.perch && img && info && drawPerched(g, img, info, p.x, y, p.dir, now - l.since, FIRE_SEATS.some((s) => s.ground && Math.abs(s.x - p.x) < 3 && Math.abs(s.y - p.y) < 3))) {
         // On the fountain's rim, a log by the fire, a cafe chair (with a cup on the table)
         if (CAFE.seats.some((s) => Math.abs(s.x - p.x) < 3 && Math.abs(s.y - p.y) < 3)) drawCup(g, p.x, y, p.dir, now, l.phase);
       } else if (p.anim === WANIM.dance && img && info && drawDancing(g, img, info, p.x, y, now, l.phase)) {

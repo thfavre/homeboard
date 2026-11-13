@@ -16,13 +16,14 @@ import type { Outfit, Tier, WornItem } from './wardrobe.ts';
 export const TOWN = WORLD;
 /**
  * What stands on the town's square (world units, `y` where it stands): the fountain, the trees (each
- * `size` times the art's size) and the lamp posts, in the order the lamplighter knows them
+ * `size` times the art's size, `stem` the share of its trunk showing under the leaves) and the lamp
+ * posts, in the order the lamplighter knows them
  */
 export const TOWN_SCENE = {
   fountain: SPY_SCENE.fountain,
   trees: [
     { x: 430, y: 440, size: 1.12 },
-    { x: 1170, y: 440, size: 0.88 },
+    { x: 1170, y: 440, size: 1.18, stem: 0.62 },
     { x: 480, y: 780, size: 0.97 },
     { x: 1120, y: 780, size: 1.24 },
   ],
@@ -96,6 +97,8 @@ export interface Seat {
   x: number;
   y: number;
   dir: WDir;
+  /** Sitting on the ground (legs out), not on something */
+  ground?: boolean;
 }
 
 /** Places on the fountain's rim: two on its front, one on each side facing out */
@@ -106,27 +109,26 @@ export const FOUNTAIN_SEATS: Seat[] = [
   { x: 883, y: 553, dir: 3 },
 ];
 
-/** The campfire on the grass in the bottom right corner: the fire pit, three logs around it and the places on them */
+/** The campfire on the grass in the bottom right corner: the fire pit, two logs by it (behind and right) and the places around it (on the ground on its left) */
 export const CAMPFIRE = { x: 1400, y: 712 };
 export const FIRE_LOGS = [
-  { x: 1333, y: 717, along: 'y' as const },
   { x: 1467, y: 717, along: 'y' as const },
   { x: 1400, y: 661, along: 'x' as const },
 ];
 export const FIRE_SEATS: Seat[] = [
-  { x: 1343, y: 706, dir: 3 },
-  { x: 1343, y: 733, dir: 3 },
+  { x: 1346, y: 704, dir: 3, ground: true },
+  { x: 1346, y: 734, dir: 3, ground: true },
   { x: 1457, y: 706, dir: 1 },
   { x: 1457, y: 733, dir: 1 },
   { x: 1382, y: 672, dir: 2 },
   { x: 1418, y: 672, dir: 2 },
 ];
 
-/** The notice board on the square, right of the town hall (its right edge is at x 505), and where its readers stand (facing it) */
-export const NOTICE_BOARD = { x: 580, y: 236 };
+/** The notice board at the foot of the town hall, left of its door and steps, and where its readers stand (facing it) */
+export const NOTICE_BOARD = { x: 148, y: 304 };
 export const BOARD_SPOTS = [
-  { x: 562, y: 264 },
-  { x: 600, y: 264 },
+  { x: 130, y: 334 },
+  { x: 168, y: 334 },
 ];
 
 /** Where an angler stands on the river's bank, facing the front with the rod held out to the right, over the water */
@@ -157,8 +159,8 @@ export const CAFE = (() => {
   const window = { x: (h.x + CAFE_ART.glass.x0) * S, y: (CAFE_ART.glass.y0 - top) * S, w: (CAFE_ART.glass.x1 - CAFE_ART.glass.x0) * S, h: (CAFE_ART.glass.y1 - CAFE_ART.glass.y0) * S };
   const doorX = (h.x + CAFE_ART.door) * S;
   const tables = [
-    { x: 1032, y: 236 },
-    { x: 1114, y: 236 },
+    { x: 1036, y: 236 },
+    { x: 1166, y: 236 },
   ];
   return {
     house: { x0: h.x * S, x1: (h.x + h.w) * S, art: h.x },
@@ -168,8 +170,8 @@ export const CAFE = (() => {
     inside: [0.14, 0.38, 0.62, 0.86].map((k) => window.x + window.w * k),
     tables,
     seats: tables.flatMap((t): Seat[] => [
-      { x: t.x - 27, y: t.y + 2, dir: 3 },
-      { x: t.x + 27, y: t.y + 2, dir: 1 },
+      { x: t.x - 40, y: t.y + 2, dir: 3 },
+      { x: t.x + 40, y: t.y + 2, dir: 1 },
     ]),
     terrace: [
       { x: 1012, y: 284, dir: 3 as WDir },
@@ -224,7 +226,7 @@ export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number }[] 
   ...TOWN_SCENE.lamps.map((l) => ({ x: l.x, y: l.y, rx: 12, ry: 7 })),
   ...townHallFootprint(),
   { x: NOTICE_BOARD.x, y: NOTICE_BOARD.y, rx: 30, ry: 7 },
-  ...CAFE.tables.map((t) => ({ x: t.x, y: t.y, rx: 13, ry: 6 })),
+  ...CAFE.tables.map((t) => ({ x: t.x, y: t.y, rx: 22, ry: 8 })),
   { x: CAMPFIRE.x, y: CAMPFIRE.y, rx: 25, ry: 12 },
   ...FIRE_LOGS.map((l) => (l.along === 'y' ? { x: l.x, y: l.y, rx: 6, ry: 25 } : { x: l.x, y: l.y, rx: 30, ry: 4 })),
 ];

@@ -1,5 +1,5 @@
 import { BODY, FRAME_PX, SPRITE_SCALE, SQUARE_HOUSES, WORLD, seeded } from '$shared/crowd.ts';
-import { HALL, HALL_ART, RIVERSIDE, RIVERSIDE_ART, THRONE_SEAT, TOWN_BROOK, type SheetInfo } from '$shared/world.ts';
+import { HALL, HALL_ART, RIVERSIDE, RIVERSIDE_ART, THRONE_SEAT, TOWN_BROOK, TOWN_GRASS, type SheetInfo } from '$shared/world.ts';
 import type { Prop } from '../games/crowd/scene.ts';
 
 /**
@@ -351,13 +351,13 @@ function bridgeSpan(): [number, number] {
  */
 function riverside(g: G, sheets: Sheets, frame: number): void {
   grass(g, 0, R.w, 0, 61);
-  // Where the square's paving ends: a dark edge, the grass growing over it
-  px(g, GREEN.line, 0, 0, 1, PH);
+  // Where the square's paving ends: a dark edge, the grass growing over it (below, the town is grass too)
+  px(g, GREEN.line, 0, 0, 1, TOWN_GRASS.edge);
   river(g, frame);
   // The town's river comes in from the left along the bottom and flows into it
   brook(g, Math.round(TOWN_PW), frame, 0);
   const [x0, x1] = bridgeSpan();
-  path(g, 0, x0 + 4);
+  trail(g, 0, x0 + 4, Math.round(TOWN_PW));
   path(g, x1 - 4, R.w);
   bridge(g);
   // A few flowering bushes in the grass, on whichever side of the river has room
@@ -847,8 +847,66 @@ export function townEdge(town: HTMLCanvasElement, from: number, house: number, s
   return { canvas: c, x: from - B };
 }
 
+/**
+ * The trail from the town to the bridge, from column x0 to x1 of `g` (`ox`: how far along the
+ * town g's column 0 is): flagstones of warm stone laid unevenly, grass between them, its edges
+ * wandering. It winds a little and is narrow out on the grass, and widens to the bridge's deck as
+ * it comes up to it.
+ */
+export function trail(g: G, x0: number, x1: number, ox: number): void {
+  const [bridge] = bridgeSpan();
+  const end = Math.round(TOWN_PW) + bridge + 4;
+  const mid = (R.bridge.y0 + R.bridge.y1) / 2;
+  const full = (R.bridge.y1 - R.bridge.y0) / 2 - 2;
+  /** The trail at a column (along the town): its middle and half width */
+  const at = (gx: number) => {
+    const near = Math.max(0, Math.min(1, 1 - (end - gx) / 70));
+    const wind = (1 - near) * (6 * Math.sin(gx / 37 + 1.3) + 3 * Math.sin(gx / 13));
+    return { c: mid + wind, hw: 13 + (full - 13) * near * near + 1.5 * Math.sin(gx / 9) };
+  };
+  // The packed earth of the trail, its edges a pixel or two off here and there
+  for (let x = x0; x < x1; x++) {
+    const { c, hw } = at(x + ox);
+    const top = Math.round(c - hw + (hash(x + ox, 1) < 0.3 ? 1 : 0));
+    const bottom = Math.round(c + hw - (hash(x + ox, 2) < 0.3 ? 1 : 0));
+    px(g, EARTH.mid, x, top, 1, bottom - top);
+    px(g, EARTH.line, x, top, 1, 1);
+    veil(g, x, bottom, 1, 1, 0.25);
+  }
+  // Flagstones: one in each cell of a loose grid, its size and place a little off, some missing near the edges
+  const r = seeded(31);
+  for (let gx = Math.floor((x0 + ox) / 11) * 11 - 11; gx < x1 + ox; gx += 11) {
+    const { c, hw } = at(gx + 5);
+    const rows = Math.max(2, Math.round((hw * 2) / 9));
+    for (let k = 0; k < rows; k++) {
+      const edge = k === 0 || k === rows - 1;
+      if (edge && r() < 0.3) continue;
+      const w = 7 + Math.floor(r() * 4);
+      const h = 6 + Math.floor(r() * 3);
+      const x = gx - ox + Math.floor(r() * 3) - 1 + (k % 2 ? 5 : 0);
+      const y = Math.round(c - hw + 1 + (k * (hw * 2 - 2)) / rows + r() * 2);
+      const x2 = Math.min(x + w, x1);
+      if (x2 <= Math.max(x, x0)) continue;
+      const xs = Math.max(x, x0);
+      const tone = r();
+      px(g, SAND.line, xs, y, x2 - xs, h);
+      px(g, tone < 0.3 ? SAND.mid : SAND.light, xs, y, x2 - xs, h - 1);
+      px(g, SAND.pale, xs, y, x2 - xs, 1);
+      if (x >= x0) px(g, SAND.pale, x, y, 1, h - 1);
+    }
+  }
+  // Grass growing over its edges and between the stones
+  for (let x = x0; x < x1; x += 2) {
+    const { c, hw } = at(x + ox);
+    const t = Math.floor(r() * 3);
+    px(g, GREEN.shade, x, Math.round(c - hw), 2, 1 + t);
+    px(g, GREEN.blade, x + 1, Math.round(c + hw) - 1 - t, 2, 1 + t);
+    if (r() < 0.12) px(g, GREEN.blade, x, Math.round(c - hw + 3 + r() * (hw * 2 - 6)), 1, 2);
+  }
+}
+
 /** The path to the hall from `x0` to `x1`, along the bridge's line: slabs of warm stone, grass growing over its edges */
-function path(g: G, x0: number, x1: number): void {
+export function path(g: G, x0: number, x1: number): void {
   const r = seeded(x0 + 7);
   const y0 = R.bridge.y0 + 2;
   const y1 = R.bridge.y1 - 2;

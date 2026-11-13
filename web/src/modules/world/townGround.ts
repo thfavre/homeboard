@@ -1,6 +1,7 @@
 import { SPRITE_SCALE, WORLD, seeded } from '$shared/crowd.ts';
 import { TOWN_GRASS } from '$shared/world.ts';
-import { GREEN, RIVER_CUT, RIVER_FRAMES, RIVER_FRAME_MS, TOWN_PW, brook, brookBox, brookLength, brookPoint, canvas, grass, px, veil } from './throneRoom.ts';
+import { RIVERSIDE_ART } from '$shared/world.ts';
+import { GREEN, RIVER_CUT, RIVER_FRAMES, RIVER_FRAME_MS, TOWN_PW, brook, brookBox, brookLength, brookPoint, canvas, grass, px, trail, veil } from './throneRoom.ts';
 
 /**
  * The town's own ground over the square's paving (sprite pixels, built once): in the bottom right
@@ -16,8 +17,17 @@ const PH = Math.ceil(WORLD.h / S);
 /** The row where the grass reaches the town's right edge (the town's edge over the riverside stops there) */
 export const GREEN_TOP = TOWN_GRASS.edge;
 
-/** Where the grass starts on a row (x), on the smooth slant from the bottom edge up to the right edge */
-const slantAt = (y: number) => TOWN_GRASS.bottom + ((PH - y) * (TOWN_PW - TOWN_GRASS.bottom)) / (PH - TOWN_GRASS.edge);
+/**
+ * Where the grass starts on a row (x): along the slant from the bottom edge up to the right edge,
+ * wandering either side of it in bays and tongues of grass, so it does not run straight. It still
+ * meets the town's edges where TOWN_GRASS says.
+ */
+const slantAt = (y: number) => {
+  const k = (PH - y) / (PH - TOWN_GRASS.edge);
+  const wander = 26 * Math.sin(y / 41 + 0.7) + 14 * Math.sin(y / 17 + 2.1) + 6 * Math.sin(y / 7.3);
+  // Less wandering toward both ends, where it meets the edges
+  return TOWN_GRASS.bottom + k * (TOWN_PW - TOWN_GRASS.bottom) + wander * Math.min(1, k * 4, (1 - k) * 4);
+};
 
 /**
  * Lay the town's grass and its river over the square's ground (`ground`, in sprite pixels, possibly
@@ -80,6 +90,9 @@ export function townGround(ground: HTMLCanvasElement): void {
     const y = GREEN_TOP + Math.floor(r() * (PH - GREEN_TOP));
     px(g, 'rgba(70,130,50,0.35)', ends[y] - 2 - Math.floor(r() * 8), y, 2 + Math.floor(r() * 3), 1 + Math.floor(r() * 2));
   }
+  // The trail to the castle's bridge leaves the paving here, across the grass
+  const pathRows = ends.slice(RIVERSIDE_ART.bridge.y0, RIVERSIDE_ART.bridge.y1);
+  trail(g, Math.min(...pathRows) - 2, W, 0);
   // The river, in the first frame of its flow (the others are drawn over it, see brookFrames)
   brook(g, 0, 0);
 }

@@ -36,12 +36,13 @@ const SIT_ROWS: Record<WDir, string> = { 0: 'sitUp', 1: 'sitLeft', 2: 'sit', 3: 
 
 /**
  * Sitting on a seat (the fountain's rim, a log, a cafe chair) facing `dir`, sitting down over the
- * first moments like on a bench. False: the sheet has no sit art for it.
+ * first moments like on a bench; or on the ground (`ground`), legs out (the sit rows' first frame).
+ * False: the sheet has no sit art for it.
  */
-export function drawPerched(g: G, img: HTMLImageElement, info: SheetInfo, x: number, y: number, dir: WDir, since: number): boolean {
+export function drawPerched(g: G, img: HTMLImageElement, info: SheetInfo, x: number, y: number, dir: WDir, since: number, ground = false): boolean {
   const row = rowOf(img, info, SIT_ROWS[dir], 3) ?? rowOf(img, info, 'sit', 3);
   if (!row) return false;
-  drawFrame(g, img, info, row.row, Math.min(row.frames - 1, Math.floor(since / 150)), x, y);
+  drawFrame(g, img, info, row.row, ground ? 0 : Math.min(row.frames - 1, Math.floor(since / 150)), x, y);
   return true;
 }
 

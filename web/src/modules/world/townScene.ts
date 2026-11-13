@@ -158,22 +158,22 @@ function noticeBoard(): Prop {
 
 /** A round bistro table: a marble top on an iron stem and foot */
 function buildTable(): HTMLCanvasElement {
-  const [c, g] = canvas(22, 17);
-  px(g, IRON.line, 7, 15, 8, 2);
-  px(g, IRON.mid, 8, 15, 6, 1);
-  px(g, IRON.line, 10, 6, 2, 10);
-  px(g, IRON.light, 10, 6, 1, 9);
+  const [c, g] = canvas(38, 23);
+  px(g, IRON.line, 13, 21, 12, 2);
+  px(g, IRON.mid, 14, 21, 10, 1);
+  px(g, IRON.line, 18, 9, 2, 13);
+  px(g, IRON.light, 18, 9, 1, 12);
   // The top, seen from above: an ellipse, its rim in shade
   g.fillStyle = '#9d978c';
   g.beginPath();
-  g.ellipse(11, 4, 10.5, 3.5, 0, 0, Math.PI * 2);
+  g.ellipse(19, 6, 18.5, 5.5, 0, 0, Math.PI * 2);
   g.fill();
   g.fillStyle = '#ece8de';
   g.beginPath();
-  g.ellipse(11, 3.5, 9.5, 2.8, 0, 0, Math.PI * 2);
+  g.ellipse(19, 5.4, 17.2, 4.5, 0, 0, Math.PI * 2);
   g.fill();
-  px(g, '#fbf9f3', 5, 2, 6, 1);
-  px(g, '#c9c3b6', 4, 6, 14, 1);
+  px(g, '#fbf9f3', 7, 2, 12, 1);
+  px(g, '#c9c3b6', 6, 10, 26, 1);
   return c;
 }
 
@@ -290,10 +290,10 @@ function cafeTable(table: HTMLCanvasElement, chair: HTMLCanvasElement, parasol: 
     {
       y,
       ground(g) {
-        shadow(g, x, y + 1, 22, 6);
+        shadow(g, x, y + 1, 34, 8);
         // The chairs, either side, facing the table: drawn on the ground, under whoever sits on them
-        stand(g, chair, x - 30, y + 2);
-        stand(g, chair, x + 30, y + 2, true);
+        stand(g, chair, x - 38, y + 2);
+        stand(g, chair, x + 38, y + 2, true);
       },
       draw(g) {
         stand(g, table, x, y + 1);
@@ -462,7 +462,7 @@ export function drawFireLight(g: G, dark: number, now: number): void {
 /** Everything that stands up on the town's square (`keep`: which of the sidewalk's benches and plants to keep, by their x) */
 export function townProps(env: Env, keep: (x: number) => boolean): Prop[] {
   const out: Prop[] = [fountain(env, TOWN_SCENE.fountain.x, TOWN_SCENE.fountain.y)];
-  TOWN_SCENE.trees.forEach((t, k) => out.push(tree(env, t.x, t.y, k % 2 === 1, k * 1.7, t.size)));
+  TOWN_SCENE.trees.forEach((t, k) => out.push(tree(env, t.x, t.y, k % 2 === 1, k * 1.7, t.size, 'stem' in t ? t.stem : 1)));
   TOWN_SCENE.lamps.forEach((l, i) => out.push(lampPost(env, i, l.x, l.y)));
   // The sidewalk's benches and plants, but the bench before the cafe's porch: it stands in front of the potted tree instead
   out.push(...sidewalkProps(env, (x) => keep(x) && x !== TOWN_BENCH.instead));

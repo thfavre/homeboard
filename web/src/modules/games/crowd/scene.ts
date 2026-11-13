@@ -239,14 +239,15 @@ export interface Prop {
   ground?(g: CanvasRenderingContext2D, now: number): void;
 }
 
-/** A tree, `size` times the art's size (the town's trees are not all alike) */
-export function tree(env: Env, x: number, y: number, spring: boolean, phase: number, size = 1): Prop {
+/** A tree, `size` times the art's size (the town's trees are not all alike), `stem` the share of the trunk showing under the leaves */
+export function tree(env: Env, x: number, y: number, spring: boolean, phase: number, size = 1, stem = 1): Prop {
   const k = S * size;
+  const crown = 44 * k * stem;
   return {
     y,
     hit(hx, hy) {
       // The leaves: an ellipse over the trunk
-      const cy = y - 44 * k - 40 * k;
+      const cy = y - crown - 40 * k;
       return ((hx - x) / (47 * k)) ** 2 + ((hy - cy) / (40 * k)) ** 2 < 1 ? 'leaves' : null;
     },
     ground(g) {
@@ -258,7 +259,7 @@ export function tree(env: Env, x: number, y: number, spring: boolean, phase: num
       // The trunk, and the leaves swaying a pixel in the wind
       put(g, env['tree-trunks'], CUT.trunk, x, y + 4, k);
       const sway = Math.round(Math.sin(now / 1400 + phase) * 1.3) * k;
-      put(g, env['tree-canopies'], spring ? CUT.canopySpring : CUT.canopySummer, x, y - 44 * k, k, sway);
+      put(g, env['tree-canopies'], spring ? CUT.canopySpring : CUT.canopySummer, x, y - crown, k, sway);
     },
   };
 }

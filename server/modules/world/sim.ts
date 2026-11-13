@@ -695,7 +695,9 @@ export class TownSim {
         if (away) continue;
         const from = this.ceremony || Math.random() < 0.5 ? -20 : TOWN.w + 20;
         const spot = randSpot();
-        w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, noCheer: !!r.noCheer, errands: [], wrapped: null, anchor: { x: from, y: spot.y, at: now }, through: 0, turn: 0 };
+        // (in from the right: above the river, which leaves the town lower down that edge)
+        const y = from > 0 && wet(TOWN_AREA.x1, spot.y, 40) ? rand(TOWN_AREA.y0 + 20, BROOK_WAY.y - 20) : spot.y;
+        w = { id: r.id, x: from, y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, noCheer: !!r.noCheer, errands: [], wrapped: null, anchor: { x: from, y, at: now }, through: 0, turn: 0 };
         this.walkers.set(r.id, w);
         continue;
       }
