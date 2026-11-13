@@ -84,18 +84,22 @@ export const TOWN_PLACES: Record<PlaceId, TownPlace> = {
 // ------------------------------------------------------------ the throne room
 
 /**
- * The throne room: a hall off the right edge of the town, out of the TV's normal view. For the
- * King's ceremony the camera moves over to it: the King walks up the red carpet to the throne at
- * its far end and sits, and everyone else kneels on both sides of the carpet, facing the throne.
+ * The throne room: a hall beyond a river off the right edge of the town, out of the TV's normal
+ * view. For the King's ceremony the camera moves over to it: the King crosses the bridge and walks
+ * up the red carpet to the throne at its far end and sits, and everyone else kneels on both sides
+ * of the carpet, facing the throne. The hall stands on the grass, which shows above and below it.
  *
  * These are the hall's measures in sprite pixels, from its top left corner. The TV builds the hall
  * on them (web/src/modules/world/throneRoom.ts) and the town's life walks by them.
  */
 export const HALL_ART = {
-  /** Its width: a third of the town's, as much as the camera moves */
+  /** Its width: a third of the town's */
   w: 396,
-  /** The foot of the back wall */
-  wall: 128,
+  /** The top of the back wall (its face, seen from inside), and its foot */
+  top: 64,
+  wall: 192,
+  /** The top edge of the front wall, along the bottom of the hall */
+  front: 590,
   /** The red carpet, from the hall's open side to the throne: its top and bottom edge */
   carpet: { y0: 366, y1: 442 },
   /**
@@ -115,10 +119,35 @@ export const HALL_ART = {
   throne: { x: 338, y: 414 },
 };
 
-/** Where the hall lies in the world: from the town's right edge on (world units) */
-export const HALL = { x0: TOWN.w, w: HALL_ART.w * SPRITE_SCALE };
-/** How far the camera moves to the right for the ceremony: a third of the screen (world units) */
-export const HALL_PAN = TOWN.w / 3;
+/**
+ * The riverside between the town and the hall, in sprite pixels from the town's right edge: grass,
+ * a river running down the whole screen and a stone bridge over it on the carpet's line. Nobody
+ * wades through the water: whoever has to get across takes the bridge.
+ */
+export const RIVERSIDE_ART = {
+  w: 144,
+  /** The river's tiles, from the outer edge of one grassy bank to the other's */
+  river: { x0: 18, x1: 114 },
+  /** The bridge's deck between its two parapets: its top and bottom edge */
+  bridge: { y0: 368, y1: 440 },
+};
+/** Where the riverside lies in the world: from the town's right edge on (world units) */
+export const RIVERSIDE = { x0: TOWN.w, w: RIVERSIDE_ART.w * SPRITE_SCALE };
+/**
+ * The river as walkers see it (world units): the band of x they only cross on the bridge, and the y
+ * their feet keep to on it
+ */
+export const CROSSING = {
+  x0: RIVERSIDE.x0 + RIVERSIDE_ART.river.x0 * SPRITE_SCALE,
+  x1: RIVERSIDE.x0 + RIVERSIDE_ART.river.x1 * SPRITE_SCALE,
+  y0: (RIVERSIDE_ART.bridge.y0 + 12) * SPRITE_SCALE,
+  y1: (RIVERSIDE_ART.bridge.y1 - 4) * SPRITE_SCALE,
+};
+
+/** Where the hall lies in the world: beyond the riverside (world units) */
+export const HALL = { x0: RIVERSIDE.x0 + RIVERSIDE.w, w: HALL_ART.w * SPRITE_SCALE };
+/** How far the camera moves to the right for the ceremony: over the riverside, until the hall's right wall meets the screen's edge (world units) */
+export const HALL_PAN = HALL.x0 + HALL.w - TOWN.w;
 
 /** A point of the hall's art in world units */
 const hallPoint = (px: number, py: number) => ({ x: HALL.x0 + px * SPRITE_SCALE, y: py * SPRITE_SCALE });
@@ -154,8 +183,9 @@ export function praySpots(rows: number): { x: number; y: number }[] {
         const k = row * 20 + col * 2 + (s + 1) / 2;
         const x = Math.round(DAIS_FOOT - 42 - col * 60 - (row % 2) * 24 + ((k * 37) % 9) - 4);
         const y = Math.round(CARPET_Y + s * (side + row * 56));
-        // Not where a lamp post or a tree of the square stands
+        // Not where a lamp post or a tree of the square stands, nor in the river
         if (TOWN_OBSTACLES.some((o) => Math.abs(x - o.x) < o.rx + 26 && Math.abs(y - o.y) < o.ry + 22)) continue;
+        if (x > CROSSING.x0 - 24 && x < CROSSING.x1 + 24) continue;
         out.push({ x, y });
       }
     }

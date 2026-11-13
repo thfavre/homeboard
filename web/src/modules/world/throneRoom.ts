@@ -1,25 +1,29 @@
 import { BODY, FRAME_PX, SPRITE_SCALE, WORLD, seeded } from '$shared/crowd.ts';
-import { HALL, HALL_ART, THRONE_SEAT, type SheetInfo } from '$shared/world.ts';
+import { HALL, HALL_ART, RIVERSIDE, RIVERSIDE_ART, THRONE_SEAT, type SheetInfo } from '$shared/world.ts';
 import type { Prop } from '../games/crowd/scene.ts';
 
 /**
- * The throne room on the TV: a hall off the right edge of the town that the camera moves over to for
- * the King's ceremony. A red carpet runs from its open side up the steps of a dais to the throne,
- * under banners, between pillars and burning braziers.
+ * The throne room on the TV: a hall beyond a river off the right edge of the town, which the camera
+ * moves over to for the King's ceremony. A stone bridge crosses the river to the hall's open side;
+ * a red carpet runs from there up the steps of a dais to the throne, under banners, between pillars
+ * and burning braziers. The hall stands on the grass, with bushes and flowers along its walls.
  *
- * The throne, the carpet's weave, the floor tiles and the potted trees are LPC Revised art
- * (web/public/crowd/env, see its CREDITS.txt), the reds recolored to one royal red. Everything else
- * (the walls, pillars, banners, windows, the dais, the footstool, the braziers and their fire) is
+ * The throne, the carpet's weave, the floor tiles, the potted trees, the grass, the river and its
+ * banks, the bushes and the flowers are LPC Revised art (web/public/crowd/env, see its CREDITS.txt),
+ * the reds recolored to one royal red. Everything else (the walls, pillars, banners, windows, the
+ * dais, the footstool, the braziers and their fire, the bridge and the path) is
  * drawn here by hand in the palettes of those sheets, lit from the top left, one sprite pixel at a
  * time.
  *
- * The ground is built once in sprite pixels (HALL_ART, shared/world.ts) and drawn SPRITE_SCALE world
- * units a pixel, like the square; what stands up or burns is drawn every frame in world units.
+ * The ground (the riverside, then the hall: RIVERSIDE_ART and HALL_ART, shared/world.ts) is built
+ * once in sprite pixels and drawn SPRITE_SCALE world units a pixel, like the square; what stands up,
+ * burns or flows is drawn every frame in world units.
  */
 
 const S = SPRITE_SCALE;
 const A = HALL_ART;
-/** The hall's height in sprite pixels: the town's */
+const R = RIVERSIDE_ART;
+/** The ground's height in sprite pixels: the town's */
 const PH = Math.ceil(WORLD.h / S);
 
 // ------------------------------------------------------------ palettes (from the sheets)
@@ -34,6 +38,9 @@ const GOLD = { line: '#794117', dark: '#d19428', mid: '#e09c4c', light: '#f3c35f
 const IRON = { line: '#0f1218', dark: '#1b192b', mid: '#29253a', light: '#4b4b60', shine: '#6a7587' };
 /** The dark wood of the throne */
 const WOOD = { line: '#1a1213', dark: '#3e111a', mid: '#603429', light: '#7f4c31' };
+/** Two greens of the grass sheet (the tufts over the path's edges), and the dark water under the bridge's arch */
+const GRASS = { dark: '#3d6b2f', light: '#5b8f3a' };
+const ARCH = '#16323a';
 
 /** The carpet sheet's purple rug and the throne sheet's red cushions, in the royal red */
 const CARPET_SWAP: Record<string, string> = { '#1b192b': RED.line, '#382b33': RED.deep, '#4c3b64': RED.dark, '#655789': RED.mid, '#7c6ea6': RED.light };
@@ -52,6 +59,20 @@ const FLOOR_TILES = [
   [32, 32],
   [32, 64],
 ] as const;
+/** Plain grass (32 px tiles of the grass sheet), mixed at random so it does not look laid in rows */
+const GRASS_TILES = [
+  [32, 32],
+  [32, 128],
+] as const;
+/** The pond sheet's water and its grassy banks: its two frames side by side, each a bank on the left, water, a bank on the right */
+const WATER = { frame: 96, y: 128, left: 0, water: 32, right: 64 };
+/** Round bushes (the summer row) and small flowering bushes, 32 px each */
+const BUSHES = [
+  [0, 32],
+  [32, 32],
+  [64, 32],
+] as const;
+const FLOWER_BUSHES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((c) => [c * 32, 64] as const);
 
 export interface HallArt {
   /** The hall's ground, in sprite pixels */
@@ -60,7 +81,14 @@ export interface HallArt {
   throne: HTMLCanvasElement;
   /** The part of the throne drawn in front of whoever sits on it (same size and place as the cut) */
   throneFront: HTMLCanvasElement;
+  /** The river and the bridge in the water's two frames (the strip RIVER_CUT, in sprite pixels), taking turns over the ground */
+  river: HTMLCanvasElement[];
+  /** Glints on the water */
+  sparkle: HTMLImageElement;
 }
+
+/** The river's moving strip (sprite pixels from the town's edge): the river and the bridge's ends */
+const RIVER_CUT = { x: R.river.x0 - 12, w: R.river.x1 - R.river.x0 + 24 };
 
 let loading: Promise<HallArt | null> | null = null;
 
@@ -82,14 +110,25 @@ export function loadHall(): Promise<HallArt | null> {
       img.onerror = () => reject(new Error('throne-front'));
       img.src = '/world/throne-front.png';
     });
-  loading ??= Promise.all([load('throne'), load('carpet'), load('pave-stone-diamond'), load('planters'), front()])
-    .then(([throne, carpet, tiles, planters, near]) => {
+  const names = ['throne', 'carpet', 'pave-stone-diamond', 'planters', 'grass', 'water-pond-anim', 'bush-round', 'flowers', 'water-sparkle-anim'] as const;
+  loading ??= Promise.all([...names.map(load), front()])
+    .then(([throne, carpet, tiles, planters, grass, water, bushes, flowers, sparkle, near]) => {
       const [tx, ty, tw, th] = THRONE_CUT;
       const back = recolored(throne, tx, ty, tw, th, CUSHION_SWAP);
       const g = back.getContext('2d')!;
       g.globalCompositeOperation = 'destination-out';
       g.drawImage(near, 0, 0);
-      return { ground: buildGround(carpet, tiles, planters), throne: back, throneFront: recolored(near, 0, 0, tw, th, CUSHION_SWAP) };
+      const sheets: Sheets = { carpet, tiles, planters, grass, water, bushes, flowers };
+      const ground = buildGround(sheets);
+      // The river's strip in both frames: cut from the ground, and from the riverside built again with the second frame
+      const [later] = canvas(R.w, PH);
+      riverside(later.getContext('2d')!, sheets, 1);
+      const river = [ground, later].map((from) => {
+        const [strip, sg] = canvas(RIVER_CUT.w, PH);
+        sg.drawImage(from, -RIVER_CUT.x, 0);
+        return strip;
+      });
+      return { ground, throne: back, throneFront: recolored(near, 0, 0, tw, th, CUSHION_SWAP), river, sparkle };
     })
     .catch(() => null);
   return loading;
@@ -139,46 +178,240 @@ function veil(g: G, x: number, y: number, w: number, h: number, alpha: number, l
 
 // ------------------------------------------------------------ the ground (built once)
 
+interface Sheets {
+  carpet: HTMLImageElement;
+  tiles: HTMLImageElement;
+  planters: HTMLImageElement;
+  grass: HTMLImageElement;
+  water: HTMLImageElement;
+  bushes: HTMLImageElement;
+  flowers: HTMLImageElement;
+}
+
 /**
- * The whole hall lying flat: the floor, the dais, the carpet, the walls with their banners, windows
- * and pillars, and two small trees in porcelain pots below the dais (nobody walks there)
+ * Everything lying flat, from the town's edge: the riverside, then the hall on the grass beyond it
+ * (the floor, the dais, the carpet, the walls with their banners, windows and pillars, and two
+ * small trees in porcelain pots below the dais, where nobody walks), and the garden around it
  */
-function buildGround(carpetSheet: HTMLImageElement, tiles: HTMLImageElement, planters: HTMLImageElement): HTMLCanvasElement {
-  const [c, g] = canvas(A.w, PH);
-  floor(g, tiles);
+function buildGround(sheets: Sheets): HTMLCanvasElement {
+  const [c, g] = canvas(R.w + A.w, PH);
+  riverside(g, sheets, 0);
+  g.save();
+  g.translate(R.w, 0);
+  grass(g, sheets.grass, 0, A.w, 77);
+  floor(g, sheets.tiles);
   dais(g);
-  carpet(g, carpetSheet);
+  carpet(g, sheets.carpet);
+  g.save();
+  g.translate(0, A.top);
   backWall(g);
+  g.restore();
   outerWalls(g);
+  garden(g, sheets);
   const [sx, sy, sw, sh] = TOPIARY;
   for (const [x, y] of [
-    [A.dais[0].x + 22, A.dais[0].y1 + 70],
-    [A.east - 24, A.dais[0].y1 + 70],
+    [A.dais[0].x + 22, A.dais[0].y1 + 62],
+    [A.east - 24, A.dais[0].y1 + 62],
   ]) {
     g.fillStyle = 'rgba(14,10,24,0.26)';
     g.beginPath();
     g.ellipse(x + 3, y - 3, 13, 4, 0, 0, Math.PI * 2);
     g.fill();
-    g.drawImage(planters, sx, sy, sw, sh, x - sw / 2, y - sh, sw, sh);
+    g.drawImage(sheets.planters, sx, sy, sw, sh, x - sw / 2, y - sh, sw, sh);
   }
+  g.restore();
   return c;
+}
+
+/** Grass from `x0` to `x1`, the whole height */
+function grass(g: G, sheet: HTMLImageElement, x0: number, x1: number, seed: number): void {
+  const r = seeded(seed);
+  for (let y = 0; y < PH; y += 32) {
+    for (let x = x0; x < x1; x += 32) {
+      const [sx, sy] = GRASS_TILES[r() < 0.5 ? 0 : 1];
+      const w = Math.min(32, x1 - x);
+      g.drawImage(sheet, sx, sy, w, 32, x, y, w, 32);
+    }
+  }
+}
+
+/**
+ * The riverside (sprite pixels from the town's edge), with the water in one of its two frames: the
+ * grass, the river running down it, the path to the hall and the bridge carrying it over the water
+ */
+function riverside(g: G, sheets: Sheets, frame: number): void {
+  grass(g, sheets.grass, 0, R.w, 61);
+  const sx = frame * WATER.frame;
+  const { x0 } = R.river;
+  for (let y = 0; y < PH; y += 32) {
+    g.drawImage(sheets.water, sx + WATER.left, WATER.y, 32, 32, x0, y, 32, 32);
+    g.drawImage(sheets.water, sx + WATER.water, WATER.y, 32, 32, x0 + 32, y, 32, 32);
+    g.drawImage(sheets.water, sx + WATER.right, WATER.y, 32, 32, x0 + 64, y, 32, 32);
+  }
+  path(g, 0, R.river.x0 + 8);
+  path(g, R.river.x1 - 8, R.w);
+  bridge(g);
+  // A few flowers in the grass by the banks, away from the path
+  const r = seeded(19);
+  for (const [x, y] of [
+    [6, 128],
+    [126, 214],
+    [4, 566],
+    [128, 610],
+    [124, 70],
+  ]) {
+    const [fx, fy] = FLOWER_BUSHES[Math.floor(r() * FLOWER_BUSHES.length)];
+    g.drawImage(sheets.flowers, fx, fy, 32, 32, x - 12, y - 24, 24, 24);
+  }
+}
+
+/** The path to the hall from `x0` to `x1`, along the bridge's line: slabs of warm stone, grass growing over its edges */
+function path(g: G, x0: number, x1: number): void {
+  const r = seeded(x0 + 7);
+  const y0 = R.bridge.y0 + 2;
+  const y1 = R.bridge.y1 - 2;
+  px(g, SAND.dark, x0, y0, x1 - x0, y1 - y0);
+  for (let y = y0, row = 0; y < y1; y += 12, row++) {
+    for (let x = x0 - (row % 2 ? 9 : 0); x < x1; x += 18) {
+      const bx = Math.max(x0, x + 1);
+      const bw = Math.min(x + 17, x1) - bx;
+      const bh = Math.min(11, y1 - y - 1);
+      if (bw <= 0 || bh <= 0) continue;
+      px(g, r() < 0.3 ? SAND.mid : SAND.light, bx, y + 1, bw, bh);
+      px(g, SAND.pale, bx, y + 1, bw, 1);
+      veil(g, bx, y + bh, bw, 1, 0.18);
+    }
+  }
+  for (let x = x0; x < x1; x += 3) {
+    const t = Math.floor(r() * 3);
+    px(g, GRASS.dark, x, y0, 2, 1 + t);
+    px(g, GRASS.light, x + 1, y1 - 1 - t, 2, 1 + t);
+  }
+}
+
+/**
+ * The bridge: a deck of flagstones between two low parapets, over one round arch. Seen from above,
+ * the top parapet shows its top and its face toward the deck, the bottom one its top and below it
+ * the bridge's face, with the arch over the water and its shadow under it.
+ */
+function bridge(g: G): void {
+  const r = seeded(23);
+  const x0 = R.river.x0 - 4;
+  const x1 = R.river.x1 + 4;
+  const w = x1 - x0;
+  const { y0, y1 } = R.bridge;
+  // Its shadow on the water, below the face
+  veil(g, x0 + 4, y1 + 20, w - 4, 6, 0.3);
+  veil(g, x0 + 4, y1 + 26, w - 4, 4, 0.14);
+  // The deck: flagstones
+  px(g, SAND.dark, x0, y0, w, y1 - y0);
+  for (let y = y0, row = 0; y < y1; y += 12, row++) {
+    for (let x = x0 - (row % 2 ? 10 : 0); x < x1; x += 20) {
+      const bx = Math.max(x0, x + 1);
+      const bw = Math.min(x + 19, x1) - bx;
+      const bh = Math.min(11, y1 - y - 1);
+      if (bw <= 0 || bh <= 0) continue;
+      px(g, r() < 0.25 ? SAND.mid : SAND.light, bx, y + 1, bw, bh);
+      px(g, SAND.pale, bx, y + 1, bw, 1);
+    }
+  }
+  // The top parapet: its top, its face toward the deck in shade, its shadow on the deck
+  px(g, SAND.line, x0, y0 - 10, w, 10);
+  px(g, SAND.light, x0, y0 - 9, w, 4);
+  px(g, SAND.pale, x0, y0 - 9, w, 1);
+  px(g, SAND.mid, x0, y0 - 5, w, 4);
+  for (let x = x0 + 10; x < x1; x += 14) px(g, SAND.dark, x, y0 - 5, 1, 4);
+  veil(g, x0, y0, w, 3, 0.25);
+  // The bottom parapet's top
+  px(g, SAND.line, x0, y1, w, 7);
+  px(g, SAND.light, x0, y1 + 1, w, 4);
+  px(g, SAND.pale, x0, y1 + 1, w, 1);
+  // The bridge's face under it: courses of stone, the arch's dark mouth over the water
+  const face = y1 + 7;
+  const fh = 14;
+  px(g, SAND.mid, x0, face, w, fh);
+  for (let y = face, row = 0; y < face + fh; y += 4, row++) {
+    px(g, SAND.dark, x0, y + 3, w, 1);
+    for (let x = x0 + (row % 2 ? 6 : 0); x < x1; x += 12) px(g, SAND.dark, x, y, 1, 3);
+  }
+  const ax = Math.round((R.river.x0 + R.river.x1) / 2);
+  const half = 28;
+  for (let j = 0; j < fh; j++) {
+    // The arch: as wide as the water at the bottom, rounding off upward
+    const rr = Math.round(half * Math.sqrt(Math.max(0, 1 - ((fh - j) / (fh + 1)) ** 2)));
+    if (rr <= 0) continue;
+    px(g, ARCH, ax - rr, face + j, rr * 2, 1);
+    px(g, SAND.pale, ax - rr - 1, face + j, 1, 1);
+    px(g, SAND.dark, ax + rr, face + j, 1, 1);
+  }
+  px(g, SAND.line, x0, face + fh, w, 1);
+  // A post at each corner: a block of stone a little higher than the parapets
+  for (const [x, y] of [
+    [x0 - 2, y0 - 14],
+    [x1 - 8, y0 - 14],
+    [x0 - 2, y1 - 4],
+    [x1 - 8, y1 - 4],
+  ]) {
+    px(g, SAND.line, x, y, 10, 13);
+    px(g, SAND.light, x + 1, y + 1, 8, 7);
+    px(g, SAND.pale, x + 1, y + 1, 8, 1);
+    px(g, SAND.mid, x + 1, y + 8, 8, 4);
+    veil(g, x + 10, y + 2, 2, 11, 0.25);
+  }
+}
+
+/**
+ * The grass around the hall (in the hall's own pixels): round bushes along the top of the back wall
+ * with flowers between them, a bed of flowering bushes along the foot of the front wall
+ */
+function garden(g: G, sheets: Sheets): void {
+  const r = seeded(43);
+  const shadow = (x: number, y: number, rx: number) => {
+    g.fillStyle = 'rgba(14,10,24,0.22)';
+    g.beginPath();
+    g.ellipse(x + 3, y - 2, rx, rx / 3, 0, 0, Math.PI * 2);
+    g.fill();
+  };
+  // Above the back wall: bushes in a loose row, a flower here and there between them
+  for (let x = 30; x < A.w - 16; x += 30 + Math.floor(r() * 18)) {
+    const [bx, by] = BUSHES[Math.floor(r() * BUSHES.length)];
+    const y = A.top - BACK_TOP - 2 - Math.floor(r() * 8);
+    if (r() < 0.6) {
+      const [fx, fy] = FLOWER_BUSHES[Math.floor(r() * FLOWER_BUSHES.length)];
+      g.drawImage(sheets.flowers, fx, fy, 32, 32, x + 4, y - 34 - Math.floor(r() * 8), 24, 24);
+    }
+    shadow(x, y, 12);
+    g.drawImage(sheets.bushes, bx, by, 32, 32, x - 16, y - 30, 32, 32);
+  }
+  // Below the front wall: a bed of flowering bushes, two colors taking turns
+  const bed = A.front + FRONT_WALL + FRONT_FACE + 26;
+  const colors = [FLOWER_BUSHES[1], FLOWER_BUSHES[7]];
+  for (let x = 44, k = 0; x < A.w - 14; x += 26, k++) {
+    const [fx, fy] = colors[k % 2];
+    const y = bed + (k % 2) * 4;
+    shadow(x, y, 11);
+    g.drawImage(sheets.flowers, fx, fy, 32, 32, x - 16, y - 30, 32, 32);
+  }
 }
 
 /** The floor: a chessboard of diamond tiles, a sill of light stone along the open side, the back wall's shadow */
 function floor(g: G, tiles: HTMLImageElement): void {
   const y0 = A.wall - 12;
-  for (let y = y0, row = 0; y < PH; y += 32, row++) {
+  const y1 = A.front;
+  for (let y = y0, row = 0; y < y1; y += 32, row++) {
     for (let x = 6, col = 0; x < A.east; x += 32, col++) {
       const [sx, sy] = FLOOR_TILES[(row + col) % 2];
-      g.drawImage(tiles, sx, sy, 32, 32, x, y, 32, 32);
+      const h = Math.min(32, y1 - y);
+      g.drawImage(tiles, sx, sy, 32, h, x, y, 32, h);
     }
   }
-  // The sill: one step up from the square
-  px(g, SAND.light, 0, A.wall, 6, PH - A.wall);
-  px(g, SAND.pale, 0, A.wall, 1, PH - A.wall);
-  px(g, SAND.dark, 5, A.wall, 1, PH - A.wall);
-  for (let y = A.wall + 20; y < PH; y += 24) px(g, SAND.mid, 1, y, 4, 1);
-  veil(g, 6, A.wall, 2, PH - A.wall, 0.22);
+  // The sill: one step up from the grass
+  const h = A.front - A.wall;
+  px(g, SAND.light, 0, A.wall, 6, h);
+  px(g, SAND.pale, 0, A.wall, 1, h);
+  px(g, SAND.dark, 5, A.wall, 1, h);
+  for (let y = A.wall + 20; y < A.front; y += 24) px(g, SAND.mid, 1, y, 4, 1);
+  veil(g, 6, A.wall, 2, h, 0.22);
   // The back wall's shadow on the floor
   for (let k = 0; k < 10; k++) veil(g, 6, A.wall + k, A.east - 6, 1, 0.3 * (1 - k / 10));
 }
@@ -279,13 +512,14 @@ function block(g: G, x: number, y: number, w: number, h: number, tone: number): 
   veil(g, x, y + h - 1, w, 1, 0.22);
 }
 
-/** The back wall: courses of dark stone on a lighter foot, pillars along it, banners and windows between them */
+/** The back wall's face, from its top (drawn A.top lower on the ground): courses of dark stone on a lighter foot, pillars along it, banners and windows between them */
 function backWall(g: G): void {
   const r = seeded(4);
   const x0 = 0;
   const x1 = A.east;
-  const foot = A.wall - 12;
-  px(g, STONE.deep, x0, 0, x1 - x0, A.wall);
+  const wall = A.wall - A.top;
+  const foot = wall - 12;
+  px(g, STONE.deep, x0, 0, x1 - x0, wall);
   for (let y = foot - 12, row = 0; y > -12; y -= 12, row++) {
     for (let x = x0 - (row % 2 ? 13 : 0); x < x1; x += 26) {
       const tone = r() < 0.2 ? 0.07 : r() < 0.25 ? -0.1 : 0;
@@ -311,9 +545,9 @@ function backWall(g: G): void {
       else tallWindow(g, between, 12, 30, 74);
     }
   }
-  for (let k = 0; first + k * step < x1 - 12; k++) pillar(g, first + k * step, 0, A.wall + 6, 22);
+  for (let k = 0; first + k * step < x1 - 12; k++) pillar(g, first + k * step, 0, wall + 6, 22);
   // The corner by the open side: a pier of lighter stone, a step out of the wall
-  pier(g, 0, 0, 30, A.wall + 10);
+  pier(g, 0, -BACK_TOP - 2, 30, wall + 10);
 }
 
 /** A round pillar from `top` down to its foot at `bottom`, lit from the left, a golden ring under the torch it carries */
@@ -483,26 +717,43 @@ function tallWindow(g: G, cx: number, top: number, w: number, h: number): void {
   veil(g, x - 3, top + h + 5, w + 8, 2, 0.3);
 }
 
-/** How thick the front wall shows along the bottom of the picture (sprite pixels) */
+/** How thick the front wall shows from above, and how high its outer face is (sprite pixels) */
 const FRONT_WALL = 13;
+const FRONT_FACE = 24;
+/** How thick the back wall shows from above, over its face */
+const BACK_TOP = 12;
 
 /**
- * The right wall and the front wall, seen from above: the tops of thick walls of dark stone, and
- * the top of the pier where the front wall ends at the open side
+ * The walls seen from above: the tops of the thick back, right and front walls of dark stone, the
+ * front wall's outer face down to the grass, and the top of the pier where it ends at the open side
  */
 function outerWalls(g: G): void {
+  const top = A.top - BACK_TOP;
+  const bottom = A.front + FRONT_WALL;
+  // The back wall's top, all along
+  px(g, STONE.shade, 0, top, A.w, BACK_TOP);
+  for (let bx = 0, col = 0; bx < A.w; bx += 22, col++) {
+    px(g, STONE.dark, bx + 1, top + 1, 20, BACK_TOP - 2);
+    veil(g, bx + 1, top + 1, 20, 1, 0.12, true);
+    if (col % 3 === 1) veil(g, bx + 1, top + 1, 20, BACK_TOP - 2, 0.1);
+  }
+  px(g, STONE.line, 0, top, A.w, 1);
+  // The right wall's top, down to the front wall
   const x = A.east;
   const w = A.w - x;
-  px(g, STONE.shade, x, 0, w, PH);
-  for (let y = -6, row = 0; y < PH; y += 20, row++) {
-    px(g, STONE.dark, x + 1, y + 1, w - 1, 18);
-    veil(g, x + 1, y + 1, w - 1, 1, 0.12, true);
-    if (row % 3 === 1) veil(g, x + 1, y + 1, w - 1, 18, 0.1);
+  px(g, STONE.shade, x, top, w, bottom - top);
+  for (let y = top - 6, row = 0; y < bottom; y += 20, row++) {
+    const by = Math.max(top + 1, y + 1);
+    const bh = Math.min(y + 19, bottom) - by;
+    if (bh <= 0) continue;
+    px(g, STONE.dark, x + 1, by, w - 1, bh);
+    veil(g, x + 1, by, w - 1, 1, 0.12, true);
+    if (row % 3 === 1) veil(g, x + 1, by, w - 1, bh, 0.1);
   }
-  px(g, STONE.light, x, 0, 1, PH);
-  px(g, STONE.line, x - 1, A.wall, 1, PH - A.wall);
-  // The front wall: the same stone, laid along the bottom edge
-  const y = PH - FRONT_WALL;
+  px(g, STONE.light, x, A.top, 1, bottom - A.top);
+  px(g, STONE.line, x - 1, A.wall, 1, A.front - A.wall);
+  // The front wall: the same stone, laid along the bottom of the hall
+  const y = A.front;
   px(g, STONE.shade, 0, y, A.w, FRONT_WALL);
   for (let bx = 4, col = 0; bx < A.w; bx += 22, col++) {
     px(g, STONE.dark, bx + 1, y + 2, 20, FRONT_WALL - 2);
@@ -511,6 +762,18 @@ function outerWalls(g: G): void {
   }
   px(g, STONE.light, 0, y + 1, A.w, 1);
   px(g, STONE.line, 0, y, A.w, 1);
+  // Its outer face down to the grass: courses of stone in shade, a dark foot, its shadow on the grass
+  const face = y + FRONT_WALL;
+  px(g, STONE.dark, 0, face, A.w, FRONT_FACE);
+  for (let fy = face, row = 0; fy < face + FRONT_FACE; fy += 8, row++) {
+    px(g, STONE.shade, 0, fy + 7, A.w, 1);
+    veil(g, 0, fy, A.w, 1, 0.1, true);
+    for (let fx = row % 2 ? 0 : 13; fx < A.w; fx += 26) px(g, STONE.shade, fx, fy, 1, 7);
+  }
+  veil(g, 0, face, A.w, 3, 0.3);
+  px(g, STONE.line, 0, face + FRONT_FACE - 1, A.w, 1);
+  veil(g, 0, face + FRONT_FACE, A.w, 4, 0.3);
+  veil(g, 0, face + FRONT_FACE + 4, A.w, 3, 0.14);
   // Its end by the open side: the top of a pier, like the one at the back
   px(g, STONE.line, 0, y - 5, 30, FRONT_WALL + 5);
   px(g, STONE.mid, 1, y - 4, 28, FRONT_WALL + 3);
@@ -562,7 +825,7 @@ function glow(g: G, x: number, y: number, radius: number, strength: number, now:
 /** Where the torches on the back wall's pillars burn (sprite pixels: the flame's foot) */
 const TORCHES: { x: number; y: number }[] = (() => {
   const out: { x: number; y: number }[] = [];
-  for (let cx = 46; cx < A.east - 12; cx += 68) out.push({ x: cx, y: 74 });
+  for (let cx = 46; cx < A.east - 12; cx += 68) out.push({ x: cx, y: A.top + 74 });
   return out;
 })();
 
@@ -679,6 +942,36 @@ function standard(g: G, x: number, y: number, tall: number): void {
   u(-5, y0 + 18, 9, 1, GOLD.line);
 }
 
+/** World position of a point of the riverside's art */
+const onRiverside = (x: number, y: number) => ({ x: RIVERSIDE.x0 + x * S, y: y * S });
+
+/** Where the water glints (sprite pixels of the riverside), and how far into the twinkle each one starts */
+const GLINTS = [
+  [58, 92, 0],
+  [76, 252, 2],
+  [54, 330, 1],
+  [72, 524, 3],
+  [60, 640, 2],
+  [78, 152, 1],
+] as const;
+
+/**
+ * The river flowing: its two frames taking turns over the ground (the bridge comes with them), and
+ * glints on the water. Drawn right after the ground.
+ */
+export function drawRiver(g: G, art: HallArt, now: number): void {
+  const strip = art.river[Math.floor(now / 520) % 2];
+  const p = onRiverside(RIVER_CUT.x, 0);
+  g.drawImage(strip, 0, 0, strip.width, strip.height, p.x, 0, strip.width * S, strip.height * S);
+  const t = Math.floor(now / 160);
+  g.globalAlpha = 0.75;
+  for (const [x, y, k] of GLINTS) {
+    const q = onRiverside(x, y);
+    g.drawImage(art.sparkle, ((t + k) % 4) * 32, 32, 32, 32, Math.round(q.x - 16), Math.round(q.y - 16), 32, 32);
+  }
+  g.globalAlpha = 1;
+}
+
 /**
  * The fires on the back wall (the torches on its pillars). They burn behind everyone, so they are
  * drawn right after the ground.
@@ -786,8 +1079,8 @@ export function drawHallLight(g: G, now: number, dark: number, seated: number | 
   const day = 1 - dark;
   if (day > 0.05) {
     for (let k = 1, cx = 46 + 68 * 1.5; cx < A.east - 18; k += 2, cx += 136) {
-      const a = at(cx - 15, 88);
-      const b = at(cx + 15, 88);
+      const a = at(cx - 15, A.top + 88);
+      const b = at(cx + 15, A.top + 88);
       const reach = 250;
       const slant = 96;
       const shaft = g.createLinearGradient(0, a.y, 0, a.y + reach);

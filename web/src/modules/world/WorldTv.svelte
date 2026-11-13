@@ -2,14 +2,14 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, WORLD } from '$shared/crowd.ts';
-  import { DAIS_FOOT, FRAME_STRIDE, HALL, HALL_PAN, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
-  import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, hallProps, loadHall, type HallArt } from './throneRoom.ts';
+  import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, type HallArt } from './throneRoom.ts';
 
   /**
    * The town on the TV: the crowd games' square (same LPC environment art, same renderer), lived in
@@ -173,7 +173,7 @@
     }
   }
 
-  // The ground, built once per art state: the town, and the throne room to its right once its art is there
+  // The ground, built once per art state: the town, and the river and the throne room to its right once their art is there
   let bg: HTMLCanvasElement | null = null;
   let bgKey = '';
   function background(): HTMLCanvasElement {
@@ -181,13 +181,13 @@
     if (bg && bgKey === key) return bg;
     if (env) {
       const c = document.createElement('canvas');
-      c.width = WORLD.w + (hall ? Math.ceil(HALL.w) : 0);
+      c.width = WORLD.w + (hall ? Math.ceil(HALL_PAN) : 0);
       c.height = WORLD.h;
       const g = c.getContext('2d')!;
       g.imageSmoothingEnabled = false;
       const ground = squareGround(env, shopArt ? shopSwap(env, shopArt) : undefined);
       g.drawImage(ground, 0, 0, ground.width * 1.35, ground.height * 1.35);
-      if (hall) g.drawImage(hall.ground, HALL.x0, 0, hall.ground.width * SPRITE_SCALE, hall.ground.height * SPRITE_SCALE);
+      if (hall) g.drawImage(hall.ground, RIVERSIDE.x0, 0, hall.ground.width * SPRITE_SCALE, hall.ground.height * SPRITE_SCALE);
       bg = c;
     } else {
       // Until the art is there: plain stone
@@ -257,10 +257,13 @@
     if (away && (!hall || ground.width <= TOWN.w)) {
       // The throne room's art is not there: plain stone
       g.fillStyle = '#3a3c42';
-      g.fillRect(TOWN.w, 0, HALL.w, TOWN.h);
+      g.fillRect(TOWN.w, 0, HALL_PAN, TOWN.h);
     }
     const inHall = away && hall ? hallStanding : [];
-    if (away && hall) drawHallWall(g, now);
+    if (away && hall) {
+      drawRiver(g, hall, now);
+      drawHallWall(g, now);
+    }
     // Shadows of the things standing up, on the ground under everyone
     for (const p of standingProps) p.ground?.(g, now);
     for (const p of inHall) p.ground?.(g, now);
@@ -461,7 +464,7 @@
     const dark = darkness();
     if (dark > 0.02) {
       g.fillStyle = `rgba(14,16,42,${0.34 * dark})`;
-      g.fillRect(0, 0, TOWN.w + (away ? HALL.w : 0), TOWN.h);
+      g.fillRect(0, 0, TOWN.w + (away ? HALL_PAN : 0), TOWN.h);
       // The shops stay lit inside
       for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
     }

@@ -1,4 +1,4 @@
-import { BENCHES, CARPET_START, CARPET_Y, DAIS_FOOT, HALL, PRAY_HALL_COLS, PRAY_ROWS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, WANIM, praySpots, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
+import { BENCHES, CARPET_START, CARPET_Y, CROSSING, DAIS_FOOT, PRAY_HALL_COLS, PRAY_ROWS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, WANIM, praySpots, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
 
 /**
  * The life of the town: characters wander the ground band, stop for a while, sit on benches, pet
@@ -94,8 +94,8 @@ const GATHER_EXTRA_MS = 35_000;
 const HAIL_MS = 2600;
 /** Seated, the King gets up to cheer his court this often */
 const CHEER_EVERY_MS = 10000;
-/** Arriving this close to the hall's open side, a character is given its place along the carpet */
-const DOOR_ZONE = 130;
+/** Arriving this close to the bridge over the river, a character is given its place along the carpet */
+const BRIDGE_ZONE = 40;
 /** This close to the end of the court nobody is called anymore: they would arrive as everyone leaves */
 const LAST_CALL_MS = 8000;
 
@@ -247,6 +247,25 @@ function standable(x: number, y: number): { x: number; y: number } {
   // Dead in the middle: out to the front
   const [ux, uy] = d ? [nx / d, ny / d] : [0, 1];
   return { x: o.x + ux * (o.rx + STAND_CLEAR + 1), y: o.y + uy * (o.ry + STAND_CLEAR + 1) };
+}
+
+/** The nearest y on the bridge's deck */
+const onBridge = (y: number) => Math.max(CROSSING.y0, Math.min(CROSSING.y1, y));
+
+/**
+ * Where a character at `a` going to x `tx` must head first, when the river lies between: the near
+ * end of the bridge, or once on it, its far end. Null: nothing to cross.
+ */
+function bridgeWay(a: { x: number; y: number }, tx: number): { x: number; y: number } | null {
+  const side = (x: number) => (x < CROSSING.x0 ? -1 : x > CROSSING.x1 ? 1 : 0);
+  const from = side(a.x);
+  const to = side(tx);
+  if (from === to) return null;
+  const y = onBridge(a.y);
+  // On the bridge: off its far end (just past it, so the walk on from there is on that side)
+  if (from === 0) return { x: to > 0 ? CROSSING.x1 + 1 : CROSSING.x0 - 1, y };
+  // To the near end: right on its edge, which counts as on the bridge
+  return { x: from < 0 ? CROSSING.x0 : CROSSING.x1, y };
 }
 
 function blocked(x: number, y: number, margin = 0): boolean {
@@ -463,8 +482,17 @@ export class TownSim {
     }
   }
 
-  /** Walk toward a point, around what stands in the way; true when there */
+  /** Walk toward a point, around what stands in the way and over the bridge if it is across the river; true when there */
   private walkTo(w: Walker, tx: number, ty: number, speed: number, dt: number): boolean {
+    const via = bridgeWay(w, tx);
+    if (!via) return this.walkStraight(w, tx, ty, speed, dt);
+    // To the bridge's near end first, then over it (landing on each exactly, so the next leg starts from there)
+    if (this.walkStraight(w, via.x, via.y, speed, dt)) Object.assign(w, via);
+    return false;
+  }
+
+  /** Walk toward a point, around what stands in the way; true when there */
+  private walkStraight(w: Walker, tx: number, ty: number, speed: number, dt: number): boolean {
     // A target inside something on the square can never be reached: the nearest spot beside it then
     ({ x: tx, y: ty } = standable(tx, ty));
     const dx = tx - w.x;
@@ -666,10 +694,10 @@ export class TownSim {
           w.doing = this.backToTown(now);
           break;
         }
-        // To the hall's open side: whoever gets there first is given the place nearest the throne
-        const tx = HALL.x0 - DOOR_ZONE + 20;
-        const ty = Math.max(CARPET_Y - 200, Math.min(CARPET_Y + 200, w.y));
-        if (w.x >= HALL.x0 - DOOR_ZONE || this.walkTo(w, tx, ty, this.pace(w, tx, ty), dt)) {
+        // To the bridge: whoever gets there first is given the place nearest the throne
+        const tx = CROSSING.x0 - BRIDGE_ZONE + 10;
+        const ty = onBridge(w.y);
+        if (w.x >= CROSSING.x0 - BRIDGE_ZONE || this.walkTo(w, tx, ty, this.pace(w, tx, ty), dt)) {
           const spot = this.freeSpot();
           // No place left: stand around a while, then look again
           w.doing = spot >= 0 ? { kind: 'goPray', spot, inLane: false } : idle(now, 3000, 6000);
@@ -682,9 +710,9 @@ export class TownSim {
           break;
         }
         const s = this.ceremony!.spots[d.spot];
-        // Into its lane where the hall opens (or behind the place, when that is out on the square),
-        // then along the lane to the place: the ones before went further in, nobody is in the way
-        const entry = Math.min(HALL.x0 + 16, s.x - 40);
+        // Into its lane where the hall opens (or behind the place, when that is out by the river or on
+        // the square), then along the lane to the place: the ones before went further in, nobody is in the way
+        const entry = Math.min(CARPET_START + 2, s.x - 40);
         if (!d.inLane && w.x < entry - ARRIVE) {
           if (this.walkTo(w, entry, s.y, this.pace(w, entry, s.y), dt)) d.inLane = true;
           break;
@@ -998,8 +1026,11 @@ export class TownSim {
         b.y = clampY(b.y + (dy / 2.2) * push);
       }
     }
-    // Pushed into the fountain: back out to its edge
-    for (const w of list) if (this.last >= w.through) keepOut(w);
+    // Pushed into the fountain: back out to its edge; pushed off the bridge: back onto it
+    for (const w of list) {
+      if (this.last >= w.through) keepOut(w);
+      if (w.x >= CROSSING.x0 && w.x <= CROSSING.x1) w.y = onBridge(w.y);
+    }
   }
 
   private stepCat(now: number, dt: number): void {
