@@ -2,7 +2,8 @@
  * Fake guests for trying the town: each joins the party like a phone would, makes a random avatar
  * the first time, and stays online (so it walks around the town on the TV) until the script stops.
  * Then they fall asleep and fade out like any guest who left. Run again, the same bots come back
- * with the avatars they already have.
+ * with the avatars they already have. Now and then a bot buys a piece of clothing and puts it on, or
+ * changes its hairstyle, with its own money like a guest (SHOP_CHANCE below).
  *
  *   npx tsx scripts/bots.ts            three bots on the server of this folder
  *   npx tsx scripts/bots.ts 5          five bots (up to 60)
@@ -13,7 +14,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { io, type Socket } from 'socket.io-client';
-import { randomChoices } from '../shared/world.ts';
+import { HAIR_STYLES, randomChoices, type AvatarChoices, type WardrobeMine } from '../shared/world.ts';
+import { CATALOG, type Outfit } from '../shared/wardrobe.ts';
 
 const NAMES = [
   'Ada', 'Bruno', 'Cleo', 'Dario', 'Elsa', 'Felix', 'Gaia', 'Hugo', 'Iris', 'Jonas', 'Kira', 'Leon', 'Mila', 'Nino', 'Olga',
@@ -23,6 +25,11 @@ const NAMES = [
 const PIN = '7392';
 /** Past the names: numbered bots */
 const MAX = 60;
+/** Every this often each bot may treat itself: this chance to buy a piece and put it on, or (the
+ * rest of the time) go to the barber for a new hairstyle */
+const SHOP_EVERY_MS = 30_000;
+const SHOP_CHANCE = 0.04;
+const BUY_SHARE = 0.65;
 
 const count = Math.max(1, Math.min(MAX, Number(process.argv[2]) || 3));
 const port = Number(process.env.PORT) || 4300;
@@ -57,5 +64,40 @@ for (let b = 0; b < count; b++) {
     }
   };
   s.on('connect', enter);
+  setTimeout(() => setInterval(() => s.connected && Math.random() < SHOP_CHANCE && treat(s, name).catch(() => {}), SHOP_EVERY_MS), Math.random() * SHOP_EVERY_MS);
+}
+
+const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
+
+/** A bot buys a piece it can afford and wears it, or gets a new hairstyle (nothing happens if the shop says no) */
+async function treat(s: Socket, name: string) {
+  const choices: AvatarChoices | null = await rpc(s, 'world', 'mine');
+  if (!choices) return;
+  if (Math.random() < BUY_SHARE) {
+    // A few tries: a locked slot, a piece owned already or too dear for the wallet is refused
+    for (let i = 0; i < 6; i++) {
+      const item = pick(CATALOG.filter((it) => !it.bodies || it.bodies.includes(choices.body)));
+      const color = pick(item.colors);
+      try {
+        const mine: WardrobeMine = await rpc(s, 'world', 'buy', { id: item.id, color });
+        const outfit: Outfit = { ...mine.outfit, [item.slot]: { id: item.id, color } };
+        // A dress takes the top and bottom's place, and the other way round
+        if (item.slot === 'dress') {
+          delete outfit.top;
+          delete outfit.bottom;
+        }
+        if (item.slot === 'top' || item.slot === 'bottom') delete outfit.dress;
+        await rpc(s, 'world', 'wear', { outfit });
+        console.log(`${name} bought the ${item.name} (${color})`);
+        return;
+      } catch {
+        // Next try
+      }
+    }
+  } else {
+    const hair = pick(HAIR_STYLES.filter((h) => h.id !== choices.hair)).id;
+    await rpc(s, 'world', 'save', { choices: { ...choices, hair } });
+    console.log(`${name} has a new hairstyle (${hair})`);
+  }
 }
 console.log(`${count} bots on port ${port}. Ctrl-C takes them offline.`);
