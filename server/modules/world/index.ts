@@ -9,8 +9,9 @@ import { CATALOG, TIERS, itemById, notForTheKing, starterPieces, openSlots, piec
 import { Composer, ROW_KEYS, choicesHash } from './compose.ts';
 import { LpcFiles } from './lpc.ts';
 import { TownSim } from './sim.ts';
+import { ACTION_DEFAULTS, setupActions, type ActionSettings, type ActionsData } from './actions.ts';
 
-interface WorldSettings {
+interface WorldSettings extends ActionSettings {
   /** A guest with no open page for this long lies down to sleep at the edge of the town */
   sleepAfterMin: number;
   /** A sleeping character fades out after this much longer */
@@ -162,7 +163,7 @@ const outfitKey = (o: Outfit) => JSON.stringify(Object.entries(o).sort(([a], [b]
  */
 const hairKey = (c: AvatarChoices) => `${c.hair}|${c.hairColor}|${c.beard}`;
 
-interface WorldData {
+interface WorldData extends ActionsData {
   avatars: Record<string, StoredAvatar>;
   /** The measurements of the last sheet built: only a fallback for a sheet not measured yet */
   sheet: SheetInfo | null;
@@ -285,6 +286,7 @@ export default defineModule<WorldSettings>({
     partyChancePct: 20,
     partyHours: 7,
     partyGoersPct: 70,
+    ...ACTION_DEFAULTS,
   },
 
   setup(ctx) {
@@ -329,7 +331,9 @@ export default defineModule<WorldSettings>({
       return { speed };
     };
 
-    const sim = new TownSim({ dress: (id, place) => dress(id, place), caught: (id) => caughtFish(id) }, townNow);
+    const sim = new TownSim({ dress: (id, place) => dress(id, place), caught: (id) => caughtFish(id), delivered: (id) => actions?.delivered(id) }, townNow);
+    /** The guests' actions from the phone (the courier, fireworks), set up once the money is (see below) */
+    let actions: ReturnType<typeof setupActions> | undefined;
 
     /** Builds by hash, so the same look is composited once even when asked twice at once */
     const building = new Map<string, Promise<SheetInfo>>();
@@ -373,6 +377,7 @@ export default defineModule<WorldSettings>({
       // The King's crowned looks: the one in the town, and the one they see of themselves on the phone
       if (k) used.add(`${crownedOf(k).hash}.png`).add(`${choicesHash(k.choices, crownOn(king.id!, k.outfit ?? {}))}.png`);
       for (const d of dressing.values()) used.add(`${d.hash}.png`);
+      if (actions) used.add(`${actions.courierHash}.png`);
       for (const f of readdirSync(sheetsDir)) {
         if (f.endsWith('.png') && !used.has(f) && !building.has(f.replace(/\.png$/, ''))) unlinkSync(join(sheetsDir, f));
       }
@@ -657,6 +662,9 @@ export default defineModule<WorldSettings>({
         shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices(), unlockPieces: s.unlockPieces, secretPieces: s.secretPieces },
         day: { on: s.dayCycle, ...townClock() },
         king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), pricing: kingPricing(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null, reigns },
+        actions: actions?.info(),
+        shows: actions?.shows(),
+        courier: actions?.courier() ?? undefined,
       };
       if (role === 'admin') {
         const guests = [...ctx.session.guests.values()];
@@ -717,6 +725,16 @@ export default defineModule<WorldSettings>({
           darkNow: Math.round(sim.darkness * 100) / 100,
           nightSleepers: sim.sleepingForTheNight,
           kingSales: king.sales,
+          actionSettings: {
+            courier: s.courier,
+            courierFee: s.courierFee,
+            courierMaxCoins: s.courierMaxCoins,
+            fireworks: s.fireworks,
+            fireworkBase: s.fireworkBase,
+            fireworkPerPoint: s.fireworkPerPoint,
+            fireworkShells: s.fireworkShells,
+            fireworkSaved: s.fireworkSaved,
+          },
           wallets: guests.map((g) => ({ id: g.id, name: g.name, color: g.color, balance: wallets[g.id] ?? 0 })),
         };
       }
@@ -864,6 +882,23 @@ export default defineModule<WorldSettings>({
 
     /** Tell this guest's open pages their new balance */
     const sendWallet = (guestId: string) => ctx.emit({ guest: guestId }, 'wallet', { balance: wallets[guestId] ?? 0 });
+
+    actions = setupActions({
+      ctx,
+      data: store.data,
+      save: () => store.save(),
+      wallets,
+      sendWallet,
+      hasAvatar: (id) => !!store.data.avatars[id],
+      sim,
+      townNow,
+      speed: () => warp.speed,
+      townClock,
+      dusk: () => (ctx.settings.get().dayCycle ? ctx.settings.get().dusk : null),
+      currency: () => ctx.settings.get().currencyName,
+      composite,
+      sheetUrlOf: (choices, outfit) => sheetUrl(choicesHash(choices, outfit)),
+    });
 
     ctx.onGuest('wardrobe', (_args, guest) => mine(guest.id));
 
@@ -1296,6 +1331,7 @@ export default defineModule<WorldSettings>({
         partyChancePct: Math.max(0, Math.min(100, Math.round(num(args.partyChancePct, s.partyChancePct)))),
         partyHours: Math.max(1, Math.min(12, Math.round(num(args.partyHours, s.partyHours) * 2) / 2)),
         partyGoersPct: Math.max(0, Math.min(100, Math.round(num(args.partyGoersPct, s.partyGoersPct)))),
+        ...actions!.options(args),
       });
       ctx.publish();
     });
@@ -1370,6 +1406,7 @@ export default defineModule<WorldSettings>({
       Object.assign(king, { id: null, since: 0, paid: 0, sales: 0 });
       delete king.asked;
       reigns.length = 0;
+      actions?.reset();
       sim.reset();
       store.save();
       // Open pages (the header, the shop) show the emptied wallet at once instead of the old balance

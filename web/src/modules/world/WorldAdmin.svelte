@@ -10,6 +10,7 @@
   import Monarchy from './Monarchy.svelte';
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
+  const act = $derived(mod?.actionSettings);
   const kingName = $derived(mod?.king?.id ? (mod.characters.find((c) => c.id === mod.king!.id)?.name ?? null) : null);
 
   // The clock, for when the next ceremony is and for the crown's price as it drops
@@ -195,6 +196,67 @@
     </label>
     <p class="faint small">A sleeper gone for this much longer fades away, so the town never clutters up.</p>
   </Section>
+
+  {#if act}
+    <Section title="Guest actions">
+      <p class="faint small">What guests make happen in the town from the Actions tab of their avatar panel. Paid in {mod.shop?.currencyName}.</p>
+      <div class="line">
+        <div>
+          <strong>Courier</strong>
+          <p class="faint small">
+            A guest writes a letter to another guest, on paper they pick, with some money slipped in if they like. A courier walks in from the edge of the
+            town on the TV, the other character stops and takes the parcel and holds it up, and the letter opens on their phone as a sealed envelope.
+          </p>
+        </div>
+        <Toggle checked={act.courier} label="Courier" onchange={(v) => setOption('courier', v)} />
+      </div>
+      <div class="pair">
+        <label class="field">
+          <span>The courier costs</span>
+          <input class="input" type="number" min="0" value={act.courierFee} onchange={(e) => setAmount('courierFee', e.currentTarget.value)} />
+        </label>
+        <label class="field">
+          <span>Most money in a letter</span>
+          <input class="input" type="number" min="0" value={act.courierMaxCoins} onchange={(e) => setAmount('courierMaxCoins', e.currentTarget.value)} />
+        </label>
+      </div>
+      <p class="faint small">The money in a letter goes from the sender to the one it is for when the courier hands it over. 0: letters only.</p>
+      <div class="line">
+        <div>
+          <strong>Fireworks</strong>
+          <p class="faint small">
+            Guests design their own shows on the phone (shapes, colors, sizes, several at once, effects) and launch them over the town, at night only. Shows go
+            up one after the other, and the characters standing around stop to watch and cheer. Each guest starts with a basic one.
+          </p>
+        </div>
+        <Toggle checked={act.fireworks} label="Fireworks" onchange={(v) => setOption('fireworks', v)} />
+      </div>
+      <div class="pair">
+        <label class="field">
+          <span>A show costs at least</span>
+          <input class="input" type="number" min="0" value={act.fireworkBase} onchange={(e) => setAmount('fireworkBase', e.currentTarget.value)} />
+        </label>
+        <label class="field">
+          <span>Plus per craziness point</span>
+          <input class="input" type="number" min="0" value={act.fireworkPerPoint} onchange={(e) => setAmount('fireworkPerPoint', e.currentTarget.value)} />
+        </label>
+      </div>
+      <p class="faint small">
+        Every shell is worth a point, more for a fancy shape (a heart, a smile), a bigger size, each extra color and each effect, times how many go up at once. The basic show is 1 point; a wild one easily 40.
+      </p>
+      <div class="pair">
+        <label class="field">
+          <span>Most shells in a show (1 to 30)</span>
+          <input class="input" type="number" min="1" max="30" value={act.fireworkShells} onchange={(e) => setAmount('fireworkShells', e.currentTarget.value)} />
+        </label>
+        <label class="field">
+          <span>Shows each guest can keep (1 to 30)</span>
+          <input class="input" type="number" min="1" max="30" value={act.fireworkSaved} onchange={(e) => setAmount('fireworkSaved', e.currentTarget.value)} />
+        </label>
+      </div>
+      {#if !mod.dayCycle}<p class="error small">Day and night are off, so it is never night in the town and no fireworks can go up.</p>{/if}
+    </Section>
+  {/if}
 
   <Section title="Day and night">
     <div class="line">

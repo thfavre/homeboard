@@ -30,12 +30,14 @@ export function asSheets(info: SheetInfo | null): Sheets | null {
 export function gameAnim(anim: number): number {
   switch (anim) {
     case WANIM.walk:
+    case WANIM.carry:
       return ANIM.walk;
     case WANIM.sit:
     case WANIM.pet:
       return ANIM.sit;
     case WANIM.cheer:
     case WANIM.catch:
+    case WANIM.unwrap:
       return ANIM.cheer;
     default:
       return ANIM.idle;
