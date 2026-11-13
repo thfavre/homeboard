@@ -84,7 +84,8 @@ const bedsAt3: number[] = [];
 const atMorning: number[] = [];
 const atNoon: number[] = [];
 
-const STEP = 100;
+/** One tick of the sim (ms of town time): the server ticks 10 times a second, so a town sped up 10 times (SPEED=10) takes a whole second a tick */
+const STEP = 100 * (Number(process.env.SPEED) || 1);
 type Track = { kind: string; since: number; x: number; y: number; stillSince: number };
 const track = new Map<string, Track>();
 const problems = new Map<string, { n: number; example: string }>();

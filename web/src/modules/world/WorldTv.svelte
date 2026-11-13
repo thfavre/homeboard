@@ -271,7 +271,7 @@
     // The town's own time: it can run faster than real time (the button), and everything that moves
     // on its own (walk cycles, water, fire, birds, lights) follows it
     const now = townTime(real, world?.warp);
-    const step = Math.min(0.4, Math.max(0, (now - lastDraw) / 1000));
+    const step = Math.min(1, Math.max(0, (now - lastDraw) / 1000));
     lastDraw = now;
 
     // The two frames around the drawn time (they come by real time); positions are mixed between them by id

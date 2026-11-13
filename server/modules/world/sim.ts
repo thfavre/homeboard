@@ -166,6 +166,8 @@ const NIGHT_LEAD_MIN = 240;
 /** Night owls go to bed within this after dawn, and sleep this long (minutes, a random time in each range) */
 const OWL_BED_MIN = 60;
 const OWL_SLEEP_MIN: [number, number] = [150, 270];
+/** The longest step the town moves in at once (seconds): a longer tick is split into steps */
+const MAX_STEP_S = 0.2;
 /** Up in the morning: a stretch, arms up (characters whose clothes have the art for it) */
 const STRETCH_MS = 1800;
 
@@ -772,22 +774,28 @@ export class TownSim {
       }
       w.fading = shouldFade && (w.doing.kind === 'sleep' || w.doing.kind === 'goSleep');
     }
-    for (const [id, w] of this.walkers) {
-      if (!seen.has(id)) {
-        // Gone from the party: a place it held in a shop is free again (seats are counted from the walkers)
-        this.walkers.delete(id);
-        continue;
-      }
-      this.plan(w, now, o);
-      this.step(w, now, dt, o);
-      this.unstick(w, now);
-      if (w.fading) {
-        w.alpha = Math.max(0, w.alpha - dt / 3);
-        if (w.alpha === 0) this.walkers.delete(id);
-      }
+    for (const id of this.walkers.keys()) {
+      // Gone from the party: a place it held in a shop is free again (seats are counted from the walkers)
+      if (!seen.has(id)) this.walkers.delete(id);
     }
-    this.separate();
-    this.stepCat(now, dt);
+    // A long tick (the town's time running fast) goes in short steps: walks go around things as at
+    // normal speed, and nobody steps past where they were going
+    const steps = Math.max(1, Math.ceil(dt / MAX_STEP_S));
+    for (let k = 1; k <= steps; k++) {
+      const at = now - dt * 1000 * (1 - k / steps);
+      const sdt = dt / steps;
+      for (const [id, w] of this.walkers) {
+        this.plan(w, at, o);
+        this.step(w, at, sdt, o);
+        this.unstick(w, at);
+        if (w.fading) {
+          w.alpha = Math.max(0, w.alpha - sdt / 3);
+          if (w.alpha === 0) this.walkers.delete(id);
+        }
+      }
+      this.separate();
+      this.stepCat(at, sdt);
+    }
     this.stepLamps(now, o);
     this.stepFire(now, o);
     this.nightSleepers = 0;

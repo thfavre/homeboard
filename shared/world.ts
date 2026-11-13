@@ -844,7 +844,7 @@ export interface Reign {
 export type CeremonyHold = 'king' | 'game' | 'tv';
 
 /** How much faster the town's time can run (the TV's button goes round them) */
-export const TOWN_SPEEDS = [1, 2, 4] as const;
+export const TOWN_SPEEDS = [1, 2, 5, 10] as const;
 
 /**
  * The town's own time (ms) at a real time `now`: real time plus how far it ran ahead, `ahead` at
