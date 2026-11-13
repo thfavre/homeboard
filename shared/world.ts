@@ -121,13 +121,13 @@ export const HALL_ART = {
 
 /**
  * The riverside between the town and the hall, in sprite pixels from the town's right edge: grass,
- * a river running down the whole screen and a stone bridge over it on the carpet's line. Nobody
+ * a river winding down the whole screen and a stone bridge over it on the carpet's line. Nobody
  * wades through the water: whoever has to get across takes the bridge.
  */
 export const RIVERSIDE_ART = {
-  w: 144,
-  /** The river's tiles, from the outer edge of one grassy bank to the other's */
-  river: { x0: 18, x1: 114 },
+  w: 156,
+  /** The band the river winds down in, its banks included */
+  river: { x0: 14, x1: 142 },
   /** The bridge's deck between its two parapets: its top and bottom edge */
   bridge: { y0: 368, y1: 440 },
 };
