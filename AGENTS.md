@@ -48,6 +48,8 @@ and phones connected. So:
   Check the port is free first. A fresh data folder has no WLED lights, so tests never drive the
   real lights. Drive it with `socket.io-client` (auth `{ role: 'admin' }` works from localhost,
   guests join with `rpc('core', 'join', { code, name, pin })`).
+- `npx tsx scripts/bots.ts [count]` joins fake guests with random avatars that walk the town until
+  stopped (follows `PORT` and `HB_DATA_DIR`).
 
 ## Environment variables
 

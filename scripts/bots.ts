@@ -1,0 +1,50 @@
+/**
+ * Fake guests for trying the town: each joins the party like a phone would, makes a random avatar
+ * the first time, and stays online (so it walks around the town on the TV) until the script stops.
+ * Then they fall asleep and fade out like any guest who left. Run again, the same bots come back
+ * with the avatars they already have.
+ *
+ *   npx tsx scripts/bots.ts            three bots on the server of this folder
+ *   npx tsx scripts/bots.ts 5          five bots
+ *
+ * The port follows PORT (4300 by default) and the data folder HB_DATA_DIR, like the server, so the
+ * bots join a test copy when pointed at one.
+ */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { io, type Socket } from 'socket.io-client';
+import { randomChoices } from '../shared/world.ts';
+
+const NAMES = ['Ada', 'Bruno', 'Cleo', 'Dario', 'Elsa', 'Felix', 'Gaia', 'Hugo', 'Iris', 'Jonas', 'Kira', 'Leon'];
+/** The bots' PIN: lets the same bot log back in on the next run */
+const PIN = '7392';
+
+const count = Math.max(1, Math.min(NAMES.length, Number(process.argv[2]) || 3));
+const port = Number(process.env.PORT) || 4300;
+const dataDir = process.env.HB_DATA_DIR || join(import.meta.dirname, '..', 'data');
+// The session code, read where the server keeps it (it is what the QR code on the TV carries)
+const code = JSON.parse(readFileSync(join(dataDir, 'session.json'), 'utf8')).code;
+
+const rpc = (s: Socket, module: string, method: string, args?: unknown) =>
+  new Promise<any>((ok, ko) =>
+    s.timeout(30_000).emit('rpc', { module, method, args }, (err: unknown, res: { ok: boolean; data?: unknown; error?: string }) =>
+      err ? ko(new Error('The server did not answer')) : res.ok ? ok(res.data) : ko(new Error(res.error)),
+    ),
+  );
+
+for (const n of NAMES.slice(0, count)) {
+  const name = `Bot ${n}`;
+  const s = io(`http://localhost:${port}`, { auth: { role: 'guest' }, transports: ['websocket'] });
+  // Also after a server restart: the socket reconnects and the bot joins again
+  s.on('connect', async () => {
+    try {
+      const joined = await rpc(s, 'core', 'join', { code, name, pin: PIN });
+      s.auth = { role: 'guest', token: joined.token };
+      if (!(await rpc(s, 'world', 'mine'))) await rpc(s, 'world', 'save', { choices: randomChoices() });
+      console.log(`${name} is in town${joined.returning ? ' (back again)' : ''}`);
+    } catch (e) {
+      console.log(`${name}: ${(e as Error).message}`);
+    }
+  });
+}
+console.log(`${count} bots on port ${port}. Ctrl-C takes them offline.`);
