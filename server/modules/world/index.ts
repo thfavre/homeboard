@@ -270,7 +270,7 @@ export default defineModule<WorldSettings>({
     lamplighter: true,
     party: true,
     partyEveryDays: 7,
-    partyHours: 5,
+    partyHours: 7,
     partyGoersPct: 70,
   },
 

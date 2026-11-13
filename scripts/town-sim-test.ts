@@ -74,7 +74,7 @@ const opts: TownOptions = {
   activities: { cafe: true, fountain: true, board: true, fish: true, fire: true },
   lamplighter: true,
   // A party every other night, so a two hour test sees one
-  party: { on: true, everyDays: 2, hours: 5, goers: 0.7 },
+  party: { on: true, everyDays: 2, hours: 7, goers: 0.7 },
 };
 /** The share of characters asleep for the night at 3:00, at 9:00 (the night owls) and at noon, each day */
 const atNight: number[] = [];
@@ -112,6 +112,8 @@ let fireNights = 0;
 let nights = 0;
 const dayFires = new Set<number>();
 let dancersMax = 0;
+/** At the party (inside, on the terrace, on the way) at 23:00, 2:00 and 4:30 on party nights */
+const atParty: string[] = [];
 const sec = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 const start = clock;
 let lastCeremony = clock;
@@ -165,6 +167,9 @@ while (clock < end) {
     if (frame.fire) fireNights++;
   }
   if (frame.fire && minute > 9 * 60 && minute < 19 * 60) dayFires.add(Math.floor(opts.localMinutes / 1440));
+  for (const [at, label] of [[1380, '23:00'], [120, '2:00'], [270, '4:30']] as const) {
+    if (frame.party && before < at && minute >= at) atParty.push(`${label} ${[...(simAny.walkers as Map<string, any>).values()].filter((w) => w.doing.kind === 'party').length}`);
+  }
   dancersMax = Math.max(dancersMax, frame.a.filter((_, i) => i % FRAME_STRIDE === 2).filter((a) => a === WANIM.dance).length);
   for (const [id, w] of simAny.walkers as Map<string, any>) {
     (kinds.get(id) ?? kinds.set(id, new Set()).get(id)!).add(w.doing.kind);
@@ -268,6 +273,7 @@ console.log(`characters that never: sat ${never('sit')}, petted ${never('pet')},
 console.log(`sleepers on top of each other at 3:00: ${stacked} pairs (sleepers ${bedsAt3.join(' ')})`);
 console.log('started:', started);
 console.log(`campfire burning at 1:00 on ${fireNights} of ${nights} nights, lit by day on ${dayFires.size} days`);
+console.log(`at the party: ${atParty.join(', ') || '-'}`);
 console.log(`fish caught: ${fishCaught} in ${started.fish ?? 0} fishing trips`);
 console.log(`lamps lit: ${lampsAt.join(', ')}; most dancing at once: ${dancersMax}`);
 console.log('longest per activity:', Object.fromEntries(Object.entries(stats.maxKindMs).map(([k, v]) => [k, sec(v)])));

@@ -325,7 +325,7 @@
         <strong>Party nights</strong>
         <p class="faint small">
           Every few nights the cafe throws a party from nightfall. Many stay up for it: some dance inside, seen through the window in flashing colored light,
-          others stand out on the terrace with a drink. When it is over they go to bed. Needs day and night.
+          others stand out on the terrace with a drink. Some go home early, one by one; the rest stay until it is over. Needs day and night.
         </p>
       </div>
       <Toggle checked={!!mod.party} label="Party nights" onchange={(v) => setOption('party', v)} />

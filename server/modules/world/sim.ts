@@ -119,6 +119,8 @@ const LAMP_WAIT_MS = 15_000;
 const LAMP_AUTO_MS = 1100;
 /** During a party: the chance a character free to pick something goes to it, the share going inside (if there is room), how long inside and outside */
 const PARTY_CHANCE = 0.7;
+/** The share of the party's guests who stay to its end (the others go home one by one, from a third of the way in) */
+const PARTY_TO_THE_END = 0.4;
 const PARTY_INSIDE = 0.55;
 const PARTY_INSIDE_MS: [number, number] = [16_000, 34_000];
 const PARTY_OUTSIDE_MS: [number, number] = [12_000, 28_000];
@@ -631,7 +633,7 @@ export class TownSim {
   /** The party night the host ended early (its name), so it does not start again */
   private partyStopped: string | null = null;
   /** The party now and its name (null: none), and the town's clock and the party's length at the last tick */
-  private partyNow: { night: string } | null = null;
+  private partyNow: { night: string; from: number; until: number } | null = null;
   private lastMinutes = 0;
   private lastPartyHours = 5;
   private last = 0;
@@ -1031,7 +1033,8 @@ export class TownSim {
           break;
         }
         // A party on: most go to it
-        if (this.partyNow && Math.random() < PARTY_CHANCE && this.goParty(w)) break;
+        // (except who went home from it already)
+        if (this.partyNow && o.localMinutes < this.homeFromParty(w.id) && Math.random() < PARTY_CHANCE && this.goParty(w)) break;
         if (Math.random() < o.chatChance && this.startChat(w, now)) break;
         if (this.pickActivity(w, o)) break;
         const roll = Math.random();
@@ -1742,16 +1745,32 @@ export class TownSim {
     this.lastMinutes = o.localMinutes;
     this.lastPartyHours = o.party.hours;
     if (o.localMinutes < this.partyUntil) {
-      this.partyNow = { night: `now${this.partyFrom}` };
+      this.partyNow = { night: `now${this.partyFrom}`, from: this.partyFrom, until: this.partyUntil };
       return;
     }
     const p = o.party.on && o.dayNight.on ? partyAt(o.localMinutes, o.dayNight.dusk, o.party.everyDays, o.party.hours) : null;
-    this.partyNow = p?.on && `${p.night}` !== this.partyStopped ? { night: `${p.night}` } : null;
+    const from = p ? p.night * 1440 + minuteOf(o.dayNight.dusk) : 0;
+    this.partyNow = p?.on && `${p.night}` !== this.partyStopped ? { night: `${p.night}`, from, until: from + o.party.hours * 60 } : null;
   }
 
-  /** This guest's character stays up for the party (the same ones all through one party) */
+  /**
+   * This guest's character is at the party, or staying up for it: one of the party's guests (the
+   * same ones all through one party) who has not gone home yet. Some stay to the end; the others go
+   * home one by one from a third of the way in (see PARTY_TO_THE_END).
+   */
   private upForParty(id: string, o: TownOptions): boolean {
-    return !!this.partyNow && hash01(`${id}:${this.partyNow.night}:party`) < o.party.goers;
+    const p = this.partyNow;
+    if (!p || hash01(`${id}:${p.night}:party`) >= o.party.goers) return false;
+    return o.localMinutes < this.homeFromParty(id);
+  }
+
+  /** When this character goes home from the party now on (town minutes; the party's end for those who stay to the end) */
+  private homeFromParty(id: string): number {
+    const p = this.partyNow;
+    if (!p) return -Infinity;
+    const k = hash01(`${id}:${p.night}:home`);
+    if (k < PARTY_TO_THE_END) return p.until;
+    return p.from + (p.until - p.from) * (1 / 3 + ((2 / 3) * (k - PARTY_TO_THE_END)) / (1 - PARTY_TO_THE_END));
   }
 
   /** A party is on at the cafe */
@@ -1764,7 +1783,7 @@ export class TownSim {
     if (this.partyNow) return false;
     this.partyFrom = this.lastMinutes;
     this.partyUntil = this.lastMinutes + this.lastPartyHours * 60;
-    this.partyNow = { night: `now${this.partyFrom}` };
+    this.partyNow = { night: `now${this.partyFrom}`, from: this.partyFrom, until: this.partyUntil };
     return true;
   }
 
