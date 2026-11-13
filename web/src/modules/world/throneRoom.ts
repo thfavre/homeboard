@@ -1083,8 +1083,8 @@ function outerWalls(g: G, stone: HTMLCanvasElement): void {
 /** The towers: as wide as two of the castle sheet's tiles, where their floor is (from their top), and how tall the tall ones and the low ones are */
 const TOWER_W = 64;
 const TOWER_FLOOR = 36;
-const TOWER_TALL = 172;
-const TOWER_LOW = 100;
+const TOWER_TALL = 188;
+const TOWER_LOW = 132;
 /** Where the towers stand (in the hall's pixels: their left edge and their foot): two tall ones at the back, two low ones at the front */
 const TOWERS = [
   { x: -30, foot: A.wall + 4, tall: true },
@@ -1116,16 +1116,21 @@ function castleTower(stone: HTMLCanvasElement, tall: boolean): HTMLCanvasElement
   if (tall) {
     piece(by, 64, top + 12);
     piece(by + 32, 32, top + 76);
-    piece(by + 64, 48, top + 108);
+    piece(by + 32, 16, top + 108);
+    piece(by + 64, 48, top + 124);
   } else {
     piece(by, 26, top + 12);
-    piece(by + 30, 16, top + 38);
-    piece(by + 82, 30, top + 54);
+    piece(by + 26, 48, top + 38);
+    piece(by + 82, 30, top + 86);
   }
   return c;
 }
 
-/** The towers' pictures, once built with the ground (the ones standing out over the riverside are drawn again over the river's frames) */
+/**
+ * The towers' pictures, once built with the ground. The tall ones are part of the ground (drawn again
+ * over the river's frames where they stand out over the riverside); the front ones stand up among
+ * the people and props (hallProps), in front of whoever is behind them.
+ */
 let towerArt: { tall: HTMLCanvasElement; low: HTMLCanvasElement } | null = null;
 
 function towers(g: G, stone: HTMLCanvasElement): void {
@@ -1137,7 +1142,7 @@ function towers(g: G, stone: HTMLCanvasElement): void {
     g.beginPath();
     g.ellipse(t.x + TOWER_W / 2 + 6, t.foot - 6, TOWER_W / 2 + 2, 9, 0, 0, Math.PI * 2);
     g.fill();
-    g.drawImage(img, t.x, t.foot - img.height);
+    if (t.tall) g.drawImage(img, t.x, t.foot - img.height);
   }
 }
 
@@ -1332,8 +1337,8 @@ export function drawRiver(g: G, art: HallArt, now: number): void {
   g.globalAlpha = 1;
   // The towers standing out over the riverside's grass, which the river's frames just painted over
   for (const tw of TOWERS) {
-    const img = tw.tall ? towerArt?.tall : towerArt?.low;
-    if (!img || tw.x >= 0) continue;
+    const img = towerArt?.tall;
+    if (!img || !tw.tall || tw.x >= 0) continue;
     const q = at(tw.x, tw.foot - img.height);
     g.drawImage(img, q.x, q.y, img.width * S, img.height * S);
   }
@@ -1430,6 +1435,13 @@ export function hallProps(art: HallArt): Prop[] {
       draw: (g, now) => brazier(g, p.x, p.y, now, k * 2.1 + 5),
     });
   });
+  // The front towers, standing in front of whoever is behind them
+  for (const t of TOWERS) {
+    const img = towerArt?.low;
+    if (t.tall || !img) continue;
+    const q = at(t.x, t.foot - img.height);
+    out.push({ y: t.foot * S, draw: (g) => g.drawImage(img, q.x, q.y, img.width * S, img.height * S) });
+  }
   return out;
 }
 
