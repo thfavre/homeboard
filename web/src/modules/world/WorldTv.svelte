@@ -561,7 +561,8 @@
     // The characters, the things that stand up, the birds and the cat, back to front together
     let pi = 0;
     while (pi < people.length && people[pi].anim === WANIM.sleep) drawPerson(people[pi++]);
-    const cat = frames[frames.length - 1]?.cat;
+    // The cat, smoothly between the two frames like everyone (with the town sped up it moves far between two)
+    const cat = f0 ? { ...f0.cat, x: f0.cat.x + ((f1 ?? f0).cat.x - f0.cat.x) * mix, y: f0.cat.y + ((f1 ?? f0).cat.y - f0.cat.y) * mix } : undefined;
     const standing = [
       ...standingProps,
       ...inHall,
