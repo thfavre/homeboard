@@ -1,7 +1,7 @@
 /**
  * Plays the town (server/modules/world/sim.ts) on a fake clock, hours in seconds, with many
  * characters: guests leave and come back, change their looks, cheer, and the King holds a ceremony
- * every 15 minutes, and a whole town day goes by every hour (night from 20:00 to 07:00). It watches every step for trouble (walking on the spot, standing in the
+ * every 15 minutes, and a whole town day goes by every hour (night from 22:00 to 06:00). It watches every step for trouble (walking on the spot, standing in the
  * fountain, off the square, in the river, an activity that never ends, a chat partner who is not
  * chatting back) and measures how things go (shop trips, the ceremony, sleep, who sleeps at night, variety).
  *
@@ -66,10 +66,10 @@ const opts: TownOptions = {
   king: 'g1' as string | null,
   courtMs: 60_000,
   graceMs: 20_000,
-  dayNight: { on: true, dusk: '20:00', dawn: '07:00', twilightMin: 90 },
+  dayNight: { on: true, dusk: '22:00', dawn: '06:00', twilightMin: 90 },
   localMinutes: 12 * 60,
   nightSleep: true,
-  bedtimeSpreadMin: 180,
+  bedtimeSpreadMin: 150,
   nightOwls: 0.2,
   activities: { cafe: true, fountain: true, board: true, fish: true, fire: true },
   lamplighter: true,
@@ -78,6 +78,8 @@ const opts: TownOptions = {
 };
 /** The share of characters asleep for the night at 3:00, at 9:00 (the night owls) and at noon, each day */
 const atNight: number[] = [];
+/** The share asleep for the night at midnight */
+const atMidnight: number[] = [];
 /** Pairs of sleepers lying on top of each other at 3:00, and how many slept then */
 let stacked = 0;
 const bedsAt3: number[] = [];
@@ -145,6 +147,7 @@ while (clock < end) {
     const all = [...(simAny.walkers as Map<string, any>).values()];
     return all.filter((w) => (w.doing.kind === 'sleep' || w.doing.kind === 'goSleep') && w.doing.night).length / Math.max(1, all.length);
   };
+  if (before < 1440 && (minute < before || minute >= 1440)) atMidnight.push(asleep());
   if (before < 180 && minute >= 180) {
     atNight.push(asleep());
     // Sleepers lying on top of each other (a body takes room sideways: closer counts above and below)
@@ -258,6 +261,7 @@ console.log(`court opened after (s from the call): ${(stats as any).courtWaits?.
 console.log(`in place when the court opens: ${courtShares.map((x) => Math.round(x * 100) + '%').join(' ')}`);
 console.log(`still out by the throne room a minute after: ${backLate.length ? backLate.slice(0, 5).join('; ') : 'nobody'}`);
 console.log(`away guests not asleep in time: ${sleepLate.length}`);
+console.log(`asleep for the night at midnight: ${atMidnight.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}`);
 console.log(`asleep for the night at 3:00: ${atNight.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; at 9:00: ${atMorning.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; at noon: ${atNoon.map((x) => Math.round(x * 100) + '%').join(' ') || '-'}; dark now ${frame!.dark}`);
 const never = (k: string) => [...kinds].filter(([id, set]) => !set.has(k) && !(Number(id.slice(1)) % 9 === 0 && (k === 'sit' || k === 'pet'))).length;
 console.log(`characters that never: sat ${never('sit')}, petted ${never('pet')}, chatted ${never('chat')}, wandered ${never('wander')}`);

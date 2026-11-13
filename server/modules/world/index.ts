@@ -84,7 +84,7 @@ interface WorldSettings {
   dawn: string;
   /** The light changes over this long around dusk and dawn (minutes) */
   twilightMin: number;
-  /** Characters go to bed at night, each at its own time within this spread around dusk (minutes) */
+  /** Characters go to bed at night, each at its own time within this spread after dusk (minutes) */
   nightSleep: boolean;
   bedtimeSpreadMin: number;
   /** The share of characters who stay up all night and sleep in the morning (percent) */
@@ -259,7 +259,7 @@ export default defineModule<WorldSettings>({
     dawn: '06:00',
     twilightMin: 90,
     nightSleep: true,
-    bedtimeSpreadMin: 180,
+    bedtimeSpreadMin: 150,
     nightOwlPct: 20,
     cafe: true,
     fountainSit: true,

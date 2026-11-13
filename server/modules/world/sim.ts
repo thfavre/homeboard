@@ -426,8 +426,8 @@ function hash01(text: string): number {
 }
 
 /**
- * Whether a character sleeps for the night right now. Each one has its own bedtime, from a little
- * before dusk to the spread after it, and gets up around dawn, both different every night. Night
+ * Whether a character sleeps for the night right now. Each one has its own bedtime, from dusk to
+ * the spread after it (so some are still up well into the night), and gets up around dawn, both different every night. Night
  * owls (the same ones every night) stay up and go to bed after dawn, for a few hours.
  */
 export function asleepForTheNight(id: string, o: Pick<TownOptions, 'dayNight' | 'localMinutes' | 'nightSleep' | 'bedtimeSpreadMin' | 'nightOwls'>): boolean {
@@ -444,7 +444,7 @@ export function asleepForTheNight(id: string, o: Pick<TownOptions, 'dayNight' | 
   const spread = o.bedtimeSpreadMin;
   const [bed, wake] = owl
     ? [night + a * OWL_BED_MIN, night + OWL_SLEEP_MIN[0] + b * (OWL_SLEEP_MIN[1] - OWL_SLEEP_MIN[0])]
-    : [(a - 0.2) * spread, night + (b - 0.5) * spread * 0.6];
+    : [a * spread, night + (b - 0.5) * spread * 0.6];
   return rel >= bed && rel < wake;
 }
 

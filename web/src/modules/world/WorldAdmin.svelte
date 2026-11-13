@@ -265,7 +265,8 @@
       </label>
     </div>
     <p class="faint small">
-      The first go to bed a little before night falls, the last this long after.
+      The first go to bed as night falls, the last this long after: at 150 with night at 22:00, about a third of the town is still up at midnight (with the
+      night owls).
     </p>
     <div class="current">
       <span class="status night">
