@@ -2,7 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-  import { DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { CROSSING, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { SQUARE_STREET, loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
@@ -503,9 +503,13 @@
     for (const p of people) {
       const c = byId.get(p.id);
       const s = sleepSide(p.x);
+      const king = p.id === world?.king?.id;
       // Kneeling, or seated on the throne: the name comes down with the head
       const tall = tallOf(shown.get(p.id)?.img) * (p.anim === WANIM.pray ? 0.66 : p.anim === WANIM.sit && p.dir === 1 ? 0.86 : 1);
-      if (c) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - p.lift - tall - 14, p.alpha, p.id === world?.king?.id);
+      // Over at the castle only the King keeps a name: the others' fade out as they cross the bridge,
+      // and back in as they cross it home
+      const nameAlpha = king ? p.alpha : p.alpha * Math.max(0, Math.min(1, (CROSSING.x1 - p.x) / (CROSSING.x1 - CROSSING.x0)));
+      if (c && nameAlpha > 0) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - p.lift - tall - 14, nameAlpha, king);
       if (p.anim === WANIM.sleep) drawZzz(g, p.x + s * 58, p.y - 4, now, p.alpha);
     }
     g.restore();
