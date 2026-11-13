@@ -210,11 +210,11 @@
     <div class="pair">
       <label class="field">
         <span>Night falls at (on the town's clock)</span>
-        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="20:00" value={mod.dusk} onchange={(e) => setTime('dusk', e.currentTarget)} />
+        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="22:00" value={mod.dusk} onchange={(e) => setTime('dusk', e.currentTarget)} />
       </label>
       <label class="field">
         <span>Day comes back at</span>
-        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="07:00" value={mod.dawn} onchange={(e) => setTime('dawn', e.currentTarget)} />
+        <input class="input" type="text" inputmode="numeric" maxlength="5" placeholder="06:00" value={mod.dawn} onchange={(e) => setTime('dawn', e.currentTarget)} />
       </label>
     </div>
     {#if timeErrors.dusk}<p class="error small">{timeErrors.dusk}</p>{/if}
