@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { FastForward } from '@lucide/svelte';
+  import { FastForward, Maximize, Minimize } from '@lucide/svelte';
+  import { enterFull, leaveFull, tvFull } from '../../tv/fullscreen.svelte.ts';
   import { attempt, hb, onEvent, rpc, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
   import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, TOWN_SPEEDS, hallLift, townMinutes, townTime, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
@@ -43,6 +44,13 @@
     const next = speed > 1 && !again ? 1 : TOWN_SPEEDS[(i + 1) % TOWN_SPEEDS.length];
     void attempt(() => rpc('world', 'setSpeed', { speed: next }));
   }
+
+  /** The full screen button, next to the speed: the town alone on the whole screen */
+  const toggleFull = () => (tvFull.on ? leaveFull() : enterFull());
+  // Another main view taking the TV's place (a game) brings the TV's layout back
+  onMount(() => () => {
+    if (tvFull.on) leaveFull();
+  });
 
   let canvas: HTMLCanvasElement;
   let wrap: HTMLDivElement;
@@ -263,6 +271,23 @@
     return bg;
   }
 
+  /**
+   * What of the town always shows on the TV (world units): the square where everyone walks and the
+   * buildings' fronts. The strips around it (the left of the town hall, the paving at the sides, the
+   * roof tops, the bottom row) are only shown when the screen's shape has room for them. Narrow
+   * enough to fill the town's box next to the side cards on a 16:9 TV (about 1.53 wide)
+   */
+  const TOWN_MUST = { x0: 110, x1: 1490, y0: 20, y1: 885 };
+
+  /**
+   * Where the view starts along one axis (world units), `view` long: bigger than the town, the town
+   * in the middle (bands on both sides); smaller, centered on what must show, kept inside the town
+   */
+  function viewStart(view: number, size: number, must0: number, must1: number): number {
+    if (view >= size) return (size - view) / 2;
+    return Math.max(0, Math.min(size - view, (must0 + must1) / 2 - view / 2));
+  }
+
   function draw(): void {
     if (!canvas || !wrap) return;
     const dpr = window.devicePixelRatio || 1;
@@ -300,11 +325,15 @@
 
     // The camera: on the town, or moved to the right for the ceremony in the throne room (on
     // whole screen pixels, so the ground does not shimmer as it slides)
-    const k = Math.min(cw / TOWN.w, ch / TOWN.h);
+    // The town fills the screen, its edges cut away as the screen's shape needs, but never into
+    // what must show (TOWN_MUST): only past that do bands show
+    const k = Math.min(Math.max(cw / TOWN.w, ch / TOWN.h), cw / (TOWN_MUST.x1 - TOWN_MUST.x0), ch / (TOWN_MUST.y1 - TOWN_MUST.y0));
+    const ox = viewStart(cw / k, TOWN.w, TOWN_MUST.x0, TOWN_MUST.x1);
+    const oy = viewStart(ch / k, TOWN.h, TOWN_MUST.y0, TOWN_MUST.y1);
     const cam = f0 ? (f0.cam ?? 0) + (f1 ? ((f1.cam ?? 0) - (f0.cam ?? 0)) * mix : 0) : 0;
     const shift = Math.round(Math.max(0, Math.min(1, cam)) * HALL_PAN * k);
     const away = shift > 0;
-    g.setTransform(k, 0, 0, k, (cw - TOWN.w * k) / 2 - shift, (ch - TOWN.h * k) / 2);
+    g.setTransform(k, 0, 0, k, -ox * k - shift, -oy * k);
     g.save();
     if (away) {
       // Moved over: only what the screen shows of both (nothing spills into the letterbox bands)
@@ -718,11 +747,16 @@
   }
 </script>
 
-<div class="town" bind:this={wrap}>
+<div class="town" class:full={tvFull.on} bind:this={wrap}>
   <canvas bind:this={canvas}></canvas>
-  <button type="button" class="speed" class:on={speed > 1} aria-label="Town speed {speed} times" onclick={faster}>
-    <FastForward size={18} />{speed}×
-  </button>
+  <div class="tools">
+    <button type="button" class="speed" class:on={speed > 1} aria-label="Town speed {speed} times" onclick={faster}>
+      <FastForward size={18} />{speed}×
+    </button>
+    <button type="button" class="full-btn" aria-label={tvFull.on ? 'Leave full screen' : 'Full screen'} onclick={toggleFull}>
+      {#if tvFull.on}<Minimize size={18} />{:else}<Maximize size={18} />{/if}
+    </button>
+  </div>
 </div>
 
 <style>
@@ -741,11 +775,20 @@
     width: 100%;
     height: 100%;
   }
-  /* The town's speed, top right: quiet at real speed, lit while sped up */
-  .speed {
+  .town.full {
+    border-radius: 0;
+  }
+  /* Top right: the town's speed and the full screen button */
+  .tools {
     position: absolute;
     top: 10px;
     right: 10px;
+    display: flex;
+    gap: 6px;
+  }
+  /* Both quiet; the speed is lit while sped up */
+  .speed,
+  .full-btn {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -757,6 +800,9 @@
     font: 600 14px var(--font-body);
     cursor: pointer;
     opacity: 0.75;
+  }
+  .full-btn {
+    padding: 6px 8px;
   }
   .speed.on {
     background: var(--accent);
