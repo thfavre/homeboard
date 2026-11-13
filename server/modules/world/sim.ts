@@ -1,8 +1,9 @@
-import { BENCHES, CARPET_START, CARPET_Y, CROSSING, DAIS_FOOT, PRAY_HALL_COLS, PRAY_ROWS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, WANIM, praySpots, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
+import { BENCHES, CARPET_START, CARPET_Y, CHAT_ICON, CROSSING, DAIS_FOOT, PRAY_HALL_COLS, PRAY_ROWS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, TOWN_SCENE, WANIM, praySpots, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
 
 /**
  * The life of the town: characters wander the ground band, stop for a while, sit on benches, pet
- * the cat; a guest away for too long walks to the edge, lies down to sleep and slowly fades out.
+ * the cat, walk up to each other and chat for a while; a guest away for too long walks to the edge,
+ * lies down to sleep and slowly fades out.
  * When a guest changes their look on the phone, the character walks to the shop for it (clothes or
  * barber) and comes out in the new look. For the King's ceremony the camera moves over to the
  * throne room off the town's right edge: the King walks up the carpet to the throne, the others
@@ -24,7 +25,17 @@ const HURRY_FROM = 240;
 const ACTIVITIES = {
   petCat: { radius: 300, capacity: 1 },
   bench: { radius: 540, capacity: 1 },
+  /** Someone to chat with, standing around or wandering (two at a time, any number of pairs) */
+  chat: { radius: 380, capacity: 2 },
 };
+/** Two characters chatting stand this far apart, facing each other */
+const CHAT_GAP = 42;
+/** A tree's crown hides who stands behind it: this far to each side of the trunk, and up from it */
+const CROWN = { half: 72, up: 150 };
+/** On the way to a chat for longer than this: they give up */
+const CHAT_MEET_MS = 15_000;
+/** In a chat they take turns: one speaks this long (a bubble over the head), then the other */
+const CHAT_TURN_MS = 2400;
 /** Everything in the way on the square: the fountain, the trees, the lamp posts */
 const OBSTACLES = TOWN_OBSTACLES;
 /** How far ahead a walker looks for something in the way */
@@ -63,7 +74,22 @@ type Doing =
   | { kind: 'goHall' }
   | { kind: 'goPray'; spot: number; inLane: boolean }
   | { kind: 'pray'; spot: number; until: number; knelt: boolean }
+  | { kind: 'goChat'; with: string; tx: number; ty: number; since: number }
+  | Chat
   | Visit;
+
+/**
+ * Two characters talking: `with` is the other one, who has the same chat. Until both stand in
+ * place it waits (`start` 0); then they take turns for a while, until `until`. `seed` picks what
+ * the bubbles show, the same for both.
+ */
+interface Chat {
+  kind: 'chat';
+  with: string;
+  start: number;
+  until: number;
+  seed: number;
+}
 
 /**
  * The King's ceremony. gather: the King is called first and walks to the throne; once he is in
@@ -195,6 +221,10 @@ export interface TownOptions {
   finishWithinMs: number;
   /** A longer one is wrapped up within a random time in this range, if it can be cut short */
   wrapUpMs: [number, number];
+  /** Each time a character picks something to do, the chance it goes to chat with someone nearby (0..1; 0: never) */
+  chatChance: number;
+  /** How long a chat lasts once both stand face to face (ms, a random time in the range) */
+  chatMs: [number, number];
   /** The guest holding the King's title (null: nobody, or the title is off) */
   king: string | null;
   /** A ceremony: how long the King holds court once seated, and how long everyone has to finish what they are doing and go (ms) */
@@ -319,6 +349,17 @@ export class TownSim {
     // Petting ends whenever: get up a little sooner, or stop on the way there
     goPet: { priority: PRIORITY.activity, left: (_d, w) => walkMs(w, this.cat.x, this.cat.y), wrapUp: stopWalking },
     pet: { priority: PRIORITY.activity, left: (d, _w, now) => d.until - now, wrapUp: sooner },
+    // A chat ends whenever: stop on the way, or say goodbye a little sooner (the other one sees it
+    // is over and goes on too)
+    goChat: { priority: PRIORITY.activity, left: (d, w) => walkMs(w, d.tx, d.ty), wrapUp: stopWalking },
+    chat: {
+      priority: PRIORITY.activity,
+      left: (d, _w, now) => (d.start ? d.until - now : CHAT_MEET_MS),
+      wrapUp: (d, _w, now, ms) => {
+        d.start ||= now;
+        d.until = d.until ? Math.min(d.until, now + ms) : now + ms;
+      },
+    },
     // Never cut short: a cheer is over in a moment, a sleeper wakes when the guest is back, a visit
     // runs its course, and the ceremony ends for everyone at once
     cheer: { priority: PRIORITY.activity, left: (d, _w, now) => d.until - now },
@@ -434,10 +475,12 @@ export class TownSim {
       }
     }
     const someonePets = [...this.walkers.values()].some((w) => w.doing.kind === 'pet');
+    const talk = this.talk([...this.walkers.values()], now);
     return {
       t: now,
       ids,
       a,
+      ...(talk.length ? { talk } : {}),
       cat: { x: Math.round(this.cat.x), y: Math.round(this.cat.y), dir: this.cat.dir, walk: this.cat.doing.kind === 'wander' && !someonePets, hearts: someonePets },
       cam: Math.round(this.camAt(now) * 1000) / 1000,
     };
@@ -454,6 +497,7 @@ export class TownSim {
       case 'descend':
       case 'goHall':
       case 'goPray':
+      case 'goChat':
         return WANIM.walk;
       // The King before the throne: standing until all are there, his hands up to open the court,
       // a step back to the seat, seated, and up to cheer every few seconds. Whatever he wears: a piece without art for these poses is
@@ -544,7 +588,7 @@ export class TownSim {
     if (now - w.anchor.at < STUCK_MS) return;
     w.anchor.at = now;
     const k = w.doing.kind;
-    if (k === 'wander' || k === 'goBench' || k === 'goPet') w.doing = idle(now, 300, 1200);
+    if (k === 'wander' || k === 'goBench' || k === 'goPet' || k === 'goChat') w.doing = idle(now, 300, 1200);
     else w.through = now + THROUGH_MS;
   }
 
@@ -572,6 +616,7 @@ export class TownSim {
           w.doing = { kind: 'visit', place: w.errands[0], phase: 'go', seat: -1, since: 0, until: 0, dressAt: 0, dressed: false };
           break;
         }
+        if (Math.random() < o.chatChance && this.startChat(w, now)) break;
         const roll = Math.random();
         const all = [...this.walkers.values()];
         // Benches this character can see with a seat left (sitting there, or walking to it, takes the seat)
@@ -624,6 +669,37 @@ export class TownSim {
       case 'pet':
         if (now >= d.until) w.doing = { kind: 'idle', until: now + rand(800, 2500) };
         break;
+      case 'goChat': {
+        // The other one went off to something else, or it takes too long to meet: never mind
+        if (!this.chatting(d.with, w.id) || now - d.since > CHAT_MEET_MS) {
+          w.doing = idle(now, 300, 1200);
+          break;
+        }
+        if (this.walkTo(w, d.tx, d.ty, WALK_UPS, dt)) {
+          w.x = d.tx;
+          w.y = d.ty;
+          w.doing = { kind: 'chat', with: d.with, start: 0, until: 0, seed: 0 };
+        }
+        break;
+      }
+      case 'chat': {
+        const other = this.walkers.get(d.with);
+        if (!other || !this.chatting(d.with, w.id)) {
+          w.doing = idle(now, 500, 1800);
+          break;
+        }
+        // Face each other
+        w.dir = other.x > w.x ? 3 : 1;
+        // Both in place: the chat begins, for both at once
+        if (!d.start && other.doing.kind === 'chat' && !other.doing.start) {
+          const until = now + rand(o.chatMs[0], o.chatMs[1]);
+          const seed = Math.floor(Math.random() * 1e6);
+          Object.assign(d, { start: now, until, seed });
+          Object.assign(other.doing, { start: now, until, seed });
+        }
+        if (d.start && now >= d.until) w.doing = idle(now, 800, 2500);
+        break;
+      }
       case 'sit':
         if (now >= d.until) w.doing = { kind: 'idle', until: now + rand(500, 2000) };
         break;
@@ -736,6 +812,70 @@ export class TownSim {
         break;
       }
     }
+  }
+
+  // ------------------------------------------------------------ chats
+
+  /** This character is on its way to a chat with that one, or in it */
+  private chatting(id: string, withId: string): boolean {
+    const d = this.walkers.get(id)?.doing;
+    return (d?.kind === 'goChat' || d?.kind === 'chat') && d.with === withId;
+  }
+
+  /**
+   * Go chat with someone in sight who is standing around or wandering (and has no shop to go to):
+   * both walk to a spot between them, side by side, and turn to each other. False: nobody to chat
+   * with, or no room there.
+   */
+  private startChat(w: Walker, now: number): boolean {
+    if (this.ceremony || w.x > TOWN_AREA.x1) return false;
+    const free = [...this.walkers.values()].filter(
+      (o) =>
+        o !== w &&
+        (o.doing.kind === 'idle' || o.doing.kind === 'wander') &&
+        !o.errands.length &&
+        !o.fading &&
+        o.x <= TOWN_AREA.x1 &&
+        Math.hypot(o.x - w.x, o.y - w.y) < ACTIVITIES.chat.radius,
+    );
+    if (!free.length) return false;
+    const o = free[Math.floor(Math.random() * free.length)];
+    // Halfway, kept on the square: the one on the left stands on the left
+    const mx = Math.max(TOWN_AREA.x0 + CHAT_GAP, Math.min(TOWN_AREA.x1 - CHAT_GAP, (w.x + o.x) / 2));
+    const my = Math.max(TOWN_AREA.y0 + 10, Math.min(TOWN_AREA.y1 - 10, (w.y + o.y) / 2));
+    const [left, right] = w.x <= o.x ? [w, o] : [o, w];
+    const spots = [
+      { who: left, x: mx - CHAT_GAP / 2 },
+      { who: right, x: mx + CHAT_GAP / 2 },
+    ];
+    // Not across the river, nor where something stands, nor hidden behind a tree's crown
+    const hidden = (x: number) => TOWN_SCENE.trees.some((t) => Math.abs(x - t.x) < CROWN.half && my < t.y && my > t.y - CROWN.up);
+    if (spots.some((s) => blocked(s.x, my, STAND_CLEAR) || bridgeWay(s.who, s.x) || hidden(s.x))) return false;
+    for (const s of spots) {
+      s.who.doing = { kind: 'goChat', with: (s.who === w ? o : w).id, tx: s.x, ty: my, since: now };
+      s.who.wrapped = null;
+    }
+    return true;
+  }
+
+  /**
+   * Who is speaking in each chat, and what their bubble shows: [walker index, icon] pairs (see
+   * TownFrame.talk). They take turns, with a short pause between two turns.
+   */
+  private talk(list: Walker[], now: number): number[] {
+    const out: number[] = [];
+    list.forEach((w, i) => {
+      const d = w.doing;
+      if (d.kind !== 'chat' || !d.start || now >= d.until) return;
+      const turn = Math.floor((now - d.start) / CHAT_TURN_MS);
+      // The pause at the end of each turn
+      if ((now - d.start) % CHAT_TURN_MS > CHAT_TURN_MS * 0.8) return;
+      // Turn by turn, starting with one of the two (the same pick on both sides)
+      const first = (d.seed + (w.id < d.with ? 0 : 1)) % 2;
+      if ((turn + first) % 2) return;
+      out.push(i, (d.seed + turn * 7 + (turn >> 1) * 3) % CHAT_ICON.length);
+    });
+    return out;
   }
 
   // ------------------------------------------------------------ the ceremony

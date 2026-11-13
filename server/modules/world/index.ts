@@ -49,6 +49,13 @@ interface WorldSettings {
   /** Wandering or a bench is dropped within this range (seconds) when a shop calls */
   quickMinSec: number;
   quickMaxSec: number;
+  /** Characters walk up to each other and chat for a while, with speech bubbles */
+  chat: boolean;
+  /** Each time a character picks something to do, the chance it goes to chat with someone nearby (percent) */
+  chatChancePct: number;
+  /** How long a chat lasts (seconds, a random time in the range) */
+  chatMinSec: number;
+  chatMaxSec: number;
   /** Guests can buy the King's title */
   king: boolean;
   /**
@@ -168,8 +175,8 @@ const CEREMONY_SETTLE_MS = 45_000;
 /**
  * The avatar world: a living pixel town as the TV home screen. Guests design an LPC-style
  * character on their phone (composited on the server, see compose.ts); the characters wander the
- * town, sit on benches, pet the cat, and go to sleep when their guest leaves. One guest holds the
- * King's title, and the town gathers in the throne room for the King's ceremony.
+ * town, sit on benches, pet the cat, chat in twos, and go to sleep when their guest leaves. One
+ * guest holds the King's title, and the town gathers in the throne room for the King's ceremony.
  */
 export default defineModule<WorldSettings>({
   id: 'world',
@@ -200,6 +207,10 @@ export default defineModule<WorldSettings>({
     wrapMaxSec: 10,
     quickMinSec: 1,
     quickMaxSec: 3,
+    chat: true,
+    chatChancePct: 15,
+    chatMinSec: 8,
+    chatMaxSec: 18,
     king: true,
     kingBase: 300,
     kingRise: 1.5,
@@ -548,6 +559,10 @@ export default defineModule<WorldSettings>({
           wrapMaxSec: s.wrapMaxSec,
           quickMinSec: s.quickMinSec,
           quickMaxSec: s.quickMaxSec,
+          chat: s.chat,
+          chatChancePct: s.chatChancePct,
+          chatMinSec: s.chatMinSec,
+          chatMaxSec: s.chatMaxSec,
           kingBase: s.kingBase,
           kingRise: s.kingRise,
           kingDropPerMin: s.kingDropPerMin,
@@ -935,6 +950,8 @@ export default defineModule<WorldSettings>({
         finishWithinMs: s.finishWithinSec * 1000,
         wrapUpMs: sec(s.wrapMinSec, s.wrapMaxSec),
         quickStopMs: sec(s.quickMinSec, s.quickMaxSec),
+        chatChance: s.chat ? s.chatChancePct / 100 : 0,
+        chatMs: sec(s.chatMinSec, s.chatMaxSec),
         king: kingId(),
         courtMs: s.ceremonySec * 1000,
         graceMs: s.ceremonyGraceSec * 1000,
@@ -1067,6 +1084,10 @@ export default defineModule<WorldSettings>({
         wrapMaxSec: secs(args.wrapMaxSec, s.wrapMaxSec, 120),
         quickMinSec: secs(args.quickMinSec, s.quickMinSec, 30),
         quickMaxSec: secs(args.quickMaxSec, s.quickMaxSec, 30),
+        chat: typeof args.chat === 'boolean' ? args.chat : s.chat,
+        chatChancePct: Math.max(0, Math.min(100, Math.round(num(args.chatChancePct, s.chatChancePct)))),
+        chatMinSec: Math.max(2, secs(args.chatMinSec, s.chatMinSec, 120)),
+        chatMaxSec: Math.max(2, secs(args.chatMaxSec, s.chatMaxSec, 120)),
         king: typeof args.king === 'boolean' ? args.king : s.king,
         kingBase: price(args.kingBase, s.kingBase),
         kingRise: Math.max(1, Math.min(10, Math.round(num(args.kingRise, s.kingRise) * 100) / 100)),

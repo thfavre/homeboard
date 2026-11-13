@@ -146,6 +146,34 @@
     <p class="faint small">A sleeper gone for this much longer fades away, so the town never clutters up.</p>
   </Section>
 
+  <Section title="Town life">
+    <div class="line">
+      <div>
+        <strong>Chats</strong>
+        <p class="faint small">
+          Now and then a character walks up to someone standing around or wandering nearby. They meet halfway, turn to each other and take turns talking,
+          with small speech bubbles over their heads.
+        </p>
+      </div>
+      <Toggle checked={!!mod.chat} label="Chats" onchange={(v) => setOption('chat', v)} />
+    </div>
+    <label class="field">
+      <span>Chance to start a chat (percent)</span>
+      <input class="input" type="number" min="0" max="100" value={mod.chatChancePct} onchange={(e) => setAmount('chatChancePct', e.currentTarget.value)} />
+    </label>
+    <p class="faint small">Each time a character picks something new to do. Higher: more chats in a busy town.</p>
+    <div class="pair">
+      <label class="field">
+        <span>A chat lasts from (seconds)</span>
+        <input class="input" type="number" min="2" max="120" value={mod.chatMinSec} onchange={(e) => setSeconds('chatMinSec', e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>to (seconds)</span>
+        <input class="input" type="number" min="2" max="120" value={mod.chatMaxSec} onchange={(e) => setSeconds('chatMaxSec', e.currentTarget.value)} />
+      </label>
+    </div>
+  </Section>
+
   <Section title="The King">
     <div class="line">
       <div>

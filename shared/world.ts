@@ -226,7 +226,15 @@ export interface TownFrame {
   a: number[];
   cat: { x: number; y: number; dir: WDir; walk: boolean; hearts: boolean };
   cam: number;
+  /**
+   * Who is speaking in a chat between two characters, as pairs: the index in `ids`, then what the
+   * speech bubble shows (see CHAT_ICON). Left out when nobody speaks.
+   */
+  talk?: number[];
 }
+
+/** What a speech bubble shows, by its number in TownFrame.talk */
+export const CHAT_ICON = ['dots', 'heart', 'note', 'laugh', 'question', 'exclaim'] as const;
 
 // ------------------------------------------------------------ the avatar
 
@@ -485,6 +493,10 @@ export interface WorldState {
   wrapMaxSec?: number;
   quickMinSec?: number;
   quickMaxSec?: number;
+  chat?: boolean;
+  chatChancePct?: number;
+  chatMinSec?: number;
+  chatMaxSec?: number;
   kingBase?: number;
   kingRise?: number;
   kingDropPerMin?: number;
