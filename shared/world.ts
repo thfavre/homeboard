@@ -137,11 +137,14 @@ export const BOARD_SPOTS = [
   { x: 168, y: 334 },
 ];
 
-/** Where an angler stands on the river's bank, facing the front with the rod held out to the right, over the water */
+/**
+ * Where an angler stands by the river, facing it (to the right), back on the grass: the rod is long,
+ * its float lands in the middle of the water (see drawRod in web/src/modules/world/poses.ts)
+ */
 export const FISH_SPOTS: { x: number; y: number; side: 1 | -1 }[] = [
-  { x: 1422, y: 840, side: 1 },
-  { x: 1462, y: 780, side: 1 },
-  { x: 1551, y: 652, side: 1 },
+  { x: 1353, y: 870, side: 1 },
+  { x: 1398, y: 800, side: 1 },
+  { x: 1498, y: 660, side: 1 },
 ];
 
 /**

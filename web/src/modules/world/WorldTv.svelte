@@ -2,11 +2,11 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-  import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FISH_SPOTS, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, hallLift, townMinutes, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, hallLift, townMinutes, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { SQUARE_STREET, loadEnv, squareGround, type Env, type Prop } from '../games/crowd/scene.ts';
   import { DANCE_FEET, cafeArt, drawCafe, drawCafeLight, type CafeArt } from './cafe.ts';
-  import { drawCatch, drawDancing, drawGlass, drawPerched, drawPole, drawRod } from './poses.ts';
+  import { drawAngler, drawCatch, drawDancing, drawGlass, drawPerched, drawPole } from './poses.ts';
   import { GREEN_TOP, brookFrames, drawBrook, drawBrookGlints, townGround } from './townGround.ts';
   import { drawCup, drawFireLight, lampLevel, townNow, townProps } from './townScene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
@@ -445,6 +445,13 @@
       } else if (p.anim === WANIM.perch && img && info && drawPerched(g, img, info, p.x, y, p.dir, now - l.since, FIRE_SEATS.some((s) => s.ground && Math.abs(s.x - p.x) < 3 && Math.abs(s.y - p.y) < 3))) {
         // On the fountain's rim, a log by the fire, a cafe chair (with a cup on the table)
         if (CAFE.seats.some((s) => Math.abs(s.x - p.x) < 3 && Math.abs(s.y - p.y) < 3)) drawCup(g, p.x, y, p.dir, now, l.phase);
+      } else if (
+        (p.anim === WANIM.fish || p.anim === WANIM.bite || p.anim === WANIM.catch) &&
+        drawAngler(g, p.x, y, p.dir, p.anim === WANIM.fish ? 'fish' : p.anim === WANIM.bite ? 'bite' : 'catch', now - l.since, now, l.phase, () =>
+          drawCharacter(g, sheets, img, p.x, y, { anim: gameAnim(WANIM.idle), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id)),
+        )
+      ) {
+        // Fishing with the rod: casting, waiting, a bite, the line whipped up with the fish
       } else if (p.anim === WANIM.dance && img && info && drawDancing(g, img, info, p.x, y, now, l.phase)) {
         // Dancing in the cafe
       } else {
@@ -452,9 +459,7 @@
         const dip = p.anim === WANIM.listen ? nodDip(now, l.phase) : 0;
         drawCharacter(g, sheets, img, p.x, y + dip, { anim: gameAnim(p.anim), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id));
         // What they hold: the rod (the fish caught), a glass at the party, the lamplighter's pole
-        const side = () => FISH_SPOTS.reduce((a, b) => (Math.abs(b.x - p.x) < Math.abs(a.x - p.x) ? b : a)).side;
-        if (p.anim === WANIM.fish || p.anim === WANIM.bite) drawRod(g, p.x, y, side(), now, p.anim === WANIM.bite ? now - l.since : null);
-        else if (p.anim === WANIM.catch) drawCatch(g, p.x, y, side(), now - l.since);
+        if (p.anim === WANIM.catch) drawCatch(g, p.x, y, p.dir === 1 ? -1 : 1, now - l.since);
         else if (p.anim === WANIM.drink) drawGlass(g, p.x, y, p.dir, now, l.phase);
         else if (p.anim === WANIM.light) drawPole(g, p.x, y, townNow.dark >= 0.3, now);
       }

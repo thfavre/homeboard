@@ -1078,7 +1078,7 @@ export class TownSim {
       case 'goFish': {
         const s = FISH_SPOTS[d.spot];
         if (this.walkTo(w, s.x, s.y, WALK_UPS, dt)) {
-          Object.assign(w, { x: s.x, y: s.y, dir: 2 });
+          Object.assign(w, { x: s.x, y: s.y, dir: s.side > 0 ? 3 : 1 });
           const until = now + rand(FISH_MS[0], FISH_MS[1]);
           // Now and then a fish bites: pulled out and held up, then home with it (never with clothes that cannot cheer)
           const bite = !w.noCheer && Math.random() < BITE_SHARE ? now + rand(6000, until - now - 3000) : 0;
@@ -1087,7 +1087,7 @@ export class TownSim {
         break;
       }
       case 'fish':
-        w.dir = 2;
+        w.dir = FISH_SPOTS[d.spot].side > 0 ? 3 : 1;
         if (now >= d.until) w.doing = idle(now, 600, 1800);
         break;
       case 'lamps':

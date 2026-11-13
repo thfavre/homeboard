@@ -1,0 +1,11 @@
+Art of the anglers' fishing rod on the TV (web/src/modules/world/poses.ts)
+Copied unchanged except for the file names from the Universal LPC Spritesheet Character Generator
+(assets/lpc, tools/fishing_rod): the rod behind the body (bg) and in front of it (fg), 13 frames of
+128 x 128 per direction (up, left, down, right). The line and float in the water and the fish are
+drawn in code for Homeboard.
+
+LPC hand tools, fishing rod
+  Files: fishing-rod-bg.png, fishing-rod-fg.png (tools/fishing_rod/bg.png, fg.png)
+  License: OGA-BY 3.0
+  Authors: bluecarrot16 (original), JaidynReiman (color reduction)
+  https://opengameart.org/content/lpc-hand-tools
