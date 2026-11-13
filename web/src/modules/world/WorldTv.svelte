@@ -8,7 +8,7 @@
   import { DANCE_FEET, cafeArt, drawCafe, drawCafeLight, type CafeArt } from './cafe.ts';
   import { drawAngler, drawCatch, drawDancing, drawGlass, drawPerched, drawPole } from './poses.ts';
   import { GREEN_TOP, brookFrames, drawBrook, drawBrookGlints, townGround } from './townGround.ts';
-  import { drawCup, drawFireLight, lampLevel, townNow, townProps } from './townScene.ts';
+  import { drawCup, drawFireLight, drawKindling, lampLevel, townNow, townProps } from './townScene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
@@ -313,6 +313,7 @@
     townNow.dark = dark;
     townNow.lamps = f0?.lamps ?? 0;
     townNow.party = party;
+    townNow.fire = !!f0?.fire;
     const inHall = away && hall ? hallStanding : [];
     if (away && hall) {
       drawRiver(g, hall, now);
@@ -379,8 +380,10 @@
         g.moveTo(p.x + s * 30 + 30, p.y + 2);
         g.ellipse(p.x + s * 30, p.y + 2, 30, 7, 0, 0, Math.PI * 2);
       } else {
-        g.moveTo(p.x + 15, p.y - p.lift);
-        g.ellipse(p.x, p.y - p.lift, 15, 5, 0, 0, Math.PI * 2);
+        // (sitting sideways the body is over the seat, behind the feet: its shadow goes there)
+        const sx = p.x + (p.anim === WANIM.perch ? (p.dir === 1 ? 5 : p.dir === 3 ? -5 : 0) * SPRITE_SCALE : 0);
+        g.moveTo(sx + 15, p.y - p.lift);
+        g.ellipse(sx, p.y - p.lift, 15, 5, 0, 0, Math.PI * 2);
       }
     }
     g.fill();
@@ -452,6 +455,9 @@
         )
       ) {
         // Fishing with the rod: casting, waiting, a bite, the line whipped up with the fish
+      } else if (p.anim === WANIM.kindle && img && info && drawPerched(g, img, info, p.x, y, p.dir, 0, true)) {
+        // Kneeling by the campfire to light it
+        drawKindling(g, now);
       } else if (p.anim === WANIM.dance && img && info && drawDancing(g, img, info, p.x, y, now, l.phase)) {
         // Dancing in the cafe
       } else {

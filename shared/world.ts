@@ -122,10 +122,8 @@ export const FIRE_LOGS = [
   { x: 1400, y: 661, along: 'x' as const },
 ];
 export const FIRE_SEATS: Seat[] = [
-  { x: 1346, y: 704, dir: 3, ground: true },
-  { x: 1346, y: 734, dir: 3, ground: true },
-  { x: 1463, y: 714, dir: 1 },
-  { x: 1463, y: 740, dir: 1 },
+  { x: 1346, y: 720, dir: 3, ground: true },
+  { x: 1469, y: 726, dir: 1 },
   { x: 1382, y: 672, dir: 2 },
   { x: 1418, y: 672, dir: 2 },
 ];
@@ -440,7 +438,7 @@ export function hallLift(x: number, y: number): number {
  * chair; plain sit always faces the front, and sit facing left is the King on his throne). fish
  * waits with a rod, bite is a fish pulling at the line, catch holds the fish up. dance is seen
  * through the cafe's window (x the place in it, y the window's bottom), drink stands with a glass,
- * light holds a lamplighter's pole up to the lamp in front.
+ * light holds a lamplighter's pole up to the lamp in front, kindle kneels by the campfire to light it.
  */
 export const WANIM = {
   idle: 0,
@@ -461,6 +459,7 @@ export const WANIM = {
   dance: 15,
   drink: 16,
   light: 17,
+  kindle: 18,
 } as const;
 export type WAnimId = (typeof WANIM)[keyof typeof WANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
@@ -486,6 +485,8 @@ export interface TownFrame {
   lamps?: number;
   /** A party is on at the cafe */
   party?: boolean;
+  /** The campfire burns */
+  fire?: boolean;
 }
 
 // ------------------------------------------------------------ the cafe's party night

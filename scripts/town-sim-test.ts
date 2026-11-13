@@ -98,12 +98,16 @@ const stats = { chats: 0, ceremonies: 0, visits: 0, maxKindMs: {} as Record<stri
 const LIMIT: Record<string, number> = {
   idle: 15_000, wander: 60_000, goBench: 60_000, sit: 30_000, goPet: 45_000, pet: 10_000, goChat: 20_000, chat: 40_000,
   cheer: 4000, goSleep: 90_000, visit: 120_000, goThrone: 120_000, descend: 60_000, goHall: 120_000, goPray: 120_000,
-  goSeat: 60_000, seated: 60_000, goRead: 60_000, read: 10_000, goFish: 60_000, fish: 50_000, lamps: 150_000, party: 90_000,
+  goSeat: 60_000, seated: 60_000, goRead: 60_000, read: 10_000, goFish: 60_000, fish: 50_000, lamps: 150_000, party: 90_000, kindle: 60_000,
 };
 
 /** How often each activity was started, the lamps lit at 23:00 and at 10:00 each day, the most dancing at the party at once */
 const started: Record<string, number> = {};
 const lampsAt: string[] = [];
+/** Nights the campfire burned at 1:00, and town days it burned at some point by day */
+let fireNights = 0;
+let nights = 0;
+const dayFires = new Set<number>();
 let dancersMax = 0;
 const sec = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 const start = clock;
@@ -152,6 +156,11 @@ while (clock < end) {
   const lit = (bits = frame.lamps ?? 0) => bits.toString(2).split('1').length - 1;
   if (before < 1380 && minute >= 1380) lampsAt.push(`23:00 ${lit()}`);
   if (before < 600 && minute >= 600) lampsAt.push(`10:00 ${lit()}`);
+  if (before < 60 && minute >= 60) {
+    nights++;
+    if (frame.fire) fireNights++;
+  }
+  if (frame.fire && minute > 9 * 60 && minute < 19 * 60) dayFires.add(Math.floor(opts.localMinutes / 1440));
   dancersMax = Math.max(dancersMax, frame.a.filter((_, i) => i % FRAME_STRIDE === 2).filter((a) => a === WANIM.dance).length);
   for (const [id, w] of simAny.walkers as Map<string, any>) {
     (kinds.get(id) ?? kinds.set(id, new Set()).get(id)!).add(w.doing.kind);
@@ -253,6 +262,7 @@ const never = (k: string) => [...kinds].filter(([id, set]) => !set.has(k) && !(N
 console.log(`characters that never: sat ${never('sit')}, petted ${never('pet')}, chatted ${never('chat')}, wandered ${never('wander')}`);
 console.log(`sleepers on top of each other at 3:00: ${stacked} pairs (sleepers ${bedsAt3.join(' ')})`);
 console.log('started:', started);
+console.log(`campfire burning at 1:00 on ${fireNights} of ${nights} nights, lit by day on ${dayFires.size} days`);
 console.log(`fish caught: ${fishCaught} in ${started.fish ?? 0} fishing trips`);
 console.log(`lamps lit: ${lampsAt.join(', ')}; most dancing at once: ${dancersMax}`);
 console.log('longest per activity:', Object.fromEntries(Object.entries(stats.maxKindMs).map(([k, v]) => [k, sec(v)])));

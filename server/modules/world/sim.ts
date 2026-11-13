@@ -17,6 +17,7 @@ import {
   THRONE_STAND,
   TOWN,
   TOWN_AREA,
+  TOWN_HALL,
   TOWN_OBSTACLES,
   TOWN_PLACES,
   TOWN_SCENE,
@@ -33,6 +34,7 @@ import {
   type TownFrame,
   type WDir,
 } from '../../../shared/world.ts';
+import { SPRITE_SCALE } from '../../../shared/crowd.ts';
 
 /**
  * The life of the town: characters wander the ground band, stop for a while, sit on benches or on
@@ -86,9 +88,20 @@ const SEAT_MS: Record<SeatAt | 'fireNight', [number, number]> = {
   fireNight: [25_000, 55_000],
 };
 const SEATS: Record<SeatAt, Seat[]> = { fountain: FOUNTAIN_SEATS, cafe: CAFE.seats, fire: FIRE_SEATS };
-/** The cafe's terrace is open while it is lighter than this (or during a party); the campfire burns while it is darker */
+/** The cafe's terrace is open while it is lighter than this (or during a party) */
 const CAFE_OPEN_DARK = 0.5;
-const FIRE_DARK = 0.3;
+/**
+ * The campfire: it burns on this share of the nights, and on this share of the days for a while
+ * (town minutes, from a time between the hours given); someone kneels by the pit and lights it, for
+ * this long. Nobody free to do it this long: it catches on its own.
+ */
+const FIRE_NIGHTS = 2 / 3;
+const FIRE_DAYS = 0.15;
+const DAY_FIRE = { from: 9 * 60, to: 16 * 60, lasts: 120 };
+const KINDLE_MS = 3200;
+const KINDLE_WAIT_MS = 20_000;
+/** Where the one lighting the fire kneels: left of the pit, facing it */
+const KINDLE_AT = { x: CAMPFIRE.x - 34, y: CAMPFIRE.y + 4 };
 /** Reading the notice board */
 const READ_MS: [number, number] = [4000, 9000];
 /** Fishing: how long, the share of tries with a bite, the bite (the float bobbing) and the fish held up */
@@ -182,7 +195,8 @@ type Doing =
   | { kind: 'goFish'; spot: number }
   | Fishing
   | Lamps
-  | Party;
+  | Party
+  | { kind: 'kindle'; at: number };
 
 /** The seats besides the benches: the fountain's rim, the cafe's chairs, the logs by the campfire */
 type SeatAt = 'fountain' | 'cafe' | 'fire';
@@ -394,10 +408,18 @@ export interface TownOptions {
   party: { on: boolean; everyDays: number; hours: number; goers: number };
 }
 
-/** A number in 0..1 from a text, always the same for the same text (FNV-1a) */
+/**
+ * A number in 0..1 from a text, always the same for the same text (FNV-1a, then mixed so texts that
+ * differ only in their last character, like one night's number and the next, land far apart)
+ */
 function hash01(text: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
   return (h >>> 0) / 0x1_0000_0000;
 }
 
@@ -571,6 +593,9 @@ export class TownSim {
   private lampLit = TOWN_SCENE.lamps.map(() => false);
   private lampWait = 0;
   private lampAuto = 0;
+  /** The campfire burns; since when it should and is not lit yet (0: nothing waits) */
+  private fireLit = false;
+  private fireWait = 0;
   /** A party the host started: until when on the town's clock (minutes), and since when (its name) */
   private partyUntil = 0;
   private partyFrom = 0;
@@ -644,6 +669,8 @@ export class TownSim {
     },
     // The lamplighter hands the round over to someone else (the lamps left wait for the next one)
     lamps: { priority: PRIORITY.activity, left: () => 60_000, wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
+    // Lighting the fire is dropped for a call: someone else lights it later
+    kindle: { priority: PRIORITY.activity, left: (d, _w, now) => (d.at ? d.at + KINDLE_MS - now : 30_000), wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
     // The party: off on the way, a little sooner out of the cafe or away from the terrace
     party: {
       priority: PRIORITY.activity,
@@ -757,6 +784,7 @@ export class TownSim {
     this.separate();
     this.stepCat(now, dt);
     this.stepLamps(now, o);
+    this.stepFire(now, o);
     this.nightSleepers = 0;
     for (const w of this.walkers.values()) if ((w.doing.kind === 'sleep' || w.doing.kind === 'goSleep') && w.doing.night) this.nightSleepers++;
 
@@ -788,6 +816,7 @@ export class TownSim {
       dark: Math.round(Math.max(0, this.dark) * 1000) / 1000,
       lamps: this.lampLit.reduce((bits, lit, i) => bits | (lit ? 1 << i : 0), 0),
       party: !!this.partyNow,
+      fire: this.fireLit,
     };
   }
 
@@ -814,6 +843,8 @@ export class TownSim {
         return now < d.bite + BITE_MS ? WANIM.bite : now < d.bite + BITE_MS + CATCH_MS ? WANIM.catch : WANIM.idle;
       case 'lamps':
         return d.at ? WANIM.light : WANIM.walk;
+      case 'kindle':
+        return d.at ? WANIM.kindle : WANIM.walk;
       case 'party':
         return d.phase === 'stand' ? WANIM.drink : this.partyWalking(w, d) ? WANIM.walk : WANIM.idle;
       // The King before the throne: standing until all are there, his hands up to open the court,
@@ -1058,7 +1089,7 @@ export class TownSim {
         }
         if (this.walkTo(w, s.x, s.y, WALK_UPS, dt)) {
           Object.assign(w, { x: s.x, y: s.y, dir: s.dir });
-          const night = d.at === 'fire' && this.dark >= FIRE_DARK;
+          const night = d.at === 'fire' && this.fireLit;
           const [a, b] = SEAT_MS[night ? 'fireNight' : d.at];
           w.doing = { kind: 'seated', at: d.at, seat: d.seat, until: now + rand(a, b) };
         }
@@ -1096,6 +1127,20 @@ export class TownSim {
           this.hooks.caught?.(w.id);
         }
         if (now >= d.until) w.doing = idle(now, 600, 1800);
+        break;
+      case 'kindle':
+        // Lit already (it caught on its own), or not wanted anymore: never mind
+        if (this.fireLit || !this.fireWanted(o)) {
+          w.doing = idle(now, 400, 1200);
+        } else if (!d.at) {
+          if (this.walkTo(w, KINDLE_AT.x, KINDLE_AT.y, WALK_UPS, dt)) {
+            Object.assign(w, { ...KINDLE_AT, dir: 3 });
+            d.at = now;
+          }
+        } else if (now - d.at >= KINDLE_MS) {
+          this.fireLit = true;
+          w.doing = idle(now, 800, 1800);
+        }
         break;
       case 'lamps':
         this.stepLamplighter(w, d, now, dt);
@@ -1439,17 +1484,19 @@ export class TownSim {
     const near = w.x >= TOWN.w / 2;
     let best = { x: near ? TOWN.w - 50 : 50, y: rand(TOWN_AREA.y0 + 40, CARPET_Y - 70) };
     let bestScore = -Infinity;
-    for (let k = 0; k < 60; k++) {
-      const right = k < 40 ? near : !near;
+    for (let k = 0; k < 160; k++) {
+      const right = k < 100 ? near : !near;
       const inner = k % 3 === 2;
       const x = right ? TOWN.w - (inner ? 125 : 55) + rand(-12, 12) : (inner ? 125 : 55) + rand(-12, 12);
       const y = rand(TOWN_AREA.y0 + 40, TOWN_AREA.y1 - 20);
       // (a sleeper lies toward the middle: the whole body clear of the river, the logs and the carpet's way)
       if (right && (Math.abs(y - CARPET_Y) < 70 || y > CAMPFIRE.y - 60)) continue;
+      // (and on the left, below the town hall's front: a sleeper lies on the square, not across its steps)
+      if (!right && y < (TOWN_HALL.y + TOWN_HALL.h) * SPRITE_SCALE + 30) continue;
       if (blocked(x, y, 10) || wet(x, y) || wet(x + (right ? -60 : 60), y)) continue;
       // Lying down, a body takes room sideways: other sleepers count closer above and below than beside
       const room = others.reduce((m, o) => Math.min(m, Math.hypot((x - o.x) * 0.5, y - o.y)), 200);
-      const score = Math.min(room, 60) - (right !== near ? 25 : 0) - (inner ? 12 : 0) + Math.random();
+      const score = Math.min(room, 45) - (right !== near ? 12 : 0) - (inner ? 6 : 0) + Math.random();
       if (score > bestScore) [best, bestScore] = [{ x, y }, score];
     }
     return best;
@@ -1491,7 +1538,7 @@ export class TownSim {
           return i < 0 ? null : { kind: 'goFish', spot: i };
         },
       ],
-      [a.fire && !w.noSit, this.dark >= FIRE_DARK ? CHANCE.fireAtNight : CHANCE.fire, () => seat('fire', 0)],
+      [a.fire && !w.noSit, this.fireLit ? CHANCE.fireAtNight : CHANCE.fire, () => seat('fire', 0)],
     ];
     let roll = Math.random();
     for (const [on, chance, start] of options) {
@@ -1592,6 +1639,59 @@ export class TownSim {
     } else if (now - d.at >= LIGHT_MS) {
       this.lampLit[d.lamp] = d.lit;
       d.at = 0;
+    }
+  }
+
+  // ------------------------------------------------------------ the campfire
+
+  /**
+   * The campfire should burn now: on its nights (2 in 3, the same ones every time), and on some
+   * days for a couple of hours from a time of its own. Never with the campfire off.
+   */
+  private fireWanted(o: TownOptions): boolean {
+    if (!o.activities.fire) return false;
+    const m = o.localMinutes;
+    if (this.dark >= 0.5) {
+      // Which night: counted from noon, so the hours after midnight belong to the evening before
+      const night = Math.floor((m - 12 * 60) / 1440);
+      return hash01(`fire:${night}`) < FIRE_NIGHTS;
+    }
+    const day = Math.floor(m / 1440);
+    if (hash01(`dayfire:${day}`) >= FIRE_DAYS) return false;
+    const from = DAY_FIRE.from + hash01(`dayfire:${day}:at`) * (DAY_FIRE.to - DAY_FIRE.from);
+    const t = m - day * 1440;
+    return t >= from && t < from + DAY_FIRE.lasts;
+  }
+
+  /**
+   * The campfire: when it should burn and does not yet, someone free (the one nearest) goes and
+   * lights it; nobody free for a while (or during a ceremony), it catches on its own. When it should
+   * not burn anymore it goes out.
+   */
+  private stepFire(now: number, o: TownOptions): void {
+    if (!this.fireWanted(o)) {
+      this.fireLit = false;
+      this.fireWait = 0;
+      return;
+    }
+    if (this.fireLit) return;
+    const all = [...this.walkers.values()];
+    if (all.some((w) => w.doing.kind === 'kindle')) return;
+    this.fireWait ||= now;
+    if (this.ceremony || now - this.fireWait >= KINDLE_WAIT_MS) {
+      this.fireLit = true;
+      return;
+    }
+    let best: Walker | null = null;
+    let dist = Infinity;
+    for (const w of all) {
+      const free = (w.doing.kind === 'idle' || w.doing.kind === 'wander') && !w.errands.length && !w.fading && !w.noSit && w.x >= TOWN_AREA.x0 && w.x <= TOWN_AREA.x1;
+      const d = Math.hypot(w.x - KINDLE_AT.x, w.y - KINDLE_AT.y);
+      if (free && d < dist) [best, dist] = [w, d];
+    }
+    if (best) {
+      best.doing = { kind: 'kindle', at: 0 };
+      best.wrapped = null;
     }
   }
 
@@ -1859,6 +1959,7 @@ export class TownSim {
         w.doing.kind !== 'seated' &&
         w.doing.kind !== 'fish' &&
         !(w.doing.kind === 'lamps' && w.doing.at) &&
+        !(w.doing.kind === 'kindle' && w.doing.at) &&
         !(w.doing.kind === 'party' && w.doing.phase !== 'go' && w.doing.phase !== 'terrace'),
     );
     for (let i = 0; i < list.length; i++) {

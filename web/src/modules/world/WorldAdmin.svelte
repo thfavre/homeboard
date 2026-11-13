@@ -85,7 +85,8 @@
     {
       key: 'campfire',
       name: 'Campfire',
-      about: 'Logs around a fire pit on the grass by the river. Some sit there in the day; at night the fire burns and the night owls gather round it.',
+      about:
+        'Logs around a fire pit on the grass by the river. On two nights in three someone kneels by it and lights a fire, and the night owls gather round; now and then a fire is lit in the day too. Some sit there when it is out.',
     },
     {
       key: 'lamplighter',

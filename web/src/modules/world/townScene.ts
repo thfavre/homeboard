@@ -14,7 +14,7 @@ type G = CanvasRenderingContext2D;
 const S = SPRITE_SCALE;
 
 /** What the props need to know of the town right now (set by the TV every frame) */
-export const townNow = { dark: 0, lamps: 0, party: false };
+export const townNow = { dark: 0, lamps: 0, party: false, fire: false };
 
 function canvas(w: number, h: number): [HTMLCanvasElement, G] {
   const c = document.createElement('canvas');
@@ -383,8 +383,35 @@ function buildLog(along: 'x' | 'y'): HTMLCanvasElement {
   return c;
 }
 
-/** How brightly the campfire burns: it is lit as night falls, out in the day */
-export const fireLevel = () => Math.max(0, Math.min(1, (townNow.dark - 0.2) / 0.25));
+/** When the campfire last caught or went out (TV time), to let it grow from small flames and die down */
+const fireSwitch = { lit: false, at: -Infinity };
+/** How brightly the campfire burns now, 0 to 1: it grows over a few seconds once lit, and dies down when it goes out */
+export function fireLevel(now: number): number {
+  if (townNow.fire !== fireSwitch.lit) {
+    fireSwitch.lit = townNow.fire;
+    fireSwitch.at = now;
+  }
+  const t = (now - fireSwitch.at) / 1000;
+  return fireSwitch.lit ? Math.min(1, 0.15 + t / 5) : Math.max(0, 1 - t / 4);
+}
+
+/** Lighting the fire: sparks from the flint jumping onto the pit's kindling, a first wisp of smoke */
+export function drawKindling(g: G, now: number): void {
+  const { x, y } = CAMPFIRE;
+  for (let i = 0; i < 5; i++) {
+    const t = ((now / 420 + i / 5) % 1 + 1) % 1;
+    if ((Math.floor(now / 140) + i) % 3 === 0) continue;
+    g.fillStyle = `rgba(255,${200 + i * 10},110,${1 - t})`;
+    g.fillRect(Math.round(x - 8 * S + Math.sin(i * 5.1) * 5 * S), Math.round(y - (2 + t * 9) * S), S, S);
+  }
+  for (let i = 0; i < 3; i++) {
+    const t = ((now / 1800 + i / 3) % 1 + 1) % 1;
+    g.fillStyle = `rgba(210,210,215,${0.35 * (1 - t)})`;
+    g.beginPath();
+    g.arc(x + Math.sin(t * 4 + i) * 4 * S, y - (4 + t * 30) * S, (2 + t * 4) * S, 0, Math.PI * 2);
+    g.fill();
+  }
+}
 
 function campfire(): Prop[] {
   const pit = buildPit();
@@ -402,7 +429,7 @@ function campfire(): Prop[] {
         }
       },
       draw(g, now) {
-        const level = fireLevel();
+        const level = fireLevel(now);
         if (level <= 0) return;
         // The flames: tongues of fire licking up, each flickering on its own, yellow in their heart
         const tongues = [
@@ -442,7 +469,7 @@ function campfire(): Prop[] {
 
 /** The campfire's light at night, over the dark: a warm flickering glow on the grass and the faces around it */
 export function drawFireLight(g: G, dark: number, now: number): void {
-  const level = fireLevel() * dark;
+  const level = fireLevel(now) * dark;
   if (level <= 0.02) return;
   const { x, y } = CAMPFIRE;
   const flicker = 1 + Math.sin(now / 80) * 0.05 + Math.sin(now / 31) * 0.03;
