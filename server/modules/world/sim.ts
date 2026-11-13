@@ -425,20 +425,47 @@ function hash01(text: string): number {
   return (h >>> 0) / 0x1_0000_0000;
 }
 
+/** A night owl has this chance to be one again the next night (the others become one often enough to keep the share) */
+const OWL_KEEP = 0.5;
+/** How many nights back a character's nights are followed to know whether it is a night owl (enough to forget where it started) */
+const OWL_MEMORY = 12;
+const owls = new Map<string, boolean>();
+
+/**
+ * Whether a character is a night owl on night `night`: about `share` of the town each night, a
+ * different lot from one night to the next. A night owl stays one the next night with the chance
+ * OWL_KEEP, the others become one just often enough to keep the share. Worked out by following
+ * the character's last nights (the same answer every time, on every server start).
+ */
+export function nightOwl(id: string, night: number, share: number): boolean {
+  if (share <= 0) return false;
+  if (share >= 1) return true;
+  const key = `${id}:${night}:${share}`;
+  const known = owls.get(key);
+  if (known !== undefined) return known;
+  const become = (share * (1 - OWL_KEEP)) / (1 - share);
+  let owl = hash01(`${id}:${night - OWL_MEMORY}:owl`) < share;
+  for (let n = night - OWL_MEMORY + 1; n <= night; n++) owl = hash01(`${id}:${n}:owl`) < (owl ? OWL_KEEP : become);
+  if (owls.size > 5000) owls.clear();
+  owls.set(key, owl);
+  return owl;
+}
+
 /**
  * Whether a character sleeps for the night right now. Each one has its own bedtime, from dusk to
- * the spread after it (so some are still up well into the night), and gets up around dawn, both different every night. Night
- * owls (the same ones every night) stay up and go to bed after dawn, for a few hours.
+ * the spread after it (so some are still up well into the night), and gets up around dawn, both
+ * different every night. Night owls (a different lot each night, see nightOwl) stay up and go to
+ * bed after dawn, for a few hours.
  */
 export function asleepForTheNight(id: string, o: Pick<TownOptions, 'dayNight' | 'localMinutes' | 'nightSleep' | 'bedtimeSpreadMin' | 'nightOwls'>): boolean {
   if (!o.nightSleep || !o.dayNight.on) return false;
-  const owl = hash01(`${id}:owl`) < o.nightOwls;
   const dusk = minuteOf(o.dayNight.dusk);
   const night = minutesFrom(dusk, minuteOf(o.dayNight.dawn));
   // Which night it is, and how far into it (counted from its lead before dusk)
   const since = o.localMinutes - dusk + NIGHT_LEAD_MIN;
   const key = Math.floor(since / 1440);
   const rel = since - key * 1440 - NIGHT_LEAD_MIN;
+  const owl = nightOwl(id, key, o.nightOwls);
   const a = hash01(`${id}:${key}:bed`);
   const b = hash01(`${id}:${key}:wake`);
   const spread = o.bedtimeSpreadMin;
