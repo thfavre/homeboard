@@ -505,6 +505,8 @@ export interface TownFrame {
   fire?: boolean;
   /** The cafe's parasols that are open, one bit each in the order of CAFE.tables */
   parasols?: number;
+  /** The cafe's door is open (the first one in opened it for the day) */
+  cafeDoor?: boolean;
 }
 
 // ------------------------------------------------------------ the cafe's party night

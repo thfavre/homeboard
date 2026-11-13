@@ -293,7 +293,7 @@ export function drawCafe(g: G, art: CafeArt, now: number, dark: number, party: b
 const DOOR = { sx: 448, sy: 192, x: CAFE_ART.door - 16 - 32, y: 80 - 16 };
 const door = { open: 0, at: 0 };
 
-/** The cafe's door: open while the cafe is (`open`: in the day, and for a party), shut at night; it swings over a moment */
+/** The cafe's door: open (`open`: the first one in opened it for the day, or for a party) or shut; it swings over a moment */
 export function drawCafeDoor(g: G, art: CafeArt, now: number, open: boolean): void {
   const dt = Math.min(0.2, Math.max(0, (now - door.at) / 1000));
   door.at = now;

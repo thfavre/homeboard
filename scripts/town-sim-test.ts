@@ -101,7 +101,7 @@ const stats = { chats: 0, ceremonies: 0, visits: 0, maxKindMs: {} as Record<stri
 const LIMIT: Record<string, number> = {
   idle: 15_000, wander: 60_000, goBench: 60_000, sit: 30_000, goPet: 45_000, pet: 10_000, goChat: 20_000, chat: 40_000,
   cheer: 4000, goSleep: 90_000, visit: 120_000, goThrone: 120_000, descend: 60_000, goHall: 120_000, goPray: 120_000,
-  goSeat: 60_000, seated: 60_000, goRead: 60_000, read: 10_000, goFish: 60_000, fish: 50_000, lamps: 150_000, party: 90_000, kindle: 60_000, parasol: 60_000,
+  goSeat: 60_000, seated: 60_000, goRead: 60_000, read: 10_000, goFish: 60_000, fish: 50_000, lamps: 150_000, party: 90_000, kindle: 60_000, parasol: 60_000, coffee: 60_000,
 };
 
 /** How often each activity was started, the lamps lit at 23:00 and at 10:00 each day, the most dancing at the party at once */
@@ -109,6 +109,9 @@ const started: Record<string, number> = {};
 const lampsAt: string[] = [];
 /** The parasols open at 9:00, 13:00 and 23:00 (a party keeps them open), each day */
 const parasolsAt: string[] = [];
+/** When the cafe's door was opened each day (town time), and whether it was open at noon */
+const doorOpened: string[] = [];
+let doorWas = false;
 /** Nights the campfire burned at 1:00, and town days it burned at some point by day */
 let fireNights = 0;
 let nights = 0;
@@ -173,6 +176,8 @@ while (clock < end) {
   for (const [at, label] of [[1380, '23:00'], [120, '2:00'], [270, '4:30']] as const) {
     if (frame.party && before < at && minute >= at) atParty.push(`${label} ${[...(simAny.walkers as Map<string, any>).values()].filter((w) => w.doing.kind === 'party').length}`);
   }
+  if (frame.cafeDoor && !doorWas) doorOpened.push(`${Math.floor(minute / 60)}:${String(Math.floor(minute % 60)).padStart(2, '0')}${frame.party ? ' (party)' : ''}`);
+  doorWas = !!frame.cafeDoor;
   dancersMax = Math.max(dancersMax, frame.a.filter((_, i) => i % FRAME_STRIDE === 2).filter((a) => a === WANIM.dance).length);
   for (const [id, w] of simAny.walkers as Map<string, any>) {
     (kinds.get(id) ?? kinds.set(id, new Set()).get(id)!).add(w.doing.kind);
@@ -247,8 +252,8 @@ while (clock < end) {
     const inTown = w.x >= TOWN_AREA.x0 - 30 && w.x <= TOWN_AREA.x1 + 30;
     const inHall = w.x > CROSSING.x1;
     if (w.x > CROSSING.x0 + 4 && w.x < CROSSING.x1 - 4 && (w.y < CROSSING.y0 - 4 || w.y > CROSSING.y1 + 4)) report('in the river off the bridge', where);
-    // (a visit or the party goes up to a door)
-    if ((w.y < TOWN_AREA.y0 - 40 || w.y > TOWN_AREA.y1 + 10) && !(d.kind === 'visit' || d.kind === 'party')) report('off the square (y)', where);
+    // (a visit, the party or a coffee goes up to a door)
+    if ((w.y < TOWN_AREA.y0 - 40 || w.y > TOWN_AREA.y1 + 10) && !(d.kind === 'visit' || d.kind === 'party' || d.kind === 'coffee')) report('off the square (y)', where);
     if (w.x < TOWN.w && brookSide(w.x, w.y) > -BROOK_HW + 2) report(`in the town's river (${kind})`, where);
     if (!inTown && !inHall && !(w.x > TOWN_AREA.x1) && !(w.x < TOWN_AREA.x0 && (d.kind === 'wander' || d.kind === 'goSleep' || d.kind === 'sleep' || w.x >= 20))) report('off the square (x)', where);
     if (w.x > DAIS_FOOT + 60 && d.kind !== 'throne' && d.kind !== 'descend' && d.kind !== 'goThrone') report('on the dais without being King', where);
@@ -278,6 +283,7 @@ console.log('started:', started);
 console.log(`campfire burning at 1:00 on ${fireNights} of ${nights} nights, lit by day on ${dayFires.size} days`);
 console.log(`at the party: ${atParty.join(', ') || '-'}`);
 console.log(`fish caught: ${fishCaught} in ${started.fish ?? 0} fishing trips`);
+console.log(`cafe door opened at: ${doorOpened.join(', ')}`);
 console.log(`parasols open: ${parasolsAt.join(', ')}`);
 console.log(`lamps lit: ${lampsAt.join(', ')}; most dancing at once: ${dancersMax}`);
 console.log('longest per activity:', Object.fromEntries(Object.entries(stats.maxKindMs).map(([k, v]) => [k, sec(v)])));

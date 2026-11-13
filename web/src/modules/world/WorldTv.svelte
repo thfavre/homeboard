@@ -551,9 +551,11 @@
     }
     // The cafe, with the dancers seen through its window on a party night
     if (cafe) {
-      drawCafe(g, cafe, now, dark, party, () => dancers.forEach((p) => drawPerson({ ...p, y: DANCE_FEET })));
-      // Its door stands open while it is open: in the day, and for a party
-      drawCafeDoor(g, cafe, now, dark < 0.5 || party);
+      // The dancers on a party night, and whoever gets a coffee at the counter
+      const customers = inside.filter((p) => p.x >= CAFE.window.x && p.x <= CAFE.window.x + CAFE.window.w);
+      drawCafe(g, cafe, now, dark, party, () => [...customers, ...dancers].forEach((p) => drawPerson({ ...p, y: DANCE_FEET })));
+      // Its door: opened by the first one in each day, shut at night
+      drawCafeDoor(g, cafe, now, !!f0?.cafeDoor);
     }
 
     // The characters, the things that stand up, the birds and the cat, back to front together

@@ -99,6 +99,10 @@ const FIRE_NIGHTS = 2 / 3;
 const FIRE_DAYS = 0.15;
 const DAY_FIRE = { from: 9 * 60, to: 16 * 60, lasts: 120 };
 const KINDLE_MS = 3200;
+/** Going to the cafe's terrace: the share who first get a coffee inside, how long at the counter, and the places at it (along the window) */
+const COFFEE_SHARE = 0.6;
+const COFFEE_MS: [number, number] = [3500, 7000];
+const COFFEE_COUNTER = [0.8, 0.66, 0.92];
 /**
  * The cafe's parasols: opened this many town minutes after dawn and folded this many after dusk
  * (a random time in each range, every day and table its own), by someone standing this far in front
@@ -210,7 +214,21 @@ type Doing =
   | Lamps
   | Party
   | { kind: 'kindle'; at: number }
+  | Coffee
   | { kind: 'parasol'; table: number; open: boolean; at: number };
+
+/**
+ * Getting a coffee inside the cafe before sitting on its terrace (the chair `seat` is held all
+ * along): to the door, in, at the counter (seen through the window) until `until`, out, then to
+ * the chair. `cut`: called away while going in, the time inside is cut to this.
+ */
+interface Coffee {
+  kind: 'coffee';
+  seat: number;
+  phase: 'go' | 'enter' | 'inside' | 'exit';
+  until: number;
+  cut: number;
+}
 
 /** The seats besides the benches: the fountain's rim, the cafe's chairs, the logs by the campfire */
 type SeatAt = 'fountain' | 'cafe' | 'fire';
@@ -502,7 +520,8 @@ const idle = (now: number, a: number, b: number): Doing => ({ kind: 'idle', unti
 const walkMs = (w: Walker, x: number, y: number) => (Math.hypot(x - w.x, y - w.y) / WALK_UPS) * 1000;
 
 /** Inside the cafe at the party, or going through its door: nothing else starts until it is out */
-const inCafe = (w: Walker) => w.doing.kind === 'party' && (w.doing.phase === 'enter' || w.doing.phase === 'inside' || w.doing.phase === 'exit');
+const inCafe = (w: Walker) =>
+  (w.doing.kind === 'party' || w.doing.kind === 'coffee') && (w.doing.phase === 'enter' || w.doing.phase === 'inside' || w.doing.phase === 'exit');
 
 /** A walk ends naturally anywhere: stop, look around for a moment */
 const stopWalking = (_d: Doing, w: Walker, now: number, ms: number) => {
@@ -637,6 +656,8 @@ export class TownSim {
   /** The campfire burns; since when it should and is not lit yet (0: nothing waits) */
   private fireLit = false;
   private fireWait = 0;
+  /** The cafe's door: shut every morning until the first one goes in, then open until it closes for the night */
+  private cafeDoorOpen = false;
   /** The cafe's parasols: open or folded, and since when one waits for someone to do it (0: none waits) */
   private parasolOpen = CAFE.tables.map(() => false);
   private parasolWait = CAFE.tables.map(() => 0);
@@ -718,6 +739,16 @@ export class TownSim {
     // The lamplighter hands the round over to someone else (the lamps left wait for the next one)
     lamps: { priority: PRIORITY.activity, left: () => 60_000, wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
     // Lighting the fire is dropped for a call: someone else lights it later
+    // A coffee: off on the way, a little sooner out of the cafe; who has it goes on to sit (casual, like the seat)
+    coffee: {
+      priority: PRIORITY.casual,
+      left: (d, w, now) => (d.phase === 'inside' ? d.until - now : d.phase === 'go' ? walkMs(w, CAFE.front.x, CAFE.front.y) : 1500),
+      wrapUp: (d, w, now, ms) => {
+        if (d.phase === 'go') stopWalking(d, w, now, ms);
+        else if (d.phase === 'inside') d.until = Math.min(d.until, now + ms);
+        else if (d.phase === 'enter') d.cut = now + ms;
+      },
+    },
     // Opening or folding a parasol is dropped for a call: someone else does it later
     parasol: { priority: PRIORITY.activity, left: (d, _w, now) => (d.at ? d.at + PARASOL_MS - now : 30_000), wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
     kindle: { priority: PRIORITY.activity, left: (d, _w, now) => (d.at ? d.at + KINDLE_MS - now : 30_000), wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
@@ -843,6 +874,8 @@ export class TownSim {
     this.stepLamps(now, o);
     this.stepFire(now, o);
     this.stepParasols(now, o);
+    // The cafe's door: shut once it closes for the night (when nobody is going through it)
+    if (!this.cafeOpen() && ![...this.walkers.values()].some(inCafe)) this.cafeDoorOpen = false;
     this.nightSleepers = 0;
     for (const w of this.walkers.values()) if ((w.doing.kind === 'sleep' || w.doing.kind === 'goSleep') && w.doing.night) this.nightSleepers++;
 
@@ -855,6 +888,9 @@ export class TownSim {
         // Seen through the shop window: x is the place inside, y the window's bottom
         const p = TOWN_PLACES[d.place];
         a.push(Math.round(p.seats[d.seat]), Math.round(p.window.y + p.window.h), WANIM.inside, this.insideDir(w, d, now), Math.round(w.alpha * 100));
+      } else if (d.kind === 'coffee' && d.phase === 'inside') {
+        // At the counter behind the cafe's window, facing it (x the place at it, y the window's bottom)
+        a.push(Math.round(this.counterAt(w)), Math.round(CAFE.window.y + CAFE.window.h), WANIM.inside, 0, Math.round(w.alpha * 100));
       } else if (d.kind === 'party' && d.phase === 'inside') {
         // Dancing behind the cafe's window: x the place in it, y the window's bottom, turning now and then
         const turns: WDir[] = [2, 2, 1, 2, 3, 2, 0, 2];
@@ -875,6 +911,7 @@ export class TownSim {
       lamps: this.lampLit.reduce((bits, lit, i) => bits | (lit ? 1 << i : 0), 0),
       party: !!this.partyNow,
       fire: this.fireLit,
+      cafeDoor: this.cafeDoorOpen,
       parasols: this.parasolOpen.reduce((bits, open, i) => bits | (open ? 1 << i : 0), 0),
     };
   }
@@ -907,6 +944,8 @@ export class TownSim {
       case 'parasol':
         // Reaching up to the parasol's crank, arms up
         return d.at ? WANIM.cheer : WANIM.walk;
+      case 'coffee':
+        return d.phase === 'inside' ? WANIM.inside : WANIM.walk;
       case 'party':
         return d.phase === 'stand' ? WANIM.drink : this.partyWalking(w, d) ? WANIM.walk : WANIM.idle;
       // The King before the throne: standing until all are there, his hands up to open the court,
@@ -1208,6 +1247,9 @@ export class TownSim {
         }
         break;
       }
+      case 'coffee':
+        this.stepCoffee(w, d, now, dt);
+        break;
       case 'kindle':
         // Lit already (it caught on its own), or not wanted anymore: never mind
         if (this.fireLit || !this.fireWanted(o)) {
@@ -1601,7 +1643,18 @@ export class TownSim {
     };
     const options: [boolean, number, () => Doing | null][] = [
       [a.fountain && !w.noSit, CHANCE.fountain, () => seat('fountain', ACTIVITIES.fountain.radius)],
-      [a.cafe && !w.noSit && this.cafeOpen(), CHANCE.cafe, () => seat('cafe', 0)],
+      [
+        a.cafe && !w.noSit && this.cafeOpen(),
+        CHANCE.cafe,
+        () => {
+          // Often a coffee from inside first, the chair held meanwhile (a few at the counter at most)
+          const d = seat('cafe', 0);
+          const atCounter = [...this.walkers.values()].filter((o) => o.doing.kind === 'coffee').length;
+          return d?.kind === 'goSeat' && Math.random() < COFFEE_SHARE && atCounter < COFFEE_COUNTER.length
+            ? { kind: 'coffee', seat: d.seat, phase: 'go', until: 0, cut: 0 }
+            : d;
+        },
+      ],
       [
         a.board,
         CHANCE.board,
@@ -1638,6 +1691,7 @@ export class TownSim {
       if (o === except) continue;
       const d = o.doing;
       if ((d.kind === 'goSeat' || d.kind === 'seated') && d.at === at && d.seat === seat) return true;
+      if (d.kind === 'coffee' && at === 'cafe' && d.seat === seat) return true;
     }
     return false;
   }
@@ -1719,6 +1773,40 @@ export class TownSim {
     } else if (now - d.at >= LIGHT_MS) {
       this.lampLit[d.lamp] = d.lit;
       d.at = 0;
+    }
+  }
+
+  // ------------------------------------------------------------ a coffee at the cafe
+
+  /** Where at the counter (x behind the window) a customer stands: the places taken in the order they came in */
+  private counterAt(w: Walker): number {
+    const inside = [...this.walkers.values()].filter((o) => o.doing.kind === 'coffee' && o.doing.phase === 'inside');
+    const k = Math.max(0, inside.indexOf(w)) % COFFEE_COUNTER.length;
+    return CAFE.window.x + CAFE.window.w * COFFEE_COUNTER[k];
+  }
+
+  /** Getting a coffee: to the door, in (the door opens for the day, if it was not yet), at the counter, out, then to the chair held */
+  private stepCoffee(w: Walker, d: Coffee, now: number, dt: number): void {
+    switch (d.phase) {
+      case 'go':
+        // Closed meanwhile (night fell): never mind
+        if (!this.cafeOpen()) w.doing = idle(now, 300, 900);
+        else if (this.walkTo(w, CAFE.front.x, CAFE.front.y, WALK_UPS, dt)) d.phase = 'enter';
+        break;
+      case 'enter':
+        if (this.walkTo(w, CAFE.door.x, CAFE.door.y, WALK_UPS, dt)) {
+          const stay = now + rand(COFFEE_MS[0], COFFEE_MS[1]);
+          Object.assign(d, { phase: 'inside', until: d.cut ? Math.min(stay, d.cut) : stay });
+          this.cafeDoorOpen = true;
+        }
+        break;
+      case 'inside':
+        if (now >= d.until) d.phase = 'exit';
+        break;
+      case 'exit':
+        // Out, then off to the chair with the coffee
+        if (this.walkTo(w, CAFE.front.x - 30, CAFE.front.y + 22, WALK_UPS, dt)) w.doing = { kind: 'goSeat', at: 'cafe', seat: d.seat };
+        break;
     }
   }
 
@@ -1923,6 +2011,7 @@ export class TownSim {
         if (this.walkTo(w, CAFE.door.x, CAFE.door.y, WALK_UPS, dt)) {
           const stay = now + rand(PARTY_INSIDE_MS[0], PARTY_INSIDE_MS[1]);
           Object.assign(d, { phase: 'inside', until: d.cut ? Math.min(stay, d.cut) : stay });
+          this.cafeDoorOpen = true;
         }
         break;
       case 'inside':
@@ -2074,6 +2163,7 @@ export class TownSim {
   /** Going through a shop door: faded by how close to it */
   private doorAlpha(w: Walker): number {
     const d = w.doing;
+    if (d.kind === 'coffee') return d.phase === 'enter' || d.phase === 'exit' ? Math.max(0, Math.min(1, Math.hypot(w.x - CAFE.door.x, w.y - CAFE.door.y) / DOOR_FADE)) : 1;
     if (d.kind === 'party') return d.phase === 'enter' || d.phase === 'exit' ? Math.max(0, Math.min(1, Math.hypot(w.x - CAFE.door.x, w.y - CAFE.door.y) / DOOR_FADE)) : 1;
     if (d.kind !== 'visit' || (d.phase !== 'enter' && d.phase !== 'exit')) return 1;
     const p = TOWN_PLACES[d.place];
@@ -2108,7 +2198,8 @@ export class TownSim {
         !(w.doing.kind === 'lamps' && w.doing.at) &&
         !(w.doing.kind === 'kindle' && w.doing.at) &&
         !(w.doing.kind === 'parasol' && w.doing.at) &&
-        !(w.doing.kind === 'party' && w.doing.phase !== 'go' && w.doing.phase !== 'terrace'),
+        !(w.doing.kind === 'party' && w.doing.phase !== 'go' && w.doing.phase !== 'terrace') &&
+        !(w.doing.kind === 'coffee' && w.doing.phase !== 'go'),
     );
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
