@@ -50,6 +50,9 @@ and phones connected. So:
   guests join with `rpc('core', 'join', { code, name, pin })`).
 - `npx tsx scripts/bots.ts [count]` joins fake guests with random avatars that walk the town until
   stopped (follows `PORT` and `HB_DATA_DIR`).
+- `npx tsx scripts/town-sim-test.ts [minutes] [characters] [seed]` plays the town's sim alone on a
+  fake clock and reports characters stuck, walking through things or never finishing what they do.
+  Run it after changing `server/modules/world/sim.ts`.
 
 ## Environment variables
 

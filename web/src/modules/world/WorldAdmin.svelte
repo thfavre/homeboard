@@ -151,8 +151,8 @@
       <div>
         <strong>Chats</strong>
         <p class="faint small">
-          Now and then a character walks up to someone standing around or wandering nearby. They meet halfway, turn to each other and take turns talking,
-          with small speech bubbles over their heads.
+          Now and then a character walks up to someone standing around or wandering nearby. They meet halfway, turn to each other and take turns talking
+          with their hands while the other nods, and now and then they laugh together.
         </p>
       </div>
       <Toggle checked={!!mod.chat} label="Chats" onchange={(v) => setOption('chat', v)} />

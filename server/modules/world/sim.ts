@@ -1,4 +1,4 @@
-import { BENCHES, CARPET_START, CARPET_Y, CHAT_ICON, CROSSING, DAIS_FOOT, PRAY_HALL_COLS, PRAY_ROWS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, TOWN_SCENE, WANIM, praySpots, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
+import { BENCHES, CARPET_START, CARPET_Y, CROSSING, DAIS_FOOT, PRAY_HALL_COLS, PRAY_ROWS, THRONE_SEAT, THRONE_STAND, TOWN, TOWN_AREA, TOWN_OBSTACLES, TOWN_PLACES, TOWN_SCENE, WANIM, praySpots, type PlaceId, type TownFrame, type WDir } from '../../../shared/world.ts';
 
 /**
  * The life of the town: characters wander the ground band, stop for a while, sit on benches, pet
@@ -34,12 +34,20 @@ const CHAT_GAP = 42;
 const CROWN = { half: 72, up: 150 };
 /** On the way to a chat for longer than this: they give up */
 const CHAT_MEET_MS = 15_000;
-/** In a chat they take turns: one speaks this long (a bubble over the head), then the other */
-const CHAT_TURN_MS = 2400;
+/** In a chat they take turns: one speaks this long (talking with the hands), then the other */
+const CHAT_TURN_MS = 2600;
+/** Some turns end with both laughing (this share of the turns), for the last part of the turn */
+const CHAT_LAUGH_SHARE = 0.3;
+const CHAT_LAUGH_MS = 900;
 /** Everything in the way on the square: the fountain, the trees, the lamp posts */
 const OBSTACLES = TOWN_OBSTACLES;
 /** How far ahead a walker looks for something in the way */
-const LOOK_AHEAD = 16;
+const LOOK_AHEAD = 48;
+/** Room a walker keeps from the edge of what stands on the square, going around it (less than STAND_CLEAR, so a spot next to it can be reached) */
+const EDGE_GAP = 3;
+/** Going around something: the heading turns by this much at a time, at most this many times (to 135 degrees) */
+const TURN_STEP = Math.PI / 24;
+const TURN_STEPS = 18;
 /** Two standing characters this close push each other apart (nobody stands on anyone) */
 const PERSONAL_SPACE = 34;
 /** Close enough to a target to be there */
@@ -49,7 +57,7 @@ const STAND_CLEAR = 5;
 /** Walking but less than this far from where it was this long ago: a character is stuck */
 const STUCK_DIST = 14;
 const STUCK_MS = 2500;
-/** A stuck character whose walk matters goes straight through what is in the way for this long */
+/** A stuck character whose walk matters slips past the others for this long (nobody pushes it back) */
 const THROUGH_MS = 3000;
 /** Room between two characters queueing at a shop door */
 const QUEUE_GAP = 36;
@@ -80,8 +88,8 @@ type Doing =
 
 /**
  * Two characters talking: `with` is the other one, who has the same chat. Until both stand in
- * place it waits (`start` 0); then they take turns for a while, until `until`. `seed` picks what
- * the bubbles show, the same for both.
+ * place it waits (`start` 0); then they take turns for a while, until `until`. `seed` picks who
+ * speaks first and which turns end in a laugh, the same for both.
  */
 interface Chat {
   kind: 'chat';
@@ -152,13 +160,15 @@ interface Walker {
   fading: boolean;
   /** The worn art has no sitting sheets: stays off benches and away from the cat */
   noSit: boolean;
+  /** The worn art has no emote or jump sheets: no gestures or laughs in a chat (see chatPose) */
+  noCheer: boolean;
   /** Shops to go to, in order (see RosterEntry.errands) */
   errands: PlaceId[];
   /** The activity already asked to wrap up for a trip (it is asked once) */
   wrapped: Doing | null;
   /** Where it was, and when, the last time it got somewhere (see unstick) */
   anchor: { x: number; y: number; at: number };
-  /** Until then it walks straight through what stands on the square (it was stuck) */
+  /** Until then it slips past the other characters: it neither pushes nor is pushed (it was stuck) */
   through: number;
   /** The side it is going around something on (1 or -1; 0: nothing in the way) */
   turn: number;
@@ -203,8 +213,9 @@ export interface RosterEntry {
   online: boolean;
   /** How long they have been away (ms; 0 while online) */
   awayMs: number;
-  /** See Walker.noSit */
+  /** See Walker.noSit and Walker.noCheer */
   noSit?: boolean;
+  noCheer?: boolean;
   /** Shops the character has to visit to look like on the phone (the latest look counts, so one trip each) */
   errands?: PlaceId[];
 }
@@ -409,11 +420,12 @@ export class TownSim {
         if (shouldSleep) continue;
         const from = this.ceremony || Math.random() < 0.5 ? -20 : TOWN.w + 20;
         const spot = randSpot();
-        w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, errands: [], wrapped: null, anchor: { x: from, y: spot.y, at: now }, through: 0, turn: 0 };
+        w = { id: r.id, x: from, y: spot.y, dir: from < 0 ? 3 : 1, doing: { kind: 'wander', tx: spot.x, ty: spot.y }, alpha: 1, fading: false, noSit: !!r.noSit, noCheer: !!r.noCheer, errands: [], wrapped: null, anchor: { x: from, y: spot.y, at: now }, through: 0, turn: 0 };
         this.walkers.set(r.id, w);
         continue;
       }
       w.noSit = !!r.noSit;
+      w.noCheer = !!r.noCheer;
       w.errands = errands;
       // An outfit change mid-sit (or mid-pet) would show missing art: stand up
       if (w.noSit && (w.doing.kind === 'sit' || w.doing.kind === 'goBench' || w.doing.kind === 'pet' || w.doing.kind === 'goPet')) {
@@ -475,12 +487,10 @@ export class TownSim {
       }
     }
     const someonePets = [...this.walkers.values()].some((w) => w.doing.kind === 'pet');
-    const talk = this.talk([...this.walkers.values()], now);
     return {
       t: now,
       ids,
       a,
-      ...(talk.length ? { talk } : {}),
       cat: { x: Math.round(this.cat.x), y: Math.round(this.cat.y), dir: this.cat.dir, walk: this.cat.doing.kind === 'wander' && !someonePets, hearts: someonePets },
       cam: Math.round(this.camAt(now) * 1000) / 1000,
     };
@@ -521,6 +531,8 @@ export class TownSim {
         return WANIM.pet;
       case 'cheer':
         return WANIM.cheer;
+      case 'chat':
+        return this.chatPose(w, d, now);
       default:
         return WANIM.idle;
     }
@@ -546,25 +558,28 @@ export class TownSim {
     const step = Math.min(d, speed * dt);
     let ux = dx / d;
     let uy = dy / d;
-    // Something just ahead: turn aside, a little more each try, to the side leading away from it
-    const reach = Math.min(LOOK_AHEAD, d);
-    const ahead = (x: number, y: number) => obstacleAt(w.x + x * reach, w.y + y * reach);
-    // (not a character that was stuck: it goes straight through for a moment)
-    const o = this.last < w.through || blocked(w.x, w.y) ? undefined : ahead(ux, uy);
-    if (o) {
+    const o = this.inTheWay(w, ux, uy, d);
+    if (o && blocked(w.x, w.y)) {
+      // Pushed into it: straight out first, the shortest way (the edge's normal)
+      const nx = (w.x - o.x) / (o.rx * o.rx);
+      const ny = (w.y - o.y) / (o.ry * o.ry);
+      const nl = Math.hypot(nx, ny) || 1;
+      ux = nx / nl;
+      uy = ny / nl;
+    } else if (o) {
+      // Turn just enough for the way ahead to be clear, to one side and the same side until past it
+      // (changing sides every step gets nowhere). The side: the one that needs the smaller turn.
+      const reach = Math.min(LOOK_AHEAD, d);
       const base = Math.atan2(uy, ux);
-      const turned = (side: number, k: number) => [Math.cos(base + (side * k * Math.PI) / 12), Math.sin(base + (side * k * Math.PI) / 12)];
-      const away = ([x, y]: number[]) => Math.hypot(w.x + x * reach - o.x, w.y + y * reach - o.y);
-      // Still going around it: on the same side as before (changing sides every step gets nowhere)
-      let way: number[] | undefined;
-      for (let k = 1; w.turn && !way && k <= 8; k++) if (!ahead(...(turned(w.turn, k) as [number, number]))) way = turned(w.turn, k);
-      for (let k = 1; !way && k <= 8; k++) {
-        const free = [1, -1].filter((side) => !ahead(...(turned(side, k) as [number, number])));
-        if (!free.length) continue;
-        w.turn = free.sort((a, b) => away(turned(b, k)) - away(turned(a, k)))[0];
-        way = turned(w.turn, k);
+      const clear = (side: number, k: number) => !this.inTheWay(w, Math.cos(base + side * k * TURN_STEP), Math.sin(base + side * k * TURN_STEP), reach);
+      if (!w.turn) {
+        for (let k = 1; !w.turn && k <= TURN_STEPS; k++) w.turn = clear(1, k) ? 1 : clear(-1, k) ? -1 : 0;
+        w.turn ||= 1;
       }
-      if (way) [ux, uy] = way;
+      let k = 1;
+      while (k < TURN_STEPS && !clear(w.turn, k)) k++;
+      ux = Math.cos(base + w.turn * k * TURN_STEP);
+      uy = Math.sin(base + w.turn * k * TURN_STEP);
     } else {
       w.turn = 0;
     }
@@ -575,9 +590,25 @@ export class TownSim {
   }
 
   /**
+   * What stands in the way of a straight walk toward the target, looking this far ahead (or the
+   * thing the character stands in, if it got pushed into one): the line is tried every few units,
+   * against everything grown by a small gap, so a walk along an edge does not cut through it
+   */
+  private inTheWay(w: Walker, ux: number, uy: number, dist: number): (typeof OBSTACLES)[number] | undefined {
+    const here = obstacleAt(w.x, w.y);
+    if (here) return here;
+    const reach = Math.min(LOOK_AHEAD, dist);
+    for (let s = 3; s <= reach; s += 3) {
+      const o = obstacleAt(w.x + ux * s, w.y + uy * s, EDGE_GAP);
+      if (o) return o;
+    }
+    return undefined;
+  }
+
+  /**
    * A character walking without getting anywhere (something in the way it cannot get around, or
    * others pushing back): a casual walk is dropped for something else; a walk that matters (the
-   * ceremony, a shop, bed) goes straight through what is in the way for a moment
+   * ceremony, a shop, bed) slips past the others for a moment
    */
   private unstick(w: Walker, now: number): void {
     const walking = this.animOf(w, now) === WANIM.walk;
@@ -828,14 +859,16 @@ export class TownSim {
    * with, or no room there.
    */
   private startChat(w: Walker, now: number): boolean {
-    if (this.ceremony || w.x > TOWN_AREA.x1) return false;
+    // Both on the square (not still walking in from the edge, nor out by the throne room)
+    const onSquare = (c: Walker) => c.x >= TOWN_AREA.x0 && c.x <= TOWN_AREA.x1;
+    if (this.ceremony || !onSquare(w)) return false;
     const free = [...this.walkers.values()].filter(
       (o) =>
         o !== w &&
         (o.doing.kind === 'idle' || o.doing.kind === 'wander') &&
         !o.errands.length &&
         !o.fading &&
-        o.x <= TOWN_AREA.x1 &&
+        onSquare(o) &&
         Math.hypot(o.x - w.x, o.y - w.y) < ACTIVITIES.chat.radius,
     );
     if (!free.length) return false;
@@ -859,23 +892,20 @@ export class TownSim {
   }
 
   /**
-   * Who is speaking in each chat, and what their bubble shows: [walker index, icon] pairs (see
-   * TownFrame.talk). They take turns, with a short pause between two turns.
+   * How a character in a chat stands right now: talking with the hands on its turn, listening (and
+   * nodding) on the other's, and both laughing at the end of some turns. The two take turns from
+   * the same clock and seed, so they always agree. Clothes without emote art (a dress, a cape) only
+   * listen: their gestures would make the piece vanish.
    */
-  private talk(list: Walker[], now: number): number[] {
-    const out: number[] = [];
-    list.forEach((w, i) => {
-      const d = w.doing;
-      if (d.kind !== 'chat' || !d.start || now >= d.until) return;
-      const turn = Math.floor((now - d.start) / CHAT_TURN_MS);
-      // The pause at the end of each turn
-      if ((now - d.start) % CHAT_TURN_MS > CHAT_TURN_MS * 0.8) return;
-      // Turn by turn, starting with one of the two (the same pick on both sides)
-      const first = (d.seed + (w.id < d.with ? 0 : 1)) % 2;
-      if ((turn + first) % 2) return;
-      out.push(i, (d.seed + turn * 7 + (turn >> 1) * 3) % CHAT_ICON.length);
-    });
-    return out;
+  private chatPose(w: Walker, d: Chat, now: number): number {
+    if (!d.start || now >= d.until) return WANIM.idle;
+    const t = now - d.start;
+    const turn = Math.floor(t / CHAT_TURN_MS);
+    // The same pick for both: a hash of the chat's seed and the turn
+    const laughs = ((d.seed * 31 + turn * 977) % 1000) / 1000 < CHAT_LAUGH_SHARE;
+    if (laughs && t % CHAT_TURN_MS > CHAT_TURN_MS - CHAT_LAUGH_MS) return w.noCheer ? WANIM.listen : WANIM.laugh;
+    const first = (d.seed + (w.id < d.with ? 0 : 1)) % 2;
+    return (turn + first) % 2 || w.noCheer ? WANIM.listen : WANIM.talk;
   }
 
   // ------------------------------------------------------------ the ceremony
@@ -942,8 +972,11 @@ export class TownSim {
       c.spots = praySpots(Math.min(PRAY_ROWS, Math.ceil(crowd.length / (PRAY_HALL_COLS * 2))));
       return;
     }
-    // In place: everyone but those on a trip to a shop (they come after it and kneel as they arrive)
-    const inPlace = crowd.every((w) => w.doing.kind === 'pray' || w.doing.kind === 'visit') && (!king || king.doing.kind === 'throne');
+    // In place: everyone but those on a trip to a shop (they come after it and kneel as they arrive).
+    // A full hall counts as everyone: who has no place left waits outside and does not hold it up.
+    const full = this.freeSpot() < 0;
+    const inPlace =
+      crowd.every((w) => w.doing.kind === 'pray' || w.doing.kind === 'visit' || (full && w.doing.kind !== 'goPray')) && (!king || king.doing.kind === 'throne');
     if (waited >= PAN_MS && (inPlace || now - c.open >= o.graceMs + GATHER_EXTRA_MS)) Object.assign(c, { phase: 'court', since: now });
   }
 
@@ -1024,6 +1057,8 @@ export class TownSim {
     const call = this.callOf(w, now, o);
     if (call === null || w.wrapped === w.doing) return;
     const d = w.doing;
+    // Just arriving from beyond the edge of town: in first, it would stop out of the picture
+    if (d.kind === 'wander' && (w.x < TOWN_AREA.x0 || w.x > TOWN_AREA.x1) && w.x < CROSSING.x0) return;
     const rule = this.rule(w);
     if (rule.priority >= PRIORITY[call]) return;
     const finishWithin = call === 'ceremony' ? o.graceMs : o.finishWithinMs;
@@ -1139,9 +1174,10 @@ export class TownSim {
   /** Push standing characters apart so nobody overlaps anyone */
   private separate(): void {
     // Not the ones sitting, lying, crouching or kneeling, nor the King on the carpet and the dais,
-    // nor on a shop's steps (going in, inside, coming out)
+    // nor on a shop's steps (going in, inside, coming out), nor one slipping past the others (it was stuck)
     const list = [...this.walkers.values()].filter(
       (w) =>
+        this.last >= w.through &&
         w.doing.kind !== 'sit' &&
         w.doing.kind !== 'sleep' &&
         w.doing.kind !== 'pet' &&
@@ -1168,7 +1204,7 @@ export class TownSim {
     }
     // Pushed into the fountain: back out to its edge; pushed off the bridge: back onto it
     for (const w of list) {
-      if (this.last >= w.through) keepOut(w);
+      keepOut(w);
       if (w.x >= CROSSING.x0 && w.x <= CROSSING.x1) w.y = onBridge(w.y);
     }
   }

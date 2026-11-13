@@ -2,13 +2,14 @@
   import { onMount, untrack } from 'svelte';
   import { hb, onEvent, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-  import { CHAT_ICON, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, WANIM, hallLift, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { SQUARE_STREET, loadEnv, squareGround, squareProps, type Env, type Prop } from '../games/crowd/scene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
+  import { drawLaughing, drawTalking, nodDip } from './chat.ts';
   import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
 
   /**
@@ -141,114 +142,6 @@
       g.font = `bold ${10 + t * 10}px system-ui, sans-serif`;
       g.fillStyle = `rgba(225,230,255,${(1 - t) * 0.8 * alpha})`;
       g.fillText('z', x + 14 + t * 18 + Math.sin((t + i) * 7) * 4, y - 20 - t * 34);
-    }
-  }
-
-  /** Per speaker in a chat: the bubble shown and since when (it pops up when it changes) */
-  const bubbles = new Map<string, { icon: number; since: number }>();
-  /** How long a speech bubble takes to pop up */
-  const POP_MS = 160;
-
-  /**
-   * A speech bubble over a speaker's name: a white rounded box leaning toward who they talk to, its
-   * tail pointing down at them, with a drawn icon inside
-   */
-  function speechBubble(g: CanvasRenderingContext2D, x: number, y: number, lean: number, icon: number, age: number, now: number, alpha: number): void {
-    const t = Math.min(1, age / POP_MS);
-    const s = 0.55 + 0.45 * (1 - (1 - t) ** 3) + Math.sin(Math.min(1, age / 320) * Math.PI) * 0.06;
-    const w = 34;
-    const h = 26;
-    const cx = x + lean * 12;
-    g.save();
-    g.globalAlpha = alpha * t;
-    g.translate(cx, y);
-    g.scale(s, s);
-    g.fillStyle = 'rgba(255,255,255,0.96)';
-    g.strokeStyle = 'rgba(30,26,40,0.55)';
-    g.lineWidth = 1.5;
-    // The box, and its tail down toward the speaker's head (outlined, then the line where they join painted over)
-    const tx = -lean * 9;
-    g.beginPath();
-    g.roundRect(-w / 2, -h, w, h, 9);
-    g.moveTo(tx - 4, -1);
-    g.lineTo(tx - lean * 3, 8);
-    g.lineTo(tx + 4, -1);
-    g.fill();
-    g.stroke();
-    g.fillRect(tx - 3, -3, 6, 3.5);
-    drawChatIcon(g, CHAT_ICON[icon] ?? 'dots', 0, -h / 2, now);
-    g.restore();
-  }
-
-  /** The icon inside a speech bubble, centered on (x, y) */
-  function drawChatIcon(g: CanvasRenderingContext2D, icon: (typeof CHAT_ICON)[number], x: number, y: number, now: number): void {
-    const ink = 'rgba(40,36,56,0.92)';
-    switch (icon) {
-      case 'dots':
-        // Three dots bobbing one after the other
-        g.fillStyle = ink;
-        for (let i = 0; i < 3; i++) {
-          g.beginPath();
-          g.arc(x + (i - 1) * 8, y + 1 - Math.max(0, Math.sin(now / 160 - i * 0.9)) * 3, 2.4, 0, Math.PI * 2);
-          g.fill();
-        }
-        break;
-      case 'heart':
-        g.fillStyle = 'rgba(232,74,110,0.95)';
-        heart(g, x, y + 1, 6.5 + Math.sin(now / 150) * 0.6);
-        break;
-      case 'note': {
-        // An eighth note, rocking a little
-        g.save();
-        g.translate(x, y);
-        g.rotate(Math.sin(now / 260) * 0.18);
-        g.fillStyle = ink;
-        g.strokeStyle = ink;
-        g.lineWidth = 2;
-        g.beginPath();
-        g.ellipse(-3, 5, 4, 3, -0.4, 0, Math.PI * 2);
-        g.fill();
-        g.beginPath();
-        g.moveTo(0.6, 4.5);
-        g.lineTo(0.6, -8);
-        g.quadraticCurveTo(5, -6, 6, -1);
-        g.stroke();
-        g.restore();
-        break;
-      }
-      case 'laugh': {
-        // A laughing face: eyes shut tight, mouth wide open
-        const r = 8;
-        g.fillStyle = 'rgba(255,205,64,1)';
-        g.beginPath();
-        g.arc(x, y, r, 0, Math.PI * 2);
-        g.fill();
-        g.strokeStyle = 'rgba(120,70,10,0.9)';
-        g.lineWidth = 1.4;
-        for (const side of [-1, 1]) {
-          g.beginPath();
-          g.moveTo(x + side * 4.5, y - 1.5);
-          g.lineTo(x + side * 2.5, y - 3);
-          g.lineTo(x + side * 4.5, y - 4.5);
-          g.stroke();
-        }
-        g.fillStyle = 'rgba(120,40,20,0.95)';
-        g.beginPath();
-        g.moveTo(x - 4.5, y + 1);
-        g.lineTo(x + 4.5, y + 1);
-        g.quadraticCurveTo(x, y + 9 + Math.sin(now / 90), x - 4.5, y + 1);
-        g.fill();
-        break;
-      }
-      case 'question':
-      case 'exclaim':
-        g.fillStyle = icon === 'question' ? 'rgba(52,110,214,0.95)' : 'rgba(226,108,34,0.95)';
-        g.font = 'bold 19px system-ui, sans-serif';
-        g.textAlign = 'center';
-        g.textBaseline = 'middle';
-        g.fillText(icon === 'question' ? '?' : '!', x, y + 1);
-        g.textBaseline = 'alphabetic';
-        break;
     }
   }
 
@@ -498,10 +391,16 @@
         // Kneeling toward the throne
       } else if (p.anim === WANIM.sit && p.dir === 1 && img && info && drawEnthroned(g, img, info, p.x, y)) {
         // The King on the throne, seen from the side
+      } else if (p.anim === WANIM.talk && img && info && drawTalking(g, img, info, p.x, y, p.dir, now, l.phase)) {
+        // Chatting: talking with the hands
+      } else if (p.anim === WANIM.laugh && img && info && drawLaughing(g, img, info, p.x, y, p.dir, now - l.since)) {
+        // Chatting: both laughing
       } else if (p.anim === WANIM.cheer && p.dir === 1 && img && info && drawHailing(g, img, info, p.x, y, now - l.since)) {
         // The King before the throne, both hands up
       } else {
-        drawCharacter(g, sheets, img, p.x, y, { anim: gameAnim(p.anim), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id));
+        // (a listener in a chat nods now and then)
+        const dip = p.anim === WANIM.listen ? nodDip(now, l.phase) : 0;
+        drawCharacter(g, sheets, img, p.x, y + dip, { anim: gameAnim(p.anim), dir: p.dir, dist: l.dist, since: now - l.since, now, phase: l.phase }, hue(p.id));
       }
       g.globalAlpha = 1;
     };
@@ -601,18 +500,6 @@
       const place = placeAt(p.x);
       if (c && place) nameTag(g, c.name, p.x, place.window.y + place.window.h + 14, p.alpha, p.id === world?.king?.id);
     }
-    // Who speaks in a chat, and what their bubble shows (a new one pops up)
-    const talking = new Map<string, number>();
-    const talk = f0?.talk ?? [];
-    for (let i = 0; i + 1 < talk.length; i += 2) {
-      const id = f0!.ids[talk[i]];
-      if (id) talking.set(id, talk[i + 1]);
-    }
-    for (const [id, icon] of talking) {
-      const b = bubbles.get(id);
-      if (!b || b.icon !== icon) bubbles.set(id, { icon, since: now });
-    }
-    for (const id of bubbles.keys()) if (!talking.has(id)) bubbles.delete(id);
     // Where each name goes: over the head (beside a sleeper), then names that would overlap (two
     // characters chatting, a queue) pushed apart sideways so every name can be read
     g.font = '600 15px system-ui, sans-serif';
@@ -642,9 +529,6 @@
       const { p } = t;
       if (t.c) nameTag(g, t.c.name, t.x, t.y, p.alpha, t.king);
       if (p.anim === WANIM.sleep) drawZzz(g, p.x + sleepSide(p.x) * 58, p.y - 4, now, p.alpha);
-      // Speaking: a bubble over the head, above the name, leaning toward the one listening
-      const b = bubbles.get(p.id);
-      if (b) speechBubble(g, p.x, t.headY - 21, p.dir === 1 ? -1 : 1, b.icon, now - b.since, now, p.alpha);
     }
     g.restore();
   }

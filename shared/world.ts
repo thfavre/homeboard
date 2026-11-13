@@ -206,8 +206,12 @@ export function hallLift(x: number, y: number): number {
   return Math.min(1, (px - dais[0].x) / (top - dais[0].x)) * dais.length * rise * SPRITE_SCALE;
 }
 
-/** What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat, inside is seen through a shop window, pray kneels before the throne) */
-export const WANIM = { idle: 0, walk: 1, sit: 2, sleep: 3, pet: 4, cheer: 5, inside: 6, pray: 7 } as const;
+/**
+ * What a character is doing, as sent in the frames (sleep lies down, pet crouches by the cat, inside
+ * is seen through a shop window, pray kneels before the throne). In a chat: talk is the one speaking
+ * (talking with the hands), listen the other one (nodding now and then), laugh both at once.
+ */
+export const WANIM = { idle: 0, walk: 1, sit: 2, sleep: 3, pet: 4, cheer: 5, inside: 6, pray: 7, talk: 8, listen: 9, laugh: 10 } as const;
 export type WAnimId = (typeof WANIM)[keyof typeof WANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
 export type WDir = 0 | 1 | 2 | 3;
@@ -226,15 +230,7 @@ export interface TownFrame {
   a: number[];
   cat: { x: number; y: number; dir: WDir; walk: boolean; hearts: boolean };
   cam: number;
-  /**
-   * Who is speaking in a chat between two characters, as pairs: the index in `ids`, then what the
-   * speech bubble shows (see CHAT_ICON). Left out when nobody speaks.
-   */
-  talk?: number[];
 }
-
-/** What a speech bubble shows, by its number in TownFrame.talk */
-export const CHAT_ICON = ['dots', 'heart', 'note', 'laugh', 'question', 'exclaim'] as const;
 
 // ------------------------------------------------------------ the avatar
 

@@ -49,7 +49,7 @@ interface WorldSettings {
   /** Wandering or a bench is dropped within this range (seconds) when a shop calls */
   quickMinSec: number;
   quickMaxSec: number;
-  /** Characters walk up to each other and chat for a while, with speech bubbles */
+  /** Characters walk up to each other and chat for a while, talking with their hands */
   chat: boolean;
   /** Each time a character picks something to do, the chance it goes to chat with someone nearby (percent) */
   chatChancePct: number;
@@ -940,7 +940,7 @@ export default defineModule<WorldSettings>({
             setTown(g.id, { choices: a.choices, outfit: a.outfit ?? {} });
             errands = [];
           }
-          return { id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), noSit: wornLimits(g.id).noSit, errands };
+          return { id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), ...wornLimits(g.id), errands };
         });
       const sec = (a: number, b: number): [number, number] => [Math.min(a, b) * 1000, Math.max(a, b) * 1000];
       const frame = sim.tick(roster, {
