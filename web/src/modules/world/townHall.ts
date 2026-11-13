@@ -1,26 +1,27 @@
-import { SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
+import { SPRITE_SCALE } from '$shared/crowd.ts';
+import { TOWN_HALL } from '$shared/world.ts';
 
 /**
  * The town hall: a stone building with a clock tower in the top left corner of the square, standing
- * in front of the first house of the row and a little further down than the houses. Seen from above
- * and in front like the houses: a hipped slate roof with two chimneys and two dormers, the clock tower
- * rising through it to a pointed roof, and below the eaves the front: two arched windows in each wing,
- * two columns on each side of the door under the clock, steps down to the square. It casts its shadow
- * on the ground. The clock's hands show the town's own time (see townMinutes), and at night its face
- * and the windows light up.
+ * in front of the first house of the row and further down than the houses, onto the square. Seen from
+ * above and in front like the houses, and drawn at their size (their doors are 32 pixels wide, their
+ * walls about 85 high): a hipped slate roof with two chimneys and two dormers, the clock tower rising
+ * through it to a pointed roof, and below the eaves the front: in each wing two tall arched windows
+ * with a small window over each, stones on the corners, a portico of four columns under a pediment
+ * around the double door and its fanlight, steps down to the square. It casts its shadow on the ground.
+ * The clock's hands show the town's own time (see townMinutes), and at night its face and the windows
+ * light up.
  *
  * The building is drawn by hand once, one sprite pixel at a time, in sprite pixels from its top left
  * corner; the TV draws it SPRITE_SCALE world units a pixel over the square's ground, like the houses.
- * The hands are drawn every frame, over it.
+ * The hands are drawn every frame, over it. Characters do not walk over it (see TOWN_OBSTACLES).
  */
 
 const S = SPRITE_SCALE;
-/** The house of the row it stands in front of: the first one, in the corner */
-const HOUSE = houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / S))[0];
-/** Where it stands and its size: from the top of the screen down past the sidewalk (the houses end at SQUARE_HOUSES.bottom) */
-const X0 = Math.max(0, HOUSE.x) + 4;
-const W = 200;
-const H = 134;
+/** Where it stands and its size (sprite pixels) */
+const X0 = TOWN_HALL.x;
+const W = TOWN_HALL.w;
+const H = TOWN_HALL.h;
 /** The middle, where the tower stands */
 const MID = W / 2;
 
@@ -31,25 +32,35 @@ const SLATE = { line: '#1f2130', dark: '#33364b', mid: '#474c66', light: '#5f668
 const GOLD = { o: '#794117', m: '#d19428', l: '#f3c35f', h: '#fdd082' };
 const GLASS = { dark: '#1f2a40', mid: '#2e3f5c', light: '#5d7a9a' };
 const WOOD = { line: '#2a1610', dark: '#4a2a1c', mid: '#6b3d22', light: '#85502c' };
+/** The light painted frames of the windows, like the houses' */
+const FRAME = { mid: '#e6e0d0', dark: '#a39c90' };
 const FACE = '#f4ecd6';
 
 /** The roof seen from above: its back eave, its ridge (shorter than the eaves: a hipped roof) and its front eave, where the front wall begins */
-const ROOF = { back: 12, ridge: 30, inset: 34, eave: 64 };
+const ROOF = { back: 6, ridge: 20, inset: 34, eave: 48 };
 const WALL_TOP = ROOF.eave + 5;
-const PLINTH = 118;
+/** The bottom of the front wall, where the plinth begins (the plinth ends 10 pixels lower) */
+const PLINTH = 146;
+/** The band of stone between the small upper windows and the tall ones */
+const STRING = 77;
 /** The tower: its walls up from the front wall through the roof, the cornice its pointed roof stands on */
-const TOWER_X0 = MID - 26;
-const TOWER_X1 = MID + 26;
-const TOWER_TOP = 22;
-/** The wings' windows: left edge and size, arched at the top */
-const WIN = { y: 78, w: 16, h: 32 };
-const WIN_XS = [12, 42].flatMap((x) => [x, W - x - WIN.w]);
+const TOWER_X0 = MID - 32;
+const TOWER_X1 = MID + 32;
+const TOWER_TOP = 20;
+/** The wings' tall windows: left edge and size, arched at the top */
+const WIN = { y: 84, w: 26, h: 46 };
+const WIN_XS = [12, 46].flatMap((x) => [x, W - x - WIN.w]);
+/** The small windows over them */
+const UPPER = { y: 59, w: 14, h: 13 };
 /** The dormers on the roof's front slope: their left edges */
-const DORMER_XS = [26, W - 26 - 16];
+const DORMER_XS = [28, W - 28 - 16];
 /** The clock: its middle and the radius of its face */
-const CLOCK = { x: MID, y: 42, r: 13 };
-/** The door under the clock, between the columns */
-const DOOR = { x: MID - 10, y: 86, w: 20, bottom: 122 };
+const CLOCK = { x: MID, y: 38, r: 12 };
+/** The double door under the clock, between the columns: the top of its arched fanlight, where the leaves begin, its bottom */
+const DOOR = { x: MID - 18, y: 88, w: 36, leaves: 106, bottom: PLINTH };
+/** The portico's lintel on the columns, and the pediment on it */
+const LINTEL = DOOR.y - 10;
+const PEDIMENT = 12;
 
 function px(g: CanvasRenderingContext2D, color: string, x: number, y: number, w = 1, h = 1): void {
   g.fillStyle = color;
@@ -59,6 +70,14 @@ function px(g: CanvasRenderingContext2D, color: string, x: number, y: number, w 
 /** A filled disc, pixel by pixel */
 function disc(g: CanvasRenderingContext2D, color: string, cx: number, cy: number, r: number): void {
   for (let y = -r; y <= r; y++) {
+    const half = Math.floor(Math.sqrt(r * r - y * y + r * 0.8));
+    px(g, color, cx - half, cy + y, half * 2 + 1, 1);
+  }
+}
+
+/** The top half of a disc, pixel by pixel (an arch), its flat side on `cy` */
+function arch(g: CanvasRenderingContext2D, color: string, cx: number, cy: number, r: number): void {
+  for (let y = -r; y <= 0; y++) {
     const half = Math.floor(Math.sqrt(r * r - y * y + r * 0.8));
     px(g, color, cx - half, cy + y, half * 2 + 1, 1);
   }
@@ -83,6 +102,18 @@ function band(g: CanvasRenderingContext2D, p: typeof STONE, x: number, y: number
   px(g, p.line, x, y + h - 1, w, 1);
 }
 
+/** Quoins: big stones on a corner, long and short in turn, from y0 to y1; `left`: the corner's wall goes off to the right */
+function quoins(g: CanvasRenderingContext2D, p: typeof STONE, x: number, y0: number, y1: number, left: boolean): void {
+  for (let y = y0, k = 0; y < y1; y += 8, k++) {
+    const long = k % 2 ? 7 : 11;
+    const h = Math.min(7, y1 - y);
+    const x0 = left ? x : x - long;
+    px(g, left ? p.shine : p.light, x0, y, long, h);
+    px(g, p.dark, x0, y + h, long, 1);
+    px(g, p.line, left ? x0 + long : x0 - 1, y, 1, h);
+  }
+}
+
 /** A column with its base and capital, lit from the left */
 function column(g: CanvasRenderingContext2D, x: number, top: number, bottom: number): void {
   band(g, TOWER, x - 1, top, 7, 3);
@@ -95,24 +126,53 @@ function column(g: CanvasRenderingContext2D, x: number, top: number, bottom: num
   band(g, TOWER, x - 1, bottom - 3, 7, 3);
 }
 
-/** An arched window: a stone surround with a keystone, dark glass with glazing bars and a gleam, a sill */
+/**
+ * A tall arched window: a stone surround with a keystone, a light painted frame, dark glass in six
+ * panes and an arched top light, a gleam, a sill and its shadow
+ */
 function archWindow(g: CanvasRenderingContext2D, x: number): void {
   const { y, w, h } = WIN;
   const r = w / 2;
-  disc(g, STONE.light, x + r - 0.5, y + r, r + 1.5);
+  const cx = x + r - 0.5;
+  // The stone surround, then the frame, then the glass inside it
+  arch(g, STONE.line, cx, y + r, r + 3);
+  px(g, STONE.line, x - 3, y + r, w + 6, h - r);
+  arch(g, STONE.light, cx, y + r, r + 2);
   px(g, STONE.light, x - 2, y + r, w + 4, h - r);
-  px(g, STONE.line, x - 2, y + r, 1, h - r);
-  disc(g, GLASS.mid, x + r - 0.5, y + r, r - 0.5);
-  px(g, GLASS.mid, x, y + r, w, h - r);
-  px(g, GLASS.dark, x, y + r, 2, h - r);
-  px(g, GLASS.light, x + 3, y + r + 2, 1, 8);
-  px(g, GLASS.light, x + 4, y + r + 1, 1, 3);
-  px(g, STONE.dark, x + r - 1, y + 1, 1, h - 1);
-  px(g, STONE.dark, x, y + r + 7, w, 1);
-  px(g, STONE.shine, x + r - 3, y - 3, 5, 5);
-  px(g, STONE.dark, x + r - 3, y + 1, 5, 1);
+  arch(g, FRAME.mid, cx, y + r, r);
+  px(g, FRAME.mid, x, y + r, w, h - r);
+  arch(g, GLASS.mid, cx, y + r, r - 2);
+  px(g, GLASS.mid, x + 2, y + r, w - 4, h - r - 2);
+  px(g, GLASS.dark, x + 2, y + r, 2, h - r - 2);
+  // Glazing bars: the transom under the top light, a mullion, two bars across
+  px(g, FRAME.mid, x, y + r, w, 2);
+  px(g, FRAME.mid, x + r - 1, y + 3, 2, h - 3);
+  for (const k of [12, 23]) px(g, FRAME.mid, x + 2, y + r + k, w - 4, 1);
+  px(g, FRAME.dark, x + 2, y + r + 2, w - 4, 1);
+  // A gleam on the left panes
+  px(g, GLASS.light, x + 5, y + r + 4, 1, 6);
+  px(g, GLASS.light, x + 6, y + r + 4, 1, 2);
+  px(g, GLASS.light, x + 5, y + r + 15, 1, 4);
+  // The keystone over the arch
+  px(g, STONE.shine, x + r - 3, y - 4, 6, 5);
+  px(g, STONE.line, x + r - 3, y + 1, 6, 1);
+  px(g, STONE.dark, x + r + 2, y - 4, 1, 5);
+  band(g, STONE, x - 4, y + h, w + 8, 4);
+  px(g, 'rgba(20,10,20,0.3)', x - 3, y + h + 4, w + 7, 2);
+}
+
+/** A small square window over a tall one: a stone surround, a frame with a cross, a sill */
+function upperWindow(g: CanvasRenderingContext2D, x: number): void {
+  const { y, w, h } = UPPER;
+  px(g, STONE.line, x - 2, y - 2, w + 4, h + 2);
+  px(g, STONE.light, x - 1, y - 1, w + 2, h + 1);
+  px(g, FRAME.mid, x, y, w, h);
+  px(g, GLASS.mid, x + 1, y + 1, w - 2, h - 2);
+  px(g, GLASS.dark, x + 1, y + 1, 1, h - 2);
+  px(g, FRAME.mid, x + w / 2 - 1, y, 1, h);
+  px(g, FRAME.mid, x, y + 6, w, 1);
+  px(g, GLASS.light, x + 3, y + 2, 1, 3);
   band(g, STONE, x - 3, y + h, w + 6, 3);
-  px(g, 'rgba(20,10,20,0.3)', x - 2, y + h + 3, w + 5, 2);
 }
 
 /** The clock's face: a stone roundel, a gold ring, the hour marks (the four quarters longer) */
@@ -187,21 +247,79 @@ function chimney(g: CanvasRenderingContext2D, x: number, top: number): void {
 
 /** A dormer on the front slope: a little gable roof over a small window */
 function dormer(g: CanvasRenderingContext2D, x: number): void {
-  const y = ROOF.ridge + 12;
+  const y = ROOF.ridge + 8;
   px(g, 'rgba(10,10,20,0.3)', x + 16, y + 2, 3, 15);
   px(g, STONE.mid, x, y + 6, 16, 12);
   px(g, STONE.line, x, y + 6, 1, 12);
   px(g, STONE.line, x + 15, y + 6, 1, 12);
   px(g, STONE.line, x, y + 17, 16, 1);
-  px(g, STONE.light, x + 3, y + 8, 10, 8);
+  px(g, FRAME.mid, x + 3, y + 8, 10, 8);
   px(g, GLASS.mid, x + 4, y + 9, 8, 7);
   px(g, GLASS.light, x + 5, y + 10, 1, 3);
-  px(g, STONE.dark, x + 7, y + 9, 1, 7);
+  px(g, FRAME.mid, x + 7, y + 9, 1, 7);
   for (let k = 0; k < 8; k++) {
     px(g, k % 3 === 2 ? SLATE.dark : SLATE.mid, x + 8 - k - 1, y + k, (k + 1) * 2, 1);
     px(g, SLATE.line, x + 8 - k - 1, y + k, 1, 1);
     px(g, SLATE.line, x + 8 + k, y + k, 1, 1);
   }
+}
+
+/** The pediment on the portico: a low stone triangle with a darker field inside, its base on `y` */
+function pediment(g: CanvasRenderingContext2D, x0: number, x1: number, y: number): void {
+  const half = (x1 - x0) / 2;
+  for (let k = 0; k < PEDIMENT; k++) {
+    // From the apex down: how far out from the middle this row reaches
+    const reach = Math.round((half * (k + 1)) / PEDIMENT);
+    const row = y - PEDIMENT + k;
+    px(g, TOWER.line, MID - reach, row, reach * 2, 1);
+    if (reach > 3) px(g, TOWER.shine, MID - reach + 1, row, reach - 1, 1);
+    if (reach > 3) px(g, TOWER.light, MID, row, reach - 2, 1);
+    // The field inside, three pixels in from the slopes
+    const inner = reach - 7;
+    if (k > 3 && inner > 0) px(g, TOWER.dark, MID - inner, row, inner * 2, 1);
+  }
+  // A gold roundel in the field
+  disc(g, GOLD.o, MID, y - 4, 2);
+  px(g, GOLD.l, MID - 1, y - 5, 2, 1);
+}
+
+/** The double door: an arched fanlight with radiating bars over two panelled leaves with gold handles */
+function door(g: CanvasRenderingContext2D): void {
+  const { x, y, w, leaves, bottom } = DOOR;
+  const r = w / 2;
+  const cx = x + r - 0.5;
+  // The stone frame round it, then the fanlight's glass
+  arch(g, TOWER.line, cx, leaves, r + 2);
+  px(g, TOWER.line, x - 2, leaves, w + 4, bottom - leaves);
+  arch(g, TOWER.shine, cx, leaves, r + 1);
+  px(g, TOWER.shine, x - 1, leaves, w + 2, bottom - leaves);
+  arch(g, WOOD.line, cx, leaves, r);
+  arch(g, GLASS.mid, cx, leaves, r - 2);
+  for (const a of [-0.6, -0.2, 0.2, 0.6]) {
+    for (let d = 3; d < r - 1; d++) px(g, WOOD.dark, Math.round(MID - 0.5 + Math.sin(a * 2.4) * d), Math.round(leaves - Math.cos(a * 2.4) * d));
+  }
+  arch(g, WOOD.dark, cx, leaves, 3);
+  px(g, GLASS.light, x + 8, leaves - 8, 1, 3);
+  px(g, WOOD.line, x, leaves - 1, w, 2);
+  // The two leaves, each with two raised panels
+  px(g, WOOD.line, x, leaves + 1, w, bottom - leaves - 1);
+  for (const lx of [x + 1, MID + 1]) {
+    const lw = w / 2 - 2;
+    px(g, WOOD.mid, lx, leaves + 1, lw, bottom - leaves - 1);
+    px(g, WOOD.light, lx, leaves + 1, 1, bottom - leaves - 1);
+    for (const [py, ph] of [
+      [leaves + 4, 14],
+      [leaves + 22, 15],
+    ]) {
+      px(g, WOOD.dark, lx + 3, py, lw - 6, ph);
+      px(g, WOOD.light, lx + 4, py + 1, lw - 7, ph - 1);
+      px(g, WOOD.mid, lx + 5, py + 2, lw - 9, ph - 3);
+    }
+  }
+  px(g, GOLD.l, MID - 4, leaves + 19, 2, 3);
+  px(g, GOLD.l, MID + 2, leaves + 19, 2, 3);
+  px(g, GOLD.o, MID - 4, leaves + 21, 2, 1);
+  px(g, GOLD.o, MID + 2, leaves + 21, 2, 1);
 }
 
 function build(): HTMLCanvasElement {
@@ -213,28 +331,30 @@ function build(): HTMLCanvasElement {
   chimney(g, 30, ROOF.back + 2);
   chimney(g, W - 37, ROOF.back + 2);
   for (const x of DORMER_XS) dormer(g, x);
-  // The front: a cornice with dentils under the eaves, the stone wall, a plinth and the base
+  // The front: a cornice with dentils under the eaves, the stone wall with a band across and stones on
+  // its corners, a plinth and the base
   band(g, STONE, 0, WALL_TOP - 4, W, 4);
   for (let x = 1; x < W; x += 4) px(g, STONE.dark, x, WALL_TOP - 2, 2, 1);
   wall(g, STONE, 0, WALL_TOP, W, PLINTH);
-  px(g, STONE.line, 0, WALL_TOP - 4, 1, H - WALL_TOP + 4);
-  px(g, STONE.line, W - 1, WALL_TOP - 4, 1, H - WALL_TOP + 4);
+  band(g, STONE, 0, STRING, W, 3);
+  quoins(g, STONE, 1, WALL_TOP, PLINTH, true);
+  quoins(g, STONE, W - 1, WALL_TOP, PLINTH, false);
+  px(g, STONE.line, 0, WALL_TOP - 4, 1, PLINTH - WALL_TOP + 15);
+  px(g, STONE.line, W - 1, WALL_TOP - 4, 1, PLINTH - WALL_TOP + 15);
   band(g, STONE, 0, PLINTH, W, 5);
-  px(g, STONE.dark, 0, PLINTH + 5, W, 5);
+  px(g, STONE.dark, 1, PLINTH + 5, W - 2, 5);
   px(g, STONE.line, 0, PLINTH + 10, W, 1);
-  for (const x of WIN_XS) archWindow(g, x);
+  for (const x of WIN_XS) {
+    archWindow(g, x);
+    upperWindow(g, x + (WIN.w - UPPER.w) / 2);
+  }
   // The tower: lighter stone up through the roof, quoins on its corners, its shadow on the roof and
   // the right wing, its pointed roof on a cornice
   px(g, 'rgba(10,10,20,0.3)', TOWER_X1 + 1, TOWER_TOP + 4, 6, ROOF.eave - TOWER_TOP - 4);
   px(g, 'rgba(20,10,20,0.22)', TOWER_X1 + 1, WALL_TOP, 3, PLINTH - WALL_TOP);
   wall(g, TOWER, TOWER_X0, TOWER_TOP, TOWER_X1, PLINTH);
-  for (let y = TOWER_TOP; y < PLINTH; y += 8) {
-    const long = ((y - TOWER_TOP) / 8) % 2 ? 5 : 8;
-    px(g, TOWER.shine, TOWER_X0, y, long, 7);
-    px(g, TOWER.light, TOWER_X1 - long, y, long, 7);
-    px(g, TOWER.dark, TOWER_X0, y + 7, long, 1);
-    px(g, TOWER.dark, TOWER_X1 - long, y + 7, long, 1);
-  }
+  quoins(g, TOWER, TOWER_X0, TOWER_TOP, PLINTH, true);
+  quoins(g, TOWER, TOWER_X1, TOWER_TOP, PLINTH, false);
   px(g, TOWER.line, TOWER_X0 - 1, TOWER_TOP, 1, PLINTH - TOWER_TOP);
   px(g, TOWER.line, TOWER_X1, TOWER_TOP, 1, PLINTH - TOWER_TOP);
   // Where the tower comes out of the roof: a band of lead flashing
@@ -242,30 +362,18 @@ function build(): HTMLCanvasElement {
   spire(g);
   band(g, TOWER, TOWER_X0 - 3, TOWER_TOP - 3, TOWER_X1 - TOWER_X0 + 6, 5);
   clockFace(g);
-  // The portico: a lintel on two pairs of columns, the arched door between them
-  const lintel = DOOR.y - 8;
-  band(g, TOWER, DOOR.x - 14, lintel, DOOR.w + 28, 5);
-  px(g, GOLD.m, MID - 5, lintel + 1, 10, 2);
-  px(g, GOLD.l, MID - 5, lintel + 1, 10, 1);
-  for (const x of [DOOR.x - 13, DOOR.x - 7, DOOR.x + DOOR.w + 2, DOOR.x + DOOR.w + 8]) column(g, x, lintel + 5, DOOR.bottom);
-  const r = DOOR.w / 2;
-  disc(g, TOWER.line, DOOR.x + r - 0.5, DOOR.y + r, r + 1);
-  px(g, TOWER.line, DOOR.x - 1, DOOR.y + r, DOOR.w + 2, DOOR.bottom - DOOR.y - r);
-  disc(g, WOOD.mid, DOOR.x + r - 0.5, DOOR.y + r, r - 1);
-  px(g, WOOD.mid, DOOR.x, DOOR.y + r, DOOR.w, DOOR.bottom - DOOR.y - r);
-  px(g, WOOD.line, MID - 1, DOOR.y + 1, 1, DOOR.bottom - DOOR.y - 1);
-  for (const x of [DOOR.x + 2, MID + 2]) {
-    px(g, WOOD.dark, x, DOOR.y + r + 1, 6, 9);
-    px(g, WOOD.light, x + 1, DOOR.y + r + 2, 5, 8);
-    px(g, WOOD.dark, x, DOOR.y + r + 13, 6, 9);
-    px(g, WOOD.light, x + 1, DOOR.y + r + 14, 5, 8);
-  }
-  px(g, GOLD.l, MID - 3, DOOR.y + r + 11, 1, 2);
-  px(g, GOLD.l, MID + 1, DOOR.y + r + 11, 1, 2);
+  // The portico: a pediment on a lintel on two pairs of columns, the door between them
+  const x0 = DOOR.x - 18;
+  const x1 = DOOR.x + DOOR.w + 18;
+  px(g, 'rgba(20,10,20,0.25)', x1, LINTEL + 2, 3, DOOR.bottom - LINTEL - 2);
+  pediment(g, x0 - 2, x1 + 2, LINTEL);
+  band(g, TOWER, x0 - 2, LINTEL, x1 - x0 + 4, 6);
+  px(g, GOLD.m, MID - 7, LINTEL + 2, 14, 2);
+  px(g, GOLD.l, MID - 7, LINTEL + 2, 14, 1);
+  door(g);
+  for (const x of [x0 + 2, x0 + 9, x1 - 15, x1 - 8]) column(g, x, LINTEL + 6, DOOR.bottom);
   // Steps down to the square, each wider than the one above
-  band(g, STONE, DOOR.x - 18, DOOR.bottom, DOOR.w + 36, 4);
-  band(g, STONE, DOOR.x - 22, DOOR.bottom + 4, DOOR.w + 44, 4);
-  band(g, STONE, DOOR.x - 26, DOOR.bottom + 8, DOOR.w + 52, 4);
+  for (let k = 0; k < 4; k++) band(g, STONE, x0 - 2 - k * 4, DOOR.bottom + k * 6, x1 - x0 + 4 + k * 8, 6);
   return c;
 }
 
@@ -284,28 +392,41 @@ export const TOWN_HALL_SPAN = { x0: X0 * S, x1: (X0 + W) * S };
 /** World position of a sprite pixel of the building */
 const world = (x: number, y: number) => ({ x: (X0 + x) * S, y: y * S });
 
-/** At night: the windows glow warm, and the clock's face is lit from behind */
+/** A warm glow on a window's glass at night, warmer at the bottom where the lamps inside are, and a soft halo on the stone round it */
+function glowWindow(g: CanvasRenderingContext2D, dark: number, x: number, y: number, w: number, h: number, arched: boolean): void {
+  const a = world(x, y);
+  const r = (w / 2) * S;
+  const hw = h * S;
+  const halo = g.createRadialGradient(a.x + r, a.y + hw * 0.55, 0, a.x + r, a.y + hw * 0.55, hw * 0.8);
+  halo.addColorStop(0, `rgba(255,200,120,${0.18 * dark})`);
+  halo.addColorStop(1, 'rgba(255,200,120,0)');
+  g.fillStyle = halo;
+  g.fillRect(a.x - hw, a.y - hw * 0.3, r * 2 + hw * 2, hw * 1.7);
+  const glass = g.createLinearGradient(0, a.y, 0, a.y + hw);
+  glass.addColorStop(0, `rgba(255,214,140,${0.45 * dark})`);
+  glass.addColorStop(1, `rgba(255,190,100,${0.7 * dark})`);
+  g.fillStyle = glass;
+  g.beginPath();
+  if (arched) {
+    g.arc(a.x + r, a.y + r, r, Math.PI, 0);
+    g.rect(a.x, a.y + r, w * S, hw - r);
+  } else g.rect(a.x, a.y, w * S, hw);
+  g.fill();
+}
+
+/** At night: the windows and the door's fanlight glow warm, and the clock's face is lit from behind */
 export function drawTownHallLight(g: CanvasRenderingContext2D, dark: number): void {
   if (dark <= 0.02) return;
   for (const x of WIN_XS) {
-    const a = world(x, WIN.y);
-    const r = (WIN.w / 2) * S;
-    const h = WIN.h * S;
-    // A soft halo on the stone around it, then the glass, warmer at the bottom where the lamps inside are
-    const halo = g.createRadialGradient(a.x + r, a.y + h * 0.55, 0, a.x + r, a.y + h * 0.55, h * 0.8);
-    halo.addColorStop(0, `rgba(255,200,120,${0.18 * dark})`);
-    halo.addColorStop(1, 'rgba(255,200,120,0)');
-    g.fillStyle = halo;
-    g.fillRect(a.x - h, a.y - h * 0.3, r * 2 + h * 2, h * 1.7);
-    const glass = g.createLinearGradient(0, a.y, 0, a.y + h);
-    glass.addColorStop(0, `rgba(255,214,140,${0.45 * dark})`);
-    glass.addColorStop(1, `rgba(255,190,100,${0.7 * dark})`);
-    g.fillStyle = glass;
-    g.beginPath();
-    g.arc(a.x + r, a.y + r, r, Math.PI, 0);
-    g.rect(a.x, a.y + r, WIN.w * S, h - r);
-    g.fill();
+    glowWindow(g, dark, x + 2, WIN.y + 2, WIN.w - 4, WIN.h - 4, true);
+    glowWindow(g, dark * 0.8, x + (WIN.w - UPPER.w) / 2 + 1, UPPER.y + 1, UPPER.w - 2, UPPER.h - 2, false);
   }
+  const r = DOOR.w / 2 - 2;
+  const f = world(MID, DOOR.leaves);
+  g.fillStyle = `rgba(255,205,125,${0.55 * dark})`;
+  g.beginPath();
+  g.arc(f.x, f.y, r * S, Math.PI, 0);
+  g.fill();
   const c = world(CLOCK.x, CLOCK.y);
   const glow = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, CLOCK.r * S * 2.2);
   glow.addColorStop(0, `rgba(255,236,190,${0.5 * dark})`);

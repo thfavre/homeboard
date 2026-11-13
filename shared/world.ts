@@ -12,7 +12,33 @@ import type { Outfit, Tier, WornItem } from './wardrobe.ts';
  */
 export const TOWN = WORLD;
 export const TOWN_SCENE = SPY_SCENE;
-export const TOWN_OBSTACLES = SPY_OBSTACLES;
+/** Where characters walk: the square below the sidewalk */
+export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
+/**
+ * The town hall in the top left corner of the square (drawn by the TV, web/src/modules/world/townHall.ts):
+ * its left edge, width and height in sprite pixels, from the top of the screen down past the sidewalk
+ * onto the square. It stands in front of the first house of the row, a little in from its left edge.
+ */
+export const TOWN_HALL = { x: Math.max(0, houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / SPRITE_SCALE))[0].x) + 4, w: 224, h: 170 };
+
+/**
+ * The part of the square the town hall's front and steps stand on: a flat ellipse whose lower edge
+ * follows the bottom of the steps in the middle and of the plinth at the wings, between the square's
+ * left edge (nobody walks further left) and the building's right edge. Nobody walks over it.
+ */
+function townHallFootprint(): { x: number; y: number; rx: number; ry: number } {
+  const S = SPRITE_SCALE;
+  const right = (TOWN_HALL.x + TOWN_HALL.w) * S;
+  const x = (TOWN_AREA.x0 + right) / 2;
+  const ry = 120;
+  const y = TOWN_HALL.h * S + 3 - ry;
+  // Wide enough to still reach the bottom of the plinth (14 sprite pixels above the steps' bottom) at its ends
+  const reach = (TOWN_HALL.h - 14) * S - y;
+  const rx = (right - x) / Math.sqrt(1 - (reach / ry) ** 2);
+  return { x, y, rx, ry };
+}
+
+export const TOWN_OBSTACLES = [...SPY_OBSTACLES, townHallFootprint()];
 /** Benches characters can sit on: where the square's benches stand, and where a sitter's feet land */
 export const BENCHES: { x: number; y: number }[] = [
   { x: 400, y: 178 },
@@ -71,9 +97,6 @@ function place(id: PlaceId, name: string, kind: HouseKind, nearX: number, seats:
     seats: Array.from({ length: seats }, (_, i) => window.x + (window.w * (i + 0.5)) / seats),
   };
 }
-
-/** Where characters walk: the square below the sidewalk */
-export const TOWN_AREA = { x0: 70, x1: 1530, y0: 190, y1: 875 };
 
 /** The clothes shop (the big house near the middle) and the barber (the small one on the right) */
 export const TOWN_PLACES: Record<PlaceId, TownPlace> = {
