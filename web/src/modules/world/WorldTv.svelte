@@ -500,35 +500,13 @@
       const place = placeAt(p.x);
       if (c && place) nameTag(g, c.name, p.x, place.window.y + place.window.h + 14, p.alpha, p.id === world?.king?.id);
     }
-    // Where each name goes: over the head (beside a sleeper), then names that would overlap (two
-    // characters chatting, a queue) pushed apart sideways so every name can be read
-    g.font = '600 15px system-ui, sans-serif';
-    const tags = people.map((p) => {
+    for (const p of people) {
       const c = byId.get(p.id);
       const s = sleepSide(p.x);
       // Kneeling, or seated on the throne: the name comes down with the head
       const tall = tallOf(shown.get(p.id)?.img) * (p.anim === WANIM.pray ? 0.66 : p.anim === WANIM.sit && p.dir === 1 ? 0.86 : 1);
-      const headY = p.y - p.lift - tall - 14;
-      const king = p.id === world?.king?.id;
-      const sleep = p.anim === WANIM.sleep;
-      return { p, c, king, headY, x: sleep ? p.x + s * 36 : p.x, y: sleep ? p.y - 26 : headY, w: c ? g.measureText(c.name).width + 16 + (king ? 18 : 0) : 0 };
-    });
-    for (let round = 0; round < 3; round++) {
-      for (let i = 0; i < tags.length; i++) {
-        for (let j = i + 1; j < tags.length; j++) {
-          const [a, b] = tags[i].x <= tags[j].x ? [tags[i], tags[j]] : [tags[j], tags[i]];
-          if (!a.c || !b.c || Math.abs(a.y - b.y) >= 22) continue;
-          const overlap = (a.w + b.w) / 2 + 4 - (b.x - a.x);
-          if (overlap <= 0) continue;
-          a.x -= overlap / 2;
-          b.x += overlap / 2;
-        }
-      }
-    }
-    for (const t of tags) {
-      const { p } = t;
-      if (t.c) nameTag(g, t.c.name, t.x, t.y, p.alpha, t.king);
-      if (p.anim === WANIM.sleep) drawZzz(g, p.x + sleepSide(p.x) * 58, p.y - 4, now, p.alpha);
+      if (c) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - p.lift - tall - 14, p.alpha, p.id === world?.king?.id);
+      if (p.anim === WANIM.sleep) drawZzz(g, p.x + s * 58, p.y - 4, now, p.alpha);
     }
     g.restore();
   }
