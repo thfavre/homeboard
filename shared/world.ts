@@ -107,12 +107,12 @@ export interface Seat {
   ground?: boolean;
 }
 
-/** Places on the fountain's rim: two on its front, one on each side facing out */
+/** Places on the fountain's rim: two on its front, one on each side facing out (the sitter's bottom on the rim, checked on the TV) */
 export const FOUNTAIN_SEATS: Seat[] = [
-  { x: 758, y: 586, dir: 2 },
-  { x: 842, y: 586, dir: 2 },
-  { x: 717, y: 553, dir: 1 },
-  { x: 883, y: 553, dir: 3 },
+  { x: 775, y: 578, dir: 2 },
+  { x: 825, y: 578, dir: 2 },
+  { x: 740, y: 556, dir: 1 },
+  { x: 860, y: 556, dir: 3 },
 ];
 
 /** The campfire on the grass in the bottom right corner: the fire pit, two logs by it (behind and right) and the places around it (on the ground on its left) */
