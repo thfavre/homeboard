@@ -374,8 +374,8 @@ export function choicesHash(c: AvatarChoices, outfit: Outfit = {}): string {
   while (worn.length > 8 && worn[worn.length - 1] === null) worn.pop();
   // Bare legs (shorts that are a piece now, not drawn under every empty slot) get a new name
   const bare = !outfit.bottom && !outfit.dress ? ['bare'] : [];
-  // The bra was redrawn (straps that reach the band, no shoulder caps): looks wearing it get a new name
-  const redrawn = outfit.top?.id === 'bra' ? ['bra2'] : [];
+  // The bra was redrawn (straps that reach the band, a smaller side view): looks wearing it get a new name
+  const redrawn = outfit.top?.id === 'bra' ? ['bra3'] : [];
   return createHash('sha1').update(JSON.stringify([c.body, c.skin, c.hair, c.hairColor, c.beard, c.eyes, worn, ...bare, ...redrawn])).digest('hex').slice(0, 12);
 }
 

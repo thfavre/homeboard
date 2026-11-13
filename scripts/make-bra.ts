@@ -2,7 +2,8 @@
  * Draws the bra sheets (assets/lpc/spritesheets/torso/clothes/bra/female/) from the LPC "Sleeveless 2"
  * top, frame by frame, so it has every animation and the same pixel style. Seen from the front: two
  * straps from the shoulders down to two rounded cups, a V between them; from the back a straight band
- * under the straps; from the side the cup. Every cut edge gets the top's dark outline. Which way is
+ * under the straps; from the side a strap down to a rounded cup on the front of the chest, and a thin
+ * band from it to the back. Every cut edge gets the top's dark outline. Which way is
  * "up" in a frame (standing, sitting, lying hurt) comes from where the head is.
  *
  *   npx tsx scripts/make-bra.ts
@@ -22,7 +23,11 @@ const CUP_TOP_IN = 0.5; // ... dipping to this between them (the V)
 const CUP_EDGE = 0.66; // the cups' bottom at their sides
 const CUP_LOW = 0.84; // ... and at their lowest
 const BACK = [0.46, 0.72]; // the band across the back
-const SIDE = [0.34, 0.78]; // the cup seen from the side
+/** Seen from the side: the cup (its middle and radii, across from the chest's front and along), and
+ * the band from behind the cup to the back */
+const SIDE_CUP = { f: 0.12, t: 0.5, rf: 0.45, rt: 0.21 };
+const SIDE_BAND = [0.53, 0.72];
+const SIDE_BAND_FROM = 0.3;
 /** Pixels from the chest's edge to the middle of a strap */
 const STRAP_IN = 2;
 /** Of the chest's width: each cup's half width around its middle */
@@ -94,6 +99,12 @@ for (const file of readdirSync(TOP).filter((f) => f.endsWith('.png'))) {
         if (facing === 'side') return Math.abs(c - Math.round((c0 + c1) / 2)) <= 1;
         return Math.abs(c - (c0 + STRAP_IN)) <= 1 || Math.abs(c - (c1 - STRAP_IN)) <= 1;
       };
+      // Seen from the side: 0 at the chest's front, 1 at the back (the right-facing row looks right,
+      // the others left)
+      const sideFront = (x: number, y: number) => (cy / F === 3 ? 1 - w(x, y) : w(x, y));
+      // ... the cup: a rounded shape on the front of the chest
+      const sideCup = (x: number, y: number) =>
+        ((sideFront(x, y) - SIDE_CUP.f) / SIDE_CUP.rf) ** 2 + ((t(x, y) - SIDE_CUP.t) / SIDE_CUP.rt) ** 2 <= 1;
       const keep = (x: number, y: number) => {
         if (!top.data[at(x, y) + 3] || !inChest(x, y)) return false;
         const tt = t(x, y);
@@ -101,7 +112,7 @@ for (const file of readdirSync(TOP).filter((f) => f.endsWith('.png'))) {
         // From the shoulders down into the cups (or the band at the back)
         const strap = strapAt(x, y) && tt < (facing === 'back' ? BACK[0] : CUP_TOP_IN) + 0.05;
         if (facing === 'back') return strap || (tt >= BACK[0] && tt <= BACK[1]);
-        if (facing === 'side') return strap || (tt >= SIDE[0] && tt <= SIDE[1]);
+        if (facing === 'side') return strap || sideCup(x, y) || (sideFront(x, y) >= SIDE_BAND_FROM && tt >= SIDE_BAND[0] && tt <= SIDE_BAND[1]);
         if (strap) return true;
         // The front: below the V of the cups' top, above their round bottoms
         const fromMid = Math.abs(ww - 0.5) * 2;
@@ -146,7 +157,8 @@ for (const file of readdirSync(TOP).filter((f) => f.endsWith('.png'))) {
         });
         // A strap above the cups or band: cloth in its middle column, outline at both sides, whatever
         // the top had there (the shade of its neckline)
-        const inStrap = strapAt(x, y) && t(x, y) < (facing === 'back' ? BACK[0] : facing === 'side' ? SIDE[0] : CUP_TOP_OUT);
+        const inStrap =
+          strapAt(x, y) && (facing === 'side' ? !sideCup(x, y) && t(x, y) < SIDE_BAND[0] : t(x, y) < (facing === 'back' ? BACK[0] : CUP_TOP_OUT));
         const strapMid = inStrap && strapAt(x - up[1], y + up[0]) && strapAt(x + up[1], y - up[0]);
         const c = inStrap ? (strapMid ? cloth : dark) : cut ? dark : [top.data[i], top.data[i + 1], top.data[i + 2]];
         out.data[i] = c[0];
