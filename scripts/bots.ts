@@ -5,7 +5,7 @@
  * with the avatars they already have.
  *
  *   npx tsx scripts/bots.ts            three bots on the server of this folder
- *   npx tsx scripts/bots.ts 5          five bots
+ *   npx tsx scripts/bots.ts 5          five bots (up to 60)
  *
  * The port follows PORT (4300 by default) and the data folder HB_DATA_DIR, like the server, so the
  * bots join a test copy when pointed at one.
@@ -15,11 +15,16 @@ import { join } from 'node:path';
 import { io, type Socket } from 'socket.io-client';
 import { randomChoices } from '../shared/world.ts';
 
-const NAMES = ['Ada', 'Bruno', 'Cleo', 'Dario', 'Elsa', 'Felix', 'Gaia', 'Hugo', 'Iris', 'Jonas', 'Kira', 'Leon'];
+const NAMES = [
+  'Ada', 'Bruno', 'Cleo', 'Dario', 'Elsa', 'Felix', 'Gaia', 'Hugo', 'Iris', 'Jonas', 'Kira', 'Leon', 'Mila', 'Nino', 'Olga',
+  'Paco', 'Quinn', 'Rosa', 'Sven', 'Tina', 'Ugo', 'Vera', 'Willy', 'Xena', 'Yann', 'Zoe',
+];
 /** The bots' PIN: lets the same bot log back in on the next run */
 const PIN = '7392';
+/** Past the names: numbered bots */
+const MAX = 60;
 
-const count = Math.max(1, Math.min(NAMES.length, Number(process.argv[2]) || 3));
+const count = Math.max(1, Math.min(MAX, Number(process.argv[2]) || 3));
 const port = Number(process.env.PORT) || 4300;
 const dataDir = process.env.HB_DATA_DIR || join(import.meta.dirname, '..', 'data');
 
@@ -30,8 +35,8 @@ const rpc = (s: Socket, module: string, method: string, args?: unknown) =>
     ),
   );
 
-for (const n of NAMES.slice(0, count)) {
-  const name = `Bot ${n}`;
+for (let b = 0; b < count; b++) {
+  const name = `Bot ${NAMES[b] ?? b + 1}`;
   const s = io(`http://localhost:${port}`, { auth: { role: 'guest' }, transports: ['websocket'] });
   // Also after a server restart: the socket reconnects and the bot joins again
   const enter = async () => {
