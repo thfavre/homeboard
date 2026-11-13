@@ -250,7 +250,7 @@ export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number }[] 
   { x: NOTICE_BOARD.x, y: NOTICE_BOARD.y, rx: 30, ry: 7 },
   // The benches on the square (the one on the sidewalk stands off it): the fountain's, and the one by the tree, seen from the side
   { x: TOWN_BENCHES.list[1].x, y: TOWN_BENCHES.list[1].y - 9, rx: 40, ry: 7 },
-  { x: TOWN_BENCHES.list[2].x - 2, y: TOWN_BENCHES.list[2].y - 22, rx: 11, ry: 24 },
+  { x: TOWN_BENCHES.list[2].x - 2, y: TOWN_BENCHES.list[2].y - 18, rx: 11, ry: 18 },
   ...CAFE.tables.map((t) => ({ x: t.x, y: t.y, rx: 22, ry: 8 })),
   { x: CAMPFIRE.x, y: CAMPFIRE.y, rx: 25, ry: 12 },
   ...FIRE_LOGS.map((l) => (l.along === 'y' ? { x: l.x, y: l.y, rx: 6, ry: 25 } : { x: l.x, y: l.y, rx: 30, ry: 4 })),
@@ -260,7 +260,7 @@ export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number }[] 
  * front bench's bottom; on the one facing right, by the middle of its seat (see Seat and
  * TOWN_BENCHES; both checked on the TV)
  */
-export const BENCHES: Seat[] = TOWN_BENCHES.list.map((b) => (b.dir === 2 ? { x: b.x, y: b.y + 2, dir: 2 } : { x: b.x + 5, y: b.y - 16, dir: b.dir }));
+export const BENCHES: Seat[] = TOWN_BENCHES.list.map((b) => (b.dir === 2 ? { x: b.x, y: b.y + 2, dir: 2 } : { x: b.x + 1, y: b.y - 12, dir: b.dir }));
 
 // ------------------------------------------------------------ the shops
 

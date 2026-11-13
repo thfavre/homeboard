@@ -328,44 +328,45 @@ function cafeTable(table: HTMLCanvasElement, chair: HTMLCanvasElement, parasol: 
 /** The wood of the city sheet's bench, dark to light */
 const BENCH = { line: '#412c18', dark: '#5a3615', shade: '#714f29', mid: '#876437', light: '#a57a44', shine: '#d2a066' };
 /** The bench facing right, in its art (sprite pixels): its size, and the middle of its seat */
-export const SIDE_BENCH = { w: 22, h: 58, seat: { x: 12, y: 30 } };
+export const SIDE_BENCH = { w: 22, h: 46, seat: { x: 12, y: 24 } };
 
 /**
  * A park bench seen from the side, facing right (the city sheet has it only facing the front):
- * its long seat runs front to back, planks lit from the top left, the backrest's boards along its
- * left edge, the seat's front end and the legs in shade
+ * its seat runs front to back, planks lit from the top left, the backrest's boards along its left
+ * edge, the seat's end and legs in shade at the front
  */
 export function buildSideBench(): HTMLCanvasElement {
   const { w, h } = SIDE_BENCH;
   const [c, g] = canvas(w, h);
-  // The legs: two under each end, the back ones half hidden by the seat
+  // The legs: the back ones under the backrest, the front ones under the seat's front end
   for (const [x, y0] of [
-    [4, 43],
-    [15, 43],
-    [4, 10],
-    [15, 10],
+    [3, 31],
+    [16, 37],
+    [6, 37],
   ] as const) {
-    px(g, BENCH.line, x, y0, 3, y0 > 20 ? h - y0 : 6);
-    px(g, BENCH.shade, x + 1, y0, 1, y0 > 20 ? h - y0 - 1 : 5);
+    px(g, BENCH.line, x, y0, 3, h - y0);
+    px(g, BENCH.shade, x + 1, y0, 1, h - y0 - 1);
   }
   // The seat from above: planks running front to back, its outer edge lit, its front end in shade
-  px(g, BENCH.line, 5, 7, 15, 39);
-  px(g, BENCH.mid, 6, 8, 13, 36);
-  for (const x of [9, 12, 15]) px(g, BENCH.shade, x, 8, 1, 36);
-  px(g, BENCH.light, 6, 8, 13, 1);
-  px(g, BENCH.shine, 7, 8, 1, 35);
-  for (const x of [10, 13, 16]) px(g, BENCH.light, x, 9, 1, 34);
-  px(g, BENCH.dark, 6, 44, 13, 2);
-  px(g, BENCH.shade, 18, 8, 1, 36);
-  // The backrest along the left edge, a little higher than the seat: boards between two posts
-  px(g, BENCH.line, 1, 0, 6, 44);
-  px(g, BENCH.mid, 2, 1, 4, 42);
-  for (let y = 3; y < 42; y += 7) {
+  px(g, BENCH.line, 5, 11, 15, 27);
+  px(g, BENCH.mid, 6, 12, 13, 24);
+  for (const x of [9, 12, 15]) px(g, BENCH.shade, x, 12, 1, 24);
+  px(g, BENCH.light, 6, 12, 13, 1);
+  px(g, BENCH.shine, 7, 12, 1, 23);
+  px(g, BENCH.light, 10, 13, 1, 22);
+  px(g, BENCH.light, 13, 13, 1, 22);
+  px(g, BENCH.light, 16, 13, 1, 22);
+  px(g, BENCH.dark, 6, 36, 13, 2);
+  px(g, BENCH.shade, 18, 12, 1, 24);
+  // The backrest along the left edge: two posts and three boards between them, standing up over the seat
+  px(g, BENCH.line, 1, 0, 6, 36);
+  px(g, BENCH.mid, 2, 1, 4, 34);
+  for (let y = 3; y < 34; y += 7) {
     px(g, BENCH.light, 2, y, 4, 1);
     px(g, BENCH.dark, 2, y + 5, 4, 1);
   }
-  px(g, BENCH.shine, 2, 1, 1, 41);
-  px(g, BENCH.dark, 5, 1, 1, 42);
+  px(g, BENCH.shine, 2, 1, 1, 33);
+  px(g, BENCH.dark, 5, 1, 1, 34);
   return c;
 }
 
@@ -545,8 +546,8 @@ export function townProps(env: Env, keep: (x: number) => boolean): Prop[] {
     else
       out.push({
         // (sorted a little up its length: who sits on it is drawn over it)
-        y: b.y - 20,
-        ground: (g) => shadow(g, b.x + 2, b.y - 4, 16, 9),
+        y: b.y - 16,
+        ground: (g) => shadow(g, b.x + 2, b.y - 3, 16, 7),
         draw: (g) => stand(g, side, b.x, b.y, b.dir === 1),
       });
   }
