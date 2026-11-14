@@ -352,9 +352,9 @@
             {#each group.list as b (b.id)}
               {@const pic = blockPicture(b.id)}
               <button type="button" class="piece" class:on={block === b.id} class:dear={info.prices[b.tier] > (mine?.balance ?? 0)} onclick={() => (block = b.id)} title={b.name}>
-                <span class="art">{#if pic}<img src={pic} alt="" />{/if}</span>
                 <span class="name">{b.name}</span>
-                <span class="price"><Coins size={11} />{info.prices[b.tier]}</span>
+                <span class="art">{#if pic}<img src={pic} alt="" />{/if}</span>
+                <span class="price">{info.prices[b.tier]} <Coins size={13} /></span>
               </button>
             {/each}
           </div>
@@ -368,9 +368,9 @@
             {#each PROPS.filter((p) => p.tier === tier) as p (p.id)}
               {@const pic = propPicture(p.id, 0)}
               <button type="button" class="piece" class:on={prop === p.id} class:dear={info.prices[p.tier] > (mine?.balance ?? 0)} onclick={() => pickProp(p.id)} title={p.name}>
-                <span class="art">{#if pic}<img src={pic} alt="" class="tall" />{/if}</span>
                 <span class="name">{p.name}</span>
-                <span class="price"><Coins size={11} />{info.prices[p.tier]}</span>
+                <span class="art">{#if pic}<img src={pic} alt="" class="tall" />{/if}</span>
+                <span class="price">{info.prices[p.tier]} <Coins size={13} /></span>
               </button>
             {/each}
           </div>
@@ -656,18 +656,19 @@
     scroll-snap-type: x proximity;
     scrollbar-width: thin;
   }
+  /* A piece's card, like the shop's: its name on top, its picture, its price at the bottom */
   .piece {
     flex: none;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.2rem;
-    width: 4.5rem;
-    padding: 0.35rem 0.25rem 0.3rem;
+    width: 5rem;
+    padding: 0.35rem 0.3rem 0.4rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-2);
-    color: var(--text-dim);
+    color: var(--text);
     scroll-snap-align: start;
     transition:
       border-color 0.15s,
@@ -678,42 +679,50 @@
   }
   .piece.on {
     border-color: var(--accent);
-    color: var(--text);
     background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
     box-shadow: 0 0 0 1px var(--accent) inset;
   }
   .piece.dear {
     opacity: 0.55;
   }
+  .name {
+    width: 100%;
+    font-size: 0.74rem;
+    font-weight: 700;
+    line-height: 1.15;
+    text-align: center;
+    color: #fff;
+    text-shadow:
+      -1px -1px 0 #000,
+      1px -1px 0 #000,
+      -1px 1px 0 #000,
+      1px 1px 0 #000,
+      0 0 3px #000;
+    min-height: 2.3em;
+    display: grid;
+    place-items: center;
+  }
   .art {
     display: grid;
-    place-items: end center;
-    height: 2.9rem;
+    place-items: center;
+    height: 3rem;
   }
   .art img {
-    width: 1.7rem;
+    width: 1.8rem;
     image-rendering: pixelated;
   }
   .art img.tall {
     width: auto;
-    max-width: 3.3rem;
-    max-height: 2.9rem;
-  }
-  .name {
-    font-size: 0.7rem;
-    line-height: 1.1;
-    text-align: center;
-    min-height: 1.55em;
-    display: grid;
-    place-items: center;
+    max-width: 3.6rem;
+    max-height: 3rem;
   }
   .price {
     display: inline-flex;
     align-items: center;
-    gap: 0.2rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: var(--text);
+    gap: 0.25rem;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text-dim);
     font-variant-numeric: tabular-nums;
   }
   .small {
