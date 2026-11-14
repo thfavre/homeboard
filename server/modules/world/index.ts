@@ -331,7 +331,7 @@ export default defineModule<WorldSettings>({
       return { speed };
     };
 
-    const sim = new TownSim({ dress: (id, place) => dress(id, place), caught: (id) => caughtFish(id), delivered: (id) => actions?.delivered(id) }, townNow);
+    const sim = new TownSim({ dress: (id, place) => dress(id, place), caught: (id) => caughtFish(id), delivered: (id) => actions?.delivered(id), padReady: (id) => actions?.padReady(id) }, townNow);
     /** The guests' actions from the phone (the courier, fireworks), set up once the money is (see below) */
     let actions: ReturnType<typeof setupActions> | undefined;
 

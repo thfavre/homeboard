@@ -34,6 +34,7 @@ export function gameAnim(anim: number): number {
       return ANIM.walk;
     case WANIM.sit:
     case WANIM.pet:
+    case WANIM.place:
       return ANIM.sit;
     case WANIM.cheer:
     case WANIM.catch:

@@ -202,6 +202,16 @@ const COURIER_GIVE_UP_MS = 120_000;
 const WATCH_SHARE = 0.85;
 const WATCH_CHEER_MS: [number, number] = [2500, 7000];
 const WATCH_CHEER_LEN = 1300;
+/**
+ * Launching fireworks: the launcher plants a rocket this often, and backs off this far to the
+ * side; who stands within this distance of the launch spot comes over to stand around it, this
+ * far from it. Not ready after this long: the show goes up anyway.
+ */
+const PLANT_MS = 900;
+const BACK_OFF = 92;
+const GATHER_FROM = 560;
+const GATHER_RING: [number, number] = [135, 185];
+const LAUNCH_GIVE_UP_MS = 40_000;
 
 type Doing =
   | { kind: 'idle'; until: number }
@@ -235,7 +245,34 @@ type Doing =
   | { kind: 'parasol'; table: number; open: boolean; at: number }
   | Receive
   | Watch
-  | Courier;
+  | Courier
+  | Launch
+  | Gather;
+
+/**
+ * Setting up fireworks: walk to the launch spot (`go`), crouch and plant the rockets one by one
+ * (`place`, from `since`), step back to the side (`back`), and wait facing them until they go up
+ * (`ready`; the show then turns this into watching). Given up at `until`.
+ */
+interface Launch {
+  kind: 'launch';
+  show: string;
+  phase: 'go' | 'place' | 'back' | 'ready';
+  pad: { x: number; y: number };
+  back: { x: number; y: number };
+  since: number;
+  until: number;
+}
+
+/** Someone near the launch spot comes closer (or steps back) to `tx, ty` and waits there facing it, until `until` */
+interface Gather {
+  kind: 'gather';
+  tx: number;
+  ty: number;
+  pad: { x: number; y: number };
+  arrived: boolean;
+  until: number;
+}
 
 /**
  * Waiting for a courier who is almost there, facing them (`wait`; first stepping out to `to` from
@@ -567,6 +604,8 @@ export interface TownHooks {
   caught?(id: string): void;
   /** A courier handed a letter over (or gave up looking for who it is for): once per letter */
   delivered?(letter: string): void;
+  /** The rockets of a show are planted and their launcher stands back: it can go up (once per show) */
+  padReady?(show: string): void;
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -741,7 +780,9 @@ export class TownSim {
   /** The couriers on their rounds, by their own id (apart from the characters: nobody chats with them or calls them to the ceremony) */
   private couriers = new Map<string, Walker>();
   /** Fireworks going up: from when to when (the town's time), and whether the watchers were picked yet */
-  private skyShows: { from: number; until: number; picked: boolean }[] = [];
+  private skyShows: { from: number; until: number; burst: number; picked: boolean }[] = [];
+  /** Launch spots with rockets planted and not gone up yet, by show: where, how many so far, of how many */
+  private pads = new Map<string, { x: number; y: number; planted: number; total: number }>();
 
   /** `clock`: the town's time (ms), which can run faster than real time; real time by default */
   constructor(
@@ -818,6 +859,9 @@ export class TownSim {
     watch: { priority: PRIORITY.activity, left: (d, _w, now) => d.until - now, wrapUp: sooner },
     // (only couriers do this: they are never called anywhere)
     courier: { priority: PRIORITY.ceremony, left: () => Infinity },
+    // Setting up fireworks is seen through (a call waits, like a shop trip); coming over to watch ends whenever
+    launch: { priority: PRIORITY.errand, left: () => Infinity },
+    gather: { priority: PRIORITY.activity, left: (d, _w, now) => d.until - now, wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
     // The party: off on the way, a little sooner out of the cafe or away from the terrace
     party: {
       priority: PRIORITY.activity,
@@ -994,6 +1038,7 @@ export class TownSim {
       fire: this.fireLit,
       cafeDoor: this.cafeDoorOpen,
       parasols: this.parasolOpen.reduce((bits, open, i) => bits | (open ? 1 << i : 0), 0),
+      ...(this.pads.size ? { rockets: [...this.pads.values()].flatMap((p) => [Math.round(p.x), Math.round(p.y), p.planted]) } : {}),
     };
   }
 
@@ -1058,6 +1103,11 @@ export class TownSim {
         return d.phase === 'unwrap' ? WANIM.unwrap : d.to ? WANIM.walk : WANIM.idle;
       case 'watch':
         return !w.noCheer && now >= d.cheerAt && now < d.cheerAt + WATCH_CHEER_LEN ? WANIM.cheer : WANIM.idle;
+      // Planting the rockets crouched (clothes without sit art: standing)
+      case 'launch':
+        return d.phase === 'go' || d.phase === 'back' ? WANIM.walk : d.phase === 'place' && !w.noSit ? WANIM.place : WANIM.idle;
+      case 'gather':
+        return d.arrived ? WANIM.idle : WANIM.walk;
       default:
         return WANIM.idle;
     }
@@ -1376,6 +1426,15 @@ export class TownSim {
         if (now >= d.until) w.doing = idle(now, 300, 1500);
         else if (now >= d.cheerAt + WATCH_CHEER_LEN) d.cheerAt = now + rand(WATCH_CHEER_MS[0], WATCH_CHEER_MS[1]);
         break;
+      case 'launch':
+        this.stepLaunch(w, d, now, dt);
+        break;
+      case 'gather':
+        // Over to the launch spot's ring, then facing the rockets until they go up
+        if (now >= d.until) w.doing = idle(now, 300, 1200);
+        else if (!d.arrived) d.arrived = this.walkTo(w, d.tx, d.ty, WALK_UPS, dt);
+        else w.dir = Math.abs(d.pad.x - w.x) > Math.abs(d.pad.y - w.y) * 1.4 ? (d.pad.x > w.x ? 3 : 1) : d.pad.y > w.y ? 2 : 0;
+        break;
       case 'courier':
         break;
       case 'sleep':
@@ -1602,6 +1661,7 @@ export class TownSim {
   reset(): void {
     this.couriers.clear();
     this.skyShows = [];
+    this.pads.clear();
     this.ceremony = null;
     this.cam = { from: 0, to: 0, at: 0, ms: 1 };
   }
@@ -2290,8 +2350,9 @@ export class TownSim {
         w.doing.kind !== 'sit' &&
         w.doing.kind !== 'sleep' &&
         w.doing.kind !== 'pet' &&
-        // (nor the one taking a parcel: the courier stands close)
+        // (nor the one taking a parcel: the courier stands close; nor who plants rockets)
         w.doing.kind !== 'receive' &&
+        !(w.doing.kind === 'launch' && w.doing.phase === 'place') &&
         w.doing.kind !== 'throne' &&
         w.doing.kind !== 'descend' &&
         !(w.doing.kind === 'goThrone' && w.doing.onCarpet) &&
@@ -2458,11 +2519,123 @@ export class TownSim {
   }
 
   /**
-   * Fireworks over the town, from and until these times (the town's time): most of those standing
-   * around or wandering stop, turn to the sky and cheer now and then
+   * A guest launches fireworks: their character walks to an open spot near where it is, plants the
+   * rockets (`rockets` of them) and steps back to the side, then the show can go up (padReady). Who
+   * stands around nearby comes over to watch. Returns the launch spot (the rockets go up from
+   * there), and whether the character sets them up: not when it is not in the town or busy with
+   * something that cannot be cut short (the show then goes up at once, from that spot).
    */
-  watchSky(from: number, until: number): void {
-    this.skyShows.push({ from, until, picked: false });
+  prepareLaunch(show: string, id: string, rockets: number): { pad: { x: number; y: number }; walking: boolean } {
+    const now = this.clock();
+    const w = this.walkers.get(id);
+    const asleep = w?.doing.kind === 'sleep' || w?.doing.kind === 'goSleep';
+    const free = !!w && !this.ceremony && !inCafe(w) && w.x >= TOWN_AREA.x0 && w.x <= TOWN_AREA.x1 && (asleep || !!this.rule(w).wrapUp);
+    const spot = this.launchSpot(w ?? null);
+    if (!w || !free || !spot) return { pad: spot?.pad ?? { x: TOWN.w / 2, y: 330 }, walking: false };
+    // (up from bed for it, if need be: back to bed after)
+    w.fading = false;
+    w.alpha = 1;
+    w.wrapped = null;
+    w.doing = { kind: 'launch', show, phase: 'go', pad: spot.pad, back: spot.back, since: now, until: now + LAUNCH_GIVE_UP_MS };
+    this.pads.set(show, { ...spot.pad, planted: 0, total: Math.max(1, rockets) });
+    // Who is around comes over, on the side they come from, at a good distance (not too close to the rockets)
+    for (const o of this.walkers.values()) {
+      const k = o.doing.kind;
+      if (o === w || (k !== 'idle' && k !== 'wander' && k !== 'watch') || o.errands.length || o.fading) continue;
+      if (Math.hypot(o.x - spot.pad.x, o.y - spot.pad.y) > GATHER_FROM) continue;
+      let a = Math.atan2(o.y - spot.pad.y, o.x - spot.pad.x);
+      // Not on the launcher's side: in front of the rockets or behind them instead, a little away from it (not across them)
+      if (Math.sign(Math.cos(a)) === Math.sign(spot.back.x - spot.pad.x) && Math.abs(Math.sin(a)) < 0.6) a = Math.atan2(Math.sin(a) >= 0 ? 1 : -1, -0.45 * Math.sign(spot.back.x - spot.pad.x));
+      const r = rand(GATHER_RING[0], GATHER_RING[1]);
+      const t = standable(spot.pad.x + Math.cos(a) * r, spot.pad.y + Math.sin(a) * r * 0.6);
+      // (moved out of something onto the rockets, or onto where the launcher steps back to: they watch from where they are)
+      if (wet(t.x, t.y) || crownOver(t.x, t.y) || t.y < TOWN_AREA.y0 || t.y > TOWN_AREA.y1) continue;
+      if (Math.hypot(t.x - spot.pad.x, t.y - spot.pad.y) < 80 || Math.hypot(t.x - spot.back.x, t.y - spot.back.y) < 40) continue;
+      o.doing = { kind: 'gather', tx: t.x, ty: t.y, pad: spot.pad, arrived: false, until: now + LAUNCH_GIVE_UP_MS + 20_000 };
+      o.wrapped = null;
+    }
+    return { pad: spot.pad, walking: true };
+  }
+
+  /**
+   * Where fireworks are set up: an open spot of the square near the character (some steps away, so
+   * it walks there), with room to step back to the side, away from the fountain, trees and seats;
+   * and that side spot
+   */
+  private launchSpot(w: Walker | null): { pad: { x: number; y: number }; back: { x: number; y: number } } | null {
+    const from = w ? { x: w.x, y: w.y } : { x: TOWN.w / 2, y: (TOWN_AREA.y0 + TOWN_AREA.y1) / 2 };
+    let best: { pad: { x: number; y: number }; back: { x: number; y: number } } | null = null;
+    let bestD = Infinity;
+    const open = (x: number, y: number) => !blocked(x, y, 34) && !wet(x, y, 40) && !crownOver(x, y) && !crownOver(x, y + 30);
+    // (and nothing over it for the rockets to fly into: no tree's crown up the way)
+    const clearAbove = (x: number, y: number) => [40, 80, 120, 160, 200, 240].every((up) => !crownOver(x, y - up) && !crownOver(x - 20, y - up) && !crownOver(x + 20, y - up));
+    for (let y = TOWN_AREA.y0 + 110; y <= TOWN_AREA.y1 - 50; y += 30) {
+      for (let x = TOWN_AREA.x0 + 90; x <= TOWN_AREA.x1 - 90; x += 30) {
+        if (!open(x, y) || !open(x, y - 18) || !clearAbove(x, y)) continue;
+        const d = Math.hypot(x - from.x, y - from.y);
+        // A few steps away, not across the town
+        const score = Math.abs(d - 160);
+        if (score >= bestD) continue;
+        const side = x < from.x ? 1 : -1;
+        const back = [side, -side].map((s) => ({ x: x + s * BACK_OFF, y: y - 8 })).find((b) => open(b.x, b.y));
+        if (!back) continue;
+        best = { pad: { x, y }, back };
+        bestD = score;
+      }
+    }
+    return best;
+  }
+
+  private stepLaunch(w: Walker, d: Launch, now: number, dt: number): void {
+    const pad = this.pads.get(d.show);
+    if (now >= d.until || (!pad && d.phase !== 'ready')) {
+      this.pads.delete(d.show);
+      w.doing = idle(now, 300, 900);
+      return;
+    }
+    if (d.phase === 'go') {
+      // Just behind the spot, facing it (the rockets in front)
+      if (this.walkTo(w, d.pad.x, d.pad.y - 18, WALK_UPS, dt)) {
+        Object.assign(w, { x: d.pad.x, y: d.pad.y - 18, dir: 2 });
+        d.phase = 'place';
+        d.since = now;
+      }
+    } else if (d.phase === 'place' && pad) {
+      w.dir = 2;
+      const total = pad.total;
+      pad.planted = Math.min(total, 1 + Math.floor((now - d.since) / PLANT_MS));
+      if (now >= d.since + total * PLANT_MS + 300) d.phase = 'back';
+    } else if (d.phase === 'back') {
+      if (this.walkTo(w, d.back.x, d.back.y, WALK_UPS * 0.75, dt)) {
+        w.dir = d.pad.x > w.x ? 3 : 1;
+        d.phase = 'ready';
+        this.hooks.padReady?.(d.show);
+      }
+    } else {
+      w.dir = d.pad.x > w.x ? 3 : 1;
+    }
+  }
+
+  /**
+   * A show goes up now (the town's time: from, until, and its first burst): the rockets leave their
+   * spot, its launcher and whoever came over watch, and cheer once it bursts
+   */
+  firing(show: string, from: number, until: number, burst: number): void {
+    this.pads.delete(show);
+    for (const w of this.walkers.values()) {
+      if (w.doing.kind === 'launch' && w.doing.show === show) {
+        w.doing = { kind: 'watch', until: until + rand(500, 2000), cheerAt: burst + rand(150, 900) };
+      }
+    }
+    this.watchSky(from, until, burst);
+  }
+
+  /**
+   * Fireworks over the town, from and until these times (the town's time): most of those standing
+   * around or wandering stop, turn to the sky and cheer once it bursts (`burst`), and now and then
+   */
+  watchSky(from: number, until: number, burst = from + 1500): void {
+    this.skyShows.push({ from, until, burst, picked: false });
   }
 
   private pickWatchers(now: number): void {
@@ -2472,10 +2645,10 @@ export class TownSim {
       s.picked = true;
       for (const w of this.walkers.values()) {
         const k = w.doing.kind;
-        if ((k !== 'idle' && k !== 'wander' && k !== 'watch') || w.errands.length || w.fading || w.x < TOWN_AREA.x0 || w.x > TOWN_AREA.x1) continue;
-        if (k !== 'watch' && Math.random() > WATCH_SHARE) continue;
+        if ((k !== 'idle' && k !== 'wander' && k !== 'watch' && k !== 'gather') || w.errands.length || w.fading || w.x < TOWN_AREA.x0 || w.x > TOWN_AREA.x1) continue;
+        if (k !== 'watch' && k !== 'gather' && Math.random() > WATCH_SHARE) continue;
         w.dir = 0;
-        w.doing = { kind: 'watch', until: Math.max(s.until, k === 'watch' ? (w.doing as Watch).until : 0) + rand(500, 2500), cheerAt: now + rand(1500, 4500) };
+        w.doing = { kind: 'watch', until: Math.max(s.until, k === 'watch' ? (w.doing as Watch).until : 0) + rand(500, 2500), cheerAt: Math.max(now, s.burst) + rand(150, 1200) };
         w.wrapped = null;
       }
     }

@@ -73,11 +73,19 @@
   async function launch(d: FwDesign) {
     if (!fw) return;
     busy = true;
-    const r = await attempt(() => rpc<{ at: number }>('world', 'fwLaunch', { id: d.id, price: fireworkCost(d, fw) }), 'Launched');
+    await attempt(() => rpc('world', 'fwLaunch', { id: d.id, price: fireworkCost(d, fw) }), 'Launched');
     busy = false;
-    if (r) launched = { name: d.name, at: r.at };
   }
-  let launched = $state<{ name: string; at: number } | null>(null);
+
+  /** The guest's own show while it is set up, waits its turn or goes up (the TV's state has them all) */
+  const mineShow = $derived(world?.shows?.filter((s) => s.by === hb.me?.id).at(-1));
+  const launched = $derived.by(() => {
+    const s = mineShow;
+    if (!s) return '';
+    if (!s.at) return `Your character is setting up the rockets for ${s.design.name}. Look at the TV!`;
+    if (s.at > now) return `${s.design.name} goes up in ${Math.max(1, Math.round((s.at - now) / 1000))} s.`;
+    return now < s.ends ? `${s.design.name} is lighting up the sky!` : '';
+  });
 
   async function remove(d: FwDesign) {
     const r = await attempt(() => rpc<FwDesign[]>('world', 'fwDelete', { id: d.id }));
@@ -111,10 +119,10 @@
       <span>{fw?.night ? (note || 'It is night in the town: the sky is yours.') : note}</span>
     </div>
 
-    {#if launched && launched.at > now - 4000}
+    {#if launched}
       <div class="launched card">
         <Rocket size={18} />
-        <span>{launched.at > now ? `${launched.name} goes up in ${Math.max(1, Math.round((launched.at - now) / 1000))} s. Look at the TV!` : `${launched.name} is lighting up the sky!`}</span>
+        <span>{launched}</span>
       </div>
     {/if}
 

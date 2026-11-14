@@ -287,13 +287,21 @@ export function validDesign(v: unknown, maxShells: number): Omit<FwDesign, 'id'>
 /** A show going up over the town (in the TV's state while it is on or waiting its turn) */
 export interface FwShow {
   id: string;
-  /** Server time it starts, and ends */
+  /** Server time it starts, and ends (0: its rockets are still being set up) */
   at: number;
   ends: number;
   by: string;
   byName: string;
   design: FwDesign;
+  /** Where in the town the rockets go up from (null: not known yet) */
+  pad: { x: number; y: number } | null;
 }
+
+/** The most rockets planted for a show (one per shell, up to this) */
+export const MAX_ROCKETS = 6;
+
+/** Where a shell bursts across the town: left or right of its launch spot by its `x` (0..100, 50 above it) */
+export const burstX = (padX: number, x: number, w: number) => Math.max(60, Math.min(w - 60, padX + (x - 50) * 11));
 
 /** The host's options for the actions (the admin page) */
 export interface ActionSettingsView {

@@ -226,8 +226,9 @@
           <strong>Fireworks</strong>
           <p class="faint small">
             Guests make their own shows on the phone: each shell bursts into a shape they draw with a finger (or a round burst), in their colors and
-            particles (sparks, glitter, comets, willow...). They launch them over the town, at night only, and only see them on the TV. Shows go up one
-            after the other, and the characters standing around stop to watch and cheer. Each guest starts with a basic one.
+            particles (sparks, glitter, comets, willow...). They launch them at night only, and only see them on the TV: their character walks to an open
+            spot, plants the rockets, steps back, and up they go. Whoever stands nearby comes over to watch, and the town cheers. Shows go up one after
+            the other. Each guest starts with a basic one.
           </p>
         </div>
         <Toggle checked={act.fireworks} label="Fireworks" onchange={(v) => setOption('fireworks', v)} />

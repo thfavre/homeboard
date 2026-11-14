@@ -458,6 +458,7 @@ export function hallLift(x: number, y: number): number {
  * light holds a lamplighter's pole up to the lamp in front, kindle kneels by the campfire to light it.
  * carry walks with a parcel (the courier, whose id starts with "post:"), hold stands holding it out
  * the way the character faces, unwrap holds it up with both hands (the one it was brought to).
+ * place crouches to plant fireworks rockets in the ground in front.
  */
 export const WANIM = {
   idle: 0,
@@ -482,6 +483,7 @@ export const WANIM = {
   carry: 19,
   hold: 20,
   unwrap: 21,
+  place: 22,
 } as const;
 export type WAnimId = (typeof WANIM)[keyof typeof WANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
@@ -513,6 +515,8 @@ export interface TownFrame {
   parasols?: number;
   /** The cafe's door is open (the first one in opened it for the day) */
   cafeDoor?: boolean;
+  /** Fireworks being set up: x, y and how many rockets are planted so far, for each launch spot */
+  rockets?: number[];
 }
 
 // ------------------------------------------------------------ the cafe's party night

@@ -1,4 +1,4 @@
-import { burstMs, fwHex, riseMs, samplePath, shellTimes, type FwDesign, type FwPoint, type FwShell } from '$shared/worldActions.ts';
+import { MAX_ROCKETS, burstMs, burstX, fwHex, riseMs, samplePath, shellTimes, type FwDesign, type FwPoint, type FwShell } from '$shared/worldActions.ts';
 
 /**
  * Fireworks, drawn from nothing but the design and the time since the show started: every star's
@@ -221,11 +221,65 @@ function drawRocket(g: G, x0: number, y0: number, x1: number, y1: number, u01: n
   }
 }
 
+/** Where rocket `k` of `n` stands, across its launch spot (world units from its middle) */
+const rocketOffset = (k: number, n: number) => (k - (n - 1) / 2) * 13;
+
+/**
+ * The rockets planted at a launch spot, their foot at (x, y), side by side: each standing (0), its
+ * fuse burning (1) or gone up (-1). A red tube with a white band and a cone, on a little stick.
+ */
+export function drawPadRockets(g: G, x: number, y: number, states: number[], now: number): void {
+  const n = states.length;
+  states.forEach((st, k) => {
+    if (st < 0) return;
+    const rx = Math.round(x + rocketOffset(k, n));
+    // (in sprite pixels of the town, 1.35 world units each, like the characters)
+    const p = 1.35;
+    const top = y - 21 * p;
+    g.fillStyle = 'rgba(0,0,0,0.28)';
+    g.fillRect(rx - 4 * p, y - p, 9 * p, 2 * p);
+    // The stick, the tube with its band, the cone
+    g.fillStyle = '#6b4a2a';
+    g.fillRect(rx, y - 8 * p, p, 8 * p);
+    g.fillStyle = '#3a2014';
+    g.fillRect(rx - 3 * p, top + 4 * p, 7 * p, 10 * p);
+    g.fillStyle = k % 2 ? '#2f5fb3' : '#c0342c';
+    g.fillRect(rx - 2 * p, top + 5 * p, 5 * p, 8 * p);
+    g.fillStyle = '#f2ead8';
+    g.fillRect(rx - 2 * p, top + 8 * p, 5 * p, 2 * p);
+    g.fillStyle = '#e8c35a';
+    g.beginPath();
+    g.moveTo(rx - 3 * p, top + 4.5 * p);
+    g.lineTo(rx + 0.5 * p, top);
+    g.lineTo(rx + 4 * p, top + 4.5 * p);
+    g.fill();
+    if (st === 1) {
+      // The fuse fizzing at the tube's foot
+      for (let i = 0; i < 6; i++) {
+        const a = now / 60 + i * 1.7 + k;
+        dot(g, rx + 0.5 * p + Math.cos(a) * (3 + (i % 3) * 2), top + 14 * p + Math.sin(a * 1.3) * 3, 1.3, i % 2 ? '#fff2b0' : '#ffb347', 0.95);
+      }
+      g.globalAlpha = 1;
+    }
+  });
+}
+
+/** The state of each rocket planted for a show, `ms` after it started (see drawPadRockets) */
+export function padStates(design: Pick<FwDesign, 'shells'>, ms: number): number[] {
+  const times = shellTimes(design);
+  const n = Math.min(MAX_ROCKETS, design.shells.length);
+  return Array.from({ length: n }, (_, k) => {
+    // The shell the rocket stands for: the first of its share of the show
+    const at = times[Math.floor((k * design.shells.length) / n)];
+    return ms >= at ? -1 : ms >= at - 1200 ? 1 : 0;
+  });
+}
+
 /**
  * Draw a show `ms` after it started. Returns how bright the sky is from its bursts right now (0..1,
  * for a light over the scene).
  */
-export function drawShow(g: G, design: Pick<FwDesign, 'shells'>, ms: number, sky: Sky, key = ''): number {
+export function drawShow(g: G, design: Pick<FwDesign, 'shells'>, ms: number, sky: Sky, key = '', pad: { x: number; y: number } | null = null): number {
   const times = shellTimes(design);
   let light = 0;
   // (the stars are painted plainly: in light they would add up to white where a drawn shape packs
@@ -241,11 +295,12 @@ export function drawShow(g: G, design: Pick<FwDesign, 'shells'>, ms: number, sky
       const spread = s.count > 1 ? (c / (s.count - 1) - 0.5) * Math.min(0.5, 0.12 * s.count) : 0;
       const tc = t0 - c * 90;
       if (tc < 0) continue;
-      const bx = Math.max(0.04, Math.min(0.96, s.x / 100 + spread)) * sky.w;
+      // From the launch spot on the ground when there is one (bursting left or right of it), else from behind the roofs
+      const bx = pad ? Math.max(40, Math.min(sky.w - 40, burstX(pad.x, s.x, sky.w) + spread * sky.w * 0.5)) : Math.max(0.04, Math.min(0.96, s.x / 100 + spread)) * sky.w;
       const by = sky.low + (sky.high - sky.low) * (s.height / 100) + (c % 2) * 18 * sky.unit;
-      const lx = (s.x / 100) * sky.w + spread * sky.w * 0.35;
+      const lx = pad ? pad.x + rocketOffset(Math.floor((i * Math.min(MAX_ROCKETS, design.shells.length)) / design.shells.length), Math.min(MAX_ROCKETS, design.shells.length)) : (s.x / 100) * sky.w + spread * sky.w * 0.35;
       if (tc < rise) {
-        drawRocket(g, lx, sky.ground, bx, by, tc / rise, s.particles === 'glitter', sky.unit);
+        drawRocket(g, lx, pad ? pad.y - 26 : sky.ground, bx, by, tc / rise, s.particles === 'glitter', sky.unit);
         continue;
       }
       const t = (tc - rise) / 1000;

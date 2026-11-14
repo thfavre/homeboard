@@ -5,9 +5,12 @@ import { minuteOf, minutesFrom, realAt, townMinutes, type AvatarChoices, type Sh
 import {
   BASIC_FIREWORK,
   LETTER_MAX,
+  MAX_ROCKETS,
   PAPERS,
   SEALS,
   fireworkCost,
+  riseMs,
+  shellTimes,
   showMs,
   validDesign,
   type ActionSettingsView,
@@ -79,9 +82,13 @@ interface Deps<S extends ActionSettings> {
 export const FIREWORK_DARK = 0.5;
 /** The letters kept (the oldest are forgotten) */
 const LETTERS_KEPT = 600;
-/** A show waits this long before it goes up, and the next one this long after the last ends (ms) */
-const SHOW_LEAD_MS = 1500;
+/**
+ * A show goes up this long after its rockets are ready, and this long after the one before ends
+ * (ms). Its launcher still not ready after this long (stuck, or gone): it goes up anyway.
+ */
+const SHOW_LEAD_MS = 900;
 const SHOW_GAP_MS = 1200;
+const SETUP_GIVE_UP_MS = 45_000;
 /** Letters a guest can have on the way at once */
 const LETTERS_ON_THE_WAY = 3;
 
@@ -259,8 +266,8 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
     const design = mine(guest.id).find((x) => x.id === args?.id);
     if (!design) throw new HbError('That firework is gone');
     const now = Date.now();
-    shows = shows.filter((x) => x.ends > now);
-    if (shows.some((x) => x.by === guest.id && x.at > now)) throw new HbError('Your last show has not gone up yet');
+    shows = shows.filter(waiting);
+    if (shows.some((x) => x.by === guest.id && (x.at === 0 || x.at > now))) throw new HbError('Your last show has not gone up yet');
     const cost = fireworkCost(design, prices());
     const balance = wallets[guest.id] ?? 0;
     const money = d.currency();
@@ -270,36 +277,60 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
     wallets[guest.id] = balance - cost;
     d.save();
     d.sendWallet(guest.id);
-    const at = Math.max(now + SHOW_LEAD_MS, (shows.at(-1)?.ends ?? 0) + SHOW_GAP_MS);
-    const ends = at + showMs(design);
-    const show: FwShow = { id: randomUUID().slice(0, 8), at, ends, by: guest.id, byName: guest.name, design: structuredClone(design) };
+    const show: FwShow = { id: randomUUID().slice(0, 8), at: 0, ends: 0, by: guest.id, byName: guest.name, design: structuredClone(design), pad: null };
     shows.push(show);
-    // The town watches (on its own time, which can run faster)
-    const t = d.townNow();
-    d.sim.watchSky(t + (at - now) * d.speed(), t + (ends - now) * d.speed());
-    setTimeout(() => ctx.activity(`{name} lit up the sky with ${design.name}`, { guest }), at - now);
-    // Gone from the state once over
-    setTimeout(() => ctx.publish(), ends - now + 200);
+    // The character goes and plants the rockets first (one per shell, a few at most); the show goes
+    // up once they stand back. A character that cannot (busy, not in the town) has it go up at once.
+    const prep = d.sim.prepareLaunch(show.id, guest.id, Math.min(MAX_ROCKETS, design.shells.length));
+    show.pad = prep.pad;
+    if (prep.walking) setTimeout(() => fire(show.id), SETUP_GIVE_UP_MS);
+    else fire(show.id);
     ctx.publish();
-    return { at, balance: wallets[guest.id] };
+    return { at: show.at || null, balance: wallets[guest.id] };
   });
+
+  /** A show waiting to be set up, waiting its turn, or on */
+  const waiting = (x: FwShow) => x.at === 0 || x.ends > Date.now();
+
+  /** A show's rockets are ready: it goes up after the shows before it (once) */
+  function fire(id: string) {
+    const show = shows.find((x) => x.id === id);
+    if (!show || show.at) return;
+    const now = Date.now();
+    const at = Math.max(now + SHOW_LEAD_MS, ...shows.filter((x) => x.at).map((x) => x.ends + SHOW_GAP_MS));
+    show.at = at;
+    show.ends = at + showMs(show.design);
+    // The town watches (on its own time, which can run faster) and cheers at the first burst
+    const t = d.townNow();
+    const town = (real: number) => t + (real - now) * d.speed();
+    const first = show.design.shells[0];
+    d.sim.firing(show.id, town(at), town(show.ends), town(at + shellTimes(show.design)[0] + riseMs(first)));
+    const guest = ctx.session.guests.get(show.by);
+    if (guest) setTimeout(() => ctx.activity(`{name} lit up the sky with ${show.design.name}`, { guest }), at - now);
+    // Gone from the state once over
+    setTimeout(() => ctx.publish(), show.ends - now + 200);
+    ctx.publish();
+  }
 
   return {
     /** What every phone and the TV see of the actions */
     info(): ActionsInfo {
       const s = ctx.settings.get();
       const now = Date.now();
-      const live = shows.filter((x) => x.ends > now);
+      const live = shows.filter(waiting);
+      // (one being set up counts for about as long as that takes)
+      const busyUntil = Math.max(0, ...live.map((x) => (x.at ? x.ends : now + 15_000)));
       return {
         courier: { on: s.courier, fee: Math.max(0, s.courierFee), maxCoins: Math.max(0, s.courierMaxCoins) },
-        fireworks: { on: s.fireworks, ...prices(), maxShells: s.fireworkShells, night: night(), nightAt: nightAt(), busyUntil: live.at(-1)?.ends ?? 0 },
+        fireworks: { on: s.fireworks, ...prices(), maxShells: s.fireworkShells, night: night(), nightAt: nightAt(), busyUntil },
       };
     },
-    /** The shows waiting or on (the TV draws them) */
+    /** The shows being set up, waiting or on (the TV draws the ones with a time) */
     shows(): FwShow[] {
-      const now = Date.now();
-      return (shows = shows.filter((x) => x.ends > now));
+      return (shows = shows.filter(waiting));
     },
+    /** A launcher stands back from the rockets: the show can go up */
+    padReady: (id: string) => fire(id),
     /** The courier's look for the TV (null until its sheet is built), and the name of its sheet (kept when unused sheets are cleaned) */
     courier: () => courierSheet,
     courierHash: choicesHash(COURIER_LOOK.choices, COURIER_LOOK.outfit),

@@ -16,7 +16,7 @@
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
   import { TOWN_HALL_SPAN, drawTownHall, drawTownHallClock, drawTownHallLight } from './townHall.ts';
   import { drawLaughing, drawTalking, nodDip } from './chat.ts';
-  import { drawShow, type Sky } from './fireworks.ts';
+  import { drawPadRockets, drawShow, padStates, type Sky } from './fireworks.ts';
   import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
 
   /**
@@ -188,6 +188,27 @@
 
   /** Where the fireworks go up on the TV: from behind the houses, bursting over the top of the town */
   const TV_SKY: Sky = { w: TOWN.w, ground: 260, low: 200, high: 50, unit: 0.8 };
+
+  /**
+   * Fireworks rockets standing on the ground, among everything else back to front: the ones being
+   * planted (the frames say how many), and the ones of a show that has started, until each goes
+   * up (their fuse fizzing just before)
+   */
+  function rocketsOnTheGround(f: TownFrame | null, real: number): { y: number; draw: (g: CanvasRenderingContext2D) => void }[] {
+    const out: { y: number; draw: (g: CanvasRenderingContext2D) => void }[] = [];
+    const r = f?.rockets ?? [];
+    for (let i = 0; i + 2 < r.length; i += 3) {
+      const [x, y, n] = [r[i], r[i + 1], r[i + 2]];
+      if (n > 0) out.push({ y, draw: (g) => drawPadRockets(g, x, y, new Array(n).fill(0), real) });
+    }
+    for (const s of world?.shows ?? []) {
+      const pad = s.pad;
+      if (!pad || !s.at || real >= s.ends) continue;
+      const states = padStates(s.design, real - s.at);
+      if (states.some((st) => st >= 0)) out.push({ y: pad.y, draw: (g) => drawPadRockets(g, pad.x, pad.y, states, real) });
+    }
+    return out;
+  }
 
   /**
    * The courier's parcel (brown paper, string and a red seal): carried in both hands in front,
@@ -613,6 +634,7 @@
       ...inHall,
       ...(env ? pigeons.groundItems(env) : []),
       ...(cat && env ? [{ y: cat.y, draw: (gg: CanvasRenderingContext2D) => drawCat(gg, cat, now) }] : []),
+      ...rocketsOnTheGround(f0, real),
     ].sort((a, b) => a.y - b.y);
     let qi = 0;
     while (pi < people.length || qi < standing.length) {
@@ -651,14 +673,14 @@
 
     // The guests' fireworks over the town (on real time, like the phone that designed them), the
     // bursts lighting up the square for a moment, and whose show it is at the top
-    const show = away ? undefined : world?.shows?.find((s) => real >= s.at && real < s.ends);
+    const show = away ? undefined : world?.shows?.find((s) => s.at && real >= s.at && real < s.ends);
     if (show) {
       // (within the town: nothing in the letterbox bands)
       g.save();
       g.beginPath();
       g.rect(0, 0, TOWN.w, TOWN.h);
       g.clip();
-      const light = drawShow(g, show.design, real - show.at, TV_SKY, show.id);
+      const light = drawShow(g, show.design, real - show.at, TV_SKY, show.id, show.pad);
       g.restore();
       if (light > 0.01) {
         g.globalCompositeOperation = 'lighter';
