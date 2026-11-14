@@ -6,14 +6,30 @@
 
 // ------------------------------------------------------------ letters
 
-/** The paper a letter is written on */
+/**
+ * The paper a letter is written on. Plain papers come with the courier; fancy and luxe ones cost
+ * extra, at the prices the host sets (courierPaperFancy, courierPaperLuxe).
+ */
 export const PAPERS = [
-  { id: 'parchment', name: 'Parchment' },
-  { id: 'rose', name: 'Rose' },
-  { id: 'sky', name: 'Sky' },
-  { id: 'night', name: 'Night' },
+  { id: 'parchment', name: 'Parchment', tier: 'plain' },
+  { id: 'sky', name: 'Sky', tier: 'plain' },
+  { id: 'kraft', name: 'Kraft', tier: 'plain' },
+  { id: 'mint', name: 'Mint', tier: 'plain' },
+  { id: 'rose', name: 'Rose', tier: 'fancy' },
+  { id: 'lavender', name: 'Lavender', tier: 'fancy' },
+  { id: 'confetti', name: 'Confetti', tier: 'fancy' },
+  { id: 'night', name: 'Night', tier: 'luxe' },
+  { id: 'gilded', name: 'Gilded', tier: 'luxe' },
+  { id: 'royal', name: 'Royal', tier: 'luxe' },
 ] as const;
 export type PaperId = (typeof PAPERS)[number]['id'];
+export type PaperTier = (typeof PAPERS)[number]['tier'];
+
+/** What a paper costs on top of the courier */
+export function paperPrice(id: PaperId, prices: { fancy: number; luxe: number }): number {
+  const tier = PAPERS.find((p) => p.id === id)?.tier ?? 'plain';
+  return tier === 'fancy' ? prices.fancy : tier === 'luxe' ? prices.luxe : 0;
+}
 
 /** The wax seal on the envelope */
 export const SEALS = [
@@ -25,8 +41,15 @@ export const SEALS = [
 ] as const;
 export type SealId = (typeof SEALS)[number]['id'];
 
-/** The longest letter */
+/** The longest letter, in characters and in lines (it fits its page) */
 export const LETTER_MAX = 280;
+export const LETTER_LINES = 8;
+
+/** A letter's text as it is kept: trimmed, at most LETTER_LINES lines and LETTER_MAX characters */
+export function letterText(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  return v.replace(/\r/g, '').split('\n').slice(0, LETTER_LINES).join('\n').trim().slice(0, LETTER_MAX);
+}
 
 export interface Letter {
   id: string;
@@ -308,6 +331,9 @@ export interface ActionSettingsView {
   courier: boolean;
   courierFee: number;
   courierMaxCoins: number;
+  /** What a fancy and a luxe paper cost on top of the courier */
+  courierPaperFancy: number;
+  courierPaperLuxe: number;
   fireworks: boolean;
   fireworkBase: number;
   fireworkPerPoint: number;
@@ -317,7 +343,7 @@ export interface ActionSettingsView {
 
 /** What the phone needs to know about the actions (every guest's state) */
 export interface ActionsInfo {
-  courier: { on: boolean; fee: number; maxCoins: number };
+  courier: { on: boolean; fee: number; maxCoins: number; papers: { fancy: number; luxe: number } };
   fireworks: {
     on: boolean;
     base: number;

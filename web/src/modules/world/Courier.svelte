@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Coins, Send } from '@lucide/svelte';
+  import { Coins, Search, Send } from '@lucide/svelte';
   import { attempt, hb, onEvent, rpc } from '$lib/client.svelte.ts';
-  import { LETTER_MAX, PAPERS, SEALS, type Letter, type PaperId, type SealId } from '$shared/worldActions.ts';
+  import { LETTER_LINES, LETTER_MAX, PAPERS, SEALS, paperPrice, type Letter, type PaperId, type SealId } from '$shared/worldActions.ts';
   import type { WardrobeMine, WorldState } from '$shared/world.ts';
   import Portrait from './Portrait.svelte';
   import WaxSeal from './WaxSeal.svelte';
@@ -10,10 +10,11 @@
   import { HAND, paperStyle } from './papers.ts';
 
   /**
-   * Write a letter and send it by courier: who it is for (their character's face), the paper and
-   * the seal, the words (written on the paper itself, in a hand), and money slipped in, coin by
-   * coin. Sent, the paper folds into its envelope, the seal is pressed on and it flies off; on the
-   * TV the courier walks it to the other one's character, and it opens on their phone.
+   * Write a letter and send it by courier: who it is for (their character's face, found by name),
+   * the paper (the fancier ones cost extra), the words (written on the page itself, in a hand, as
+   * many lines as the page holds), and money added as a gift. Sent, the page folds into its
+   * envelope, the seal is pressed on and it flies off; on the TV the courier walks it to the other
+   * one's character, and it opens on their phone.
    */
   let { onsent }: { onsent: () => void } = $props();
 
@@ -24,8 +25,11 @@
 
   let to = $state<string | null>(null);
   let paper = $state<PaperId>('parchment');
-  let seal = $state<SealId>('crimson');
+  // The seal is always the red one for now (its picker is kept below, commented out)
+  const seal: SealId = 'crimson';
   let text = $state('');
+  /** The name typed to find someone */
+  let query = $state('');
   let coins = $state(0);
   let error = $state('');
   /** writing, then sending (the server is asked), then folding (the envelope flies off) */
@@ -42,7 +46,14 @@
   });
 
   const toName = $derived(others.find((c) => c.id === to)?.name ?? '');
-  const fee = $derived(info?.fee ?? 0);
+  /** The people shown: the ones whose name has what is typed (the one picked always stays) */
+  const shown = $derived.by(() => {
+    const q = query.trim().toLowerCase();
+    return q ? others.filter((c) => c.id === to || c.name.toLowerCase().includes(q)) : others;
+  });
+  const papers = $derived(info?.papers ?? { fancy: 0, luxe: 0 });
+  /** The courier, and the paper when it is not a plain one */
+  const fee = $derived((info?.fee ?? 0) + paperPrice(paper, papers));
   const cost = $derived(fee + coins);
   const sealColor = $derived(SEALS.find((s) => s.id === seal)?.color ?? SEALS[0].color);
   const initial = $derived((hb.me?.name ?? '?').charAt(0).toUpperCase());
@@ -57,16 +68,25 @@
   /** Can be afforded with the courier's fee on top (all of them while the wallet is not known) */
   const affordable = (v: number) => balance === null || v + fee <= balance;
 
-  /** The textarea grows with the letter: the paper gets longer, never a scrollbar */
-  function grow(el: HTMLTextAreaElement) {
-    const fit = () => {
-      el.style.height = 'auto';
-      el.style.height = `${el.scrollHeight}px`;
-    };
-    fit();
-    el.addEventListener('input', fit);
-    return { destroy: () => el.removeEventListener('input', fit) };
+  /**
+   * The page holds LETTER_LINES lines and no more: what would run past its last line (a new line,
+   * or words wrapping onto one) is not taken
+   */
+  function write(e: Event & { currentTarget: HTMLTextAreaElement }) {
+    const el = e.currentTarget;
+    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 28;
+    if (el.value.split('\n').length > LETTER_LINES || el.scrollHeight > lineH * LETTER_LINES + 2) {
+      const at = Math.max(0, el.selectionStart - (el.value.length - text.length));
+      el.value = text;
+      el.setSelectionRange(at, at);
+      full = true;
+      return;
+    }
+    full = false;
+    text = el.value;
   }
+  /** The last thing typed did not fit on the page */
+  let full = $state(false);
 
   async function send(e: SubmitEvent) {
     e.preventDefault();
@@ -89,13 +109,21 @@
 <form novalidate class="courier" onsubmit={send}>
   <section class="group">
     <span class="label">To</span>
+    {#if others.length > 6}
+      <label class="search">
+        <Search size={16} />
+        <input type="search" bind:value={query} placeholder="Find someone" aria-label="Find someone" />
+      </label>
+    {/if}
     {#if others.length}
       <div class="people">
-        {#each others as c (c.id)}
+        {#each shown as c (c.id)}
           <button type="button" class="person" class:on={to === c.id} style:--who={c.color} onclick={() => (to = c.id)} disabled={stage !== 'writing'}>
             <span class="face"><Portrait url={c.url} sheet={c.sheet} size={46} /></span>
             <span class="truncate">{c.name}</span>
           </button>
+        {:else}
+          <p class="faint small none-found">Nobody by that name.</p>
         {/each}
       </div>
     {:else}
@@ -110,6 +138,7 @@
         <button type="button" class="paper-pick" class:on={paper === p.id} style={paperStyle(p.id)} onclick={() => (paper = p.id)}>
           <span class="swatch"></span>
           <span class="pname">{p.name}</span>
+          {#if paperPrice(p.id, papers)}<span class="extra"><Coins size={11} />+{paperPrice(p.id, papers)}</span>{/if}
         </button>
       {/each}
     </div>
@@ -119,10 +148,10 @@
   <div class="desk" class:folding={stage === 'folding'}>
     <div class="sheet" style={paperStyle(paper)} style:--hand={HAND}>
       <span class="dear">Dear {toName || '...'},</span>
-      <textarea use:grow bind:value={text} maxlength={LETTER_MAX} rows="4" placeholder="Write your letter here" disabled={stage !== 'writing'}></textarea>
+      <textarea value={text} oninput={write} maxlength={LETTER_MAX} rows={LETTER_LINES} placeholder="Write your letter here" disabled={stage !== 'writing'}></textarea>
       <div class="foot">
-        <span class="count" class:near={text.length > LETTER_MAX - 30}>{text.length}/{LETTER_MAX}</span>
-        <span class="sign"><span class="yours">Yours,</span>{hb.me?.name}</span>
+        <span class="count" class:near={full || text.length > LETTER_MAX - 30}>{full ? 'The page is full' : `${text.length}/${LETTER_MAX}`}</span>
+        <span class="sign">{hb.me?.name}</span>
       </div>
       {#if coins}
         <span class="clip" aria-hidden="true"><Coins size={15} />{coins}</span>
@@ -135,6 +164,7 @@
     </div>
   </div>
 
+  <!-- The seal's color, put aside for now (always the red one):
   <section class="group">
     <span class="label">Seal</span>
     <div class="seals">
@@ -145,35 +175,25 @@
       {/each}
     </div>
   </section>
+  -->
 
   {#if steps.length}
     <section class="group">
-      <span class="label">Slip in some {currency}</span>
+      <span class="label">Add {currency} as a gift</span>
       <div class="coins">
         <button type="button" class="coin none" class:on={coins === 0} onclick={() => (coins = 0)}>None</button>
         {#each steps as v (v)}
           <button type="button" class="coin" class:on={coins === v} disabled={!affordable(v)} onclick={() => (coins = v)}>{v}</button>
         {/each}
       </div>
-      <p class="faint small">
-        {#if coins}{toName || 'They'} {toName ? 'gets' : 'get'} {coins} {currency} with your letter.{:else}A letter on its own is lovely too.{/if}
-        {#if balance !== null}You have {balance}.{/if}
-      </p>
     </section>
   {/if}
 
   {#if error}<p class="error small">{error}</p>{/if}
-  <div class="bill">
-    <span class="lines">
-      <span>Courier <strong>{fee}</strong></span>
-      {#if coins}<span>Enclosed <strong>{coins}</strong></span>{/if}
-    </span>
-    <button type="submit" class="btn primary go" disabled={stage !== 'writing' || !info?.on}>
-      <Send size={18} />{stage === 'folding' ? 'On its way' : 'Send'}
-      <span class="price"><Coins size={15} />{cost}</span>
-    </button>
-  </div>
-  <p class="faint small center">Watch the TV: the courier walks your letter over to {toName || 'them'}.</p>
+  <button type="submit" class="btn primary block go" disabled={stage !== 'writing' || !info?.on}>
+    <Send size={18} />{stage === 'folding' ? 'On its way' : 'Send'}
+    <span class="price"><Coins size={15} />{cost}</span>
+  </button>
 </form>
 
 <style>
@@ -195,16 +215,40 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
+  /* Everyone in rows; past two rows the list scrolls up and down */
   .people {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(4.4rem, 1fr));
     gap: 0.5rem;
-    overflow-x: auto;
-    padding: 0.15rem 0.1rem 0.3rem;
-    scrollbar-width: none;
+    max-height: 13.2rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.25rem 0.15rem;
+  }
+  .none-found {
+    grid-column: 1 / -1;
+  }
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text-dim);
+  }
+  .search input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.6rem 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text);
   }
   .person {
-    flex: none;
-    width: 4.7rem;
+    min-width: 0;
     display: grid;
     justify-items: center;
     gap: 0.3rem;
@@ -236,10 +280,11 @@
   }
   .papers {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 0.4rem;
   }
   .paper-pick {
+    position: relative;
     display: grid;
     justify-items: center;
     gap: 0.25rem;
@@ -257,13 +302,28 @@
     height: 1.8rem;
     border-radius: 3px;
     background: var(--lines, none), radial-gradient(130% 120% at 50% 40%, transparent 50%, var(--edge) 100%), var(--paper);
-    background-size: auto;
     box-shadow: 0 3px 8px -4px rgba(0, 0, 0, 0.6);
   }
   .pname {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: var(--text-dim);
   }
+  /* What a fancier paper costs on top, on its corner */
+  .extra {
+    position: absolute;
+    top: -0.45rem;
+    right: -0.3rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.05rem 0.3rem;
+    border-radius: 999px;
+    background: linear-gradient(160deg, var(--coin), var(--coin-2));
+    color: #3a2400;
+    font-size: 0.66rem;
+    font-weight: 800;
+  }
+  /* The seal's picker, put aside with it:
   .seals {
     display: flex;
     justify-content: space-between;
@@ -281,6 +341,7 @@
     border-color: var(--accent);
     transform: scale(1.08);
   }
+  */
 
   /* ---------------------------------------------------------- the paper (colors from papers.ts) */
 
@@ -307,9 +368,9 @@
   .dear {
     font-size: 1.2rem;
   }
+  /* As tall as its lines (LETTER_LINES), no more */
   textarea {
     width: 100%;
-    min-height: 7.5rem;
     padding: 0;
     border: 0;
     outline: none;
@@ -345,10 +406,6 @@
     justify-items: end;
     font-size: 1.3rem;
     line-height: 1.2;
-  }
-  .yours {
-    font-size: 0.95rem;
-    opacity: 0.7;
   }
   /* The coins slipped in: clipped to the corner of the page */
   .clip {
@@ -467,8 +524,8 @@
     display: flex;
     gap: 0.45rem;
     overflow-x: auto;
-    margin: 0 -0.25rem;
-    padding: 0.4rem 0.25rem;
+    margin: -0.3rem -0.25rem 0;
+    padding: 0.75rem 0.25rem 0.5rem;
     scrollbar-width: none;
     scroll-snap-type: x proximity;
   }
@@ -509,21 +566,7 @@
   .coin:disabled {
     opacity: 0.3;
   }
-  .bill {
-    display: flex;
-    align-items: center;
-    gap: 0.8rem;
-  }
-  .lines {
-    display: grid;
-    font-size: 0.82rem;
-    color: var(--text-dim);
-  }
-  .lines strong {
-    color: var(--text);
-  }
   .go {
-    flex: 1;
     justify-content: center;
   }
   .price {
@@ -535,9 +578,6 @@
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.18);
     font-size: 0.9rem;
-  }
-  .center {
-    text-align: center;
   }
   .error {
     color: var(--danger);

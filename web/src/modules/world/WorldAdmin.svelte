@@ -222,6 +222,17 @@
         </label>
       </div>
       <p class="faint small">The money in a letter goes from the sender to the one it is for when the courier hands it over. 0: letters only.</p>
+      <div class="pair">
+        <label class="field">
+          <span>A fancy paper costs extra</span>
+          <input class="input" type="number" min="0" value={act.courierPaperFancy} onchange={(e) => setAmount('courierPaperFancy', e.currentTarget.value)} />
+        </label>
+        <label class="field">
+          <span>A luxe paper costs extra</span>
+          <input class="input" type="number" min="0" value={act.courierPaperLuxe} onchange={(e) => setAmount('courierPaperLuxe', e.currentTarget.value)} />
+        </label>
+      </div>
+      <p class="faint small">Parchment, sky, kraft and mint come with the courier. Rose, lavender and confetti are fancy; night, gilded and royal are luxe.</p>
       <div class="line">
         <div>
           <strong>Fireworks</strong>
