@@ -782,6 +782,7 @@ export default defineModule<WorldSettings>({
             courier: s.courier,
             courierFee: s.courierFee,
             courierMaxCoins: s.courierMaxCoins,
+            courierPaperTinted: s.courierPaperTinted,
             courierPaperFancy: s.courierPaperFancy,
             courierPaperLuxe: s.courierPaperLuxe,
             fireworks: s.fireworks,
