@@ -18,12 +18,12 @@ import type { LpcFiles } from './lpc.ts';
 const FRAME = 64;
 const COLUMNS = 13;
 
-type Anim = 'walk' | 'run' | 'idle' | 'hurt' | 'jump' | 'emote' | 'sit';
+type Anim = 'walk' | 'run' | 'idle' | 'hurt' | 'jump' | 'emote' | 'sit' | 'thrust';
 const DIR = { up: 0, left: 1, down: 2, right: 3 } as const;
 type Face = 'happy' | 'closed';
 
 /** The rows of an output sheet, identical to scripts/crowd-sprites.ts (the TV reuses its renderer) */
-const ROWS: { key: string; row: number; anim: Anim; dir: number; face?: Face; last?: boolean }[] = [
+const ROWS: { key: string; row: number; anim: Anim; dir: number; face?: Face; last?: boolean; whole?: boolean }[] = [
   { key: 'walk', row: 0, anim: 'walk', dir: DIR.right },
   { key: 'run', row: 1, anim: 'run', dir: DIR.right },
   { key: 'idleRight', row: 2, anim: 'idle', dir: DIR.right },
@@ -46,6 +46,10 @@ const ROWS: { key: string; row: number; anim: Anim; dir: number; face?: Face; la
   { key: 'sitLeft', row: 16, anim: 'sit', dir: DIR.left },
   { key: 'sitRight', row: 17, anim: 'sit', dir: DIR.right },
   { key: 'emoteLeft', row: 18, anim: 'emote', dir: DIR.left },
+  // The town only: both arms driven forward, facing right (shaking the tree by the bench). Left
+  // empty unless every layer has it: a piece without the art would vanish while it plays, and the
+  // TV then uses another pose (see drawShaking)
+  { key: 'thrustRight', row: 19, anim: 'thrust', dir: DIR.right, whole: true },
 ];
 /** Every row key: a sheet measured without one of them was made before it existed and is redrawn */
 export const ROW_KEYS = ROWS.map((r) => r.key);
@@ -266,7 +270,7 @@ export class Composer {
       stack.sort((a, b) => a.zPos - b.zPos);
       const loaded = await Promise.all(stack.map((l) => this.sheet(l, r.anim)));
       const sheets = loaded.filter((s): s is PNG => !!s);
-      if (!sheets.length) continue;
+      if (!sheets.length || (r.whole && sheets.length < loaded.length)) continue;
       // The body sets the frame count: an item with extra frames would otherwise float on its own
       const bodySheet = loaded.find((s, i) => s && stack[i].body) ?? sheets[0];
       const frames = Math.min(COLUMNS, bodySheet.width / FRAME);

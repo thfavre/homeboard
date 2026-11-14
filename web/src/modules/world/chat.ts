@@ -124,20 +124,35 @@ export function drawAngerMark(g: G, x: number, y: number, now: number, alpha: nu
   g.globalAlpha = 1;
 }
 
-/** How long each push at the trunk takes, and the run frames that have both fists forward and the legs braced (the run row faces right) */
-const PUSH_MS = 140;
-const PUSH_FRAMES = [3, 4];
-
 /**
- * Shaking a tree: braced against the trunk with both hands on it, pushing and pulling fast (two run
- * frames with the fists forward in turn, leaning in a sprite pixel on each push), facing it. False:
+ * Shaking a tree, facing it, both hands on the trunk, rocking it fast. With the LPC thrust (both
+ * arms driven forward, a spear jab without the spear): its arms out and arms half out frames in
+ * turn, the body moved so the hands stay on the bark and only the body rocks. A sheet without it (a
+ * piece worn has no thrust art): two run frames with the fists forward and the legs braced. Both
+ * rows face right. Each is a list of (ms, frame, how far toward the trunk in sprite pixels). False:
  * nothing to draw it with.
  */
+const THRUST: [number, number, number][] = [
+  [150, 5, 0],
+  [150, 4, 3],
+];
+const BRACE: [number, number, number][] = [
+  [140, 3, 4],
+  [140, 4, 5],
+];
 export function drawShaking(g: G, img: HTMLImageElement, info: SheetInfo, x: number, y: number, dir: WDir, since: number): boolean {
-  const run = rowOf(img, info, 'run', PUSH_FRAMES[1] + 1);
-  if (!run) return false;
-  const push = Math.floor(since / PUSH_MS) % 2;
-  const lean = push ? (dir === 1 ? -S : S) : 0;
-  drawFrame(g, img, info, run.row, PUSH_FRAMES[push], x + lean, y, dir === 1);
+  const thrust = rowOf(img, info, 'thrustRight', 6);
+  const row = thrust ?? rowOf(img, info, 'run', 5);
+  if (!row) return false;
+  const steps = thrust ? THRUST : BRACE;
+  const total = steps.reduce((t, [ms]) => t + ms, 0);
+  let t = since % total;
+  let [, frame, dx] = steps[0];
+  for (const [ms, f, d] of steps) {
+    [frame, dx] = [f, d];
+    if (t < ms) break;
+    t -= ms;
+  }
+  drawFrame(g, img, info, row.row, frame, x + (dir === 1 ? -dx : dx) * S, y, dir === 1);
   return true;
 }

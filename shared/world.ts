@@ -162,7 +162,7 @@ export const TREE_SHAKE = (() => {
   return {
     tree: 2,
     bench: 2,
-    x: t.x - 26,
+    x: t.x - 36,
     y: t.y + 1,
     meet: [
       { x: t.x - 20, y: t.y + 25 },
