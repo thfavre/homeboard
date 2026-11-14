@@ -20,6 +20,7 @@
   import { TOWN_HALL_SPAN, drawTownHall, drawTownHallClock, drawTownHallLight } from './townHall.ts';
   import { drawAngerMark, drawLaughing, drawScolding, drawShaking, drawTalking, nodDip } from './chat.ts';
   import { buildingAt, drawHammer, drawLotGround, drawLotLight, drawLotPuffs, loadLotArt, lotNow, lotStanding, type LotArt } from './lotArt.ts';
+  import { drawPadRockets, drawShow, padStates, type Sky } from './fireworks.ts';
   import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
 
   /**
@@ -208,6 +209,67 @@
       g.fillStyle = `rgba(225,230,255,${(1 - t) * 0.8 * alpha})`;
       g.fillText('z', x + 14 + t * 18 + Math.sin((t + i) * 7) * 4, y - 20 - t * 34);
     }
+  }
+
+  /** Where the fireworks go up on the TV: from behind the houses, bursting over the top of the town */
+  const TV_SKY: Sky = { w: TOWN.w, ground: 260, low: 200, high: 50, unit: 0.8 };
+
+  /**
+   * Fireworks rockets standing on the ground, among everything else back to front: the ones being
+   * planted (the frames say how many), and the ones of a show that has started, until each goes
+   * up (their fuse fizzing just before)
+   */
+  function rocketsOnTheGround(f: TownFrame | null, real: number): { y: number; draw: (g: CanvasRenderingContext2D) => void }[] {
+    const out: { y: number; draw: (g: CanvasRenderingContext2D) => void }[] = [];
+    const r = f?.rockets ?? [];
+    for (let i = 0; i + 2 < r.length; i += 3) {
+      const [x, y, n] = [r[i], r[i + 1], r[i + 2]];
+      if (n > 0) out.push({ y, draw: (g) => drawPadRockets(g, x, y, new Array(n).fill(0), real) });
+    }
+    for (const s of world?.shows ?? []) {
+      const pad = s.pad;
+      if (!pad || !s.at || real >= s.ends) continue;
+      const states = padStates(s.design, real - s.at);
+      if (states.some((st) => st >= 0)) out.push({ y: pad.y, draw: (g) => drawPadRockets(g, pad.x, pad.y, states, real) });
+    }
+    return out;
+  }
+
+  /**
+   * The courier's parcel (brown paper, string and a red seal): carried in both hands in front,
+   * held out the way the courier faces, or held up over the head by the one it was brought to
+   * (lifted up over a moment). Behind the back when walking away from us.
+   */
+  function drawParcel(g: CanvasRenderingContext2D, x: number, y: number, dir: number, anim: number, tall: number, since: number): void {
+    const S = SPRITE_SCALE;
+    if (anim !== WANIM.unwrap && dir === 0) return;
+    let px = x;
+    let py = y - 21 * S;
+    const side = dir === 1 ? -1 : dir === 3 ? 1 : 0;
+    if (anim === WANIM.carry) {
+      px += side * 6 * S;
+      py += Math.abs(Math.sin(since / 140)) * S;
+    } else if (anim === WANIM.hold) {
+      px += side * 13 * S;
+      py -= 2 * S;
+    } else {
+      py = y - tall - 6 * S + (1 - Math.min(1, since / 350)) * 14 * S;
+    }
+    const w = 9 * S;
+    const h = 7 * S;
+    const l = Math.round(px - w / 2);
+    const t = Math.round(py - h / 2);
+    g.fillStyle = '#5b3a1e';
+    g.fillRect(l - S, t - S, w + 2 * S, h + 2 * S);
+    g.fillStyle = '#c08a52';
+    g.fillRect(l, t, w, h);
+    g.fillStyle = '#9c6a3a';
+    g.fillRect(l, t + h - S, w, S);
+    g.fillStyle = '#efe0bf';
+    g.fillRect(l + Math.round(w / 2 - S / 2), t, S, h);
+    g.fillRect(l, t + Math.round(h / 2 - S / 2), w, S);
+    g.fillStyle = '#b3262e';
+    g.fillRect(l + Math.round(w / 2 - S), t + Math.round(h / 2 - S), 2 * S, 2 * S);
   }
 
   function heart(g: CanvasRenderingContext2D, x: number, y: number, s: number): void {
@@ -420,6 +482,9 @@
     }
 
     const byId = new Map(world?.characters.map((c) => [c.id, c]) ?? []);
+    // The couriers all wear the courier's look (they have no name over the head)
+    const courier = world?.courier;
+    if (courier) for (const p of people) if (p.id.startsWith('post:')) byId.set(p.id, { id: p.id, name: '', color: '', url: courier.url, sheet: courier.sheet });
 
     // The ones inside a shop are seen through its window, on the wall behind everyone else; so are
     // the ones dancing in the cafe
@@ -554,6 +619,7 @@
         if (p.anim === WANIM.catch) drawCatch(g, p.x, y, p.dir === 1 ? -1 : 1, now - l.since);
         else if (p.anim === WANIM.drink) drawGlass(g, p.x, y, p.dir, now, l.phase);
         else if (p.anim === WANIM.light) drawPole(g, p.x, y, townNow.dark >= 0.3, now);
+        else if (p.anim === WANIM.carry || p.anim === WANIM.hold || p.anim === WANIM.unwrap) drawParcel(g, p.x, y, p.dir, p.anim, tallOf(img), now - l.since);
       }
       g.globalAlpha = 1;
     };
@@ -633,6 +699,7 @@
       ...inHall,
       ...(env ? pigeons.groundItems(env) : []),
       ...(cat && env ? [{ y: cat.y, draw: (gg: CanvasRenderingContext2D) => drawCat(gg, cat, now) }] : []),
+      ...rocketsOnTheGround(f0, real),
     ].sort((a, b) => a.y - b.y);
     let qi = 0;
     while (pi < people.length || qi < standing.length) {
@@ -672,6 +739,28 @@
     else if (courtSince === null && (king.anim === WANIM.cheer || (king.anim === WANIM.sit && king.dir === 1))) courtSince = now;
     if (wide && hall) drawHallLight(g, now, dark, courtSince === null ? null : now - courtSince);
 
+    // The guests' fireworks over the town (on real time, like the phone that designed them), the
+    // bursts lighting up the square for a moment, and whose show it is at the top
+    const show = away ? undefined : world?.shows?.find((s) => s.at && real >= s.at && real < s.ends);
+    if (show) {
+      // (over the town and the roofs past its top, as far as the screen shows; the caption at the screen's top)
+      const top = Math.max(-BAND, -(ch - TOWN.h * k) / k);
+      g.save();
+      g.beginPath();
+      g.rect(0, top, TOWN.w, TOWN.h - top);
+      g.clip();
+      const light = drawShow(g, show.design, real - show.at, TV_SKY, show.id, show.pad);
+      g.restore();
+      if (light > 0.01) {
+        g.globalCompositeOperation = 'lighter';
+        g.fillStyle = `rgba(255,236,210,${0.07 * light})`;
+        g.fillRect(0, top, TOWN.w, TOWN.h - top);
+        g.globalCompositeOperation = 'source-over';
+      }
+      const fade = Math.min(1, (real - show.at) / 600, (show.ends - real) / 900);
+      nameTag(g, `${show.byName}'s fireworks: ${show.design.name}`, TOWN.w / 2, top + 26, Math.max(0, fade));
+    }
+
     // Names and sleep bubbles over everything. The head's top comes from the measured sheet, so
     // the name hangs just over the hair.
     for (const p of inside) {
@@ -688,7 +777,9 @@
       // Over at the castle only the King keeps a name: the others' fade out as they cross the bridge,
       // and back in as they cross it home
       const nameAlpha = king ? p.alpha : p.alpha * Math.max(0, Math.min(1, (CROSSING.x1 - p.x) / (CROSSING.x1 - CROSSING.x0)));
-      if (c && nameAlpha > 0) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - p.lift - tall - 14, nameAlpha, king);
+      // (higher while a parcel is held up over the head)
+      const over = p.anim === WANIM.unwrap ? 16 : 0;
+      if (c?.name && nameAlpha > 0) nameTag(g, c.name, p.anim === WANIM.sleep ? p.x + s * 36 : p.x, p.anim === WANIM.sleep ? p.y - 26 : p.y - p.lift - tall - 14 - over, nameAlpha, king);
       if (p.anim === WANIM.sleep) drawZzz(g, p.x + s * 58, p.y - 4, now, p.alpha);
     }
     g.restore();

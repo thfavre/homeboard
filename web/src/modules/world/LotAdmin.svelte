@@ -33,7 +33,7 @@
       <div>
         <strong>Build lot</strong>
         <p class="faint small">
-          The fenced lot in the bottom left of the square. Guests stack blocks into sculptures and set down decorations from their phone (Build tab); their
+          The fenced lot in the bottom left of the square. Guests stack blocks into sculptures and set down decorations from their phone (Actions, Build lot); their
           character walks in and puts each piece up. Off: nobody can add or take anything, what stands there stays.
         </p>
       </div>

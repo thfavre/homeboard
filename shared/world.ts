@@ -6,6 +6,7 @@
 import { SPRITE_SCALE, SPY_OBSTACLES, SPY_SCENE, SQUARE_HOUSES, WORLD, houseRow, type HouseKind } from './crowd.ts';
 import type { Outfit, Tier, WornItem } from './wardrobe.ts';
 import { LOT, LOT_FENCE, type LotInfo, type LotSettings } from './worldBuild.ts';
+import type { ActionSettingsView, ActionsInfo, FwShow } from './worldActions.ts';
 
 /**
  * The town is built on the crowd games' square (same size, same houses, same environment art), so
@@ -483,6 +484,9 @@ export function hallLift(x: number, y: number): number {
  * through the cafe's window (x the place in it, y the window's bottom), drink stands with a glass,
  * light holds a lamplighter's pole up to the lamp in front, kindle kneels by the campfire to light it.
  * shake pushes at a tree's trunk with both hands, scold tells someone off (talking hard, angry).
+ * carry walks with a parcel (the courier, whose id starts with "post:"), hold stands holding it out
+ * the way the character faces, unwrap holds it up with both hands (the one it was brought to).
+ * place crouches to plant fireworks rockets in the ground in front.
  */
 export const WANIM = {
   idle: 0,
@@ -506,6 +510,10 @@ export const WANIM = {
   kindle: 18,
   shake: 19,
   scold: 20,
+  carry: 21,
+  hold: 22,
+  unwrap: 23,
+  place: 24,
 } as const;
 export type WAnimId = (typeof WANIM)[keyof typeof WANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
@@ -539,6 +547,8 @@ export interface TownFrame {
   cafeDoor?: boolean;
   /** Someone is shaking the tree by the bench (TREE_SHAKE), since then (the town's own time, ms) */
   shake?: number;
+  /** Fireworks being set up: x, y and how many rockets are planted so far, for each launch spot */
+  rockets?: number[];
 }
 
 // ------------------------------------------------------------ the cafe's party night
@@ -925,7 +935,14 @@ export interface WorldState {
   leavesSec?: [number, number];
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
+  /** What guests can do from the phone (the courier, fireworks) */
+  actions?: ActionsInfo;
+  /** The fireworks waiting or going up (the TV draws them) */
+  shows?: FwShow[];
+  /** The courier's look, once its sheet is built */
+  courier?: { url: string; sheet: SheetInfo };
   /** Admin only */
+  actionSettings?: ActionSettingsView;
   sleepAfterMin?: number;
   fadeAfterMin?: number;
   earnPerMin?: number;

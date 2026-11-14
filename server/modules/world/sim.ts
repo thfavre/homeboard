@@ -146,6 +146,8 @@ const PARTY_OUTSIDE_MS: [number, number] = [12_000, 28_000];
 const CHAT_GAP = 42;
 /** A tree's crown hides who stands behind it: this far to each side of the trunk, and up from it */
 const CROWN = { half: 72, up: 150 };
+/** The tree whose crown hides this spot, if any */
+const crownOver = (x: number, y: number) => TOWN_SCENE.trees.find((t) => Math.abs(x - t.x) < CROWN.half * t.size && y < t.y && y > t.y - CROWN.up * t.size);
 /** On the way to a chat for longer than this: they give up */
 const CHAT_MEET_MS = 15_000;
 /** In a chat they take turns: one speaks this long (talking with the hands), then the other */
@@ -204,6 +206,31 @@ const STRETCH_MS = 1800;
 /** A look at the build lot: how long (ms, a random time in the range), and the clap on arriving */
 const ADMIRE_MS: [number, number] = [5000, 11_000];
 const ADMIRE_CLAP_MS = 1600;
+/**
+ * A courier: walks this fast, asks the one it brings a letter to to wait once this close, stands
+ * this far beside them to hand it over, holds it out this long; they hold it up this long. A courier
+ * still not there after this long hands the letter over anyway (it shows on the phone) and leaves.
+ */
+const COURIER_UPS = 58;
+const COURIER_CALL = 170;
+const HAND_GAP = 30;
+const GIVE_MS = 1500;
+const UNWRAP_MS = 2600;
+const COURIER_GIVE_UP_MS = 120_000;
+/** Fireworks: the share of the characters standing around or wandering who stop to watch, and how often and how long a watcher cheers */
+const WATCH_SHARE = 0.85;
+const WATCH_CHEER_MS: [number, number] = [2500, 7000];
+const WATCH_CHEER_LEN = 1300;
+/**
+ * Launching fireworks: the launcher plants a rocket this often, and backs off this far to the
+ * side; who stands within this distance of the launch spot comes over to stand around it, this
+ * far from it. Not ready after this long: the show goes up anyway.
+ */
+const PLANT_MS = 900;
+const BACK_OFF = 92;
+const GATHER_FROM = 560;
+const GATHER_RING: [number, number] = [135, 185];
+const LAUNCH_GIVE_UP_MS = 40_000;
 
 type Doing =
   | { kind: 'idle'; until: number }
@@ -238,7 +265,12 @@ type Doing =
   | { kind: 'parasol'; table: number; open: boolean; at: number }
   | Build
   | { kind: 'goAdmire'; spot: number }
-  | { kind: 'admire'; spot: number; until: number; since: number };
+  | { kind: 'admire'; spot: number; until: number; since: number }
+  | Receive
+  | Watch
+  | Courier
+  | Launch
+  | Gather;
 
 /**
  * Building on the lot: to its gate (`go`), in along `path` (cell middles) to the spot by the next
@@ -253,6 +285,66 @@ interface Build {
   job: number;
   face: WDir;
   until: number;
+}
+
+/**
+ * Setting up fireworks: walk to the launch spot (`go`), crouch and plant the rockets one by one
+ * (`place`, from `since`), step back to the side (`back`), and wait facing them until they go up
+ * (`ready`; the show then turns this into watching). Given up at `until`.
+ */
+interface Launch {
+  kind: 'launch';
+  show: string;
+  phase: 'go' | 'place' | 'back' | 'ready';
+  pad: { x: number; y: number };
+  back: { x: number; y: number };
+  since: number;
+  until: number;
+}
+
+/** Someone near the launch spot comes closer (or steps back) to `tx, ty` and waits there facing it, until `until` */
+interface Gather {
+  kind: 'gather';
+  tx: number;
+  ty: number;
+  pad: { x: number; y: number };
+  arrived: boolean;
+  until: number;
+}
+
+/**
+ * Waiting for a courier who is almost there, facing them (`wait`; first stepping out to `to` from
+ * behind a tree's crown, where nobody would see it), then holding the parcel up with both hands
+ * (`unwrap`, until `until`)
+ */
+interface Receive {
+  kind: 'receive';
+  from: string;
+  phase: 'wait' | 'unwrap';
+  until: number;
+  to?: { x: number; y: number };
+}
+
+/** Fireworks over the town: standing still to watch them, and cheering at `cheerAt` (again and again) */
+interface Watch {
+  kind: 'watch';
+  until: number;
+  cheerAt: number;
+}
+
+/**
+ * A courier carrying a letter to a guest's character: walks in from an edge to beside them (`go`,
+ * waiting a little way off while they cannot take it), holds the parcel out until `until`
+ * (`give`), and walks back out (`leave`). `since`: when it set off (it gives up after a while).
+ */
+interface Courier {
+  kind: 'courier';
+  letter: string;
+  to: string;
+  phase: 'go' | 'give' | 'leave';
+  since: number;
+  until: number;
+  exit: { x: number; y: number };
 }
 
 /**
@@ -584,6 +676,10 @@ export interface TownHooks {
   lotSolid?(c: number, r: number): boolean;
   /** The character is not in the town: its pieces go up at once */
   lotFlush?(id: string): void;
+  /** A courier handed a letter over (or gave up looking for who it is for): once per letter */
+  delivered?(letter: string): void;
+  /** The rockets of a show are planted and their launcher stands back: it can go up (once per show) */
+  padReady?(show: string): void;
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -794,6 +890,12 @@ export class TownSim {
   private nightSleepers = 0;
   /** When someone last went to shake the tree by the bench */
   private lastShake = -Infinity;
+  /** The couriers on their rounds, by their own id (apart from the characters: nobody chats with them or calls them to the ceremony) */
+  private couriers = new Map<string, Walker>();
+  /** Fireworks going up: from when to when (the town's time), and whether the watchers were picked yet */
+  private skyShows: { from: number; until: number; burst: number; picked: boolean }[] = [];
+  /** Launch spots with rockets planted and not gone up yet, by show: where, how many so far, of how many */
+  private pads = new Map<string, { x: number; y: number; planted: number; total: number }>();
 
   /** `clock`: the town's time (ms), which can run faster than real time; real time by default */
   constructor(
@@ -878,6 +980,14 @@ export class TownSim {
     // Looking at the lot is casual, like a bench
     goAdmire: { priority: PRIORITY.casual, left: (d, w) => walkMs(w, LOT_ADMIRE[d.spot].x, LOT_ADMIRE[d.spot].y), wrapUp: stopWalking, quickStop: pauseFor },
     admire: { priority: PRIORITY.casual, left: (d, _w, now) => d.until - now, wrapUp: sooner, quickStop: sooner },
+    // Taking a parcel from the courier is over in a moment: a call waits for it. Watching the fireworks ends whenever.
+    receive: { priority: PRIORITY.activity, left: (d, _w, now) => (d.phase === 'wait' ? 8000 : d.until - now) },
+    watch: { priority: PRIORITY.activity, left: (d, _w, now) => d.until - now, wrapUp: sooner },
+    // (only couriers do this: they are never called anywhere)
+    courier: { priority: PRIORITY.ceremony, left: () => Infinity },
+    // Setting up fireworks is seen through (a call waits, like a shop trip); coming over to watch ends whenever
+    launch: { priority: PRIORITY.errand, left: () => Infinity },
+    gather: { priority: PRIORITY.activity, left: (d, _w, now) => d.until - now, wrapUp: (_d, w, now, ms) => (w.doing = idle(now, 200, Math.min(ms, 800))) },
     // The party: off on the way, a little sooner out of the cafe or away from the terrace
     party: {
       priority: PRIORITY.activity,
@@ -998,6 +1108,14 @@ export class TownSim {
           if (w.alpha === 0) this.walkers.delete(id);
         }
       }
+      for (const [id, c] of this.couriers) {
+        this.stepCourier(c, at, sdt);
+        if (c.fading) {
+          c.alpha = Math.max(0, c.alpha - sdt / 0.6);
+          if (c.alpha === 0) this.couriers.delete(id);
+        }
+      }
+      this.pickWatchers(at);
       this.separate();
       this.stepCat(at, sdt);
     }
@@ -1030,6 +1148,13 @@ export class TownSim {
         a.push(Math.round(w.x), Math.round(w.y), this.animOf(w, now), w.dir, Math.round(w.alpha * this.doorAlpha(w) * 100));
       }
     }
+    // The couriers: carrying the parcel, holding it out (handing it over, or waiting), empty-handed on the way out
+    for (const c of this.couriers.values()) {
+      ids.push(c.id);
+      const d = c.doing as Courier;
+      const anim = d.phase === 'leave' ? WANIM.walk : d.phase === 'give' || now - c.anchor.at > 600 ? WANIM.hold : WANIM.carry;
+      a.push(Math.round(c.x), Math.round(c.y), anim, c.dir, Math.round(c.alpha * 100));
+    }
     const someonePets = [...this.walkers.values()].some((w) => w.doing.kind === 'pet');
     const shaking = [...this.walkers.values()].find((w) => w.doing.kind === 'shake' && w.doing.at && now < w.doing.at + SHAKE_MS)?.doing as Shake | undefined;
     return {
@@ -1045,6 +1170,7 @@ export class TownSim {
       cafeDoor: this.cafeDoorOpen,
       parasols: this.parasolOpen.reduce((bits, open, i) => bits | (open ? 1 << i : 0), 0),
       ...(shaking ? { shake: shaking.at } : {}),
+      ...(this.pads.size ? { rockets: [...this.pads.values()].flatMap((p) => [Math.round(p.x), Math.round(p.y), p.planted]) } : {}),
     };
   }
 
@@ -1114,6 +1240,15 @@ export class TownSim {
         return WANIM.cheer;
       case 'chat':
         return this.chatPose(w, d, now);
+      case 'receive':
+        return d.phase === 'unwrap' ? WANIM.unwrap : d.to ? WANIM.walk : WANIM.idle;
+      case 'watch':
+        return !w.noCheer && now >= d.cheerAt && now < d.cheerAt + WATCH_CHEER_LEN ? WANIM.cheer : WANIM.idle;
+      // Planting the rockets crouched (clothes without sit art: standing)
+      case 'launch':
+        return d.phase === 'go' || d.phase === 'back' ? WANIM.walk : d.phase === 'place' && !w.noSit ? WANIM.place : WANIM.idle;
+      case 'gather':
+        return d.arrived ? WANIM.idle : WANIM.walk;
       default:
         return WANIM.idle;
     }
@@ -1437,6 +1572,32 @@ export class TownSim {
       case 'cheer':
         if (now >= d.until) w.doing = { kind: 'idle', until: now + rand(500, 1500) };
         break;
+      case 'receive': {
+        // Facing the courier while it comes; let go if it is gone (or went on without them)
+        const c = this.couriers.get(d.from);
+        if (d.phase === 'wait') {
+          if (!c || (c.doing as Courier).phase === 'leave' || now >= d.until) w.doing = idle(now, 300, 900);
+          else if (d.to) {
+            if (this.walkTo(w, d.to.x, d.to.y, WALK_UPS, dt)) delete d.to;
+          } else if (Math.abs(c.x - w.x) > 4) w.dir = c.x > w.x ? 3 : 1;
+        } else if (now >= d.until) w.doing = idle(now, 600, 1600);
+        break;
+      }
+      case 'watch':
+        if (now >= d.until) w.doing = idle(now, 300, 1500);
+        else if (now >= d.cheerAt + WATCH_CHEER_LEN) d.cheerAt = now + rand(WATCH_CHEER_MS[0], WATCH_CHEER_MS[1]);
+        break;
+      case 'launch':
+        this.stepLaunch(w, d, now, dt);
+        break;
+      case 'gather':
+        // Over to the launch spot's ring, then facing the rockets until they go up
+        if (now >= d.until) w.doing = idle(now, 300, 1200);
+        else if (!d.arrived) d.arrived = this.walkTo(w, d.tx, d.ty, WALK_UPS, dt);
+        else w.dir = Math.abs(d.pad.x - w.x) > Math.abs(d.pad.y - w.y) * 1.4 ? (d.pad.x > w.x ? 3 : 1) : d.pad.y > w.y ? 2 : 0;
+        break;
+      case 'courier':
+        break;
       case 'sleep':
         break;
       case 'goThrone': {
@@ -1587,8 +1748,7 @@ export class TownSim {
       { who: right, x: mx + CHAT_GAP / 2 },
     ];
     // Not across the river, nor where something stands, nor hidden behind a tree's crown
-    const hidden = (x: number) => TOWN_SCENE.trees.some((t) => Math.abs(x - t.x) < CROWN.half * t.size && my < t.y && my > t.y - CROWN.up * t.size);
-    if (spots.some((s) => blocked(s.x, my, STAND_CLEAR) || wet(s.x, my) || bridgeWay(s.who, s.x) || hidden(s.x))) return false;
+    if (spots.some((s) => blocked(s.x, my, STAND_CLEAR) || wet(s.x, my) || bridgeWay(s.who, s.x) || crownOver(s.x, my))) return false;
     for (const s of spots) {
       s.who.doing = { kind: 'goChat', with: (s.who === w ? o : w).id, tx: s.x, ty: my, since: now };
       s.who.wrapped = null;
@@ -1724,6 +1884,9 @@ export class TownSim {
 
   /** Everyone is gone (a new party): no ceremony, the camera back on the town at once */
   reset(): void {
+    this.couriers.clear();
+    this.skyShows = [];
+    this.pads.clear();
     this.ceremony = null;
     this.cam = { from: 0, to: 0, at: 0, ms: 1 };
   }
@@ -2557,6 +2720,9 @@ export class TownSim {
         w.doing.kind !== 'sit' &&
         w.doing.kind !== 'sleep' &&
         w.doing.kind !== 'pet' &&
+        // (nor the one taking a parcel: the courier stands close; nor who plants rockets)
+        w.doing.kind !== 'receive' &&
+        !(w.doing.kind === 'launch' && w.doing.phase === 'place') &&
         w.doing.kind !== 'throne' &&
         w.doing.kind !== 'descend' &&
         !(w.doing.kind === 'goThrone' && w.doing.onCarpet) &&
@@ -2573,6 +2739,8 @@ export class TownSim {
         // Nor a builder inside the lot's fence (or on its way out of it)
         !(w.doing.kind === 'build' && w.doing.phase !== 'go'),
     );
+    // A courier makes its way through like everyone (not while handing a parcel over)
+    for (const c of this.couriers.values()) if (this.last >= c.through && (c.doing as Courier).phase !== 'give') list.push(c);
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         const a = list[i];
@@ -2593,6 +2761,270 @@ export class TownSim {
       keepOut(w);
       keepDry(w);
       if (w.x >= CROSSING.x0 && w.x <= CROSSING.x1) w.y = onBridge(w.y);
+    }
+  }
+
+  // ------------------------------------------------------------ the courier and the fireworks
+
+  /**
+   * Send a courier with a letter to a guest's character. Not in the town (gone, or not made yet):
+   * handed over at once. The courier walks in from the nearer edge (the left one during a ceremony).
+   */
+  sendCourier(letter: string, to: string): void {
+    const now = this.clock();
+    const target = this.walkers.get(to);
+    if (!target) {
+      this.hooks.delivered?.(letter);
+      return;
+    }
+    const left = !!this.ceremony || target.x < TOWN.w / 2;
+    const x = left ? -20 : TOWN.w + 20;
+    // (in from the right: above the river, which leaves the town lower down that edge)
+    let y = Math.max(TOWN_AREA.y0 + 20, Math.min(TOWN_AREA.y1 - 20, target.y + rand(-80, 80)));
+    if (!left && wet(TOWN_AREA.x1, y, 40)) y = rand(TOWN_AREA.y0 + 20, BROOK_WAY.y - 20);
+    const id = `post:${letter}`;
+    this.couriers.set(id, {
+      id,
+      x,
+      y,
+      dir: left ? 3 : 1,
+      doing: { kind: 'courier', letter, to, phase: 'go', since: now, until: 0, exit: { x, y } },
+      alpha: 1,
+      fading: false,
+      noSit: true,
+      noCheer: true,
+      errands: [],
+      wrapped: null,
+      anchor: { x, y, at: now },
+      through: 0,
+      turn: 0,
+      building: false,
+      away: false,
+    });
+  }
+
+  /**
+   * Whether the one a courier comes to can take the parcel now: in the town doing something that
+   * can be cut short (not in a shop, at the cafe's counter or at the ceremony), or asleep where they lie
+   */
+  private canReceive(w: Walker): 'awake' | 'asleep' | null {
+    if (w.doing.kind === 'sleep') return 'asleep';
+    if (w.doing.kind === 'receive') return 'awake';
+    if (w.x > TOWN_AREA.x1 + 20 || w.x < TOWN_AREA.x0 - 20 || inCafe(w) || !this.rule(w).wrapUp) return null;
+    return 'awake';
+  }
+
+  private stepCourier(c: Walker, now: number, dt: number): void {
+    const d = c.doing as Courier;
+    // When it last moved: standing still, it holds the parcel out instead of carrying it
+    if (Math.hypot(c.x - c.anchor.x, c.y - c.anchor.y) > 0.5) c.anchor = { x: c.x, y: c.y, at: now };
+    if (d.phase === 'leave') {
+      if (this.walkTo(c, d.exit.x, d.exit.y, COURIER_UPS, dt) || c.x < -10 || c.x > TOWN.w + 10) c.fading = true;
+      return;
+    }
+    const r = this.walkers.get(d.to);
+    const leave = () => {
+      d.phase = 'leave';
+      // Out by the nearer side (above the river on the right)
+      d.exit = c.x < TOWN.w / 2 ? { x: -30, y: c.y } : { x: TOWN.w + 30, y: wet(TOWN_AREA.x1, c.y, 40) ? BROOK_WAY.y - 30 : c.y };
+    };
+    if (!r || now - d.since > COURIER_GIVE_UP_MS) {
+      // Gone, or out of reach for too long: the letter reaches the phone all the same
+      this.hooks.delivered?.(d.letter);
+      leave();
+      return;
+    }
+    if (d.phase === 'give') {
+      c.dir = r.x > c.x ? 3 : 1;
+      if (now < d.until) return;
+      this.hooks.delivered?.(d.letter);
+      if (r.doing.kind === 'receive' && r.doing.from === c.id) r.doing = r.noCheer ? idle(now, 800, 1600) : { kind: 'receive', from: c.id, phase: 'unwrap', until: now + UNWRAP_MS };
+      leave();
+      return;
+    }
+    // Beside them, on the side it comes from (the other side if that one is in the way)
+    const can = this.canReceive(r);
+    let side = c.x < r.x ? -1 : 1;
+    if (blocked(r.x + side * HAND_GAP, r.y, STAND_CLEAR) || wet(r.x + side * HAND_GAP, r.y)) side = -side;
+    const tx = r.x + side * HAND_GAP;
+    const ty = r.y;
+    const dist = Math.hypot(tx - c.x, ty - c.y);
+    if (!can) {
+      // Out of reach for now (in a shop, at the counter): wait a little way off
+      if (dist > 80) this.walkTo(c, tx, ty, COURIER_UPS, dt);
+      return;
+    }
+    // Close: they stop and wait for it, out in sight (asleep, it is left by their side)
+    if (can === 'awake' && dist < COURIER_CALL && r.doing.kind !== 'receive') {
+      r.doing = { kind: 'receive', from: c.id, phase: 'wait', until: now + 25_000, to: this.inSight(r) ?? undefined };
+      r.wrapped = null;
+    }
+    // (they are stepping out from behind a tree: wait for them there)
+    if (r.doing.kind === 'receive' && r.doing.to) {
+      this.walkTo(c, r.doing.to.x + side * HAND_GAP, r.doing.to.y, COURIER_UPS, dt);
+      return;
+    }
+    if (this.walkTo(c, tx, ty, COURIER_UPS, dt)) {
+      d.phase = 'give';
+      d.until = now + GIVE_MS;
+      c.dir = r.x > c.x ? 3 : 1;
+      if (can === 'awake') r.dir = r.x > c.x ? 1 : 3;
+    }
+  }
+
+  /**
+   * Where someone hidden behind a tree's crown steps out to, to be seen taking a parcel: just in
+   * front of the trunk, or beside the crown (null: they are in sight already, or no spot is free)
+   */
+  private inSight(w: Walker): { x: number; y: number } | null {
+    const t = crownOver(w.x, w.y);
+    if (!t) return null;
+    const reach = CROWN.half * t.size + 16;
+    const spots = [
+      { x: w.x, y: t.y + 26 },
+      { x: t.x - reach, y: w.y },
+      { x: t.x + reach, y: w.y },
+    ].sort((a, b) => Math.hypot(a.x - w.x, a.y - w.y) - Math.hypot(b.x - w.x, b.y - w.y));
+    return (
+      spots.find(
+        (s) => s.x > TOWN_AREA.x0 && s.x < TOWN_AREA.x1 && s.y < TOWN_AREA.y1 && !blocked(s.x, s.y, STAND_CLEAR) && !wet(s.x, s.y) && !crownOver(s.x, s.y) && !crownOver(s.x + HAND_GAP, s.y) && !crownOver(s.x - HAND_GAP, s.y),
+      ) ?? null
+    );
+  }
+
+  /**
+   * A guest launches fireworks: their character walks to an open spot near where it is, plants the
+   * rockets (`rockets` of them) and steps back to the side, then the show can go up (padReady). Who
+   * stands around nearby comes over to watch. Returns the launch spot (the rockets go up from
+   * there), and whether the character sets them up: not when it is not in the town or busy with
+   * something that cannot be cut short (the show then goes up at once, from that spot).
+   */
+  prepareLaunch(show: string, id: string, rockets: number): { pad: { x: number; y: number }; walking: boolean } {
+    const now = this.clock();
+    const w = this.walkers.get(id);
+    const asleep = w?.doing.kind === 'sleep' || w?.doing.kind === 'goSleep';
+    const free = !!w && !this.ceremony && !inCafe(w) && w.x >= TOWN_AREA.x0 && w.x <= TOWN_AREA.x1 && (asleep || !!this.rule(w).wrapUp);
+    const spot = this.launchSpot(w ?? null);
+    if (!w || !free || !spot) return { pad: spot?.pad ?? { x: TOWN.w / 2, y: 330 }, walking: false };
+    // (up from bed for it, if need be: back to bed after)
+    w.fading = false;
+    w.alpha = 1;
+    w.wrapped = null;
+    w.doing = { kind: 'launch', show, phase: 'go', pad: spot.pad, back: spot.back, since: now, until: now + LAUNCH_GIVE_UP_MS };
+    this.pads.set(show, { ...spot.pad, planted: 0, total: Math.max(1, rockets) });
+    // Who is around comes over, on the side they come from, at a good distance (not too close to the rockets)
+    for (const o of this.walkers.values()) {
+      const k = o.doing.kind;
+      if (o === w || (k !== 'idle' && k !== 'wander' && k !== 'watch') || o.errands.length || o.fading) continue;
+      if (Math.hypot(o.x - spot.pad.x, o.y - spot.pad.y) > GATHER_FROM) continue;
+      let a = Math.atan2(o.y - spot.pad.y, o.x - spot.pad.x);
+      // Not on the launcher's side: in front of the rockets or behind them instead, a little away from it (not across them)
+      if (Math.sign(Math.cos(a)) === Math.sign(spot.back.x - spot.pad.x) && Math.abs(Math.sin(a)) < 0.6) a = Math.atan2(Math.sin(a) >= 0 ? 1 : -1, -0.45 * Math.sign(spot.back.x - spot.pad.x));
+      const r = rand(GATHER_RING[0], GATHER_RING[1]);
+      const t = standable(spot.pad.x + Math.cos(a) * r, spot.pad.y + Math.sin(a) * r * 0.6);
+      // (moved out of something onto the rockets, or onto where the launcher steps back to: they watch from where they are)
+      if (wet(t.x, t.y) || crownOver(t.x, t.y) || t.y < TOWN_AREA.y0 || t.y > TOWN_AREA.y1) continue;
+      if (Math.hypot(t.x - spot.pad.x, t.y - spot.pad.y) < 80 || Math.hypot(t.x - spot.back.x, t.y - spot.back.y) < 40) continue;
+      o.doing = { kind: 'gather', tx: t.x, ty: t.y, pad: spot.pad, arrived: false, until: now + LAUNCH_GIVE_UP_MS + 20_000 };
+      o.wrapped = null;
+    }
+    return { pad: spot.pad, walking: true };
+  }
+
+  /**
+   * Where fireworks are set up: an open spot of the square near the character (some steps away, so
+   * it walks there), with room to step back to the side, away from the fountain, trees and seats;
+   * and that side spot
+   */
+  private launchSpot(w: Walker | null): { pad: { x: number; y: number }; back: { x: number; y: number } } | null {
+    const from = w ? { x: w.x, y: w.y } : { x: TOWN.w / 2, y: (TOWN_AREA.y0 + TOWN_AREA.y1) / 2 };
+    let best: { pad: { x: number; y: number }; back: { x: number; y: number } } | null = null;
+    let bestD = Infinity;
+    const open = (x: number, y: number) => !blocked(x, y, 34) && !wet(x, y, 40) && !crownOver(x, y) && !crownOver(x, y + 30);
+    // (and nothing over it for the rockets to fly into: no tree's crown up the way)
+    const clearAbove = (x: number, y: number) => [40, 80, 120, 160, 200, 240].every((up) => !crownOver(x, y - up) && !crownOver(x - 20, y - up) && !crownOver(x + 20, y - up));
+    for (let y = TOWN_AREA.y0 + 110; y <= TOWN_AREA.y1 - 50; y += 30) {
+      for (let x = TOWN_AREA.x0 + 90; x <= TOWN_AREA.x1 - 90; x += 30) {
+        if (!open(x, y) || !open(x, y - 18) || !clearAbove(x, y)) continue;
+        const d = Math.hypot(x - from.x, y - from.y);
+        // A few steps away, not across the town
+        const score = Math.abs(d - 160);
+        if (score >= bestD) continue;
+        const side = x < from.x ? 1 : -1;
+        const back = [side, -side].map((s) => ({ x: x + s * BACK_OFF, y: y - 8 })).find((b) => open(b.x, b.y));
+        if (!back) continue;
+        best = { pad: { x, y }, back };
+        bestD = score;
+      }
+    }
+    return best;
+  }
+
+  private stepLaunch(w: Walker, d: Launch, now: number, dt: number): void {
+    const pad = this.pads.get(d.show);
+    if (now >= d.until || (!pad && d.phase !== 'ready')) {
+      this.pads.delete(d.show);
+      w.doing = idle(now, 300, 900);
+      return;
+    }
+    if (d.phase === 'go') {
+      // Just behind the spot, facing it (the rockets in front)
+      if (this.walkTo(w, d.pad.x, d.pad.y - 18, WALK_UPS, dt)) {
+        Object.assign(w, { x: d.pad.x, y: d.pad.y - 18, dir: 2 });
+        d.phase = 'place';
+        d.since = now;
+      }
+    } else if (d.phase === 'place' && pad) {
+      w.dir = 2;
+      const total = pad.total;
+      pad.planted = Math.min(total, 1 + Math.floor((now - d.since) / PLANT_MS));
+      if (now >= d.since + total * PLANT_MS + 300) d.phase = 'back';
+    } else if (d.phase === 'back') {
+      if (this.walkTo(w, d.back.x, d.back.y, WALK_UPS * 0.75, dt)) {
+        w.dir = d.pad.x > w.x ? 3 : 1;
+        d.phase = 'ready';
+        this.hooks.padReady?.(d.show);
+      }
+    } else {
+      w.dir = d.pad.x > w.x ? 3 : 1;
+    }
+  }
+
+  /**
+   * A show goes up now (the town's time: from, until, and its first burst): the rockets leave their
+   * spot, its launcher and whoever came over watch, and cheer once it bursts
+   */
+  firing(show: string, from: number, until: number, burst: number): void {
+    this.pads.delete(show);
+    for (const w of this.walkers.values()) {
+      if (w.doing.kind === 'launch' && w.doing.show === show) {
+        w.doing = { kind: 'watch', until: until + rand(500, 2000), cheerAt: burst + rand(150, 900) };
+      }
+    }
+    this.watchSky(from, until, burst);
+  }
+
+  /**
+   * Fireworks over the town, from and until these times (the town's time): most of those standing
+   * around or wandering stop, turn to the sky and cheer once it bursts (`burst`), and now and then
+   */
+  watchSky(from: number, until: number, burst = from + 1500): void {
+    this.skyShows.push({ from, until, burst, picked: false });
+  }
+
+  private pickWatchers(now: number): void {
+    this.skyShows = this.skyShows.filter((s) => s.until > now);
+    for (const s of this.skyShows) {
+      if (s.picked || now < s.from) continue;
+      s.picked = true;
+      for (const w of this.walkers.values()) {
+        const k = w.doing.kind;
+        if ((k !== 'idle' && k !== 'wander' && k !== 'watch' && k !== 'gather') || w.errands.length || w.fading || w.x < TOWN_AREA.x0 || w.x > TOWN_AREA.x1) continue;
+        if (k !== 'watch' && k !== 'gather' && Math.random() > WATCH_SHARE) continue;
+        w.dir = 0;
+        w.doing = { kind: 'watch', until: Math.max(s.until, k === 'watch' ? (w.doing as Watch).until : 0) + rand(500, 2500), cheerAt: Math.max(now, s.burst) + rand(150, 1200) };
+        w.wrapped = null;
+      }
     }
   }
 

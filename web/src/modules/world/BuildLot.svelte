@@ -272,11 +272,7 @@
   <p class="faint small">Loading the lot...</p>
 {:else}
   <div class="lot">
-    <header class="head">
-      <h3>Build lot</h3>
-      <span class="wallet" title="Your {money}"><Coins size={15} />{mine?.balance ?? 0}</span>
-    </header>
-
+    <!-- (the guest's money shows in the page's header, next to the party coins) -->
     {#if !info.on}
       <p class="closed"><Lock size={15} />The host has closed the lot for now: you can look, but not build.</p>
     {/if}
@@ -385,28 +381,6 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-  .head h3 {
-    margin: 0;
-    font-size: 1.05rem;
-  }
-  .wallet {
-    flex: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.3rem 0.65rem;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--surface-2);
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
   }
   .closed {
     display: flex;

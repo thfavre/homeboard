@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import { Check, Coins, Hammer, PersonStanding, Shirt, ShoppingBag, Undo2 } from '@lucide/svelte';
+  import { Check, Coins, PersonStanding, Shirt, ShoppingBag, Sparkles, Undo2 } from '@lucide/svelte';
   import { attempt, hb, rpc, storageGet, storageSet } from '$lib/client.svelte.ts';
   import type { Slot } from '$shared/wardrobe.ts';
   import { BEARDS, DEFAULT_CHOICES, EYE_COLORS, HAIR_COLORS, HAIR_STYLES, SKINS, lookCost, randomChoices, type AvatarChoices, type SheetInfo, type WorldState } from '$shared/world.ts';
@@ -9,7 +9,17 @@
   import type { PreviewView } from './preview.ts';
   import Shop from './Shop.svelte';
   import Wardrobe from './Wardrobe.svelte';
-  import BuildLot from './BuildLot.svelte';
+  import Actions from './Actions.svelte';
+  import LetterPaper from './LetterPaper.svelte';
+  import { loadMail, mail, unread, watchMail } from './mail.svelte.ts';
+
+  // A letter handed over while the panel is open opens on top of it; the ones not read yet show
+  // as a count on the Actions tab (loaded on every connection: some may have come meanwhile)
+  watchMail();
+  $effect(() => {
+    if (hb.connected) void loadMail();
+  });
+  const unreadLetters = $derived(unread().length);
 
   /**
    * The avatar panel: the look editor (body, skin, hair, eyes), the wardrobe of owned clothes
@@ -17,12 +27,12 @@
    * composites a sheet for every look; the preview shows it walking.
    */
 
-  let tab = $state<'look' | 'wardrobe' | 'shop' | 'build'>('look');
+  let tab = $state<'look' | 'wardrobe' | 'shop' | 'actions'>('look');
   /** The one preview of the panel; the open tab says what it shows */
   const view = $state<PreviewView>({ url: null, sheet: null, building: false, focus: null, facing: 'down' });
 
   /** The new tab slides in from the right when going right, from the left when going back */
-  const ORDER = ['look', 'wardrobe', 'shop', 'build'];
+  const ORDER = ['look', 'wardrobe', 'shop', 'actions'];
   let slideFrom = $state(0);
   function go(next: typeof tab) {
     slideFrom = Math.sign(ORDER.indexOf(next) - ORDER.indexOf(tab)) * 40;
@@ -194,17 +204,17 @@
   <button type="button" class="tab" class:on={tab === 'look'} onclick={backToLook}><PersonStanding size={17} />My look</button>
   <button type="button" class="tab" class:on={tab === 'wardrobe'} onclick={() => tab !== 'wardrobe' && go('wardrobe')}><Shirt size={16} />Wardrobe</button>
   <button type="button" class="tab" class:on={tab === 'shop'} onclick={() => tab !== 'shop' && ((shopSlot = null), go('shop'))}><ShoppingBag size={16} />Shop</button>
-  <button type="button" class="tab" class:on={tab === 'build'} onclick={() => tab !== 'build' && go('build')}><Hammer size={16} />Build</button>
+  <button type="button" class="tab" class:on={tab === 'actions'} onclick={() => tab !== 'actions' && go('actions')}><Sparkles size={16} />Actions{#if unreadLetters}<span class="badge" aria-label="{unreadLetters} unread letters">{unreadLetters}</span>{/if}</button>
 </div>
 {/if}
 
-<!-- Stays put across the tabs: only the character inside changes and zooms -->
-<div class="stage-wrap" class:gone={tab === 'build'}><AvatarPreview {...view} /></div>
+<!-- Stays put across the tabs: only the character inside changes and zooms (the actions have pages of their own) -->
+<div class="stage-wrap" class:gone={tab === 'actions'}><AvatarPreview {...view} /></div>
 
 {#key tab}
 <div class="pane" in:fly={{ x: slideFrom, duration: 220 }}>
-{#if tab === 'build'}
-  <BuildLot />
+{#if tab === 'actions'}
+  <Actions />
 {:else if tab === 'shop'}
   <Shop startSlot={shopSlot} {view} />
 {:else if tab === 'wardrobe'}
@@ -280,8 +290,11 @@
 {/key}
 </div>
 
+{#if mail.open}
+  <LetterPaper letter={mail.open} onclose={() => (mail.open = null)} />
+{/if}
+
 <style>
-  /* The build lot has a picture of its own */
   .stage-wrap.gone {
     display: none;
   }
@@ -331,6 +344,26 @@
     font-size: 0.82rem;
     font-weight: 600;
     white-space: nowrap;
+  }
+  /* Letters not read yet, in the tab's corner */
+  .tab {
+    position: relative;
+  }
+  .badge {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.3rem;
+    display: grid;
+    place-items: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    background: var(--accent-2);
+    color: var(--accent-contrast);
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
   }
   .tab.on {
     border-color: var(--accent);
