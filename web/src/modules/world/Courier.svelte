@@ -462,12 +462,22 @@
 
   /* ---------------------------------------------------------- the coins */
 
+  /* One row that slides sideways (room for the lifted, outlined coin above and below) */
   .coins {
     display: flex;
-    flex-wrap: wrap;
     gap: 0.45rem;
+    overflow-x: auto;
+    margin: 0 -0.25rem;
+    padding: 0.4rem 0.25rem;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+  .coins::-webkit-scrollbar {
+    display: none;
   }
   .coin {
+    flex: none;
+    scroll-snap-align: start;
     display: grid;
     place-items: center;
     width: 3rem;
