@@ -244,11 +244,10 @@ export const LOT_ADMIRE: { x: number; y: number; dir: WDir }[] = [
   ...[600, 690, 780].map((y) => ({ x: LOT.x1 + LOT_FENCE + 16, y, dir: 1 as WDir })),
 ];
 
-/** A piece on its way: what the guest asked for, and what it cost them (the day's free share and their money) */
+/** A piece on its way: what the guest asked for, and what they paid for it */
 export interface LotPending {
   id: number;
   job: LotJob;
-  free: number;
   paid: number;
 }
 
@@ -257,24 +256,19 @@ export interface LotInfo {
   on: boolean;
   grid: LotGrid;
   prices: Record<LotTier, number>;
-  /** What a guest can build for free each town day */
-  freePerDay: number;
   /** How many pieces a guest can have on the way at once */
   queueMax: number;
 }
 
-/** A guest's own side of the lot: the pieces on their way and what is left of today's free share */
+/** A guest's own side of the lot: the pieces on their way, and their money */
 export interface LotMine {
   pending: LotPending[];
-  freeLeft: number;
   balance: number;
 }
 
 /** The build lot's settings (part of the world's) */
 export interface LotSettings {
   lot: boolean;
-  /** What each guest builds for free every town day (the town's money) */
-  lotFreePerDay: number;
   /** Prices by tier: a block, a fancy block, a small, big and grand decoration */
   lotBlock: number;
   lotFancy: number;

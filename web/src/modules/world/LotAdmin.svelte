@@ -6,7 +6,7 @@
   import type { WorldState } from '$shared/world.ts';
   import { LOT_TIERS, LOT_TIER_NAMES, type LotSettings, type LotTier } from '$shared/worldBuild.ts';
 
-  /** The build lot's part of the world's admin page: its switch, its prices and the daily free share, the builders' pace, emptying it */
+  /** The build lot's part of the world's admin page: its switch, its prices, the builders' pace, emptying it */
 
   const mod = $derived(hb.modules.world as WorldState | undefined);
   const s = $derived(mod?.lotSettings);
@@ -39,11 +39,6 @@
       </div>
       <Toggle checked={s.lot} label="Build lot" onchange={(v) => set('lot', v)} />
     </div>
-    <label class="field">
-      <span>Free to build every town day ({money})</span>
-      <input class="input" type="number" min="0" value={s.lotFreePerDay} onchange={(e) => setNumber('lotFreePerDay', e.currentTarget.value)} />
-    </label>
-    <p class="faint small">Each guest builds this much for free per day on the town's clock; past it, pieces cost their own {money}.</p>
     <div class="prices">
       {#each LOT_TIERS as tier (tier)}
         <label class="field">
@@ -52,7 +47,7 @@
         </label>
       {/each}
     </div>
-    <p class="faint small">What each piece costs. Fancy blocks are marble, gold, glass, crystal and lantern blocks; taking a piece away is free.</p>
+    <p class="faint small">What each piece costs, in {money}. Fancy blocks are marble, gold, glass, crystal and lantern blocks; taking a piece away is free.</p>
     <div class="pair">
       <label class="field">
         <span>Pieces on the way per guest</span>

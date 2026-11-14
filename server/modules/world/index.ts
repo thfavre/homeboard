@@ -119,7 +119,6 @@ interface WorldSettings extends LotSettings {
 /** The build lot's settings, for the admin page */
 const lotSettingsOf = (s: LotSettings): LotSettings => ({
   lot: s.lot,
-  lotFreePerDay: s.lotFreePerDay,
   lotBlock: s.lotBlock,
   lotFancy: s.lotFancy,
   lotSmall: s.lotSmall,
@@ -202,7 +201,7 @@ interface WorldData {
   reigns?: Reign[];
   /** When the last ceremony held on its own started (0: never), and the town day it was held for */
   ceremony?: { last: number };
-  /** The build lot: what stands on it, the pieces on their way, the day's free share used */
+  /** The build lot: what stands on it, the pieces on their way */
   lot?: LotData;
 }
 
@@ -902,10 +901,12 @@ export default defineModule<WorldSettings>({
 
     // ------------------------------------------------------------ the build lot
 
+    // (a lot kept from before the daily free share went has its record of it: dropped)
+    const lotData = (store.data.lot ??= emptyLot());
+    delete (lotData as { free?: unknown }).free;
     const lot = lotKeeper({
-      data: (store.data.lot ??= emptyLot()),
+      data: lotData,
       settings: () => ctx.settings.get(),
-      townDay: () => Math.floor(townMinutes(townNow(), townClock()) / 1440),
       wallets,
       sendWallet,
       sendMine: (guestId, m) => ctx.emit({ guest: guestId }, 'lotMine', m),
@@ -936,7 +937,6 @@ export default defineModule<WorldSettings>({
       const price = (v: unknown, old: number) => Math.max(0, Math.min(1_000_000, Math.round(num(v, old))));
       ctx.settings.update({
         lot: typeof args.lot === 'boolean' ? args.lot : s.lot,
-        lotFreePerDay: price(args.lotFreePerDay, s.lotFreePerDay),
         lotBlock: price(args.lotBlock, s.lotBlock),
         lotFancy: price(args.lotFancy, s.lotFancy),
         lotSmall: price(args.lotSmall, s.lotSmall),

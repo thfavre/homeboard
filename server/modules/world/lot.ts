@@ -20,7 +20,6 @@ import {
 
 export const LOT_DEFAULTS: LotSettings = {
   lot: true,
-  lotFreePerDay: 30,
   lotBlock: 1,
   lotFancy: 4,
   lotSmall: 5,
@@ -40,10 +39,9 @@ const TIER_KEY: Record<LotTier, 'lotBlock' | 'lotFancy' | 'lotSmall' | 'lotBig' 
   grand: 'lotGrand',
 };
 
-/** A piece on its way, kept with whose it is and the town day its free share came from */
+/** A piece on its way, kept with whose it is */
 interface StoredJob extends LotPending {
   guest: string;
-  day: number;
 }
 
 /** What the lot keeps in world.json */
@@ -51,26 +49,22 @@ export interface LotData {
   grid: LotGrid;
   nextId: number;
   jobs: StoredJob[];
-  /** What each guest built for free, and on which town day */
-  free: Record<string, { day: number; used: number }>;
 }
 
-export const emptyLot = (): LotData => ({ grid: { blocks: {}, props: [] }, nextId: 1, jobs: [], free: {} });
+export const emptyLot = (): LotData => ({ grid: { blocks: {}, props: [] }, nextId: 1, jobs: [] });
 
 /** How long the feed waits before telling of the same guest building again (ms) */
 const FEED_AGAIN_MS = 10 * 60_000;
 
 /**
  * The build lot's keeper: the pieces on the lot and the ones on their way. A guest asks for a piece
- * on the phone and pays at once (the day's free share first); the character walks to the lot and
+ * on the phone and pays at once; the character walks to the lot and
  * puts it up (see TownSim's build), or it goes up at once when the character is not in the town. A
  * piece that no longer fits when its turn comes (someone built there first) is paid back.
  */
 export function lotKeeper(deps: {
   data: LotData;
   settings(): LotSettings;
-  /** The town's day now (days counted on its own clock) */
-  townDay(): number;
   wallets: Record<string, number>;
   /** A guest's balance changed */
   sendWallet(guestId: string): void;
@@ -88,15 +82,8 @@ export function lotKeeper(deps: {
 
   const priceOf = (tier: LotTier | null) => (tier ? Math.max(0, Math.round(deps.settings()[TIER_KEY[tier]])) : 0);
 
-  const freeLeft = (guestId: string): number => {
-    const per = Math.max(0, Math.round(deps.settings().lotFreePerDay));
-    const f = data.free[guestId];
-    return f && f.day === deps.townDay() ? Math.max(0, per - f.used) : per;
-  };
-
   const mine = (guestId: string): LotMine => ({
-    pending: data.jobs.filter((j) => j.guest === guestId).map(({ id, job, free, paid }) => ({ id, job, free, paid })),
-    freeLeft: freeLeft(guestId),
+    pending: data.jobs.filter((j) => j.guest === guestId).map(({ id, job, paid }) => ({ id, job, paid })),
     balance: wallets[guestId] ?? 0,
   });
 
@@ -105,14 +92,11 @@ export function lotKeeper(deps: {
     deps.save();
   };
 
-  /** Give back what a piece cost (the free share only on the day it came from) */
+  /** Give back what a piece cost */
   const refund = (j: StoredJob) => {
-    if (j.paid) {
-      wallets[j.guest] = (wallets[j.guest] ?? 0) + j.paid;
-      deps.sendWallet(j.guest);
-    }
-    const f = data.free[j.guest];
-    if (j.free && f && f.day === j.day) f.used = Math.max(0, f.used - j.free);
+    if (!j.paid) return;
+    wallets[j.guest] = (wallets[j.guest] ?? 0) + j.paid;
+    deps.sendWallet(j.guest);
   };
 
   /** The lot as it will stand once everything on its way is up (what a new piece is checked against) */
@@ -129,7 +113,7 @@ export function lotKeeper(deps: {
     const why = jobProblem(data.grid, j.job);
     if (why) {
       refund(j);
-      if (j.free || j.paid) deps.failed(j.guest, why);
+      if (j.paid) deps.failed(j.guest, why);
       return false;
     }
     applyJob(data.grid, j.job, () => data.nextId++);
@@ -160,7 +144,6 @@ export function lotKeeper(deps: {
         on: s.lot,
         grid: data.grid,
         prices: { block: priceOf('block'), fancy: priceOf('fancy'), small: priceOf('small'), big: priceOf('big'), grand: priceOf('grand') },
-        freePerDay: Math.max(0, Math.round(s.lotFreePerDay)),
         queueMax: Math.max(1, Math.round(s.lotQueueMax)),
       };
     },
@@ -177,20 +160,13 @@ export function lotKeeper(deps: {
       }
       const why = jobProblem(planned(), job);
       if (why) throw new HbError(why);
-      const cost = priceOf(jobTier(job));
-      const free = Math.min(cost, freeLeft(guestId));
-      const paid = cost - free;
+      const paid = priceOf(jobTier(job));
       if ((wallets[guestId] ?? 0) < paid) throw new HbError('Not enough money for that piece');
       if (paid) {
         wallets[guestId] = (wallets[guestId] ?? 0) - paid;
         deps.sendWallet(guestId);
       }
-      const day = deps.townDay();
-      if (free) {
-        const f = data.free[guestId];
-        data.free[guestId] = f && f.day === day ? { day, used: f.used + free } : { day, used: free };
-      }
-      data.jobs.push({ id: data.nextId++, guest: guestId, job, free, paid, day });
+      data.jobs.push({ id: data.nextId++, guest: guestId, job, paid });
       changed(guestId);
       return mine(guestId);
     },
@@ -215,7 +191,6 @@ export function lotKeeper(deps: {
     /** A new session: nobody's pieces are on their way any more, and maybe the lot starts empty */
     reset(): void {
       data.jobs = [];
-      data.free = {};
       lastFeed.clear();
       if (deps.settings().lotClearOnNew) data.grid = { blocks: {}, props: [] };
       deps.save();
@@ -233,7 +208,7 @@ export function lotKeeper(deps: {
           if (!why) return { id: j.id, ...jobCells(j.job) };
           data.jobs = data.jobs.filter((x) => x !== j);
           refund(j);
-          if (j.free || j.paid) deps.failed(guestId, why);
+          if (j.paid) deps.failed(guestId, why);
           changed(guestId);
         }
         return null;

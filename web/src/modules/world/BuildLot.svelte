@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Box, Coins, Eraser, Flower2, Gift, Hourglass, Undo2, ZoomIn, ZoomOut } from '@lucide/svelte';
-  import { attempt, hb, onEvent, rpc } from '$lib/client.svelte.ts';
+  import { fade, fly } from 'svelte/transition';
+  import { Box, Check, CircleAlert, Coins, Eraser, Flower2, Hourglass, Lock, Undo2, ZoomIn, ZoomOut } from '@lucide/svelte';
+  import { hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import { SPRITE_SCALE } from '$shared/crowd.ts';
   import type { WorldState } from '$shared/world.ts';
   import {
@@ -10,8 +11,10 @@
     LOT,
     LOT_CW,
     LOT_RH,
+    LOT_TIER_NAMES,
     PROPS,
     applyJob,
+    blockById,
     cellAt,
     jobProblem,
     jobTier,
@@ -27,8 +30,8 @@
   /**
    * The build lot on the phone: the lot as the TV shows it, a palette of blocks and decorations, and
    * a tap on the lot to put the chosen piece there (or take one away). The guest's character then
-   * walks over on the TV and puts it up: until then the piece shows faint here. What it costs comes
-   * from the day's free share first, then from the town money.
+   * walks over on the TV and puts it up: until then the piece shows faint here. Every piece shows
+   * its price, paid from the town money when it is placed (taking one away is free).
    */
 
   const S = SPRITE_SCALE;
@@ -44,6 +47,21 @@
   let zoomed = $state(false);
   let busy = $state(false);
   let note = $state<{ text: string; bad: boolean } | null>(null);
+  let noteTimer: ReturnType<typeof setTimeout> | undefined;
+  /** A short message over the lot's picture, gone after a moment */
+  function say(text: string, bad: boolean) {
+    note = { text, bad };
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => (note = null), bad ? 4000 : 2600);
+  }
+  /** Where the last tap landed: its cells light up for a moment (green: on its way, red: refused) */
+  let flash = $state<{ c: number; r: number; w: number; d: number; ok: boolean } | null>(null);
+  let flashTimer: ReturnType<typeof setTimeout> | undefined;
+  function flashAt(c: number, r: number, w: number, d: number, ok: boolean) {
+    flash = { c, r, w, d, ok };
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => (flash = null), 700);
+  }
 
   let env = $state<Env | null>(null);
   let art = $state<LotArt | null>(null);
@@ -118,6 +136,16 @@
       g.lineTo(x - 7, y + 7);
       g.stroke();
     }
+    // Where the last tap landed
+    if (flash) {
+      const x = LOT.x0 + flash.c * LOT_CW;
+      const y = LOT.y0 + flash.r * LOT_RH;
+      g.fillStyle = flash.ok ? 'rgba(120,230,140,0.28)' : 'rgba(240,90,80,0.3)';
+      g.fillRect(x, y, flash.w * LOT_CW, flash.d * LOT_RH);
+      g.strokeStyle = flash.ok ? 'rgba(140,240,160,0.95)' : 'rgba(250,110,100,0.95)';
+      g.lineWidth = 2;
+      g.strokeRect(x + 1, y + 1, flash.w * LOT_CW - 2, flash.d * LOT_RH - 2);
+    }
   });
 
   // ------------------------------------------------------------ the palette
@@ -136,14 +164,13 @@
   const propPicture = (id: string, v: number) => (env ? picture(`p:${id}:${v}:${!!art}`, () => propSwatch(env!, art, id, v)) : null);
 
   const chosenProp = $derived(propById(prop));
-  /** What the chosen piece costs, and what the guest pays of it now (the free share first) */
+  /** What the chosen piece costs */
   const price = $derived.by(() => {
     if (!info || tool === 'remove') return 0;
     const job: LotJob = tool === 'block' ? { kind: 'block', c: 0, r: 0, what: block } : { kind: 'prop', c: 0, r: 0, what: prop, v: variant };
     const tier = jobTier(job);
     return tier ? info.prices[tier] : 0;
   });
-  const freeNow = $derived(Math.min(price, mine?.freeLeft ?? 0));
 
   function pickProp(id: string) {
     prop = id;
@@ -190,7 +217,9 @@
       // One of the guest's own pieces still on its way there: taken back instead (and paid back)
       const own = [...(mine?.pending ?? [])].reverse().find((p) => p.job.kind !== 'remove' && covers(p.job, at.c, at.r));
       if (own) {
-        await send(() => rpc<LotMine>('world', 'lotCancel', { id: own.id }), 'Taken back, and paid back');
+        const def = own.job.kind === 'prop' ? propById(own.job.what) : undefined;
+        flashAt(own.job.c, own.job.r, def?.w ?? 1, def?.d ?? 1, true);
+        await send(() => rpc<LotMine>('world', 'lotCancel', { id: own.id }), own.paid ? `Taken back: ${own.paid} ${money} paid back` : 'Taken back');
         return;
       }
       const p = propAt(planned, at.c, at.r);
@@ -205,12 +234,17 @@
       const r = Math.max(0, Math.min(LOT.rows - def.d, at.r - (def.d - 1)));
       job = { kind: 'prop', c, r, what: prop, v: variant };
     }
-    const why = jobProblem(planned, job);
+    const cells = job.kind === 'prop' ? { w: propById(job.what)?.w ?? 1, d: propById(job.what)?.d ?? 1 } : { w: 1, d: 1 };
+    const why = !info?.on ? 'The lot is closed for now' : jobProblem(planned, job);
+    flashAt(job.c, job.r, cells.w, cells.d, !why);
     if (why) {
-      note = { text: why, bad: true };
+      say(why, true);
       return;
     }
-    await send(() => rpc<LotMine>('world', 'lotPlace', { job }), job.kind === 'remove' ? 'Your character will take it away' : 'Your character is on the way to put it up');
+    await send(
+      () => rpc<LotMine>('world', 'lotPlace', { job }),
+      job.kind === 'remove' ? 'Your character will take it away' : price ? `${price} ${money}: your character is on the way` : 'Your character is on the way',
+    );
   }
 
   /** A job works on this cell */
@@ -223,9 +257,9 @@
     busy = true;
     try {
       mine = await call();
-      note = { text: done, bad: false };
+      say(done, false);
     } catch (err) {
-      note = { text: (err as Error).message, bad: true };
+      say((err as Error).message, true);
     } finally {
       busy = false;
     }
@@ -238,19 +272,16 @@
   <p class="faint small">Loading the lot...</p>
 {:else}
   <div class="lot">
-    <div class="stats">
-      <span class="stat" title="What you can still build for free today, on the town's clock"><Gift size={15} />{mine?.freeLeft ?? info.freePerDay} free today</span>
-      <span class="stat"><Coins size={15} />{mine?.balance ?? 0} {money}</span>
-      {#if waiting}
-        <span class="stat accent"><Hourglass size={15} />{waiting} on the way</span>
-        <button type="button" class="btn small" disabled={busy} onclick={() => send(() => rpc<LotMine>('world', 'lotCancel'), 'Everything taken back, and paid back')}>
-          <Undo2 size={14} />Take back
-        </button>
-      {/if}
-    </div>
+    <header class="head">
+      <div class="title">
+        <h3>Build lot</h3>
+        <p>Tap the lot to place a piece: your character builds it on the TV.</p>
+      </div>
+      <span class="wallet" title="Your {money}"><Coins size={15} />{mine?.balance ?? 0}</span>
+    </header>
 
     {#if !info.on}
-      <p class="closed">The host has closed the lot for now: you can look, but not build.</p>
+      <p class="closed"><Lock size={15} />The host has closed the lot for now: you can look, but not build.</p>
     {/if}
 
     <div class="frame">
@@ -258,64 +289,96 @@
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
         <canvas bind:this={canvas} class:off={!info.on} onclick={tap} aria-label="The build lot: tap where the piece goes"></canvas>
       </div>
+      {#if waiting}
+        <div class="queue" transition:fade={{ duration: 150 }}>
+          <Hourglass size={14} />
+          <span>{waiting} on the way</span>
+          <button type="button" disabled={busy} onclick={() => send(() => rpc<LotMine>('world', 'lotCancel'), 'Everything taken back and paid back')} aria-label="Take back everything on the way">
+            <Undo2 size={14} />
+          </button>
+        </div>
+      {/if}
       <button type="button" class="zoom" onclick={() => (zoomed = !zoomed)} aria-label={zoomed ? 'Zoom out' : 'Zoom in'}>
         {#if zoomed}<ZoomOut size={18} />{:else}<ZoomIn size={18} />{/if}
       </button>
+      {#key note}
+        {#if note}
+          <p class="note" class:bad={note.bad} in:fly={{ y: 8, duration: 160 }} out:fade={{ duration: 200 }}>
+            {#if note.bad}<CircleAlert size={15} />{:else}<Check size={15} />{/if}{note.text}
+          </p>
+        {/if}
+      {/key}
     </div>
 
     <div class="tools" role="tablist">
       <button type="button" role="tab" class="tool" class:on={tool === 'block'} aria-selected={tool === 'block'} onclick={() => (tool = 'block')}><Box size={16} />Blocks</button>
-      <button type="button" role="tab" class="tool" class:on={tool === 'prop'} aria-selected={tool === 'prop'} onclick={() => (tool = 'prop')}><Flower2 size={16} />Decorations</button>
+      <button type="button" role="tab" class="tool" class:on={tool === 'prop'} aria-selected={tool === 'prop'} onclick={() => (tool = 'prop')}><Flower2 size={16} />Decor</button>
       <button type="button" role="tab" class="tool" class:on={tool === 'remove'} aria-selected={tool === 'remove'} onclick={() => (tool = 'remove')}><Eraser size={16} />Take away</button>
     </div>
 
-    {#if tool === 'block'}
-      <div class="palette">
-        {#each BLOCKS as b (b.id)}
-          {@const pic = blockPicture(b.id)}
-          <button type="button" class="piece" class:on={block === b.id} onclick={() => (block = b.id)} title={b.name}>
-            {#if pic}<img src={pic} alt="" />{/if}
-            <span class="name">{b.name}</span>
-            {#if b.tier === 'fancy'}<span class="fancy">Fancy</span>{/if}
-          </button>
-        {/each}
-      </div>
-    {:else if tool === 'prop'}
-      <div class="palette">
-        {#each PROPS as p (p.id)}
-          {@const pic = propPicture(p.id, 0)}
-          <button type="button" class="piece" class:on={prop === p.id} onclick={() => pickProp(p.id)} title={p.name}>
-            {#if pic}<img src={pic} alt="" class="tall" />{/if}
-            <span class="name">{p.name}</span>
-          </button>
-        {/each}
-      </div>
-      {#if chosenProp?.variants}
-        <div class="variants">
-          {#each chosenProp.variants as name, i (name)}
-            {@const pic = propPicture(chosenProp.id, i)}
-            <button type="button" class="variant" class:on={variant === i} onclick={() => (variant = i)} title={name} aria-label={name}>
-              {#if pic}<img src={pic} alt="" />{/if}
-            </button>
-          {/each}
-        </div>
+    <!-- The piece in hand: what a tap on the lot does, and what it costs -->
+    <div class="chosen">
+      {#if tool === 'remove'}
+        <span class="pic"><Eraser size={26} /></span>
+        <span class="what">
+          <strong>Take a piece away</strong>
+          <span class="dim">Anyone's piece. Tapping one of yours still on its way takes it back and pays you back.</span>
+        </span>
+        <span class="cost free">Free</span>
+      {:else}
+        {@const pic = tool === 'block' ? blockPicture(block) : propPicture(prop, variant)}
+        <span class="pic">{#if pic}<img src={pic} alt="" class:tall={tool === 'prop'} />{/if}</span>
+        <span class="what">
+          <strong>{tool === 'block' ? (blockById(block)?.name ?? '') : (chosenProp?.name ?? '')}{tool === 'prop' && chosenProp?.variants ? `, ${chosenProp.variants[variant].toLowerCase()}` : ''}</strong>
+          <span class="dim">{tool === 'block' ? 'Tap the ground, or a column to stack on it (5 high at most).' : 'Tap where its front goes.'}</span>
+        </span>
+        <span class="cost" class:dear={price > (mine?.balance ?? 0)}><Coins size={14} />{price}</span>
       {/if}
+    </div>
+
+    {#if tool === 'prop' && chosenProp?.variants}
+      <div class="variants" role="radiogroup" aria-label="Kind">
+        {#each chosenProp.variants as name, i (name)}
+          {@const pic = propPicture(chosenProp.id, i)}
+          <button type="button" class="variant" class:on={variant === i} role="radio" aria-checked={variant === i} onclick={() => (variant = i)} title={name} aria-label={name}>
+            {#if pic}<img src={pic} alt="" />{/if}
+          </button>
+        {/each}
+      </div>
     {/if}
 
-    <p class="hint small">
-      {#if tool === 'remove'}
-        Tap a piece to take it away (anyone's): your character goes and does it, for free. Tapping one of yours still on its way takes it back and pays it back.
-      {:else if price === 0}
-        Tap the lot to put it there: it is free.
-      {:else if freeNow >= price}
-        Tap the lot to put it there: free today (it costs {price} {money}).
-      {:else}
-        Tap the lot to put it there: {price - freeNow} {money}{freeNow ? ` (and ${freeNow} from today's free share)` : ''}.
-      {/if}
-      {#if tool === 'block'}Tap a column to stack on it.{/if}
-    </p>
-    {#if note}
-      <p class="note small" class:bad={note.bad}>{note.text}</p>
+    {#if tool === 'block'}
+      {#each [{ label: 'Blocks', list: BLOCKS.filter((b) => b.tier === 'block') }, { label: 'Fancy blocks', list: BLOCKS.filter((b) => b.tier === 'fancy') }] as group (group.label)}
+        <section class="group">
+          <h4>{group.label}<span class="cost small"><Coins size={12} />{info.prices[group.list[0].tier]} each</span></h4>
+          <div class="palette">
+            {#each group.list as b (b.id)}
+              {@const pic = blockPicture(b.id)}
+              <button type="button" class="piece" class:on={block === b.id} class:dear={info.prices[b.tier] > (mine?.balance ?? 0)} onclick={() => (block = b.id)} title={b.name}>
+                <span class="art">{#if pic}<img src={pic} alt="" />{/if}</span>
+                <span class="name">{b.name}</span>
+                <span class="price"><Coins size={11} />{info.prices[b.tier]}</span>
+              </button>
+            {/each}
+          </div>
+        </section>
+      {/each}
+    {:else if tool === 'prop'}
+      {#each ['small', 'big', 'grand'] as const as tier (tier)}
+        <section class="group">
+          <h4>{LOT_TIER_NAMES[tier].replace(' decoration', '')}<span class="cost small"><Coins size={12} />{info.prices[tier]} each</span></h4>
+          <div class="palette">
+            {#each PROPS.filter((p) => p.tier === tier) as p (p.id)}
+              {@const pic = propPicture(p.id, 0)}
+              <button type="button" class="piece" class:on={prop === p.id} class:dear={info.prices[p.tier] > (mine?.balance ?? 0)} onclick={() => pickProp(p.id)} title={p.name}>
+                <span class="art">{#if pic}<img src={pic} alt="" class="tall" />{/if}</span>
+                <span class="name">{p.name}</span>
+                <span class="price"><Coins size={11} />{info.prices[p.tier]}</span>
+              </button>
+            {/each}
+          </div>
+        </section>
+      {/each}
     {/if}
   </div>
 {/if}
@@ -324,52 +387,58 @@
   .lot {
     display: flex;
     flex-direction: column;
-    gap: 0.7rem;
+    gap: 0.75rem;
   }
-  .stats {
+  .head {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
   }
-  .stat {
+  .title h3 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+  .title p {
+    margin: 0.15rem 0 0;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+  .wallet {
+    flex: none;
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.3rem 0.6rem;
+    padding: 0.3rem 0.65rem;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--surface-2);
-    font-size: 0.85rem;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
-  .stat.accent {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .stats .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    margin-left: auto;
-  }
   .closed {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
     margin: 0;
     padding: 0.5rem 0.7rem;
     border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
     border-radius: var(--radius-sm);
     background: var(--surface-2);
-    font-size: 0.88rem;
+    font-size: 0.86rem;
   }
   .frame {
     position: relative;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--surface-2);
+    box-shadow: var(--shadow);
   }
   .view {
     overflow: auto;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    max-height: 62vh;
+    max-height: 60vh;
+    overscroll-behavior: contain;
   }
   canvas {
     display: block;
@@ -379,7 +448,36 @@
   }
   canvas.off {
     cursor: default;
-    opacity: 0.85;
+    filter: saturate(0.6);
+  }
+  .queue {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.25rem 0.2rem 0.6rem;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    color: var(--text);
+    font-size: 0.8rem;
+    font-weight: 600;
+    backdrop-filter: blur(4px);
+  }
+  .queue :global(svg:first-child) {
+    color: var(--accent);
+  }
+  .queue button {
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text);
   }
   .zoom {
     position: absolute;
@@ -387,16 +485,50 @@
     bottom: 0.5rem;
     display: grid;
     place-items: center;
-    width: 2.2rem;
-    height: 2.2rem;
+    width: 2.3rem;
+    height: 2.3rem;
     border: 1px solid var(--border);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--surface) 85%, transparent);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
     color: var(--text);
+    backdrop-filter: blur(4px);
+  }
+  .note {
+    position: absolute;
+    left: 0.5rem;
+    right: 3.3rem;
+    bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0.4rem 0.65rem;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--success) 50%, var(--border));
+    color: var(--text);
+    font-size: 0.8rem;
+    line-height: 1.25;
+    pointer-events: none;
+    backdrop-filter: blur(4px);
+  }
+  .note :global(svg) {
+    flex: none;
+    color: var(--success);
+  }
+  .note.bad {
+    border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+  }
+  .note.bad :global(svg) {
+    color: var(--danger);
   }
   .tools {
     display: flex;
-    gap: 0.35rem;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
   }
   .tool {
     flex: 1;
@@ -404,73 +536,87 @@
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    padding: 0.5rem 0.3rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
+    padding: 0.45rem 0.3rem;
+    border: 0;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: transparent;
     color: var(--text-dim);
     font-size: 0.86rem;
     font-weight: 600;
     white-space: nowrap;
   }
   .tool.on {
-    border-color: var(--accent);
-    color: var(--text);
-    background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+    background: var(--accent);
+    color: var(--accent-contrast);
   }
-  .palette {
+  .chosen {
     display: flex;
-    gap: 0.4rem;
-    overflow-x: auto;
-    padding-bottom: 0.3rem;
-    scroll-snap-type: x proximity;
-  }
-  .piece {
-    position: relative;
-    flex: none;
-    display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: flex-end;
-    gap: 0.25rem;
-    width: 4.6rem;
-    height: 5.4rem;
-    padding: 0.35rem 0.25rem;
+    gap: 0.7rem;
+    padding: 0.55rem 0.7rem;
     border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .pic {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
     border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text-dim);
-    scroll-snap-align: start;
   }
-  .piece.on {
-    border-color: var(--accent);
-    color: var(--text);
-    box-shadow: 0 0 0 1px var(--accent) inset;
-  }
-  .piece img {
-    width: 2rem;
+  .pic img {
+    width: 1.6rem;
     image-rendering: pixelated;
   }
-  .piece img.tall {
+  .pic img.tall {
     width: auto;
-    max-width: 3.4rem;
-    max-height: 3.2rem;
+    max-width: 2.6rem;
+    max-height: 2.7rem;
   }
-  .name {
-    font-size: 0.72rem;
-    line-height: 1.1;
-    text-align: center;
+  .what {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
   }
-  .fancy {
-    position: absolute;
-    top: 0.2rem;
-    right: 0.2rem;
-    padding: 0 0.3rem;
+  .what strong {
+    font-size: 0.95rem;
+  }
+  .what .dim {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    line-height: 1.3;
+  }
+  .cost {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.55rem;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--warning) 25%, transparent);
-    color: var(--warning);
-    font-size: 0.6rem;
+    background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .cost.free {
+    background: color-mix(in srgb, var(--success) 18%, var(--surface-2));
+    color: var(--success);
+  }
+  .cost.dear {
+    background: color-mix(in srgb, var(--danger) 16%, var(--surface-2));
+    color: var(--danger);
+  }
+  .cost.small {
+    padding: 0.05rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: var(--surface-2);
   }
   .variants {
     display: flex;
@@ -480,8 +626,8 @@
   .variant {
     display: grid;
     place-items: center;
-    width: 2.6rem;
-    height: 2.6rem;
+    width: 2.5rem;
+    height: 2.5rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-2);
@@ -491,22 +637,94 @@
     box-shadow: 0 0 0 1px var(--accent) inset;
   }
   .variant img {
-    max-width: 2.1rem;
-    max-height: 2.1rem;
+    max-width: 2rem;
+    max-height: 2rem;
     image-rendering: pixelated;
+  }
+  .group h4 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 0 0.35rem;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .group h4 .cost {
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .palette {
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding-bottom: 0.3rem;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+  .piece {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    width: 4.5rem;
+    padding: 0.35rem 0.25rem 0.3rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    scroll-snap-align: start;
+    transition:
+      border-color 0.15s,
+      transform 0.1s;
+  }
+  .piece:active {
+    transform: scale(0.96);
+  }
+  .piece.on {
+    border-color: var(--accent);
+    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+    box-shadow: 0 0 0 1px var(--accent) inset;
+  }
+  .piece.dear {
+    opacity: 0.55;
+  }
+  .art {
+    display: grid;
+    place-items: end center;
+    height: 2.9rem;
+  }
+  .art img {
+    width: 1.7rem;
+    image-rendering: pixelated;
+  }
+  .art img.tall {
+    width: auto;
+    max-width: 3.3rem;
+    max-height: 2.9rem;
+  }
+  .name {
+    font-size: 0.7rem;
+    line-height: 1.1;
+    text-align: center;
+    min-height: 1.55em;
+    display: grid;
+    place-items: center;
+  }
+  .price {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
   }
   .small {
     font-size: 0.82rem;
-  }
-  .hint,
-  .note {
-    margin: 0;
-    color: var(--text-dim);
-  }
-  .note {
-    color: var(--success);
-  }
-  .note.bad {
-    color: var(--danger);
   }
 </style>
