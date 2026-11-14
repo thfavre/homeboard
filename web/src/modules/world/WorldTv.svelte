@@ -743,10 +743,10 @@
     if (wide && hall) drawHallLight(g, now, dark, courtSince === null ? null : now - courtSince);
 
     // The guests' fireworks over the town (on real time, like the phone that designed them), the
-    // bursts lighting up the square for a moment, and whose show it is at the top
+    // bursts lighting up the square for a moment
     const show = away ? undefined : world?.shows?.find((s) => s.at && real >= s.at && real < s.ends);
     if (show) {
-      // (over the town and the roofs past its top, as far as the screen shows; the caption at the screen's top)
+      // (over the town and the roofs past its top, as far as the screen shows)
       const top = Math.max(-BAND, -townY / k);
       g.save();
       g.beginPath();
@@ -760,8 +760,6 @@
         g.fillRect(0, top, TOWN.w, TOWN.h - top);
         g.globalCompositeOperation = 'source-over';
       }
-      const fade = Math.min(1, (real - show.at) / 600, (show.ends - real) / 900);
-      nameTag(g, `${show.byName}'s fireworks: ${show.design.name}`, TOWN.w / 2, top + 26, Math.max(0, fade));
     }
 
     // Names and sleep bubbles over everything. The head's top comes from the measured sheet, so

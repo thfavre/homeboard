@@ -1,4 +1,4 @@
-import { MAX_ROCKETS, burstMs, burstX, fwHex, riseMs, samplePath, shellTimes, type FwDesign, type FwPoint, type FwShell } from '$shared/worldActions.ts';
+import { MAX_ROCKETS, burstMs, burstX, fwHex, riseMs, rowOffset, samplePath, shellTimes, type FwDesign, type FwPoint, type FwShell } from '$shared/worldActions.ts';
 
 /**
  * Fireworks, drawn from nothing but the design and the time since the show started: every star's
@@ -222,7 +222,7 @@ function drawRocket(g: G, x0: number, y0: number, x1: number, y1: number, u01: n
 }
 
 /** Where rocket `k` of `n` stands, across its launch spot (world units from its middle) */
-const rocketOffset = (k: number, n: number) => (k - (n - 1) / 2) * 13;
+const rocketOffset = rowOffset;
 
 /**
  * The rockets planted at a launch spot, their foot at (x, y), side by side: each standing (0), its

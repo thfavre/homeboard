@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { ArrowLeft, ArrowRight, Check, ChevronDown, Coins, Copy, Plus, Save, Trash2, Undo2, X } from '@lucide/svelte';
+  import { ArrowLeft, ArrowRight, Check, Coins, Copy, Plus, Save, Trash2, Undo2, X } from '@lucide/svelte';
   import { hb } from '$lib/client.svelte.ts';
-  import { FW_COLORS, FW_MAX_COUNT, FW_MAX_DELAY, FW_NAME_MAX, FW_PARTICLES, FW_TEMPLATES, fireworkCost, newShell, type FwDesign, type FwParticle, type FwPoint, type FwShell } from '$shared/worldActions.ts';
+  import { FW_COLORS, FW_NAME_MAX, FW_PARTICLES, FW_TEMPLATES, fireworkCost, newShell, type FwDesign, type FwParticle, type FwPoint, type FwShell } from '$shared/worldActions.ts';
   import type { WorldState } from '$shared/world.ts';
   import DrawPad from './DrawPad.svelte';
   import ShellThumb from './ShellThumb.svelte';
@@ -30,7 +30,6 @@
   const maxShells = $derived(fw?.maxShells ?? 12);
 
   let sel = $state(0);
-  let placing = $state(false);
   const shell = $derived(design.shells[Math.min(sel, design.shells.length - 1)]);
   const cost = $derived(fw ? fireworkCost(design, fw) : 0);
 
@@ -107,7 +106,6 @@
     twirl: 'M12 12c0-4 3-6 6-5M12 12c4 0 6 3 5 6M12 12c0 4-3 6-6 5M12 12c-4 0-6-3-5-6',
   };
 
-  const where = $derived(`${shell.x < 34 ? 'Left' : shell.x > 66 ? 'Right' : 'Middle'}, ${shell.height < 34 ? 'low' : shell.height > 66 ? 'high' : 'halfway up'}, ${(shell.delay / 1000).toFixed(1)} s ${sel === 0 ? 'after launch' : 'after the one before'}`);
 </script>
 
 <div class="designer">
@@ -115,26 +113,29 @@
     <input class="input" type="text" maxlength={FW_NAME_MAX} bind:value={design.name} aria-label="Name of the show" placeholder="Name your show" />
   </label>
 
-  <!-- The shells in order, as they go up: pick one to make it -->
-  <div class="shells">
-    {#each design.shells as s, i (i)}
-      <button type="button" class="shell-chip" class:on={i === sel} onclick={() => (sel = i)} aria-label="Shell {i + 1}">
-        <ShellThumb shell={s} size={34} />
-        <span>{i + 1}{s.count > 1 ? ` x${s.count}` : ''}</span>
-      </button>
-    {/each}
-    <button type="button" class="shell-chip add" disabled={design.shells.length >= maxShells} onclick={add} aria-label="Add a shell"><Plus size={20} /><span>Add</span></button>
+  <!-- The rockets of the show, in the order they go up: pick one to make it -->
+  <div class="group">
+    <span class="label">Rockets <span class="faint">go up one after the other</span></span>
+    <div class="shells">
+      {#each design.shells as s, i (i)}
+        <button type="button" class="shell-chip" class:on={i === sel} onclick={() => (sel = i)} aria-label="Rocket {i + 1}">
+          <ShellThumb shell={s} size={34} />
+          <span>{i + 1}</span>
+        </button>
+      {/each}
+      <button type="button" class="shell-chip add" disabled={design.shells.length >= maxShells} onclick={add} aria-label="Add a rocket"><Plus size={20} /><span>Add</span></button>
+    </div>
   </div>
 
   {#if shell}
     <section class="card maker">
       <div class="maker-head">
-        <strong>Shell {sel + 1}</strong>
+        <strong>Rocket {sel + 1}</strong>
         <div class="tools">
           <button type="button" class="icon-btn" disabled={sel === 0} onclick={() => move(-1)} aria-label="Go up earlier"><ArrowLeft size={16} /></button>
           <button type="button" class="icon-btn" disabled={sel >= design.shells.length - 1} onclick={() => move(1)} aria-label="Go up later"><ArrowRight size={16} /></button>
-          <button type="button" class="icon-btn" disabled={design.shells.length >= maxShells} onclick={copy} aria-label="Copy this shell"><Copy size={16} /></button>
-          <button type="button" class="icon-btn" disabled={design.shells.length <= 1} onclick={remove} aria-label="Remove this shell"><Trash2 size={16} /></button>
+          <button type="button" class="icon-btn" disabled={design.shells.length >= maxShells} onclick={copy} aria-label="Copy this rocket"><Copy size={16} /></button>
+          <button type="button" class="icon-btn" disabled={design.shells.length <= 1} onclick={remove} aria-label="Remove this rocket"><Trash2 size={16} /></button>
         </div>
       </div>
 
@@ -185,31 +186,11 @@
             {/each}
           </div>
         </div>
-        <div class="group">
-          <span class="label">At once</span>
-          <div class="seg">
-            {#each Array.from({ length: FW_MAX_COUNT }, (_, i) => i + 1) as n (n)}
-              <button type="button" class:on={shell.count === n} onclick={() => (shell.count = n)}>{n}</button>
-            {/each}
-          </div>
-        </div>
+        <label class="group">
+          <span class="label">Height</span>
+          <input type="range" min="0" max="100" bind:value={shell.height} />
+        </label>
       </div>
-
-      <!-- Where and when: set for you, changed only if wanted -->
-      <button type="button" class="placing" class:open={placing} onclick={() => (placing = !placing)}>
-        <span><span class="label">Where and when</span><span class="faint small">{where}</span></span>
-        <ChevronDown size={18} />
-      </button>
-      {#if placing}
-        <div class="sliders">
-          <label class="slider"><span class="faint small">Across the sky</span><input type="range" min="0" max="100" bind:value={shell.x} /></label>
-          <label class="slider"><span class="faint small">How high</span><input type="range" min="0" max="100" bind:value={shell.height} /></label>
-          <label class="slider">
-            <span class="faint small">{sel === 0 ? 'After the launch' : 'After the one before'}: {(shell.delay / 1000).toFixed(1)} s</span>
-            <input type="range" min="0" max={sel === 0 ? 1000 : FW_MAX_DELAY} step="100" bind:value={shell.delay} />
-          </label>
-        </div>
-      {/if}
     </section>
   {/if}
 
@@ -246,8 +227,7 @@
     font-size: 1.1rem;
     font-weight: 600;
   }
-  .group,
-  .slider {
+  .group {
     display: flex;
     flex-direction: column;
     gap: 0.45rem;
@@ -425,32 +405,6 @@
   .seg button.on {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
-  }
-  .placing {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.6rem;
-    padding: 0.55rem 0.7rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    text-align: left;
-  }
-  .placing > span {
-    display: grid;
-  }
-  .placing :global(svg) {
-    flex: none;
-    transition: transform 0.2s;
-  }
-  .placing.open :global(svg) {
-    transform: rotate(180deg);
-  }
-  .sliders {
-    display: grid;
-    gap: 0.7rem;
-    margin-top: -0.3rem;
   }
   input[type='range'] {
     width: 100%;

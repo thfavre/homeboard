@@ -7,14 +7,14 @@
 // ------------------------------------------------------------ letters
 
 /**
- * The paper a letter is written on. Plain papers come with the courier; fancy and luxe ones cost
- * extra, at the prices the host sets (courierPaperFancy, courierPaperLuxe).
+ * The paper a letter is written on. Parchment comes with the courier; the others cost extra, at
+ * the prices the host sets for each level (courierPaperTinted, courierPaperFancy, courierPaperLuxe).
  */
 export const PAPERS = [
   { id: 'parchment', name: 'Parchment', tier: 'plain' },
-  { id: 'sky', name: 'Sky', tier: 'plain' },
-  { id: 'kraft', name: 'Kraft', tier: 'plain' },
-  { id: 'mint', name: 'Mint', tier: 'plain' },
+  { id: 'sky', name: 'Sky', tier: 'tinted' },
+  { id: 'kraft', name: 'Kraft', tier: 'tinted' },
+  { id: 'mint', name: 'Mint', tier: 'tinted' },
   { id: 'rose', name: 'Rose', tier: 'fancy' },
   { id: 'lavender', name: 'Lavender', tier: 'fancy' },
   { id: 'confetti', name: 'Confetti', tier: 'fancy' },
@@ -26,10 +26,11 @@ export type PaperId = (typeof PAPERS)[number]['id'];
 export type PaperTier = (typeof PAPERS)[number]['tier'];
 
 /** What a paper costs on top of the courier */
-export function paperPrice(id: PaperId, prices: { fancy: number; luxe: number }): number {
+export function paperPrice(id: PaperId, prices: PaperPrices): number {
   const tier = PAPERS.find((p) => p.id === id)?.tier ?? 'plain';
-  return tier === 'fancy' ? prices.fancy : tier === 'luxe' ? prices.luxe : 0;
+  return tier === 'plain' ? 0 : prices[tier];
 }
+export type PaperPrices = Record<Exclude<PaperTier, 'plain'>, number>;
 
 /** The wax seal on the envelope */
 export const SEALS = [
@@ -322,8 +323,12 @@ export interface FwShow {
   forNight?: true;
 }
 
-/** The most rockets planted for a show (one per shell, up to this) */
-export const MAX_ROCKETS = 6;
+/** The most rockets planted for a show (one per shell, up to this), and the most shows launched together */
+export const MAX_ROCKETS = 8;
+export const MAX_TOGETHER = 5;
+
+/** Where rocket `k` of a row of `n` stands, across its launch spot (world units from its middle) */
+export const rowOffset = (k: number, n: number) => (k - (n - 1) / 2) * 13;
 
 /** Where a shell bursts across the town: left or right of its launch spot by its `x` (0..100, 50 above it) */
 export const burstX = (padX: number, x: number, w: number) => Math.max(60, Math.min(w - 60, padX + (x - 50) * 11));
@@ -333,7 +338,8 @@ export interface ActionSettingsView {
   courier: boolean;
   courierFee: number;
   courierMaxCoins: number;
-  /** What a fancy and a luxe paper cost on top of the courier */
+  /** What a tinted, a fancy and a luxe paper cost on top of the courier */
+  courierPaperTinted: number;
   courierPaperFancy: number;
   courierPaperLuxe: number;
   fireworks: boolean;
@@ -345,7 +351,7 @@ export interface ActionSettingsView {
 
 /** What the phone needs to know about the actions (every guest's state) */
 export interface ActionsInfo {
-  courier: { on: boolean; fee: number; maxCoins: number; papers: { fancy: number; luxe: number } };
+  courier: { on: boolean; fee: number; maxCoins: number; papers: PaperPrices };
   fireworks: {
     on: boolean;
     base: number;

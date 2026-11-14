@@ -7,6 +7,7 @@ import {
   letterText,
   paperPrice,
   MAX_ROCKETS,
+  MAX_TOGETHER,
   PAPERS,
   SEALS,
   fireworkCost,
@@ -17,6 +18,7 @@ import {
   type ActionSettingsView,
   type ActionsInfo,
   type FwDesign,
+  type FwShell,
   type FwShow,
   type Letter,
   type Mailbox,
@@ -44,6 +46,7 @@ export const ACTION_DEFAULTS: ActionSettings = {
   courier: true,
   courierFee: 5,
   courierMaxCoins: 200,
+  courierPaperTinted: 2,
   courierPaperFancy: 5,
   courierPaperLuxe: 15,
   fireworks: true,
@@ -146,7 +149,10 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
   }
 
   /** What the papers that are not plain cost on top of the courier */
-  const paperPrices = () => ({ fancy: Math.max(0, ctx.settings.get().courierPaperFancy), luxe: Math.max(0, ctx.settings.get().courierPaperLuxe) });
+  const paperPrices = () => {
+    const s = ctx.settings.get();
+    return { tinted: Math.max(0, s.courierPaperTinted), fancy: Math.max(0, s.courierPaperFancy), luxe: Math.max(0, s.courierPaperLuxe) };
+  };
 
   const mailbox = (guestId: string): Mailbox => ({
     inbox: letters.filter((l) => l.to === guestId && l.deliveredAt !== null).sort((a, b) => b.deliveredAt! - a.deliveredAt!),
@@ -270,27 +276,46 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
     if (!d.hasAvatar(guest.id)) throw new HbError('Make your look first');
     // In the day it waits for the night (a town without night never gets one)
     if (!night() && nightAt() === null) throw new HbError('Fireworks only go up at night, and the town has no night now');
-    const design = mine(guest.id).find((x) => x.id === args?.id);
-    if (!design) throw new HbError('That firework is gone');
+    // One show, or several picked together (in that order): they go up one after the other
+    const ids: unknown[] = Array.isArray(args?.ids) ? args.ids : [args?.id];
+    if (!ids.length || ids.length > MAX_TOGETHER || new Set(ids).size !== ids.length) throw new HbError(`Pick 1 to ${MAX_TOGETHER} shows`);
+    const designs = ids.map((id) => mine(guest.id).find((x) => x.id === id));
+    if (designs.some((x) => !x)) throw new HbError('That firework is gone');
     const now = Date.now();
     shows = shows.filter(waiting);
-    if (shows.some((x) => x.by === guest.id && (x.at === 0 || x.at > now))) throw new HbError('Your last show has not gone up yet');
-    const cost = fireworkCost(design, prices());
+    if (shows.some((x) => x.by === guest.id && (x.at === 0 || x.at > now))) throw new HbError('Your last fireworks have not gone up yet');
+    const cost = designs.reduce((n, x) => n + fireworkCost(x!, prices()), 0);
     const balance = wallets[guest.id] ?? 0;
     const money = d.currency();
     // (the phone saw a price: one that went up meanwhile is not paid without seeing it)
-    if (args?.price !== undefined && Math.round(num(args.price, cost)) < cost) throw new HbError(`The price changed: this show now costs ${cost}`);
-    if (balance < cost) throw new HbError(`Not enough ${money}: this show costs ${cost}, you have ${balance}`, 'NO_MONEY');
+    if (args?.price !== undefined && Math.round(num(args.price, cost)) < cost) throw new HbError(`The price changed: this now costs ${cost}`);
+    if (balance < cost) throw new HbError(`Not enough ${money}: this costs ${cost}, you have ${balance}`, 'NO_MONEY');
     wallets[guest.id] = balance - cost;
     d.save();
     d.sendWallet(guest.id);
-    const show: FwShow = { id: randomUUID().slice(0, 8), at: 0, ends: 0, by: guest.id, byName: guest.name, design: structuredClone(design), pad: null };
+    // Several picked: one show of them all, each going up in turn, left and right of the launch spot
+    const design = designs.length === 1 ? structuredClone(designs[0]!) : combine(designs as FwDesign[]);
+    const show: FwShow = { id: randomUUID().slice(0, 8), at: 0, ends: 0, by: guest.id, byName: guest.name, design, pad: null };
     shows.push(show);
     if (night()) setUp(show);
     else show.forNight = true;
     ctx.publish();
-    return { at: show.at || null, balance: wallets[guest.id] };
+    return { balance: wallets[guest.id] };
   });
+
+  /**
+   * Shows launched together as one: each one's rockets after the one before (a short pause
+   * between), the first a little left of the launch spot, the next a little right, then further
+   * out on each side
+   */
+  function combine(list: FwDesign[]): FwDesign {
+    const shells: FwShell[] = [];
+    list.forEach((d, k) => {
+      const shift = k === 0 && list.length % 2 ? 0 : (k % 2 ? 1 : -1) * (14 + 12 * Math.floor(k / 2));
+      d.shells.forEach((s, i) => shells.push({ ...structuredClone(s), x: Math.max(0, Math.min(100, s.x + shift)), delay: i === 0 && k > 0 ? Math.max(s.delay, 900) : s.delay }));
+    });
+    return { id: list.map((d) => d.id).join('+'), name: list.map((d) => d.name).join(' + '), shells };
+  }
 
   /**
    * The character goes and plants the rockets first (one per shell, a few at most); the show goes
@@ -375,6 +400,7 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
         courier: typeof args.courier === 'boolean' ? args.courier : s.courier,
         courierFee: amount(args.courierFee, s.courierFee),
         courierMaxCoins: amount(args.courierMaxCoins, s.courierMaxCoins),
+        courierPaperTinted: amount(args.courierPaperTinted, s.courierPaperTinted),
         courierPaperFancy: amount(args.courierPaperFancy, s.courierPaperFancy),
         courierPaperLuxe: amount(args.courierPaperLuxe, s.courierPaperLuxe),
         fireworks: typeof args.fireworks === 'boolean' ? args.fireworks : s.fireworks,

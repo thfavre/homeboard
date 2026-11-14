@@ -51,7 +51,7 @@
     const q = query.trim().toLowerCase();
     return q ? others.filter((c) => c.id === to || c.name.toLowerCase().includes(q)) : others;
   });
-  const papers = $derived(info?.papers ?? { fancy: 0, luxe: 0 });
+  const papers = $derived(info?.papers ?? { tinted: 0, fancy: 0, luxe: 0 });
   /** The courier, and the paper when it is not a plain one */
   const fee = $derived((info?.fee ?? 0) + paperPrice(paper, papers));
   const cost = $derived(fee + coins);
@@ -278,12 +278,23 @@
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
     transform: translateY(-2px);
   }
+  /* One row that slides sideways (room above for the prices on the corners) */
   .papers {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    display: flex;
     gap: 0.4rem;
+    overflow-x: auto;
+    margin: -0.5rem -0.25rem 0;
+    padding: 0.7rem 0.25rem 0.3rem;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+  .papers::-webkit-scrollbar {
+    display: none;
   }
   .paper-pick {
+    flex: none;
+    width: 4.7rem;
+    scroll-snap-align: start;
     position: relative;
     display: grid;
     justify-items: center;
@@ -312,7 +323,7 @@
   .extra {
     position: absolute;
     top: -0.45rem;
-    right: -0.3rem;
+    right: -0.2rem;
     display: inline-flex;
     align-items: center;
     gap: 0.1rem;
