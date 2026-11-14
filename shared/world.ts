@@ -157,8 +157,8 @@ export const TREE_SHAKE = {
   x: 454,
   y: 781,
   meet: [
-    { x: 462, y: 834 },
-    { x: 506, y: 834 },
+    { x: 460, y: 805 },
+    { x: 504, y: 805 },
   ],
 };
 export const BOARD_SPOTS = [

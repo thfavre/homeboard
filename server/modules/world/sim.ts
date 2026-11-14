@@ -149,8 +149,13 @@ const CHAT_TURN_MS = 2600;
 /** Some turns end with both laughing (this share of the turns), for the last part of the turn */
 const CHAT_LAUGH_SHARE = 0.3;
 const CHAT_LAUGH_MS = 900;
-/** How long a tree is shaken, and how long the talk after lasts (ms): told off, or laughing it off together */
-const SHAKE_MS = 2600;
+/**
+ * How long a tree is shaken, then how long the one on the bench sits on under the leaves still
+ * coming down before getting up (they take a few seconds to fall), and how long the talk after
+ * lasts (ms): told off, or laughing it off together
+ */
+const SHAKE_MS = 4200;
+const REACT_MS = 2200;
 const SHAKE_TALK_MS: Record<Mood['kind'], [number, number]> = { angry: [6000, 10_000], funny: [4000, 7000] };
 /** In a laugh after the shake: each round of this long, both laugh for the first part */
 const FUNNY_ROUND_MS = 1800;
@@ -297,7 +302,8 @@ interface Mood {
 
 /**
  * Shaking the tree by the bench (TREE_SHAKE) while `victim` sits on it: to the trunk, then pushing
- * at it from `at` (0: still on the way) for SHAKE_MS. Then both meet below the tree for a talk.
+ * at it from `at` (0: still on the way) for SHAKE_MS. The leaves fall for REACT_MS more, then both
+ * meet below the tree for a talk.
  */
 interface Shake {
   kind: 'shake';
@@ -733,7 +739,7 @@ export class TownSim {
     // Shaking the tree: off on the way; once at it, it is over in a moment
     shake: {
       priority: PRIORITY.activity,
-      left: (d, w, now) => (d.at ? d.at + SHAKE_MS - now : walkMs(w, TREE_SHAKE.x, TREE_SHAKE.y)),
+      left: (d, w, now) => (d.at ? d.at + SHAKE_MS + REACT_MS - now : walkMs(w, TREE_SHAKE.x, TREE_SHAKE.y)),
       wrapUp: (d, w, now, ms) => {
         if (!d.at) stopWalking(d, w, now, ms);
       },
@@ -939,7 +945,7 @@ export class TownSim {
       }
     }
     const someonePets = [...this.walkers.values()].some((w) => w.doing.kind === 'pet');
-    const shaking = [...this.walkers.values()].find((w) => w.doing.kind === 'shake' && w.doing.at)?.doing as Shake | undefined;
+    const shaking = [...this.walkers.values()].find((w) => w.doing.kind === 'shake' && w.doing.at && now < w.doing.at + SHAKE_MS)?.doing as Shake | undefined;
     return {
       t: now,
       ids,
@@ -1545,11 +1551,12 @@ export class TownSim {
         d.at = now;
         // (whoever sits there stays for it)
         const sit = v.doing as Extract<Doing, { kind: 'sit' }>;
-        sit.until = Math.max(sit.until, now + SHAKE_MS + 1000);
+        sit.until = Math.max(sit.until, now + SHAKE_MS + REACT_MS + 1000);
       }
       return;
     }
-    if (now < d.at + SHAKE_MS) return;
+    // (done shaking, standing back to watch the leaves come down on the bench)
+    if (now < d.at + SHAKE_MS + REACT_MS) return;
     if (!v || !sitting) {
       w.doing = idle(now, 600, 1500);
       return;
