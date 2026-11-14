@@ -37,9 +37,13 @@ export const LOT = (() => {
 /** How far the fence stands outside the cells (world units): nobody walks in there but the builders */
 export const LOT_FENCE = 6;
 
-/** How many blocks a column takes, and how high each block stands (sprite pixels) */
+/**
+ * How many blocks a column takes, and how high each block stands (sprite pixels). A block is a cube:
+ * its front as high as its top is deep on the ground (a cell), like the town's crates and barrels,
+ * whose fronts are as high as their tops or higher.
+ */
 export const LOT_STACK = 5;
-export const BLOCK_UP = 12;
+export const BLOCK_UP = 16;
 
 /** Inside the fence */
 export function inLot(x: number, y: number, margin = 0): boolean {

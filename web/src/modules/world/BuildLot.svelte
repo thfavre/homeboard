@@ -50,7 +50,7 @@
   let width = $state(0);
 
   /** What the canvas shows of the world: the lot, its fence, and room above it for tall pieces on its back row */
-  const VIEW = { x0: LOT.x0 - 14, x1: LOT.x1 + 14, y0: LOT.y0 - 100, y1: LOT.y1 + 16 };
+  const VIEW = { x0: LOT.x0 - 14, x1: LOT.x1 + 14, y0: LOT.y0 - 120, y1: LOT.y1 + 16 };
   const VW = VIEW.x1 - VIEW.x0;
   const VH = VIEW.y1 - VIEW.y0;
 

@@ -25,6 +25,8 @@ export const TOWN_SCENE = {
   trees: [
     { x: 430, y: 440, size: 1.12 },
     { x: 1170, y: 440, size: 1.18, stem: 0.62 },
+    // (right of the build lot, its leaves clear of the lot)
+    { x: 700, y: 780, size: 0.97 },
     { x: 1120, y: 780, size: 1.24 },
   ],
   lamps: [
@@ -34,7 +36,8 @@ export const TOWN_SCENE = {
     { x: 980, y: 300 },
     { x: 1300, y: 610 },
     { x: 940, y: 830 },
-    { x: 660, y: 830 },
+    // (between the build lot and the tree right of it)
+    { x: 604, y: 836 },
   ],
 };
 /** Where characters walk: the square below the sidewalk (but the far side of the river, see brookSide) */
@@ -134,14 +137,15 @@ export const NOTICE_BOARD = { x: 148, y: 304 };
 /**
  * The town's own benches, where each stands (the middle of its bottom): in front of the potted tree
  * right of the barber, in place of the square's bench at `instead` (it would stand before the cafe's
- * porch; the square's other one is behind the town hall), and on the square at the top left of the
- * fountain. `dir`: the way its sitter faces; a bench facing sideways is drawn by hand (the city
- * sheet has the bench only facing the front; one stood by a tree where the build lot is now).
+ * porch; the square's other one is behind the town hall), on the square at the top left of the
+ * fountain, and just right of the bottom left tree's trunk facing right (toward the fountain, drawn by hand: the
+ * city sheet has the bench only facing the front). `dir`: the way its sitter faces.
  */
 export const TOWN_BENCHES: { instead: number; list: { x: number; y: number; dir: WDir }[] } = {
   list: [
     { x: 1450, y: 184, dir: 2 },
     { x: 676, y: 468, dir: 2 },
+    { x: 736, y: 792, dir: 3 },
   ],
   instead: 1200,
 };
@@ -250,8 +254,9 @@ export const TOWN_OBSTACLES: { x: number; y: number; rx: number; ry: number; box
   ...TOWN_SCENE.lamps.map((l) => ({ x: l.x, y: l.y, rx: 12, ry: 7 })),
   ...townHallFootprint(),
   { x: NOTICE_BOARD.x, y: NOTICE_BOARD.y, rx: 30, ry: 7 },
-  // The bench on the square (the one on the sidewalk stands off it): the fountain's
+  // The benches on the square (the one on the sidewalk stands off it): the fountain's, and the one by the tree, seen from the side
   { x: TOWN_BENCHES.list[1].x, y: TOWN_BENCHES.list[1].y - 9, rx: 40, ry: 7 },
+  { x: TOWN_BENCHES.list[2].x - 2, y: TOWN_BENCHES.list[2].y - 18, rx: 11, ry: 18 },
   ...CAFE.tables.map((t) => ({ x: t.x, y: t.y, rx: 22, ry: 8 })),
   { x: CAMPFIRE.x, y: CAMPFIRE.y, rx: 25, ry: 12 },
   ...FIRE_LOGS.map((l) => (l.along === 'y' ? { x: l.x, y: l.y, rx: 6, ry: 25 } : { x: l.x, y: l.y, rx: 30, ry: 4 })),

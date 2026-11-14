@@ -245,17 +245,24 @@ function texture(g: G, b: BlockDef, w: number, h: number, front: boolean, rand: 
 function buildFaces(b: BlockDef): Faces {
   const rand = seeded(seedOf(b.id));
   const W = LOT_CELL;
+  // The top: in full light from above, so clearly lighter than the front; a light rim at its back
+  // and left, and a bright edge along the front where it turns down (the crease that makes it a cube)
   const [top, tg] = canvas(W, LOT_CELL);
   texture(tg, b, W, LOT_CELL, false, rand);
-  // Lit from the top left: a light edge above and on the left, the outline around
+  px(tg, 'rgba(255,255,255,0.16)', 0, 0, W, LOT_CELL);
   px(tg, b.light, 1, 1, W - 2, 1);
   px(tg, b.light, 1, 1, 1, LOT_CELL - 2);
-  tg.strokeStyle = b.line;
-  tg.lineWidth = 1;
-  tg.strokeRect(0.5, 0.5, W - 1, LOT_CELL - 1);
+  px(tg, b.light, 1, LOT_CELL - 1, W - 2, 1);
+  px(tg, b.line, 0, 0, W, 1);
+  px(tg, b.line, 0, 0, 1, LOT_CELL);
+  px(tg, b.line, W - 1, 0, 1, LOT_CELL);
+  // The front: in the shade, darker toward the ground, its right edge darker still; a dark seam
+  // under the block above (the top's bright edge covers it on the topmost block)
   const [front, fg] = canvas(W, BLOCK_UP);
   texture(fg, b, W, BLOCK_UP, true, rand);
-  px(fg, 'rgba(10,8,20,0.18)', 0, BLOCK_UP - 3, W, 3);
+  for (let y = 0; y < BLOCK_UP; y++) px(fg, `rgba(10,8,20,${0.1 + (0.22 * y) / BLOCK_UP})`, 0, y, W, 1);
+  px(fg, 'rgba(10,8,20,0.18)', W - 3, 0, 2, BLOCK_UP);
+  px(fg, 'rgba(10,8,20,0.35)', 0, 0, W, 1);
   px(fg, b.line, 0, 0, 1, BLOCK_UP);
   px(fg, b.line, W - 1, 0, 1, BLOCK_UP);
   px(fg, b.line, 0, BLOCK_UP - 1, W, 1);
