@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { PenLine } from '@lucide/svelte';
   import { FW_MAX_STROKES, FW_STROKE_POINTS, fwHex, type FwPoint, type FwShell } from '$shared/worldActions.ts';
   import { shapePoints } from './fireworks.ts';
 
@@ -8,13 +9,14 @@
    * pad shows the stars where they will burst (the drawing sampled as the TV does), in the shell's
    * colors; an empty pad is a round burst.
    */
-  let { shell }: { shell: FwShell } = $props();
+  let { shell, remember }: { shell: FwShell; remember: () => void } = $props();
 
   let canvas: HTMLCanvasElement;
   /** The line being drawn (null: none) */
   let live: FwPoint[] | null = null;
-  /** Points closer than this to the last one are skipped while drawing */
+  /** Points closer than this to the last one are skipped while drawing; a long line gets it bigger */
   const MIN_STEP = 0.025;
+  let step = MIN_STEP;
 
   function toPad(e: PointerEvent): FwPoint {
     const r = canvas.getBoundingClientRect();
@@ -27,13 +29,20 @@
     if (shell.strokes.length >= FW_MAX_STROKES) return;
     canvas.setPointerCapture(e.pointerId);
     live = [toPad(e)];
+    step = MIN_STEP;
     draw();
   }
   function move(e: PointerEvent) {
     if (!live) return;
     const p = toPad(e);
     const last = live[live.length - 1];
-    if (Math.hypot(p[0] - last[0], p[1] - last[1]) < MIN_STEP || live.length >= FW_STROKE_POINTS) return;
+    if (Math.hypot(p[0] - last[0], p[1] - last[1]) < step) return;
+    // A long line keeps going: once it has as many points as a line keeps, every other one goes
+    // (its shape stays) and the next ones are taken further apart
+    if (live.length >= FW_STROKE_POINTS) {
+      live = live.filter((_, i) => i % 2 === 0 || i === live!.length - 1);
+      step *= 2;
+    }
     live.push(p);
     draw();
   }
@@ -41,6 +50,7 @@
     if (!live) return;
     // A tap is a single star: kept as a tiny line so it shows
     const st = live.length === 1 ? [live[0], [live[0][0] + 0.001, live[0][1]] as FwPoint] : live;
+    remember();
     shell.strokes.push(st.map(([x, y]) => [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000] as FwPoint));
     live = null;
   }
@@ -132,7 +142,7 @@
 <div class="pad">
   <canvas bind:this={canvas} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}></canvas>
   {#if !shell.strokes.length}
-    <p class="hint">Draw a shape with your finger<br /><span>or leave it empty for a round burst</span></p>
+    <p class="hint"><PenLine size={15} />Draw a shape</p>
   {/if}
 </div>
 
@@ -158,15 +168,13 @@
     left: 0;
     right: 0;
     bottom: 1rem;
-    text-align: center;
-    color: rgba(255, 255, 255, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    color: rgba(255, 255, 255, 0.7);
     font-weight: 600;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     pointer-events: none;
-  }
-  .hint span {
-    font-weight: 400;
-    font-size: 0.82rem;
-    opacity: 0.75;
   }
 </style>
