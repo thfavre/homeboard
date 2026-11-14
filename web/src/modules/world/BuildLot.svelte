@@ -174,9 +174,16 @@
     return tier ? info.prices[tier] : 0;
   });
 
+  /** The decoration whose colors (or kinds) lie over its card to pick from, like the wardrobe's */
+  let picking = $state<string | null>(null);
+
+  /** A decoration's card tapped: in hand; one with colors opens them over its card (tapped again: closes) */
   function pickProp(id: string) {
-    prop = id;
-    variant = 0;
+    if (prop !== id) {
+      prop = id;
+      variant = 0;
+    }
+    picking = propById(id)?.variants && picking !== id ? id : null;
   }
 
   /** The picker's categories, each with a piece to show for it */
@@ -195,6 +202,7 @@
   /** Open a category: the piece in hand becomes its first one, unless the one in hand belongs to it */
   function openCat(c: Cat) {
     cat = c;
+    picking = null;
     if (c === 'block' || c === 'fancy') {
       if (blockById(block)?.tier !== c) block = blocksOf(c)[0].id;
     } else if (c !== 'remove' && propById(prop)?.tier !== c) pickProp(propsOf(c)[0].id);
@@ -339,7 +347,7 @@
         {@const pic = tool === 'block' ? blockPicture(block) : propPicture(prop, variant)}
         <span class="pic">{#if pic}<img src={pic} alt="" class:tall={tool === 'prop'} />{/if}</span>
         <span class="what">
-          <strong>{tool === 'block' ? (blockById(block)?.name ?? '') : (chosenProp?.name ?? '')}{tool === 'prop' && chosenProp?.variants ? `, ${chosenProp.variants[variant].toLowerCase()}` : ''}</strong>
+          <strong>{tool === 'block' ? (blockById(block)?.name ?? '') : (chosenProp?.name ?? '')}{tool === 'prop' && chosenProp?.variants ? `, ${chosenProp.variants[variant]?.name.toLowerCase() ?? ''}` : ''}</strong>
           <span class="dim">{tool === 'block' ? 'Tap the ground, or a column to stack on it (5 high at most).' : 'Tap where its front goes.'}</span>
         </span>
         <span class="cost" class:dear={price > (mine?.balance ?? 0)}><Coins size={14} />{price}</span>
@@ -365,16 +373,6 @@
         {#if cat === 'remove'}
           <p class="empty">Tap any piece on the lot, yours or anyone's: your character goes and takes it away, for free. Tapping one of yours still on its way takes it back and pays you back.</p>
         {:else}
-          {#if tool === 'prop' && chosenProp?.variants && chosenProp.tier === cat}
-            <div class="variants" role="radiogroup" aria-label="Kind">
-              {#each chosenProp.variants as name, i (name)}
-                {@const pic = propPicture(chosenProp.id, i)}
-                <button type="button" class="variant" class:on={variant === i} role="radio" aria-checked={variant === i} onclick={() => (variant = i)} title={name} aria-label={name}>
-                  {#if pic}<img src={pic} alt="" />{/if}
-                </button>
-              {/each}
-            </div>
-          {/if}
           <div class="grid">
             {#if cat === 'block' || cat === 'fancy'}
               {#each blocksOf(cat) as b (b.id)}
@@ -387,12 +385,40 @@
               {/each}
             {:else}
               {#each propsOf(cat) as p (p.id)}
-                {@const pic = propPicture(p.id, 0)}
-                <button type="button" class="piece" class:on={prop === p.id} class:dear={info.prices[p.tier] > (mine?.balance ?? 0)} onclick={() => pickProp(p.id)} title={p.name}>
-                  <span class="name">{p.name}</span>
-                  <span class="art">{#if pic}<img src={pic} alt="" class="tall" />{/if}</span>
-                  <span class="price">{info.prices[p.tier]} <Coins size={13} /></span>
-                </button>
+                {@const v = prop === p.id ? variant : 0}
+                {@const pic = propPicture(p.id, v)}
+                <!-- While picking, the colors lie over the card, so its size never changes -->
+                <div class="cell">
+                  <button type="button" class="piece" class:on={prop === p.id} class:dear={info.prices[p.tier] > (mine?.balance ?? 0)} onclick={() => pickProp(p.id)} title={p.name}>
+                    <span class="name">{p.name}</span>
+                    <span class="art">{#if pic}<img src={pic} alt="" class="tall" />{/if}</span>
+                    {#if p.variants?.some((x) => x.color)}
+                      <span class="dots">
+                        {#each p.variants as x, i (x.name)}<span class="dot" class:cur={i === v} style:background={x.color}></span>{/each}
+                      </span>
+                    {/if}
+                    <span class="price">{info.prices[p.tier]} <Coins size={13} /></span>
+                  </button>
+                  {#if picking === p.id && p.variants}
+                    <div class="vpick">
+                      <span class="name">{p.name}</span>
+                      <div class="squares" style:--cols={p.variants.length <= 4 ? 2 : 3}>
+                        {#each p.variants as x, i (x.name)}
+                          {@const vpic = x.color ? null : propPicture(p.id, i)}
+                          <button
+                            type="button"
+                            class="square"
+                            class:on={prop === p.id && variant === i}
+                            style:background={x.color ?? null}
+                            aria-label={x.name}
+                            title={x.name}
+                            onclick={() => ((variant = i), (picking = null))}
+                          >{#if vpic}<img src={vpic} alt="" />{/if}</button>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                </div>
               {/each}
             {/if}
           </div>
@@ -660,6 +686,71 @@
     grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr));
     gap: 0.4rem;
   }
+  .cell {
+    position: relative;
+    display: grid;
+    min-width: 0;
+  }
+  /* A decoration's colors over its card, like the wardrobe's: its name on top, the squares filling the rest */
+  .vpick {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.35rem 0.35rem 0.4rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    /* The theme's surface can be see-through: lay it on the page color so the card below hides */
+    background:
+      linear-gradient(var(--surface-2), var(--surface-2)),
+      var(--bg);
+    box-shadow: 0 0 0 1px var(--accent) inset;
+  }
+  .squares {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(var(--cols), 1fr);
+    grid-auto-rows: 1fr;
+    gap: 0.3rem;
+    min-height: 0;
+  }
+  .square {
+    display: grid;
+    place-items: center;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 2px solid color-mix(in srgb, #000 25%, transparent);
+    border-radius: var(--radius-sm);
+    background: var(--surface-3);
+  }
+  .square.on {
+    border-color: var(--accent);
+    outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .square img {
+    max-width: 90%;
+    max-height: 90%;
+    image-rendering: pixelated;
+  }
+  .dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.2rem;
+    height: 0.6rem;
+  }
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+  }
+  .dot.cur {
+    outline: 1.5px solid var(--accent);
+    outline-offset: 1px;
+  }
   .empty {
     margin: 0;
     padding: 0.5rem;
@@ -667,31 +758,10 @@
     line-height: 1.4;
     color: var(--text-dim);
   }
-  .variants {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    padding-bottom: 0.45rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .variant {
-    display: grid;
-    place-items: center;
-    width: 2.5rem;
-    height: 2.5rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-  }
-  .variant.on {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent) inset;
-  }
-  .variant img {
-    max-width: 2rem;
-    max-height: 2rem;
-    image-rendering: pixelated;
-  }
+
+
+
+
 
 
 

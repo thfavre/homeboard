@@ -121,7 +121,8 @@ export const blockById = (id: string) => BLOCKS.find((b) => b.id === id);
 
 /**
  * A decoration from the town's art. `w` x `d`: the cells it stands on (columns, rows), from its top
- * left cell; it is drawn standing on its bottom row. `variants`: how many colors or kinds it comes in.
+ * left cell; it is drawn standing on its bottom row. `variants`: the colors or kinds it comes in (six at
+ * most, like the shop's colors), each with its column in the art (`art`) and, for a color, how it looks.
  */
 export interface PropDef {
   id: string;
@@ -129,24 +130,40 @@ export interface PropDef {
   tier: 'small' | 'big' | 'grand';
   w: number;
   d: number;
-  variants?: string[];
+  variants?: PropVariant[];
   /** Shines at night (a lamp) */
   glow?: boolean;
 }
 
-const FLOWER_COLORS = ['White', 'Pink', 'Red', 'Blue', 'Purple', 'Yellow', 'Orange', 'Amber', 'Sky'];
+export interface PropVariant {
+  name: string;
+  art: number;
+  color?: string;
+}
+
+/** The flowers' colors: six of the art's nine (orange, amber and sky are too close to the others) */
+const FLOWER_COLORS: PropVariant[] = [
+  { name: 'White', art: 0, color: '#eceee4' },
+  { name: 'Pink', art: 1, color: '#ec8fb8' },
+  { name: 'Red', art: 2, color: '#c8322a' },
+  { name: 'Blue', art: 3, color: '#5a6fd8' },
+  { name: 'Purple', art: 4, color: '#9b3f8f' },
+  { name: 'Yellow', art: 5, color: '#f0c93a' },
+];
+/** Kinds that differ by shape, not color: shown by their picture */
+const kinds = (...names: string[]): PropVariant[] => names.map((name, art) => ({ name, art }));
 
 export const PROPS: PropDef[] = [
   { id: 'flower', name: 'Flower', tier: 'small', w: 1, d: 1, variants: FLOWER_COLORS },
   { id: 'tallFlower', name: 'Tall flower', tier: 'small', w: 1, d: 1, variants: FLOWER_COLORS },
   { id: 'flowerBush', name: 'Flower bush', tier: 'small', w: 2, d: 2, variants: FLOWER_COLORS },
-  { id: 'shrub', name: 'Shrub', tier: 'small', w: 2, d: 2, variants: ['Ragged', 'Lumpy', 'Round'] },
-  { id: 'leafy', name: 'Leafy bush', tier: 'small', w: 2, d: 2, variants: ['Round', 'Bushy', 'Spiky', 'Star'] },
+  { id: 'shrub', name: 'Shrub', tier: 'small', w: 2, d: 2, variants: kinds('Ragged', 'Lumpy', 'Round') },
+  { id: 'leafy', name: 'Leafy bush', tier: 'small', w: 2, d: 2, variants: kinds('Round', 'Bushy', 'Spiky', 'Star') },
   { id: 'basket', name: 'Basket', tier: 'small', w: 2, d: 2 },
   { id: 'barrel', name: 'Barrel', tier: 'small', w: 2, d: 2 },
   { id: 'crate', name: 'Crate', tier: 'small', w: 2, d: 2 },
   { id: 'fernPot', name: 'Potted fern', tier: 'big', w: 2, d: 2 },
-  { id: 'planter', name: 'Planter box', tier: 'big', w: 2, d: 2, variants: ['Fern', 'Flowers'] },
+  { id: 'planter', name: 'Planter box', tier: 'big', w: 2, d: 2, variants: kinds('Fern', 'Flowers') },
   { id: 'topiary', name: 'Topiary', tier: 'big', w: 2, d: 2 },
   { id: 'bench', name: 'Bench', tier: 'big', w: 4, d: 2 },
   { id: 'lamp', name: 'Lamp post', tier: 'big', w: 1, d: 1, glow: true },

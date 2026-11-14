@@ -327,7 +327,8 @@ function columnProp(c: number, r: number, list: string[], ghostFrom = Infinity):
 
 /** Where a decoration's art is: its sheet and the cut of it, by its kind and variant (null: drawn otherwise) */
 function propCut(env: Env, art: LotArt | null, p: LotProp): [HTMLImageElement, Cut] | null {
-  const v = p.v;
+  // (the variant's column in the art)
+  const v = propById(p.kind)?.variants?.[p.v]?.art ?? p.v;
   switch (p.kind) {
     case 'flower':
       return [env.flowers, [v * 32, 96, 32, 32]];
