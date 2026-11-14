@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Check, Coins, Moon, Pencil, Plus, Rocket, Sun, Trash2 } from '@lucide/svelte';
+  import { Check, Coins, Moon, Pencil, Plus, Rocket, Sun, Trash2, X } from '@lucide/svelte';
   import { attempt, hb, rpc, serverNow } from '$lib/client.svelte.ts';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
   import { BASIC_FIREWORK, MAX_TOGETHER, fireworkCost, type FwDesign } from '$shared/worldActions.ts';
@@ -56,11 +56,14 @@
     draft = null;
   }
 
-  /** The shows picked to launch, in the order picked */
+  /** The shows picked to launch, in the order picked (the same one as often as tapped) */
   let picked = $state<string[]>([]);
   function pick(d: FwDesign) {
-    if (picked.includes(d.id)) picked = picked.filter((x) => x !== d.id);
-    else if (picked.length < MAX_TOGETHER) picked = [...picked, d.id];
+    if (picked.length < MAX_TOGETHER) picked = [...picked, d.id];
+  }
+  /** Takes one out of the order (the chip tapped) */
+  function unpick(i: number) {
+    picked = picked.filter((_, k) => k !== i);
   }
   const pickedShows = $derived(picked.map((id) => list?.find((x) => x.id === id)).filter((x): x is FwDesign => !!x));
   const total = $derived(fw ? pickedShows.reduce((n, d) => n + fireworkCost(d, fw), 0) : 0);
@@ -111,15 +114,16 @@
       <div class="list">
         {#each list as d (d.id)}
           {@const cost = fw ? fireworkCost(d, fw) : 0}
-          {@const n = picked.indexOf(d.id)}
-          <!-- Its first rocket as drawn on the left (how many more on it), the rest on the right; a tap picks it -->
-          <article class="show card" class:on={n >= 0}>
-            <button type="button" class="thumb" onclick={() => pick(d)} aria-label="Pick {d.name}" aria-pressed={n >= 0}>
+          {@const n = picked.filter((x) => x === d.id).length}
+          {@const full = picked.length >= MAX_TOGETHER}
+          <!-- Its first rocket as drawn on the left (how many more on it), the rest on the right; each tap adds it once more -->
+          <article class="show card" class:on={n > 0}>
+            <button type="button" class="thumb" onclick={() => pick(d)} disabled={full} aria-label="Add {d.name}" aria-pressed={n > 0}>
               <ShellThumb shell={d.shells[0]} size={58} />
               {#if d.shells.length > 1}<span class="more">+{d.shells.length - 1}</span>{/if}
-              {#if n >= 0}<span class="order">{picked.length > 1 ? n + 1 : ''}{#if picked.length === 1}<Check size={14} strokeWidth={3} />{/if}</span>{/if}
+              {#if n > 0}<span class="count">{#if n === 1}<Check size={14} strokeWidth={3} />{:else}{n}x{/if}</span>{/if}
             </button>
-            <button type="button" class="info" onclick={() => pick(d)}>
+            <button type="button" class="info" onclick={() => pick(d)} disabled={full}>
               <strong class="truncate">{d.name}</strong>
               <span class="price"><Coins size={14} />{cost}</span>
             </button>
@@ -134,9 +138,18 @@
         {/each}
       </div>
       <button type="button" class="btn block new" onclick={create}><Plus size={18} />New firework</button>
-      <!-- The ones picked go up together, in the order picked -->
+      <!-- The ones picked go up together, in the order picked: a tap on one takes it out -->
       {#if picked.length}
         <div class="launch-bar">
+          <div class="queue card">
+            {#each pickedShows as d, i (i)}
+              <button type="button" class="chip" onclick={() => unpick(i)} aria-label="Take out {d.name} ({i + 1})">
+                <ShellThumb shell={d.shells[0]} size={30} />
+                <span class="x"><X size={11} strokeWidth={3} /></span>
+              </button>
+            {/each}
+            <span class="left">{picked.length} / {MAX_TOGETHER}</span>
+          </div>
           <button type="button" class="btn primary block" disabled={busy || !canLaunch || waiting} onclick={launch}>
             {#if night}<Rocket size={18} />{:else}<Moon size={18} />{/if}
             Launch{picked.length > 1 ? ` ${picked.length}` : ''}{night ? '' : ' at nightfall'}
@@ -194,16 +207,17 @@
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   }
-  /* The order it goes up in, when several are picked (a tick for one) */
-  .order {
+  /* How many times it is picked (a tick for once) */
+  .count {
     position: absolute;
     top: -0.35rem;
     left: -0.35rem;
     display: grid;
     place-items: center;
-    width: 1.4rem;
+    min-width: 1.4rem;
     height: 1.4rem;
-    border-radius: 50%;
+    padding: 0 0.3rem;
+    border-radius: 999px;
     background: var(--accent);
     color: var(--accent-contrast);
     font-size: 0.8rem;
@@ -260,10 +274,60 @@
     position: sticky;
     bottom: calc(4.6rem + env(safe-area-inset-bottom));
     z-index: 3;
+    display: grid;
+    gap: 0.4rem;
   }
   .launch-bar .btn {
     justify-content: center;
     box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.8);
+  }
+  /* Five picked: the others cannot be added (the picked ones stay bright) */
+  .show:not(.on) .thumb:disabled,
+  .show:not(.on) .info:disabled {
+    opacity: 0.5;
+  }
+  .thumb:disabled,
+  .info:disabled {
+    cursor: default;
+  }
+  /* The order they go up in, each with an X to take it out */
+  .queue {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding: 0.4rem 0.55rem;
+    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.8);
+  }
+  .chip {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: radial-gradient(120% 120% at 50% 110%, #232a57, #060818 75%);
+  }
+  .x {
+    position: absolute;
+    top: -0.35rem;
+    right: -0.35rem;
+    display: grid;
+    place-items: center;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .left {
+    margin-left: auto;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    font-weight: 700;
   }
   .total {
     display: inline-flex;
