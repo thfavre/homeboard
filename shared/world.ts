@@ -146,6 +146,22 @@ export const TOWN_BENCHES: { instead: number; list: { x: number; y: number; dir:
   ],
   instead: 1200,
 };
+/**
+ * Shaking the tree by the bench seen from the side (the bottom left one) to shower its sitter in
+ * leaves: the tree and the bench (indexes in TOWN_SCENE.trees and BENCHES), where the shaker stands
+ * against the trunk on the side away from the bench, facing it, and where the two meet after, below
+ * the tree (the shaker on the left)
+ */
+export const TREE_SHAKE = {
+  tree: 2,
+  bench: 2,
+  x: 454,
+  y: 781,
+  meet: [
+    { x: 460, y: 805 },
+    { x: 504, y: 805 },
+  ],
+};
 export const BOARD_SPOTS = [
   { x: 130, y: 334 },
   { x: 168, y: 334 },
@@ -456,6 +472,7 @@ export function hallLift(x: number, y: number): number {
  * waits with a rod, bite is a fish pulling at the line, catch holds the fish up. dance is seen
  * through the cafe's window (x the place in it, y the window's bottom), drink stands with a glass,
  * light holds a lamplighter's pole up to the lamp in front, kindle kneels by the campfire to light it.
+ * shake pushes at a tree's trunk with both hands, scold tells someone off (talking hard, angry).
  * carry walks with a parcel (the courier, whose id starts with "post:"), hold stands holding it out
  * the way the character faces, unwrap holds it up with both hands (the one it was brought to).
  * place crouches to plant fireworks rockets in the ground in front.
@@ -480,10 +497,12 @@ export const WANIM = {
   drink: 16,
   light: 17,
   kindle: 18,
-  carry: 19,
-  hold: 20,
-  unwrap: 21,
-  place: 22,
+  shake: 19,
+  scold: 20,
+  carry: 21,
+  hold: 22,
+  unwrap: 23,
+  place: 24,
 } as const;
 export type WAnimId = (typeof WANIM)[keyof typeof WANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
@@ -515,6 +534,8 @@ export interface TownFrame {
   parasols?: number;
   /** The cafe's door is open (the first one in opened it for the day) */
   cafeDoor?: boolean;
+  /** Someone is shaking the tree by the bench (TREE_SHAKE), since then (the town's own time, ms) */
+  shake?: number;
   /** Fireworks being set up: x, y and how many rockets are planted so far, for each launch spot */
   rockets?: number[];
 }
@@ -895,6 +916,10 @@ export interface WorldState {
   king?: KingInfo;
   /** The town's own day: on or off (always day), and how many real minutes a whole day takes (the TV's town hall clock follows it) */
   day?: { on: boolean } & TownClock;
+  /** Leaves now and then falling from the trees on the TV */
+  leaves?: boolean;
+  /** How long each tree waits before dropping its next leaf: from, to (seconds) */
+  leavesSec?: [number, number];
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
   /** What guests can do from the phone (the courier, fireworks) */
@@ -949,6 +974,10 @@ export interface WorldState {
   fishReward?: number;
   campfire?: boolean;
   lamplighter?: boolean;
+  /** Now and then someone shakes the tree over the bench next to it: the chance each time a character picks something to do (percent), and the least time between two (town minutes) */
+  treeShake?: boolean;
+  treeShakePct?: number;
+  treeShakeGapMin?: number;
   /** The cafe's party night: on its own every so many town days, from nightfall for so many town hours, and the share of the town that stays up for it (percent) */
   party?: boolean;
   partyEveryDays?: number;

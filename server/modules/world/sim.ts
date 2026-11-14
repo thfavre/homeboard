@@ -21,6 +21,7 @@ import {
   TOWN_OBSTACLES,
   TOWN_PLACES,
   TOWN_SCENE,
+  TREE_SHAKE,
   WANIM,
   brookSide,
   darknessAt,
@@ -150,6 +151,17 @@ const CHAT_TURN_MS = 2600;
 /** Some turns end with both laughing (this share of the turns), for the last part of the turn */
 const CHAT_LAUGH_SHARE = 0.3;
 const CHAT_LAUGH_MS = 900;
+/**
+ * How long a tree is shaken, then how long the one on the bench sits on under the leaves still
+ * coming down before getting up (they take a few seconds to fall), and how long the talk after
+ * lasts (ms): told off, or laughing it off together
+ */
+const SHAKE_MS = 4200;
+const REACT_MS = 1200;
+const SHAKE_TALK_MS: Record<Mood['kind'], [number, number]> = { angry: [6000, 10_000], funny: [4000, 7000] };
+/** In a laugh after the shake: each round of this long, both laugh for the first part */
+const FUNNY_ROUND_MS = 1800;
+const FUNNY_LAUGH_MS = 1100;
 /** Everything in the way on the square: the fountain, the trees, the lamp posts */
 const OBSTACLES = TOWN_OBSTACLES;
 /** How far ahead a walker looks for something in the way */
@@ -229,8 +241,9 @@ type Doing =
   | { kind: 'goHall'; lane?: number }
   | { kind: 'goPray'; spot: number; inLane: boolean }
   | { kind: 'pray'; spot: number; until: number; knelt: boolean }
-  | { kind: 'goChat'; with: string; tx: number; ty: number; since: number }
+  | { kind: 'goChat'; with: string; tx: number; ty: number; since: number; mood?: Mood }
   | Chat
+  | Shake
   | Visit
   | { kind: 'goSeat'; at: SeatAt; seat: number }
   | { kind: 'seated'; at: SeatAt; seat: number; until: number }
@@ -369,6 +382,25 @@ interface Chat {
   start: number;
   until: number;
   seed: number;
+  /** After a shaken tree: `who` (the one showered in leaves) tells the other off, or both laugh */
+  mood?: Mood;
+}
+
+/** How the one on the bench takes being showered in leaves */
+interface Mood {
+  kind: 'angry' | 'funny';
+  who: string;
+}
+
+/**
+ * Shaking the tree by the bench (TREE_SHAKE) while `victim` sits on it: to the trunk, then pushing
+ * at it from `at` (0: still on the way) for SHAKE_MS. The leaves fall for REACT_MS more, then both
+ * meet below the tree for a talk.
+ */
+interface Shake {
+  kind: 'shake';
+  victim: string;
+  at: number;
 }
 
 /**
@@ -528,6 +560,8 @@ export interface TownOptions {
   activities: { cafe: boolean; fountain: boolean; board: boolean; fish: boolean; fire: boolean };
   /** Someone lights the lamps at nightfall (off: they light themselves) */
   lamplighter: boolean;
+  /** Now and then someone shakes the tree over the bench next to it while somebody sits there: each time a character picks something to do, by this chance (0..1), and never twice within `gapMs` */
+  treeShake: { on: boolean; chance: number; gapMs: number };
   /** The cafe's party night: on its own every so many days, for so many town hours from nightfall, and the share who stay up for it (0..1) */
   party: { on: boolean; everyDays: number; chance: number; hours: number; goers: number };
 }
@@ -777,6 +811,8 @@ export class TownSim {
   private dark = -1;
   /** Characters asleep for the night (not the ones whose guest is away) */
   private nightSleepers = 0;
+  /** When someone last went to shake the tree by the bench */
+  private lastShake = -Infinity;
   /** The couriers on their rounds, by their own id (apart from the characters: nobody chats with them or calls them to the ceremony) */
   private couriers = new Map<string, Walker>();
   /** Fireworks going up: from when to when (the town's time), and whether the watchers were picked yet */
@@ -802,6 +838,14 @@ export class TownSim {
     // A chat ends whenever: stop on the way, or say goodbye a little sooner (the other one sees it
     // is over and goes on too)
     goChat: { priority: PRIORITY.activity, left: (d, w) => walkMs(w, d.tx, d.ty), wrapUp: stopWalking },
+    // Shaking the tree: off on the way; once at it, it is over in a moment
+    shake: {
+      priority: PRIORITY.activity,
+      left: (d, w, now) => (d.at ? d.at + SHAKE_MS + REACT_MS - now : walkMs(w, TREE_SHAKE.x, TREE_SHAKE.y)),
+      wrapUp: (d, w, now, ms) => {
+        if (!d.at) stopWalking(d, w, now, ms);
+      },
+    },
     chat: {
       priority: PRIORITY.activity,
       left: (d, _w, now) => (d.start ? d.until - now : CHAT_MEET_MS),
@@ -1026,6 +1070,7 @@ export class TownSim {
       a.push(Math.round(c.x), Math.round(c.y), anim, c.dir, Math.round(c.alpha * 100));
     }
     const someonePets = [...this.walkers.values()].some((w) => w.doing.kind === 'pet');
+    const shaking = [...this.walkers.values()].find((w) => w.doing.kind === 'shake' && w.doing.at && now < w.doing.at + SHAKE_MS)?.doing as Shake | undefined;
     return {
       t: now,
       ids,
@@ -1038,6 +1083,7 @@ export class TownSim {
       fire: this.fireLit,
       cafeDoor: this.cafeDoorOpen,
       parasols: this.parasolOpen.reduce((bits, open, i) => bits | (open ? 1 << i : 0), 0),
+      ...(shaking ? { shake: shaking.at } : {}),
       ...(this.pads.size ? { rockets: [...this.pads.values()].flatMap((p) => [Math.round(p.x), Math.round(p.y), p.planted]) } : {}),
     };
   }
@@ -1070,6 +1116,8 @@ export class TownSim {
       case 'parasol':
         // Reaching up to the parasol's crank, arms up
         return d.at ? WANIM.cheer : WANIM.walk;
+      case 'shake':
+        return d.at && now < d.at + SHAKE_MS ? WANIM.shake : d.at ? WANIM.idle : WANIM.walk;
       case 'coffee':
         return d.phase === 'inside' ? WANIM.inside : WANIM.walk;
       case 'party':
@@ -1199,7 +1247,7 @@ export class TownSim {
     if (now - w.anchor.at < STUCK_MS) return;
     w.anchor.at = now;
     const k = w.doing.kind;
-    if (k === 'wander' || k === 'goBench' || k === 'goPet' || k === 'goChat' || k === 'goSeat' || k === 'goRead' || k === 'goFish') w.doing = idle(now, 300, 1200);
+    if (k === 'wander' || k === 'goBench' || k === 'goPet' || k === 'goChat' || k === 'goSeat' || k === 'goRead' || k === 'goFish' || k === 'shake') w.doing = idle(now, 300, 1200);
     else w.through = now + THROUGH_MS;
   }
 
@@ -1231,6 +1279,7 @@ export class TownSim {
         // (except who went home from it already)
         if (this.partyNow && o.localMinutes < this.homeFromParty(w.id) && Math.random() < PARTY_CHANCE && this.goParty(w)) break;
         if (Math.random() < o.chatChance && this.startChat(w, now)) break;
+        if (this.startShake(w, now, o)) break;
         if (this.pickActivity(w, o)) break;
         const roll = Math.random();
         const all = [...this.walkers.values()];
@@ -1293,7 +1342,7 @@ export class TownSim {
         if (this.walkTo(w, d.tx, d.ty, WALK_UPS, dt)) {
           w.x = d.tx;
           w.y = d.ty;
-          w.doing = { kind: 'chat', with: d.with, start: 0, until: 0, seed: 0 };
+          w.doing = { kind: 'chat', with: d.with, start: 0, until: 0, seed: 0, mood: d.mood };
         }
         break;
       }
@@ -1307,7 +1356,8 @@ export class TownSim {
         w.dir = other.x > w.x ? 3 : 1;
         // Both in place: the chat begins, for both at once
         if (!d.start && other.doing.kind === 'chat' && !other.doing.start) {
-          const until = now + rand(o.chatMs[0], o.chatMs[1]);
+          const [a, b] = d.mood ? SHAKE_TALK_MS[d.mood.kind] : o.chatMs;
+          const until = now + rand(a, b);
           const seed = Math.floor(Math.random() * 1e6);
           Object.assign(d, { start: now, until, seed });
           Object.assign(other.doing, { start: now, until, seed });
@@ -1317,6 +1367,9 @@ export class TownSim {
       }
       case 'sit':
         if (now >= d.until) w.doing = { kind: 'idle', until: now + rand(500, 2000) };
+        break;
+      case 'shake':
+        this.stepShake(w, d, now, dt);
         break;
       case 'goSeat': {
         const s = SEATS[d.at][d.seat];
@@ -1604,12 +1657,76 @@ export class TownSim {
   private chatPose(w: Walker, d: Chat, now: number): number {
     if (!d.start || now >= d.until) return WANIM.idle;
     const t = now - d.start;
+    // After the shaken tree: the one showered in leaves tells the other off, who takes it (nodding);
+    // or both laugh, the showered one going on about it in between
+    if (d.mood?.kind === 'angry') return w.id === d.mood.who && !w.noCheer ? WANIM.scold : WANIM.listen;
+    if (d.mood?.kind === 'funny') {
+      if (t % FUNNY_ROUND_MS < FUNNY_LAUGH_MS) return w.noCheer ? WANIM.listen : WANIM.laugh;
+      return w.id === d.mood.who && !w.noCheer ? WANIM.talk : WANIM.listen;
+    }
     const turn = Math.floor(t / CHAT_TURN_MS);
     // The same pick for both: a hash of the chat's seed and the turn
     const laughs = ((d.seed * 31 + turn * 977) % 1000) / 1000 < CHAT_LAUGH_SHARE;
     if (laughs && t % CHAT_TURN_MS > CHAT_TURN_MS - CHAT_LAUGH_MS) return w.noCheer ? WANIM.listen : WANIM.laugh;
     const first = (d.seed + (w.id < d.with ? 0 : 1)) % 2;
     return (turn + first) % 2 || w.noCheer ? WANIM.listen : WANIM.talk;
+  }
+
+  // ------------------------------------------------------------ shaking the tree by the bench
+
+  /**
+   * Maybe go shake the tree by the bench (TREE_SHAKE) to shower whoever sits on it in leaves: rare
+   * (its chance, and never twice within a while), only with someone on that bench, and not by
+   * someone whose clothes cannot raise their arms (no emote art). False: not this time.
+   */
+  private startShake(w: Walker, now: number, o: TownOptions): boolean {
+    const s = o.treeShake;
+    if (!s.on || this.ceremony || w.noCheer || now - this.lastShake < s.gapMs || Math.random() >= s.chance) return false;
+    if (w.x < TOWN_AREA.x0 || w.x > TOWN_AREA.x1) return false;
+    const all = [...this.walkers.values()];
+    if (all.some((o) => o.doing.kind === 'shake')) return false;
+    const victim = all.find((o) => o !== w && o.doing.kind === 'sit' && o.doing.bench === TREE_SHAKE.bench && !o.errands.length);
+    if (!victim) return false;
+    w.doing = { kind: 'shake', victim: victim.id, at: 0 };
+    w.wrapped = null;
+    this.lastShake = now;
+    return true;
+  }
+
+  /**
+   * To the trunk (given up when the bench is left meanwhile), then pushing at it; once it is over,
+   * the one on the bench gets up and both meet below the tree: told off half the time, laughing it
+   * off together the other half
+   */
+  private stepShake(w: Walker, d: Shake, now: number, dt: number): void {
+    const v = this.walkers.get(d.victim);
+    const sitting = v?.doing.kind === 'sit' && v.doing.bench === TREE_SHAKE.bench;
+    if (!d.at) {
+      if (!v || !sitting) {
+        w.doing = idle(now, 300, 1200);
+        return;
+      }
+      if (this.walkTo(w, TREE_SHAKE.x, TREE_SHAKE.y, WALK_UPS, dt)) {
+        Object.assign(w, { x: TREE_SHAKE.x, y: TREE_SHAKE.y, dir: 3 });
+        d.at = now;
+        // (whoever sits there stays for it)
+        const sit = v.doing as Extract<Doing, { kind: 'sit' }>;
+        sit.until = Math.max(sit.until, now + SHAKE_MS + REACT_MS + 1000);
+      }
+      return;
+    }
+    // (done shaking, standing back to watch the leaves come down on the bench)
+    if (now < d.at + SHAKE_MS + REACT_MS) return;
+    if (!v || !sitting) {
+      w.doing = idle(now, 600, 1500);
+      return;
+    }
+    const mood: Mood = { kind: Math.random() < 0.5 ? 'angry' : 'funny', who: v.id };
+    const [left, right] = TREE_SHAKE.meet;
+    w.doing = { kind: 'goChat', with: v.id, tx: left.x, ty: left.y, since: now, mood };
+    v.doing = { kind: 'goChat', with: w.id, tx: right.x, ty: right.y, since: now, mood };
+    w.wrapped = null;
+    v.wrapped = null;
   }
 
   // ------------------------------------------------------------ the ceremony

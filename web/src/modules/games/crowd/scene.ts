@@ -30,6 +30,7 @@ const FILES = [
   'cats',
   'flowers',
   'bins',
+  'leaves',
 ] as const;
 export type EnvImage = (typeof FILES)[number];
 export type Env = Record<EnvImage, HTMLImageElement>;
@@ -97,9 +98,13 @@ export function houseArt(env: Env, kind: HouseKind): [HTMLImageElement, Cut] {
  */
 export type HouseSwap = (kind: HouseKind, x: number) => CanvasImageSource | null;
 
-/** A row of houses along the top, bottom at `bottom` (sprite pixels), cut off by the top of the screen */
-function houses(g: CanvasRenderingContext2D, env: Env, bottom: number, seed: number, swap?: HouseSwap) {
+/**
+ * A row of houses along the top, bottom at `bottom` (sprite pixels), cut off by the top of the
+ * screen. `from`: only the houses from there on (the town's TV draws their roofs above the screen)
+ */
+export function houses(g: CanvasRenderingContext2D, env: Env, bottom: number, seed: number, swap?: HouseSwap, from = -Infinity) {
   for (const h of houseRow(seed, PW)) {
+    if (h.x < from) continue;
     const [img, c] = houseArt(env, h.kind);
     const instead = swap?.(h.kind, h.x);
     if (instead) g.drawImage(instead, h.x, bottom - c[3]);
@@ -239,8 +244,15 @@ export interface Prop {
   ground?(g: CanvasRenderingContext2D, now: number): void;
 }
 
+/** What a tree draws under its crown, behind its trunk and in front of it (the town's falling leaves), and how far its crown is pushed aside besides the wind (sheet pixels: someone shaking it) */
+export interface TreeLayers {
+  behind(g: CanvasRenderingContext2D, now: number): void;
+  front(g: CanvasRenderingContext2D, now: number): void;
+  sway?(now: number): number;
+}
+
 /** A tree, `size` times the art's size (the town's trees are not all alike), `stem` the share of the trunk showing under the leaves */
-export function tree(env: Env, x: number, y: number, spring: boolean, phase: number, size = 1, stem = 1): Prop {
+export function tree(env: Env, x: number, y: number, spring: boolean, phase: number, size = 1, stem = 1, layers?: TreeLayers): Prop {
   const k = S * size;
   const crown = 44 * k * stem;
   return {
@@ -257,8 +269,10 @@ export function tree(env: Env, x: number, y: number, spring: boolean, phase: num
     },
     draw(g, now) {
       // The trunk, and the leaves swaying a pixel in the wind
+      layers?.behind(g, now);
       put(g, env['tree-trunks'], CUT.trunk, x, y + 4, k);
-      const sway = Math.round(Math.sin(now / 1400 + phase) * 1.3) * k;
+      layers?.front(g, now);
+      const sway = (Math.round(Math.sin(now / 1400 + phase) * 1.3) + (layers?.sway?.(now) ?? 0)) * k;
       put(g, env['tree-canopies'], spring ? CUT.canopySpring : CUT.canopySummer, x, y - crown, k, sway);
     },
   };

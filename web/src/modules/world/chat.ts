@@ -91,3 +91,53 @@ export function drawLaughing(g: G, img: HTMLImageElement, info: SheetInfo, x: nu
   drawFrame(g, img, info, emote.row, hop ? 2 : 0, x, y - (hop ? S : 0), dir === 3);
   return true;
 }
+
+/** How fast a scolding speaker gestures, against a calm one */
+const SCOLD_PACE = 1.8;
+
+/** Telling someone off: the talking gestures, faster. False: nothing to draw it with */
+export function drawScolding(g: G, img: HTMLImageElement, info: SheetInfo, x: number, y: number, dir: WDir, now: number, phase: number): boolean {
+  return drawTalking(g, img, info, x, y, dir, now * SCOLD_PACE, phase);
+}
+
+/**
+ * The anger mark over a scolding head: four little red corners turned to each other, drawn one
+ * sprite pixel at a time, throbbing. (x, y) is its middle.
+ */
+const ANGER = ['.XX.XX.', 'X.X.X.X', 'XX...XX', '.......', 'XX...XX', 'X.X.X.X', '.XX.XX.'];
+export function drawAngerMark(g: G, x: number, y: number, now: number, alpha: number): void {
+  // Bigger and smaller by a pixel each beat (the gaps open up)
+  const beat = Math.floor(now / 260) % 2;
+  const gap = beat ? S : 0;
+  g.globalAlpha = alpha;
+  ANGER.forEach((line, r) =>
+    [...line].forEach((c, k) => {
+      if (c !== 'X') return;
+      const dx = (k - 3) * S + Math.sign(k - 3) * gap;
+      const dy = (r - 3) * S + Math.sign(r - 3) * gap;
+      g.fillStyle = '#7a1414';
+      g.fillRect(Math.round(x + dx - S / 2), Math.round(y + dy - S / 2 + S / 3), Math.ceil(S), Math.ceil(S));
+      g.fillStyle = '#e8413c';
+      g.fillRect(Math.round(x + dx - S / 2), Math.round(y + dy - S / 2), Math.ceil(S), Math.ceil(S));
+    }),
+  );
+  g.globalAlpha = 1;
+}
+
+/** How long each push at the trunk takes, and the run frames that have both fists forward and the legs braced (the run row faces right) */
+const PUSH_MS = 140;
+const PUSH_FRAMES = [3, 4];
+
+/**
+ * Shaking a tree: braced against the trunk with both hands on it, pushing and pulling fast (two run
+ * frames with the fists forward in turn, leaning in a sprite pixel on each push), facing it. False:
+ * nothing to draw it with.
+ */
+export function drawShaking(g: G, img: HTMLImageElement, info: SheetInfo, x: number, y: number, dir: WDir, since: number): boolean {
+  const run = rowOf(img, info, 'run', PUSH_FRAMES[1] + 1);
+  if (!run) return false;
+  const push = Math.floor(since / PUSH_MS) % 2;
+  const lean = push ? (dir === 1 ? -S : S) : 0;
+  drawFrame(g, img, info, run.row, PUSH_FRAMES[push], x + lean, y, dir === 1);
+  return true;
+}
