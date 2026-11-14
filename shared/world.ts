@@ -138,7 +138,7 @@ export const NOTICE_BOARD = { x: 148, y: 304 };
  * The town's own benches, where each stands (the middle of its bottom): in front of the potted tree
  * right of the barber, in place of the square's bench at `instead` (it would stand before the cafe's
  * porch; the square's other one is behind the town hall), on the square at the top left of the
- * fountain, and just right of the bottom left tree's trunk facing right (toward the fountain, drawn by hand: the
+ * fountain, and just right of the trunk of the tree right of the build lot, facing right (toward the fountain, drawn by hand: the
  * city sheet has the bench only facing the front). `dir`: the way its sitter faces.
  */
 export const TOWN_BENCHES: { instead: number; list: { x: number; y: number; dir: WDir }[] } = {
@@ -149,6 +149,26 @@ export const TOWN_BENCHES: { instead: number; list: { x: number; y: number; dir:
   ],
   instead: 1200,
 };
+/**
+ * Shaking the tree by the bench seen from the side (the one right of the build lot) to shower its sitter in
+ * leaves: the tree and the bench (indexes in TOWN_SCENE.trees and BENCHES), where the shaker stands
+ * against the trunk on the side away from the bench, facing it, and where the two meet after, below
+ * the tree (the shaker on the left)
+ */
+export const TREE_SHAKE = (() => {
+  // (from the tree, so they move with it)
+  const t = TOWN_SCENE.trees[2];
+  return {
+    tree: 2,
+    bench: 2,
+    x: t.x - 26,
+    y: t.y + 1,
+    meet: [
+      { x: t.x - 20, y: t.y + 25 },
+      { x: t.x + 24, y: t.y + 25 },
+    ],
+  };
+})();
 export const BOARD_SPOTS = [
   { x: 130, y: 334 },
   { x: 168, y: 334 },
@@ -462,6 +482,7 @@ export function hallLift(x: number, y: number): number {
  * waits with a rod, bite is a fish pulling at the line, catch holds the fish up. dance is seen
  * through the cafe's window (x the place in it, y the window's bottom), drink stands with a glass,
  * light holds a lamplighter's pole up to the lamp in front, kindle kneels by the campfire to light it.
+ * shake pushes at a tree's trunk with both hands, scold tells someone off (talking hard, angry).
  */
 export const WANIM = {
   idle: 0,
@@ -483,6 +504,8 @@ export const WANIM = {
   drink: 16,
   light: 17,
   kindle: 18,
+  shake: 19,
+  scold: 20,
 } as const;
 export type WAnimId = (typeof WANIM)[keyof typeof WANIM];
 /** Facing, in the order of the sprite sheets: up, left, down, right */
@@ -514,6 +537,8 @@ export interface TownFrame {
   parasols?: number;
   /** The cafe's door is open (the first one in opened it for the day) */
   cafeDoor?: boolean;
+  /** Someone is shaking the tree by the bench (TREE_SHAKE), since then (the town's own time, ms) */
+  shake?: number;
 }
 
 // ------------------------------------------------------------ the cafe's party night
@@ -894,6 +919,10 @@ export interface WorldState {
   lot?: LotInfo;
   /** The town's own day: on or off (always day), and how many real minutes a whole day takes (the TV's town hall clock follows it) */
   day?: { on: boolean } & TownClock;
+  /** Leaves now and then falling from the trees on the TV */
+  leaves?: boolean;
+  /** How long each tree waits before dropping its next leaf: from, to (seconds) */
+  leavesSec?: [number, number];
   /** Guest: the own choices (to edit again), set once the avatar exists */
   mine?: AvatarChoices | null;
   /** Admin only */
@@ -941,6 +970,10 @@ export interface WorldState {
   fishReward?: number;
   campfire?: boolean;
   lamplighter?: boolean;
+  /** Now and then someone shakes the tree over the bench next to it: the chance each time a character picks something to do (percent), and the least time between two (town minutes) */
+  treeShake?: boolean;
+  treeShakePct?: number;
+  treeShakeGapMin?: number;
   /** The cafe's party night: on its own every so many town days, from nightfall for so many town hours, and the share of the town that stays up for it (percent) */
   party?: boolean;
   partyEveryDays?: number;

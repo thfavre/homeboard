@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { FastForward } from '@lucide/svelte';
+  import { FastForward, Maximize, Minimize } from '@lucide/svelte';
+  import { enterFull, leaveFull, tvFull } from '../../tv/fullscreen.svelte.ts';
   import { attempt, hb, onEvent, rpc, serverNow } from '$lib/client.svelte.ts';
   import { BODY, SPRITE_SCALE, SQUARE_HOUSES, WORLD, houseRow } from '$shared/crowd.ts';
-  import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, WANIM, TOWN_SPEEDS, hallLift, townMinutes, townTime, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
+  import { CAFE, CROSSING, FIRE_SEATS, DAIS_FOOT, FRAME_STRIDE, HALL_PAN, RIVERSIDE, TOWN, TOWN_AREA, TOWN_PLACES, TOWN_SCENE, TREE_SHAKE, WANIM, TOWN_SPEEDS, hallLift, townMinutes, townTime, type SheetInfo, type TownFrame, type TownPlace, type WorldState } from '$shared/world.ts';
   import { drawCharacter } from '../games/crowd/sprites.ts';
   import { SQUARE_STREET, loadEnv, squareGround, type Env, type Prop } from '../games/crowd/scene.ts';
   import { DANCE_FEET, cafeArt, drawCafe, drawCafeDoor, drawCafeLight, type CafeArt } from './cafe.ts';
@@ -11,11 +12,13 @@
   import { GREEN_TOP, brookFrames, drawBrook, drawBrookGlints, townGround } from './townGround.ts';
   import { drawCup, drawFireLight, drawKindling, lampLevel, townNow, townProps } from './townScene.ts';
   import { Pigeons } from '../games/crowd/effects.ts';
+  import { FallingLeaves } from './leaves.ts';
   import { asSheets, gameAnim, sheetImage } from './sprites.ts';
   import { drawCut, drawShop, drawShopLight, drawSnips, drawSwish, insideFeet, setShopArt } from './shops.ts';
   import { loadShopArt, shopSwap, type ShopArt } from './shopfronts.ts';
+  import { MARGIN, townTop } from './townMargins.ts';
   import { TOWN_HALL_SPAN, drawTownHall, drawTownHallClock, drawTownHallLight } from './townHall.ts';
-  import { drawLaughing, drawTalking, nodDip } from './chat.ts';
+  import { drawAngerMark, drawLaughing, drawScolding, drawShaking, drawTalking, nodDip } from './chat.ts';
   import { buildingAt, drawHammer, drawLotGround, drawLotLight, drawLotPuffs, loadLotArt, lotNow, lotStanding, type LotArt } from './lotArt.ts';
   import { crownMark, drawEnthroned, drawHailing, drawHallLight, drawHallWall, drawKneeling, drawRiver, hallProps, loadHall, townEdge, type HallArt } from './throneRoom.ts';
 
@@ -43,6 +46,13 @@
     const next = speed > 1 && !again ? 1 : TOWN_SPEEDS[(i + 1) % TOWN_SPEEDS.length];
     void attempt(() => rpc('world', 'setSpeed', { speed: next }));
   }
+
+  /** The full screen button, next to the speed: the town alone on the whole screen */
+  const toggleFull = () => (tvFull.on ? leaveFull() : enterFull());
+  // Another main view taking the TV's place (a game) brings the TV's layout back
+  onMount(() => () => {
+    if (tvFull.on) leaveFull();
+  });
 
   let canvas: HTMLCanvasElement;
   let wrap: HTMLDivElement;
@@ -98,6 +108,11 @@
   /** Two small canvases to read a character's pixels from, the old look and the new */
   let scratch: CanvasRenderingContext2D[] | null = null;
   const pigeons = untrack(() => new Pigeons(3, TOWN_AREA));
+  const leaves = new FallingLeaves();
+  /** Since when someone shakes the tree by the bench (null: nobody), from the frames */
+  let shakeSince: number | null = null;
+  /** How far the shaken tree's crown is pushed aside now (sheet pixels): fast, back and forth */
+  const shakeSway = (now: number) => (shakeSince === null ? 0 : Math.round(Math.sin((now - shakeSince) / 45) * 2.4));
   let lastDraw = 0;
   /** When the King opened the court (his hands up before the throne): the throne glows from then on, until he comes down from the dais */
   let courtSince: number | null = null;
@@ -108,7 +123,13 @@
       env = e;
       shopArt = a;
       setShopArt(e, a);
-      if (e) standingProps = townProps(e, (x) => x < TOWN_HALL_SPAN.x0 || x > TOWN_HALL_SPAN.x1).sort((a, b) => a.y - b.y);
+      // (the falling leaves are drawn by the trees, under the crown, behind or in front of the trunk)
+      const layers = (k: number) => ({
+        behind: (g: CanvasRenderingContext2D, now: number) => leaves.drawTree(g, e!, k, false, now),
+        front: (g: CanvasRenderingContext2D, now: number) => leaves.drawTree(g, e!, k, true, now),
+        sway: (now: number) => (k === TREE_SHAKE.tree ? shakeSway(now) : 0),
+      });
+      if (e) standingProps = townProps(e, (x) => x < TOWN_HALL_SPAN.x0 || x > TOWN_HALL_SPAN.x1, layers).sort((a, b) => a.y - b.y);
       if (e && a) cafe = cafeArt(e, a);
       brook = brookFrames();
     });
@@ -223,6 +244,9 @@
   let bgKey = '';
   /** Where the town meets the grass (built with the ground once the throne room's art is there): drawn over the river's frames */
   let edge: { canvas: HTMLCanvasElement; x: number } | null = null;
+  /** What lies past the town's top (built with the ground), and how high it is (world units) */
+  let above: HTMLCanvasElement | null = null;
+  const BAND = MARGIN * SPRITE_SCALE;
   function background(): HTMLCanvasElement {
     const key = `${!!env}${!!shopArt}${!!hall}${!!cafe}`;
     if (bg && bgKey === key) return bg;
@@ -252,6 +276,7 @@
         g.drawImage(edge.canvas, edge.x * SPRITE_SCALE, 0, edge.canvas.width * SPRITE_SCALE, edge.canvas.height * SPRITE_SCALE);
       }
       bg = c;
+      above = townTop(env, swap);
     } else {
       // Until the art is there: plain stone
       const c = document.createElement('canvas');
@@ -302,23 +327,39 @@
     const mix = f0 && f1 && f1 !== f0 ? Math.max(0, Math.min(1, (t - f0.t) / (f1.t - f0.t))) : 0;
 
     // The camera: on the town, or moved to the right for the ceremony in the throne room (on
-    // whole screen pixels, so the ground does not shimmer as it slides)
+    // whole screen pixels, so the ground does not shimmer as it slides). The town sits on the
+    // screen's bottom: what room the screen's shape leaves is above it, where the roofs go on. On a
+    // screen wider than the town, the town sits on its left and the riverside shows on its right
+    const ground = background();
     const k = Math.min(cw / TOWN.w, ch / TOWN.h);
+    const extra = hall && ground.width > TOWN.w ? Math.min(HALL_PAN, Math.max(0, cw / k - TOWN.w)) : 0;
     const cam = f0 ? (f0.cam ?? 0) + (f1 ? ((f1.cam ?? 0) - (f0.cam ?? 0)) * mix : 0) : 0;
-    const shift = Math.round(Math.max(0, Math.min(1, cam)) * HALL_PAN * k);
+    const shift = Math.round(Math.max(0, Math.min(1, cam)) * (HALL_PAN - extra) * k);
     const away = shift > 0;
-    g.setTransform(k, 0, 0, k, (cw - TOWN.w * k) / 2 - shift, (ch - TOWN.h * k) / 2);
+    /** The riverside on screen: past the town's right edge, for the ceremony or on a wide screen */
+    const wide = away || extra > 0;
+    g.setTransform(k, 0, 0, k, extra > 0 ? -shift : (cw - TOWN.w * k) / 2 - shift, ch - TOWN.h * k);
     g.save();
     if (away) {
-      // Moved over: only what the screen shows of both (nothing spills into the letterbox bands)
+      // Moved over: only what the screen shows of both (nothing spills into the bands at the sides)
       g.beginPath();
-      g.rect(shift / k, 0, TOWN.w, TOWN.h);
+      g.rect(shift / k, -BAND, TOWN.w + extra, TOWN.h + BAND);
       g.clip();
     }
 
-    const ground = background();
+    // Past the town's top, in the room the screen's shape leaves: the roofs in full and the town's
+    // roofs farther back (the town hall's top over them)
+    if (above) {
+      g.drawImage(above, 0, 0, TOWN.w / SPRITE_SCALE, MARGIN, 0, -BAND, TOWN.w, BAND);
+      g.save();
+      g.beginPath();
+      g.rect(0, -BAND, TOWN.w, BAND);
+      g.clip();
+      drawTownHall(g);
+      g.restore();
+    }
     if (ground.width < TOWN.w) g.drawImage(ground, 0, 0, TOWN.w, TOWN.h);
-    else if (away) g.drawImage(ground, 0, 0);
+    else if (wide) g.drawImage(ground, 0, 0);
     else g.drawImage(ground, 0, 0, TOWN.w, TOWN.h, 0, 0, TOWN.w, TOWN.h);
     if (away && (!hall || ground.width <= TOWN.w)) {
       // The throne room's art is not there: plain stone
@@ -327,8 +368,8 @@
     }
     // The town's river flowing, glinting in the light
     if (env && ground.width >= TOWN.w) {
-      if (brook) drawBrook(g, brook, now, away);
-      drawBrookGlints(g, env['water-sparkle-anim'], now, away);
+      if (brook) drawBrook(g, brook, now, wide);
+      drawBrookGlints(g, env['water-sparkle-anim'], now, wide);
     }
     // What the town's things need to know: how dark it is, which lamps are lit, a party on
     const dark = f0 ? (f0.dark ?? 0) + (f1 ? ((f1.dark ?? 0) - (f0.dark ?? 0)) * mix : 0) : 0;
@@ -341,8 +382,8 @@
     lotNow.dark = dark;
     /** What stands on the build lot (made again when it changes) */
     const lotThings = env ? lotStanding(env, lotArt, world?.lot?.grid) : [];
-    const inHall = away && hall ? hallStanding : [];
-    if (away && hall) {
+    const inHall = wide && hall ? hallStanding : [];
+    if (wide && hall) {
       drawRiver(g, hall, now);
       if (edge) g.drawImage(edge.canvas, edge.x * SPRITE_SCALE, 0, edge.canvas.width * SPRITE_SCALE, edge.canvas.height * SPRITE_SCALE);
       drawHallWall(g, now);
@@ -373,7 +414,7 @@
           y += (f1.a[j * FRAME_STRIDE + 1] - y) * mix;
         }
         // Still out in the throne room once the camera is back on the town: out of the picture
-        if (!away && x > TOWN.w + 40) continue;
+        if (x > TOWN.w + (away ? HALL_PAN : extra) + 40) continue;
         people.push({ id, x, y, lift: hallLift(x, y), anim: f0.a[o + 2], dir: f0.a[o + 3] as 0 | 1 | 2 | 3, alpha: f0.a[o + 4] / 100 });
       }
     }
@@ -418,6 +459,14 @@
     for (const p of standingProps) p.ground?.(g, now);
     for (const p of lotThings) p.ground?.(g, now);
     for (const p of inHall) p.ground?.(g, now);
+    // Leaves now and then coming off the trees: the ones that landed lie under everyone
+    const leafy = !!env && world?.leaves !== false;
+    leaves.on = leafy;
+    shakeSince = f0?.shake ?? null;
+    if (leafy) {
+      leaves.update(step, world?.leavesSec ?? [8, 20], shakeSince === null ? null : TREE_SHAKE.tree);
+      leaves.drawGround(g, env!);
+    }
 
     /** The sheets of a character: its own, the previous one while a new look loads (and while it changes in a shop) */
     const sheetOf = (id: string, inShop: boolean) => {
@@ -492,6 +541,11 @@
         else drawKindling(g, now);
       } else if (p.anim === WANIM.dance && img && info && drawDancing(g, img, info, p.x, y, now, l.phase)) {
         // Dancing in the cafe
+      } else if (p.anim === WANIM.shake && img && info && drawShaking(g, img, info, p.x, y, p.dir, now - l.since)) {
+        // Shaking the tree by the bench, both hands on its trunk
+      } else if (p.anim === WANIM.scold && img && info && drawScolding(g, img, info, p.x, y, p.dir, now, l.phase)) {
+        // Telling off whoever shook the tree, an anger mark by the head (on the side away from them)
+        drawAngerMark(g, p.x + (p.dir === 3 ? -11 : 11) * SPRITE_SCALE, y - tallOf(img) + 11 * SPRITE_SCALE, now, p.alpha);
       } else {
         // (a listener in a chat nods now and then)
         const dip = p.anim === WANIM.listen ? nodDip(now, l.phase) : 0;
@@ -587,12 +641,13 @@
     }
     drawLotPuffs(g);
     pigeons.drawAir(g, env);
+    if (leafy) leaves.drawAir(g, env!, now);
 
     // The evening lies over the square (the lamps keep their glow). The server keeps the time of
     // day the host set, and sends how dark it is with every frame.
     if (dark > 0.02) {
       g.fillStyle = `rgba(14,16,42,${0.44 * dark})`;
-      g.fillRect(0, 0, TOWN.w + (away ? HALL_PAN : 0), TOWN.h);
+      g.fillRect(0, -BAND, TOWN.w + (wide ? HALL_PAN : 0), TOWN.h + BAND);
       // The shops stay lit inside
       for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
       // The lamp posts the lamplighter has lit shine through the veil, with a pool of light on the pavement under them
@@ -615,7 +670,7 @@
     const king = people.find((p) => p.id === world?.king?.id);
     if (!away || !king || king.x < DAIS_FOOT) courtSince = null;
     else if (courtSince === null && (king.anim === WANIM.cheer || (king.anim === WANIM.sit && king.dir === 1))) courtSince = now;
-    if (away && hall) drawHallLight(g, now, dark, courtSince === null ? null : now - courtSince);
+    if (wide && hall) drawHallLight(g, now, dark, courtSince === null ? null : now - courtSince);
 
     // Names and sleep bubbles over everything. The head's top comes from the measured sheet, so
     // the name hangs just over the hair.
@@ -722,11 +777,16 @@
   }
 </script>
 
-<div class="town" bind:this={wrap}>
+<div class="town" class:full={tvFull.on} bind:this={wrap}>
   <canvas bind:this={canvas}></canvas>
-  <button type="button" class="speed" class:on={speed > 1} aria-label="Town speed {speed} times" onclick={faster}>
-    <FastForward size={18} />{speed}×
-  </button>
+  <div class="tools">
+    <button type="button" class="speed" class:on={speed > 1} aria-label="Town speed {speed} times" onclick={faster}>
+      <FastForward size={18} />{speed}×
+    </button>
+    <button type="button" class="full-btn" aria-label={tvFull.on ? 'Leave full screen' : 'Full screen'} onclick={toggleFull}>
+      {#if tvFull.on}<Minimize size={18} />{:else}<Maximize size={18} />{/if}
+    </button>
+  </div>
 </div>
 
 <style>
@@ -745,11 +805,20 @@
     width: 100%;
     height: 100%;
   }
-  /* The town's speed, top right: quiet at real speed, lit while sped up */
-  .speed {
+  .town.full {
+    border-radius: 0;
+  }
+  /* Top right: the town's speed and the full screen button */
+  .tools {
     position: absolute;
     top: 10px;
     right: 10px;
+    display: flex;
+    gap: 6px;
+  }
+  /* Both quiet; the speed is lit while sped up */
+  .speed,
+  .full-btn {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -761,6 +830,9 @@
     font: 600 14px var(--font-body);
     cursor: pointer;
     opacity: 0.75;
+  }
+  .full-btn {
+    padding: 6px 8px;
   }
   .speed.on {
     background: var(--accent);

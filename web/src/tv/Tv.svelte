@@ -3,6 +3,7 @@
   import { Lightbulb, RotateCw, X } from '@lucide/svelte';
   import { hb, rpc } from '$lib/client.svelte.ts';
   import { applyTheme } from '../themes/index.ts';
+  import { tvFull } from './fullscreen.svelte.ts';
   import { activeModules, moduleById } from '../modules/index.ts';
   import type { TvSlot, TvWidget } from '../modules/types.ts';
 
@@ -90,7 +91,7 @@
 {:else if !hb.core}
   <div class="center"><p class="dim">Connecting...</p></div>
 {:else}
-  <div class="tv">
+  <div class="tv" class:full={tvFull.on}>
     <header>
       <div class="brand-wrap">
         <button type="button" class="brand" onclick={tapBrand}>{hb.core.appName}</button>
@@ -290,6 +291,23 @@
   footer {
     min-width: 0;
     min-height: 2.6rem;
+  }
+  /* Full screen (the town's button): the main view alone, edge to edge */
+  .tv.full {
+    /* Overlays placed by these cover the whole screen */
+    --tv-pad-x: 0px;
+    --tv-side: 0px;
+    --tv-gap: 0px;
+    grid-template-rows: minmax(0, 1fr);
+    padding: 0;
+  }
+  .tv.full > header,
+  .tv.full > footer,
+  .tv.full aside {
+    display: none;
+  }
+  .tv.full main {
+    grid-template-columns: 1fr;
   }
   .takeover {
     position: absolute;
