@@ -273,10 +273,7 @@
 {:else}
   <div class="lot">
     <header class="head">
-      <div class="title">
-        <h3>Build lot</h3>
-        <p>Tap the lot to place a piece: your character builds it on the TV.</p>
-      </div>
+      <h3>Build lot</h3>
       <span class="wallet" title="Your {money}"><Coins size={15} />{mine?.balance ?? 0}</span>
     </header>
 
@@ -391,18 +388,13 @@
   }
   .head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
   }
-  .title h3 {
+  .head h3 {
     margin: 0;
     font-size: 1.05rem;
-  }
-  .title p {
-    margin: 0.15rem 0 0;
-    font-size: 0.82rem;
-    color: var(--text-dim);
   }
   .wallet {
     flex: none;
