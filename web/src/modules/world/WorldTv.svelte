@@ -389,9 +389,10 @@
     const mix = f0 && f1 && f1 !== f0 ? Math.max(0, Math.min(1, (t - f0.t) / (f1.t - f0.t))) : 0;
 
     // The camera: on the town, or moved to the right for the ceremony in the throne room (on
-    // whole screen pixels, so the ground does not shimmer as it slides). The town sits on the
-    // screen's bottom: what room the screen's shape leaves is above it, where the roofs go on. On a
-    // screen wider than the town, the town sits on its left and the riverside shows on its right
+    // whole screen pixels, so the ground does not shimmer as it slides). The room the screen's shape
+    // leaves is above the town, where the roofs go on; on a screen taller than the town and its roofs
+    // together, both sit in its middle. On a screen wider than the town, the town sits on its left
+    // and the riverside shows on its right
     const ground = background();
     const k = Math.min(cw / TOWN.w, ch / TOWN.h);
     const extra = hall && ground.width > TOWN.w ? Math.min(HALL_PAN, Math.max(0, cw / k - TOWN.w)) : 0;
@@ -400,7 +401,9 @@
     const away = shift > 0;
     /** The riverside on screen: past the town's right edge, for the ceremony or on a wide screen */
     const wide = away || extra > 0;
-    g.setTransform(k, 0, 0, k, extra > 0 ? -shift : (cw - TOWN.w * k) / 2 - shift, ch - TOWN.h * k);
+    /** Where the town's top is on screen (screen pixels) */
+    const townY = ch / k > TOWN.h + BAND ? Math.round((ch - (TOWN.h + BAND) * k) / 2 + BAND * k) : ch - TOWN.h * k;
+    g.setTransform(k, 0, 0, k, extra > 0 ? -shift : (cw - TOWN.w * k) / 2 - shift, townY);
     g.save();
     if (away) {
       // Moved over: only what the screen shows of both (nothing spills into the bands at the sides)
@@ -744,7 +747,7 @@
     const show = away ? undefined : world?.shows?.find((s) => s.at && real >= s.at && real < s.ends);
     if (show) {
       // (over the town and the roofs past its top, as far as the screen shows; the caption at the screen's top)
-      const top = Math.max(-BAND, -(ch - TOWN.h * k) / k);
+      const top = Math.max(-BAND, -townY / k);
       g.save();
       g.beginPath();
       g.rect(0, top, TOWN.w, TOWN.h - top);

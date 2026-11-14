@@ -153,8 +153,8 @@ export const TOWN_BENCHES: { instead: number; list: { x: number; y: number; dir:
 /**
  * Shaking the tree by the bench seen from the side (the one right of the build lot) to shower its sitter in
  * leaves: the tree and the bench (indexes in TOWN_SCENE.trees and BENCHES), where the shaker stands
- * against the trunk on the side away from the bench, facing it, and where the two meet after, below
- * the tree (the shaker on the left)
+ * against the trunk on the side away from the bench, facing it, a little behind it (the trunk is
+ * drawn over the hands), and where the two meet after, below the tree (the shaker on the left)
  */
 export const TREE_SHAKE = (() => {
   // (from the tree, so they move with it)
@@ -162,8 +162,8 @@ export const TREE_SHAKE = (() => {
   return {
     tree: 2,
     bench: 2,
-    x: t.x - 36,
-    y: t.y + 1,
+    x: t.x - 31,
+    y: t.y - 7,
     meet: [
       { x: t.x - 20, y: t.y + 25 },
       { x: t.x + 24, y: t.y + 25 },
