@@ -49,9 +49,12 @@ export interface LotData {
   grid: LotGrid;
   nextId: number;
   jobs: StoredJob[];
+  /** The lot's size it was built on (cells are numbered by it): another size starts the lot over */
+  size?: string;
 }
 
-export const emptyLot = (): LotData => ({ grid: { blocks: {}, props: [] }, nextId: 1, jobs: [] });
+const lotSize = () => `${LOT.cols}x${LOT.rows}`;
+export const emptyLot = (): LotData => ({ grid: { blocks: {}, props: [] }, nextId: 1, jobs: [], size: lotSize() });
 
 /** How long the feed waits before telling of the same guest building again (ms) */
 const FEED_AGAIN_MS = 10 * 60_000;
@@ -79,6 +82,15 @@ export function lotKeeper(deps: {
 }) {
   const { data, wallets } = deps;
   const lastFeed = new Map<string, number>();
+  // Built on a lot of another size (the lot changed since): its cells would land elsewhere, so it
+  // starts empty, and what was on its way is paid back
+  if (data.size !== lotSize()) {
+    for (const j of data.jobs) wallets[j.guest] = (wallets[j.guest] ?? 0) + j.paid;
+    data.grid = { blocks: {}, props: [] };
+    data.jobs = [];
+    data.size = lotSize();
+    deps.save();
+  }
 
   const priceOf = (tier: LotTier | null) => (tier ? Math.max(0, Math.round(deps.settings()[TIER_KEY[tier]])) : 0);
 

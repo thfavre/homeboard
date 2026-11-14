@@ -23,11 +23,12 @@ export const LOT_RH = LOT_ROW * S;
  * so there is always a way in) and where one stands before it, outside.
  */
 export const LOT = (() => {
-  const cols = 22;
-  const rows = 25;
+  const cols = 16;
+  const rows = 22;
   const x0 = 72;
-  const y0 = 522;
-  const gate = { c0: 17, c1: 18 };
+  // (its bottom where the town's walkable square ends)
+  const y0 = 860 - rows * LOT_RH;
+  const gate = { c0: 12, c1: 13 };
   return {
     cols,
     rows,
@@ -240,8 +241,8 @@ export function jobCells(job: LotJob): { c: number; r: number; w: number; d: num
  * down at it) and down its right side (looking left). Not by the gate, nor by the lamp above the fence.
  */
 export const LOT_ADMIRE: { x: number; y: number; dir: WDir }[] = [
-  ...[120, 190, 380, 520].map((x) => ({ x, y: LOT.y0 - LOT_FENCE - 16, dir: 2 as WDir })),
-  ...[600, 690, 780].map((y) => ({ x: LOT.x1 + LOT_FENCE + 16, y, dir: 1 as WDir })),
+  ...[110, 180, 240].map((x) => ({ x, y: LOT.y0 - LOT_FENCE - 16, dir: 2 as WDir })),
+  ...[630, 700, 780].map((y) => ({ x: LOT.x1 + LOT_FENCE + 16, y, dir: 1 as WDir })),
 ];
 
 /** A piece on its way: what the guest asked for, and what they paid for it */

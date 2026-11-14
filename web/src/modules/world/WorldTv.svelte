@@ -603,6 +603,10 @@
         )
       ) {
         // Fishing with the rod: casting, waiting, a bite, the line whipped up with the fish
+      } else if (p.anim === WANIM.kindle && p.dir === 0 && img && info && buildingAt(p.x, p.y)) {
+        // On the build lot, seen from behind: the hammer is in front of them, so their body hides it
+        drawHammer(g, p.x, y, p.dir, now);
+        drawPerched(g, img, info, p.x, y, p.dir, 0, true);
       } else if (p.anim === WANIM.kindle && img && info && drawPerched(g, img, info, p.x, y, p.dir, 0, true)) {
         // Kneeling by the campfire to light it, or on the build lot by the piece going up
         if (buildingAt(p.x, p.y)) drawHammer(g, p.x, y, p.dir, now);
