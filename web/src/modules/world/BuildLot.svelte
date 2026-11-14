@@ -9,6 +9,7 @@
     BLOCK_UP,
     LOT,
     LOT_CW,
+    LOT_RH,
     PROPS,
     applyJob,
     cellAt,
@@ -107,7 +108,7 @@
     for (const p of mine?.pending ?? []) {
       if (p.job.kind !== 'remove') continue;
       const x = LOT.x0 + (p.job.c + 0.5) * LOT_CW;
-      const y = LOT.y0 + (p.job.r + 0.5) * LOT_CW;
+      const y = LOT.y0 + (p.job.r + 0.5) * LOT_RH;
       g.strokeStyle = 'rgba(220,60,50,0.9)';
       g.lineWidth = 3;
       g.beginPath();
@@ -160,14 +161,14 @@
       const i = Number(key);
       const c = i % LOT.cols;
       const r = Math.floor(i / LOT.cols);
-      const bottom = LOT.y0 + (r + 1) * LOT_CW;
-      things.push({ c, r, y: bottom, x0: LOT.x0 + c * LOT_CW, x1: LOT.x0 + (c + 1) * LOT_CW, top: bottom - list.length * BLOCK_UP * S - LOT_CW, on: 'column' });
+      const bottom = LOT.y0 + (r + 1) * LOT_RH;
+      things.push({ c, r, y: bottom, x0: LOT.x0 + c * LOT_CW, x1: LOT.x0 + (c + 1) * LOT_CW, top: bottom - list.length * BLOCK_UP * S - LOT_RH, on: 'column' });
     }
     for (const p of grid.props) {
       const def = propById(p.kind);
       if (!def) continue;
-      const bottom = LOT.y0 + (p.r + def.d) * LOT_CW;
-      things.push({ c: p.c, r: p.r, y: bottom, x0: LOT.x0 + p.c * LOT_CW, x1: LOT.x0 + (p.c + def.w) * LOT_CW, top: bottom - Math.max(def.d * LOT_CW, 40), on: 'prop' });
+      const bottom = LOT.y0 + (p.r + def.d) * LOT_RH;
+      things.push({ c: p.c, r: p.r, y: bottom, x0: LOT.x0 + p.c * LOT_CW, x1: LOT.x0 + (p.c + def.w) * LOT_CW, top: bottom - Math.max(def.d * LOT_RH, 40), on: 'prop' });
     }
     things.sort((a, b) => b.y - a.y);
     const t = things.find((t) => x >= t.x0 && x < t.x1 && y >= t.top && y < t.y);

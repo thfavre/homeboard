@@ -8,9 +8,14 @@ import type { WDir } from './world.ts';
 
 const S = SPRITE_SCALE;
 
-/** A cell of the lot in sprite pixels (half a ground tile), and in world units */
+/**
+ * A cell of the lot in sprite pixels: half a ground tile wide, and shallower than wide (`LOT_ROW`),
+ * the way the town's crates and barrels show their tops; and the same in world units
+ */
 export const LOT_CELL = 16;
+export const LOT_ROW = 10;
 export const LOT_CW = LOT_CELL * S;
+export const LOT_RH = LOT_ROW * S;
 
 /**
  * The lot in the bottom left of the square (world units): `cols` x `rows` cells from (x0, y0), the
@@ -19,7 +24,7 @@ export const LOT_CW = LOT_CELL * S;
  */
 export const LOT = (() => {
   const cols = 22;
-  const rows = 16;
+  const rows = 25;
   const x0 = 72;
   const y0 = 522;
   const gate = { c0: 17, c1: 18 };
@@ -29,7 +34,7 @@ export const LOT = (() => {
     x0,
     y0,
     x1: x0 + cols * LOT_CW,
-    y1: y0 + rows * LOT_CW,
+    y1: y0 + rows * LOT_RH,
     gate: { ...gate, x: x0 + (gate.c0 + (gate.c1 - gate.c0 + 1) / 2) * LOT_CW, out: y0 - 18 },
   };
 })();
@@ -38,12 +43,11 @@ export const LOT = (() => {
 export const LOT_FENCE = 6;
 
 /**
- * How many blocks a column takes, and how high each block stands (sprite pixels). A block is a cube:
- * its front as high as its top is deep on the ground (a cell), like the town's crates and barrels,
- * whose fronts are as high as their tops or higher.
+ * How many blocks a column takes, and how high each block's front stands (sprite pixels): a little
+ * higher than its top is deep (a row), like the town's crates, so a block reads as a box
  */
 export const LOT_STACK = 5;
-export const BLOCK_UP = 16;
+export const BLOCK_UP = 12;
 
 /** Inside the fence */
 export function inLot(x: number, y: number, margin = 0): boolean {
@@ -53,11 +57,11 @@ export function inLot(x: number, y: number, margin = 0): boolean {
 /** A cell's number (row after row) */
 export const cellIndex = (c: number, r: number) => r * LOT.cols + c;
 /** The middle of a cell on the ground (world units): where one stands in it */
-export const cellMiddle = (c: number, r: number) => ({ x: LOT.x0 + (c + 0.5) * LOT_CW, y: LOT.y0 + (r + 0.5) * LOT_CW });
+export const cellMiddle = (c: number, r: number) => ({ x: LOT.x0 + (c + 0.5) * LOT_CW, y: LOT.y0 + (r + 0.5) * LOT_RH });
 /** The cell a ground point lies in (null: outside the lot) */
 export function cellAt(x: number, y: number): { c: number; r: number } | null {
   const c = Math.floor((x - LOT.x0) / LOT_CW);
-  const r = Math.floor((y - LOT.y0) / LOT_CW);
+  const r = Math.floor((y - LOT.y0) / LOT_RH);
   return c >= 0 && c < LOT.cols && r >= 0 && r < LOT.rows ? { c, r } : null;
 }
 /** The gate's cells: always free */
@@ -134,22 +138,22 @@ const FLOWER_COLORS = ['White', 'Pink', 'Red', 'Blue', 'Purple', 'Yellow', 'Oran
 export const PROPS: PropDef[] = [
   { id: 'flower', name: 'Flower', tier: 'small', w: 1, d: 1, variants: FLOWER_COLORS },
   { id: 'tallFlower', name: 'Tall flower', tier: 'small', w: 1, d: 1, variants: FLOWER_COLORS },
-  { id: 'flowerBush', name: 'Flower bush', tier: 'small', w: 2, d: 1, variants: FLOWER_COLORS },
-  { id: 'shrub', name: 'Shrub', tier: 'small', w: 2, d: 1, variants: ['Ragged', 'Lumpy', 'Round'] },
-  { id: 'leafy', name: 'Leafy bush', tier: 'small', w: 2, d: 1, variants: ['Round', 'Bushy', 'Spiky', 'Star'] },
-  { id: 'basket', name: 'Basket', tier: 'small', w: 2, d: 1 },
-  { id: 'barrel', name: 'Barrel', tier: 'small', w: 2, d: 1 },
-  { id: 'crate', name: 'Crate', tier: 'small', w: 2, d: 1 },
-  { id: 'fernPot', name: 'Potted fern', tier: 'big', w: 2, d: 1 },
-  { id: 'planter', name: 'Planter box', tier: 'big', w: 2, d: 1, variants: ['Fern', 'Flowers'] },
-  { id: 'topiary', name: 'Topiary', tier: 'big', w: 2, d: 1 },
-  { id: 'bench', name: 'Bench', tier: 'big', w: 4, d: 1 },
+  { id: 'flowerBush', name: 'Flower bush', tier: 'small', w: 2, d: 2, variants: FLOWER_COLORS },
+  { id: 'shrub', name: 'Shrub', tier: 'small', w: 2, d: 2, variants: ['Ragged', 'Lumpy', 'Round'] },
+  { id: 'leafy', name: 'Leafy bush', tier: 'small', w: 2, d: 2, variants: ['Round', 'Bushy', 'Spiky', 'Star'] },
+  { id: 'basket', name: 'Basket', tier: 'small', w: 2, d: 2 },
+  { id: 'barrel', name: 'Barrel', tier: 'small', w: 2, d: 2 },
+  { id: 'crate', name: 'Crate', tier: 'small', w: 2, d: 2 },
+  { id: 'fernPot', name: 'Potted fern', tier: 'big', w: 2, d: 2 },
+  { id: 'planter', name: 'Planter box', tier: 'big', w: 2, d: 2, variants: ['Fern', 'Flowers'] },
+  { id: 'topiary', name: 'Topiary', tier: 'big', w: 2, d: 2 },
+  { id: 'bench', name: 'Bench', tier: 'big', w: 4, d: 2 },
   { id: 'lamp', name: 'Lamp post', tier: 'big', w: 1, d: 1, glow: true },
-  { id: 'pillar', name: 'Stone pillar', tier: 'big', w: 2, d: 1 },
-  { id: 'statue', name: 'Statue', tier: 'grand', w: 2, d: 1 },
-  { id: 'ironStatue', name: 'Iron sculpture', tier: 'grand', w: 2, d: 1 },
-  { id: 'fountain', name: 'Fountain', tier: 'grand', w: 4, d: 2 },
-  { id: 'tree', name: 'Young tree', tier: 'grand', w: 2, d: 1 },
+  { id: 'pillar', name: 'Stone pillar', tier: 'big', w: 2, d: 2 },
+  { id: 'statue', name: 'Statue', tier: 'grand', w: 2, d: 2 },
+  { id: 'ironStatue', name: 'Iron sculpture', tier: 'grand', w: 2, d: 2 },
+  { id: 'fountain', name: 'Fountain', tier: 'grand', w: 4, d: 3 },
+  { id: 'tree', name: 'Young tree', tier: 'grand', w: 2, d: 2 },
 ];
 export const propById = (id: string) => PROPS.find((p) => p.id === id);
 

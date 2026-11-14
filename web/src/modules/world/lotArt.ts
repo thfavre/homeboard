@@ -1,6 +1,6 @@
 import { SPRITE_SCALE } from '$shared/crowd.ts';
 import type { WDir } from '$shared/world.ts';
-import { BLOCK_UP, LOT, LOT_CELL, LOT_CW, LOT_FENCE, blockById, inLot, propById, type BlockDef, type LotGrid, type LotProp } from '$shared/worldBuild.ts';
+import { BLOCK_UP, LOT, LOT_CELL, LOT_CW, LOT_FENCE, LOT_RH, LOT_ROW, blockById, inLot, propById, type BlockDef, type LotGrid, type LotProp } from '$shared/worldBuild.ts';
 import { CUT, put, tree, type Cut, type Env, type Prop } from '../games/crowd/scene.ts';
 
 /**
@@ -74,7 +74,7 @@ const SOIL = { base: '#7d5f43', dark: '#664c35', light: '#94744f', stone: '#a09a
 /** The lot's ground in sprite pixels: tilled soil with pebbles and tufts, a faint line between the cells, a border of grass */
 function buildGround(): HTMLCanvasElement {
   const w = LOT.cols * LOT_CELL;
-  const h = LOT.rows * LOT_CELL;
+  const h = LOT.rows * LOT_ROW;
   const [c, g] = canvas(w + 8, h + 8);
   const rand = seeded(7);
   // A border of grass where the fence stands
@@ -90,7 +90,7 @@ function buildGround(): HTMLCanvasElement {
     px(g, SOIL.edge, x, y + 1, 2, 1);
   }
   // The cells, barely: a darker dot at every corner
-  for (let r = 1; r < LOT.rows; r++) for (let k = 1; k < LOT.cols; k++) px(g, 'rgba(40,26,14,0.45)', 4 + k * LOT_CELL, 4 + r * LOT_CELL);
+  for (let r = 1; r < LOT.rows; r++) for (let k = 1; k < LOT.cols; k++) px(g, 'rgba(40,26,14,0.45)', 4 + k * LOT_CELL, 4 + r * LOT_ROW);
   return c;
 }
 
@@ -155,9 +155,9 @@ function fenceProps(): Prop[] {
     return { y, draw: (g) => g.drawImage(c, Math.round(x0), Math.round(y - c.height * S), Math.round(c.width * S), Math.round(c.height * S)) };
   };
   out.push(run(left, gx0, top, true, false), run(gx1, right, top, false, true), run(left, right + 3 * S, bottom, false, false));
-  const side = buildFenceSide(LOT_CELL);
+  const side = buildFenceSide(LOT_ROW);
   for (let r = 0; r <= LOT.rows; r++) {
-    const y = r === LOT.rows ? bottom : LOT.y0 + r * LOT_CW;
+    const y = r === LOT.rows ? bottom : LOT.y0 + r * LOT_RH;
     if (r === 0) continue;
     for (const x of [left, right]) {
       out.push({ y, draw: (g) => g.drawImage(side, Math.round(x - S), Math.round(y - side.height * S), Math.round(side.width * S), Math.round(side.height * S)) });
@@ -168,7 +168,7 @@ function fenceProps(): Prop[] {
 
 // ------------------------------------------------------------ the blocks
 
-/** A block's two faces in sprite pixels: the top (a cell, seen from above) and the front (BLOCK_UP high) */
+/** A block's two faces in sprite pixels: the top (a cell, LOT_ROW deep) and the front (BLOCK_UP high) */
 interface Faces {
   top: HTMLCanvasElement;
   front: HTMLCanvasElement;
@@ -247,15 +247,16 @@ function buildFaces(b: BlockDef): Faces {
   const W = LOT_CELL;
   // The top: in full light from above, so clearly lighter than the front; a light rim at its back
   // and left, and a bright edge along the front where it turns down (the crease that makes it a cube)
-  const [top, tg] = canvas(W, LOT_CELL);
-  texture(tg, b, W, LOT_CELL, false, rand);
-  px(tg, 'rgba(255,255,255,0.16)', 0, 0, W, LOT_CELL);
+  const D = LOT_ROW;
+  const [top, tg] = canvas(W, D);
+  texture(tg, b, W, D, false, rand);
+  px(tg, 'rgba(255,255,255,0.16)', 0, 0, W, D);
   px(tg, b.light, 1, 1, W - 2, 1);
-  px(tg, b.light, 1, 1, 1, LOT_CELL - 2);
-  px(tg, b.light, 1, LOT_CELL - 1, W - 2, 1);
+  px(tg, b.light, 1, 1, 1, D - 2);
+  px(tg, b.light, 1, D - 1, W - 2, 1);
   px(tg, b.line, 0, 0, W, 1);
-  px(tg, b.line, 0, 0, 1, LOT_CELL);
-  px(tg, b.line, W - 1, 0, 1, LOT_CELL);
+  px(tg, b.line, 0, 0, 1, D);
+  px(tg, b.line, W - 1, 0, 1, D);
   // The front: in the shade, darker toward the ground, its right edge darker still; a dark seam
   // under the block above (the top's bright edge covers it on the topmost block)
   const [front, fg] = canvas(W, BLOCK_UP);
@@ -281,9 +282,9 @@ export function blockSwatch(id: string): HTMLCanvasElement | null {
   const b = blockById(id);
   if (!b) return null;
   const f = facesOf(b);
-  const [c, g] = canvas(LOT_CELL, LOT_CELL + BLOCK_UP);
+  const [c, g] = canvas(LOT_CELL, LOT_ROW + BLOCK_UP);
   g.drawImage(f.top, 0, 0);
-  g.drawImage(f.front, 0, LOT_CELL);
+  g.drawImage(f.front, 0, LOT_ROW);
   return c;
 }
 
@@ -293,7 +294,7 @@ export function blockSwatch(id: string): HTMLCanvasElement | null {
  */
 function columnProp(c: number, r: number, list: string[], ghostFrom = Infinity): Prop {
   const x = LOT.x0 + c * LOT_CW;
-  const bottom = LOT.y0 + (r + 1) * LOT_CW;
+  const bottom = LOT.y0 + (r + 1) * LOT_RH;
   const W = Math.round(x + LOT_CW) - Math.round(x);
   const X = Math.round(x);
   return {
@@ -313,7 +314,7 @@ function columnProp(c: number, r: number, list: string[], ghostFrom = Infinity):
         const y0 = Math.round(bottom - (k + 1) * BLOCK_UP * S);
         g.drawImage(f.front, X, y0, W, y1 - y0);
         if (k === list.length - 1) {
-          const t0 = Math.round(y0 - LOT_CW);
+          const t0 = Math.round(y0 - LOT_RH);
           g.drawImage(f.top, X, t0, W, y0 - t0);
         }
       }
@@ -368,7 +369,7 @@ function propCut(env: Env, art: LotArt | null, p: LotProp): [HTMLImageElement, C
 /** Where a decoration stands: the middle of its bottom edge (world units) */
 function propFoot(p: LotProp): { x: number; y: number } {
   const def = propById(p.kind);
-  return { x: LOT.x0 + (p.c + (def?.w ?? 1) / 2) * LOT_CW, y: LOT.y0 + (p.r + (def?.d ?? 1)) * LOT_CW };
+  return { x: LOT.x0 + (p.c + (def?.w ?? 1) / 2) * LOT_CW, y: LOT.y0 + (p.r + (def?.d ?? 1)) * LOT_RH };
 }
 
 /** How dark it is for the lot's lamps (set by the TV every frame; the phone shows the day) */
@@ -492,7 +493,7 @@ function noteChanges(grid: LotGrid): void {
       const b = counts.get(i) ?? 0;
       if (a === b) continue;
       const x = LOT.x0 + ((i % LOT.cols) + 0.5) * LOT_CW;
-      const y = LOT.y0 + (Math.floor(i / LOT.cols) + 1) * LOT_CW - Math.max(a, b) * BLOCK_UP * S;
+      const y = LOT.y0 + (Math.floor(i / LOT.cols) + 1) * LOT_RH - Math.max(a, b) * BLOCK_UP * S;
       puffs.push({ x, y, at: now, big: false });
     }
     for (const p of grid.props) if (!before.props.has(p.id)) puffs.push({ ...propFoot(p), at: now, big: true });
@@ -566,7 +567,7 @@ export function drawLotLight(g: G, grid: LotGrid | undefined, dark: number, now:
       const glow = blockById(id)?.glow;
       if (!glow) return;
       const x = LOT.x0 + (c + 0.5) * LOT_CW;
-      const y = LOT.y0 + (r + 1) * LOT_CW - (k + 0.5) * BLOCK_UP * S;
+      const y = LOT.y0 + (r + 1) * LOT_RH - (k + 0.5) * BLOCK_UP * S;
       const rad = 34 + Math.sin(now / 600 + i) * 2;
       const grad = g.createRadialGradient(x, y, 0, x, y, rad);
       grad.addColorStop(0, `rgba(${glow},${0.42 * dark})`);
