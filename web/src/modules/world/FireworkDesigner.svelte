@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { ArrowLeft, ArrowRight, ChevronDown, Coins, Copy, Plus, Rocket, Save, Trash2, Undo2, X } from '@lucide/svelte';
+  import { ArrowLeft, ArrowRight, Check, ChevronDown, Coins, Copy, Plus, Save, Trash2, Undo2, X } from '@lucide/svelte';
   import { hb } from '$lib/client.svelte.ts';
-  import { FW_COLORS, FW_MAX_COUNT, FW_MAX_DELAY, FW_NAME_MAX, FW_PARTICLES, FW_TEMPLATES, fireworkCost, newShell, shellPoints, type FwDesign, type FwParticle, type FwShell } from '$shared/worldActions.ts';
+  import { FW_COLORS, FW_MAX_COUNT, FW_MAX_DELAY, FW_NAME_MAX, FW_PARTICLES, FW_TEMPLATES, fireworkCost, newShell, type FwDesign, type FwParticle, type FwPoint, type FwShell } from '$shared/worldActions.ts';
   import type { WorldState } from '$shared/world.ts';
   import DrawPad from './DrawPad.svelte';
   import ShellThumb from './ShellThumb.svelte';
@@ -9,25 +9,19 @@
   /**
    * Make a firework show, shell by shell: draw each one's shape with a finger (or start from a
    * ready-made one), pick its colors and particles, and how big. Where and when it goes up is set
-   * for you and can be changed below. The show itself is only seen on the TV; the crazier it gets,
-   * the more it costs.
+   * for you and can be changed below. Saved here, launched from the list; the show itself is only
+   * seen on the TV, and the crazier it gets, the more it costs.
    */
   let {
     design = $bindable(),
     busy = false,
     onsave,
-    onlaunch,
     oncancel,
-    canLaunch,
-    launchNote,
   }: {
     design: FwDesign;
     busy?: boolean;
     onsave: () => void;
-    onlaunch: () => void;
     oncancel: () => void;
-    canLaunch: boolean;
-    launchNote: string;
   } = $props();
 
   const world = $derived(hb.modules.world as WorldState | undefined);
@@ -39,11 +33,30 @@
   let placing = $state(false);
   const shell = $derived(design.shells[Math.min(sel, design.shells.length - 1)]);
   const cost = $derived(fw ? fireworkCost(design, fw) : 0);
-  const points = $derived(design.shells.reduce((n, s) => n + shellPoints(s), 0));
-  /** How crazy the show is, for the meter: a name and how full the bar is */
-  const crazy = $derived(
-    points < 6 ? { name: 'Gentle', fill: points / 6 / 4 } : points < 16 ? { name: 'Lively', fill: 0.25 + ((points - 6) / 10) * 0.25 } : points < 36 ? { name: 'Wild', fill: 0.5 + ((points - 16) / 20) * 0.25 } : { name: 'Insane', fill: Math.min(1, 0.75 + ((points - 36) / 60) * 0.25) },
-  );
+
+  /**
+   * Each shell's drawings before each change (a line drawn, a ready-made shape, clearing it):
+   * Undo goes back one change, whatever it was
+   */
+  const history = new Map<FwShell, FwPoint[][][]>();
+  const remember = () => {
+    const past = history.get(shell) ?? [];
+    past.push(structuredClone($state.snapshot(shell.strokes)) as FwPoint[][]);
+    history.set(shell, past.slice(-40));
+    changes++;
+  };
+  /** Counts the changes, so Undo knows when it has something to go back to */
+  let changes = $state(0);
+  const canUndo = $derived((void changes, (history.get(shell)?.length ?? 0) > 0));
+  function undo() {
+    const before = history.get(shell)?.pop();
+    if (before) shell.strokes = before;
+    changes++;
+  }
+  function setStrokes(strokes: FwPoint[][]) {
+    remember();
+    shell.strokes = structuredClone(strokes);
+  }
 
   function add() {
     if (design.shells.length >= maxShells) return;
@@ -125,14 +138,14 @@
         </div>
       </div>
 
-      <DrawPad {shell} />
+      <DrawPad {shell} {remember} />
       <div class="pad-bar">
-        <button type="button" class="chip" disabled={!shell.strokes.length} onclick={() => shell.strokes.pop()}><Undo2 size={14} />Undo</button>
-        <button type="button" class="chip" disabled={!shell.strokes.length} onclick={() => (shell.strokes = [])}><X size={14} />Clear</button>
+        <button type="button" class="chip" disabled={!canUndo} onclick={undo} aria-label="Undo"><Undo2 size={14} /></button>
+        <button type="button" class="chip" disabled={!shell.strokes.length} onclick={() => setStrokes([])} aria-label="Clear"><X size={14} /></button>
         <span class="bar-sep"></span>
         <div class="templates">
           {#each FW_TEMPLATES as t (t.id)}
-            <button type="button" class="template" onclick={() => (shell.strokes = structuredClone(t.strokes))} aria-label={t.name}>
+            <button type="button" class="template" onclick={() => setStrokes(t.strokes)} aria-label={t.name}>
               <ShellThumb shell={{ strokes: t.strokes, colors: shell.colors, size: 1 }} size={24} />
             </button>
           {/each}
@@ -143,8 +156,10 @@
         <span class="label">Colors <span class="faint">up to 3</span></span>
         <div class="colors">
           {#each FW_COLORS as c (c.id)}
-            {@const n = shell.colors.indexOf(c.id)}
-            <button type="button" class="color" class:on={n >= 0} style:--c={c.hex} aria-label={c.id} onclick={() => toggleColor(c.id)}></button>
+            {@const on = shell.colors.includes(c.id)}
+            <button type="button" class="color" class:on style:--c={c.hex} aria-label={c.id} aria-pressed={on} onclick={() => toggleColor(c.id)}>
+              {#if on}<Check size={14} strokeWidth={3.5} />{/if}
+            </button>
           {/each}
         </div>
       </div>
@@ -153,13 +168,12 @@
         <span class="label">Particles</span>
         <div class="particles">
           {#each FW_PARTICLES as p (p.id)}
-            <button type="button" class="particle" class:on={shell.particles === p.id} onclick={() => (shell.particles = p.id)} title={p.about}>
+            <button type="button" class="particle" class:on={shell.particles === p.id} onclick={() => (shell.particles = p.id)}>
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={PARTICLE_ICON[p.id]} /></svg>
               <span>{p.name}</span>
             </button>
           {/each}
         </div>
-        <p class="faint small about">{FW_PARTICLES.find((p) => p.id === shell.particles)?.about}</p>
       </div>
 
       <div class="two">
@@ -199,24 +213,14 @@
     </section>
   {/if}
 
-  <!-- The bill: how crazy it got, and what that costs -->
-  <div class="bill card">
-    <div class="meter">
-      <div class="meter-head">
-        <span class="label">Craziness</span>
-        <strong class="crazy">{crazy.name}</strong>
-      </div>
-      <div class="bar"><span style:width="{crazy.fill * 100}%"></span></div>
-    </div>
-    <div class="cost"><Coins size={18} /><strong>{cost}</strong><span class="faint">{currency}</span></div>
-  </div>
-
+  <!-- Saved, it goes back to the list, where it is launched; what a launch costs on the button -->
   <div class="actions">
     <button type="button" class="btn" onclick={oncancel} disabled={busy}>Back</button>
-    <button type="button" class="btn" onclick={onsave} disabled={busy}><Save size={17} />Save</button>
-    <button type="button" class="btn primary" onclick={onlaunch} disabled={busy || !canLaunch}><Rocket size={17} />Launch</button>
+    <button type="button" class="btn primary" onclick={onsave} disabled={busy}>
+      <Save size={17} />Save
+      <span class="price" title="What a launch costs"><Coins size={14} />{cost} {currency}</span>
+    </button>
   </div>
-  <p class="faint small center">{launchNote || 'It is only seen on the TV: look up when you launch it.'}</p>
 </div>
 
 <style>
@@ -354,16 +358,29 @@
     grid-template-columns: repeat(10, 1fr);
     gap: 0.3rem;
   }
+  /* The colors not picked stay dim and small; a picked one is lit, ringed in white and ticked */
   .color {
+    display: grid;
+    place-items: center;
     aspect-ratio: 1;
     padding: 0;
-    border: 2px solid transparent;
+    border: 0;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, #fff 0 8%, var(--c) 45%);
+    color: #111;
+    opacity: 0.45;
+    transform: scale(0.82);
+    transition:
+      transform 0.15s,
+      opacity 0.15s;
   }
   .color.on {
-    border-color: #fff;
-    box-shadow: 0 0 10px 1px var(--c);
+    opacity: 1;
+    transform: none;
+    box-shadow:
+      0 0 0 2px var(--bg),
+      0 0 0 4px #fff,
+      0 0 14px 3px var(--c);
   }
   .particles {
     display: grid;
@@ -386,9 +403,6 @@
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
     color: var(--text);
-  }
-  .about {
-    min-height: 1.2em;
   }
   .two {
     display: grid;
@@ -442,58 +456,22 @@
     width: 100%;
     accent-color: var(--accent);
   }
-  .bill {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.8rem 1rem;
-  }
-  .meter {
-    flex: 1;
-    display: grid;
-    gap: 0.35rem;
-  }
-  .meter-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-  }
-  .crazy {
-    font-family: var(--font-display);
-  }
-  .bar {
-    height: 0.55rem;
-    border-radius: 999px;
-    background: var(--surface-3);
-    overflow: hidden;
-  }
-  .bar span {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, #ffcf5a, #ff6fc8 55%, #a46bff 80%, #45e3ff);
-    background-size: 18rem 100%;
-    transition: width 0.3s ease;
-  }
-  .cost {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    color: var(--coin);
-    font-size: 1.25rem;
-  }
-  .cost .faint {
-    font-size: 0.85rem;
-  }
   .actions {
     display: grid;
-    grid-template-columns: auto auto 1fr;
+    grid-template-columns: auto 1fr;
     gap: 0.5rem;
   }
   .actions .btn {
     justify-content: center;
   }
-  .center {
-    text-align: center;
+  .price {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: 0.4rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.18);
+    font-size: 0.85rem;
   }
 </style>

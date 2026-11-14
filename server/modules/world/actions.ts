@@ -268,7 +268,8 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
     const s = ctx.settings.get();
     if (!s.fireworks) throw new HbError('Fireworks are off for now');
     if (!d.hasAvatar(guest.id)) throw new HbError('Make your look first');
-    if (!night()) throw new HbError('Fireworks only go up at night');
+    // In the day it waits for the night (a town without night never gets one)
+    if (!night() && nightAt() === null) throw new HbError('Fireworks only go up at night, and the town has no night now');
     const design = mine(guest.id).find((x) => x.id === args?.id);
     if (!design) throw new HbError('That firework is gone');
     const now = Date.now();
@@ -285,15 +286,34 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
     d.sendWallet(guest.id);
     const show: FwShow = { id: randomUUID().slice(0, 8), at: 0, ends: 0, by: guest.id, byName: guest.name, design: structuredClone(design), pad: null };
     shows.push(show);
-    // The character goes and plants the rockets first (one per shell, a few at most); the show goes
-    // up once they stand back. A character that cannot (busy, not in the town) has it go up at once.
-    const prep = d.sim.prepareLaunch(show.id, guest.id, Math.min(MAX_ROCKETS, design.shells.length));
+    if (night()) setUp(show);
+    else show.forNight = true;
+    ctx.publish();
+    return { at: show.at || null, balance: wallets[guest.id] };
+  });
+
+  /**
+   * The character goes and plants the rockets first (one per shell, a few at most); the show goes
+   * up once they stand back. A character that cannot (busy, not in the town) has it go up at once.
+   */
+  function setUp(show: FwShow) {
+    delete show.forNight;
+    const prep = d.sim.prepareLaunch(show.id, show.by, Math.min(MAX_ROCKETS, show.design.shells.length));
     show.pad = prep.pad;
     if (prep.walking) setTimeout(() => fire(show.id), SETUP_GIVE_UP_MS);
     else fire(show.id);
     ctx.publish();
-    return { at: show.at || null, balance: wallets[guest.id] };
-  });
+  }
+
+  // Shows launched in the day are set up as night falls, one after the other (a few seconds apart, so the launchers do not all set off at once)
+  let nextSetUp = 0;
+  setInterval(() => {
+    if (!night() || Date.now() < nextSetUp) return;
+    const next = shows.find((x) => x.forNight);
+    if (!next) return;
+    nextSetUp = Date.now() + 4000;
+    setUp(next);
+  }, 1000);
 
   /** A show waiting to be set up, waiting its turn, or on */
   const waiting = (x: FwShow) => x.at === 0 || x.ends > Date.now();
@@ -325,7 +345,7 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
       const now = Date.now();
       const live = shows.filter(waiting);
       // (one being set up counts for about as long as that takes)
-      const busyUntil = Math.max(0, ...live.map((x) => (x.at ? x.ends : now + 15_000)));
+      const busyUntil = Math.max(0, ...live.filter((x) => !x.forNight).map((x) => (x.at ? x.ends : now + 15_000)));
       return {
         courier: { on: s.courier, fee: Math.max(0, s.courierFee), maxCoins: Math.max(0, s.courierMaxCoins), papers: paperPrices() },
         fireworks: { on: s.fireworks, ...prices(), maxShells: s.fireworkShells, night: night(), nightAt: nightAt(), busyUntil },

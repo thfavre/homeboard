@@ -144,7 +144,7 @@ export const FW_MAX_DELAY = 4000;
 export const FW_MAX_COUNT = 5;
 export const FW_NAME_MAX = 32;
 /** A drawing keeps at most this many lines, of at most this many points each */
-export const FW_MAX_STROKES = 12;
+export const FW_MAX_STROKES = 30;
 export const FW_STROKE_POINTS = 160;
 
 /** How many points a shell is worth: a drawn shape, its size, extra colors and particles, times how many go up at once */
@@ -318,6 +318,8 @@ export interface FwShow {
   design: FwDesign;
   /** Where in the town the rockets go up from (null: not known yet) */
   pad: { x: number; y: number } | null;
+  /** Launched in the day: set up once night falls */
+  forNight?: true;
 }
 
 /** The most rockets planted for a show (one per shell, up to this) */
