@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
-  import { Box, Check, CircleAlert, Coins, Eraser, Flower2, Hourglass, Lock, Undo2, ZoomIn, ZoomOut } from '@lucide/svelte';
+  import { Check, CircleAlert, Coins, Eraser, Hourglass, Lock, Undo2, ZoomIn, ZoomOut } from '@lucide/svelte';
   import { hb, onEvent, rpc } from '$lib/client.svelte.ts';
   import { SPRITE_SCALE } from '$shared/crowd.ts';
   import type { WorldState } from '$shared/world.ts';
@@ -11,7 +11,6 @@
     LOT,
     LOT_CW,
     LOT_RH,
-    LOT_TIER_NAMES,
     PROPS,
     applyJob,
     blockById,
@@ -40,7 +39,10 @@
   const money = $derived(world?.shop?.currencyName ?? 'money');
 
   let mine = $state<LotMine | null>(null);
-  let tool = $state<'block' | 'prop' | 'remove'>('block');
+  /** The category open in the picker (the blocks, a tier of decorations, or taking pieces away), and what a tap on the lot does then */
+  type Cat = 'block' | 'fancy' | 'small' | 'big' | 'grand' | 'remove';
+  let cat = $state<Cat>('block');
+  const tool = $derived(cat === 'remove' ? 'remove' : cat === 'block' || cat === 'fancy' ? 'block' : 'prop');
   let block = $state('stone');
   let prop = $state('flower');
   let variant = $state(0);
@@ -177,6 +179,27 @@
     variant = 0;
   }
 
+  /** The picker's categories, each with a piece to show for it */
+  const CATS: { id: Cat; name: string; example: () => string | null }[] = [
+    { id: 'block', name: 'Blocks', example: () => blockPicture('brick') },
+    { id: 'fancy', name: 'Fancy blocks', example: () => blockPicture('gold') },
+    { id: 'small', name: 'Small decor', example: () => propPicture('flowerBush', 1) },
+    { id: 'big', name: 'Big decor', example: () => propPicture('bench', 0) },
+    { id: 'grand', name: 'Grand decor', example: () => propPicture('statue', 0) },
+    { id: 'remove', name: 'Take away', example: () => null },
+  ];
+  /** The pieces of a category */
+  const blocksOf = (c: Cat) => BLOCKS.filter((b) => b.tier === c);
+  const propsOf = (c: Cat) => PROPS.filter((p) => p.tier === c);
+
+  /** Open a category: the piece in hand becomes its first one, unless the one in hand belongs to it */
+  function openCat(c: Cat) {
+    cat = c;
+    if (c === 'block' || c === 'fancy') {
+      if (blockById(block)?.tier !== c) block = blocksOf(c)[0].id;
+    } else if (c !== 'remove' && propById(prop)?.tier !== c) pickProp(propsOf(c)[0].id);
+  }
+
   // ------------------------------------------------------------ tapping the lot
 
   /** What a tap at a point of the world lands on: the column or decoration drawn there (front first), else the cell on the ground */
@@ -303,12 +326,6 @@
       {/key}
     </div>
 
-    <div class="tools" role="tablist">
-      <button type="button" role="tab" class="tool" class:on={tool === 'block'} aria-selected={tool === 'block'} onclick={() => (tool = 'block')}><Box size={16} />Blocks</button>
-      <button type="button" role="tab" class="tool" class:on={tool === 'prop'} aria-selected={tool === 'prop'} onclick={() => (tool = 'prop')}><Flower2 size={16} />Decor</button>
-      <button type="button" role="tab" class="tool" class:on={tool === 'remove'} aria-selected={tool === 'remove'} onclick={() => (tool = 'remove')}><Eraser size={16} />Take away</button>
-    </div>
-
     <!-- The piece in hand: what a tap on the lot does, and what it costs -->
     <div class="chosen">
       {#if tool === 'remove'}
@@ -329,50 +346,59 @@
       {/if}
     </div>
 
-    {#if tool === 'prop' && chosenProp?.variants}
-      <div class="variants" role="radiogroup" aria-label="Kind">
-        {#each chosenProp.variants as name, i (name)}
-          {@const pic = propPicture(chosenProp.id, i)}
-          <button type="button" class="variant" class:on={variant === i} role="radio" aria-checked={variant === i} onclick={() => (variant = i)} title={name} aria-label={name}>
-            {#if pic}<img src={pic} alt="" />{/if}
+    <!-- The picker: the categories on the left (each with a piece of it), the open one's pieces on the right -->
+    <div class="picker">
+      <div class="cats" role="tablist" aria-label="Categories">
+        {#each CATS as c (c.id)}
+          {@const pic = c.example()}
+          <button type="button" role="tab" class="cat" class:on={cat === c.id} aria-selected={cat === c.id} onclick={() => openCat(c.id)}>
+            <span class="cat-art">
+              {#if c.id === 'remove'}<Eraser size={22} />{:else if pic}<img src={pic} alt="" class:tall={c.id !== 'block' && c.id !== 'fancy'} />{/if}
+            </span>
+            <span class="cat-name">{c.name}</span>
+            <span class="cat-price">{#if c.id === 'remove'}Free{:else}{info.prices[c.id]} <Coins size={11} />{/if}</span>
           </button>
         {/each}
       </div>
-    {/if}
 
-    {#if tool === 'block'}
-      {#each [{ label: 'Blocks', list: BLOCKS.filter((b) => b.tier === 'block') }, { label: 'Fancy blocks', list: BLOCKS.filter((b) => b.tier === 'fancy') }] as group (group.label)}
-        <section class="group">
-          <h4>{group.label}<span class="cost small"><Coins size={12} />{info.prices[group.list[0].tier]} each</span></h4>
-          <div class="palette">
-            {#each group.list as b (b.id)}
-              {@const pic = blockPicture(b.id)}
-              <button type="button" class="piece" class:on={block === b.id} class:dear={info.prices[b.tier] > (mine?.balance ?? 0)} onclick={() => (block = b.id)} title={b.name}>
-                <span class="name">{b.name}</span>
-                <span class="art">{#if pic}<img src={pic} alt="" />{/if}</span>
-                <span class="price">{info.prices[b.tier]} <Coins size={13} /></span>
-              </button>
-            {/each}
+      <div class="pieces">
+        {#if cat === 'remove'}
+          <p class="empty">Tap any piece on the lot, yours or anyone's: your character goes and takes it away, for free. Tapping one of yours still on its way takes it back and pays you back.</p>
+        {:else}
+          {#if tool === 'prop' && chosenProp?.variants && chosenProp.tier === cat}
+            <div class="variants" role="radiogroup" aria-label="Kind">
+              {#each chosenProp.variants as name, i (name)}
+                {@const pic = propPicture(chosenProp.id, i)}
+                <button type="button" class="variant" class:on={variant === i} role="radio" aria-checked={variant === i} onclick={() => (variant = i)} title={name} aria-label={name}>
+                  {#if pic}<img src={pic} alt="" />{/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+          <div class="grid">
+            {#if cat === 'block' || cat === 'fancy'}
+              {#each blocksOf(cat) as b (b.id)}
+                {@const pic = blockPicture(b.id)}
+                <button type="button" class="piece" class:on={block === b.id} class:dear={info.prices[b.tier] > (mine?.balance ?? 0)} onclick={() => (block = b.id)} title={b.name}>
+                  <span class="name">{b.name}</span>
+                  <span class="art">{#if pic}<img src={pic} alt="" />{/if}</span>
+                  <span class="price">{info.prices[b.tier]} <Coins size={13} /></span>
+                </button>
+              {/each}
+            {:else}
+              {#each propsOf(cat) as p (p.id)}
+                {@const pic = propPicture(p.id, 0)}
+                <button type="button" class="piece" class:on={prop === p.id} class:dear={info.prices[p.tier] > (mine?.balance ?? 0)} onclick={() => pickProp(p.id)} title={p.name}>
+                  <span class="name">{p.name}</span>
+                  <span class="art">{#if pic}<img src={pic} alt="" class="tall" />{/if}</span>
+                  <span class="price">{info.prices[p.tier]} <Coins size={13} /></span>
+                </button>
+              {/each}
+            {/if}
           </div>
-        </section>
-      {/each}
-    {:else if tool === 'prop'}
-      {#each ['small', 'big', 'grand'] as const as tier (tier)}
-        <section class="group">
-          <h4>{LOT_TIER_NAMES[tier].replace(' decoration', '')}<span class="cost small"><Coins size={12} />{info.prices[tier]} each</span></h4>
-          <div class="palette">
-            {#each PROPS.filter((p) => p.tier === tier) as p (p.id)}
-              {@const pic = propPicture(p.id, 0)}
-              <button type="button" class="piece" class:on={prop === p.id} class:dear={info.prices[p.tier] > (mine?.balance ?? 0)} onclick={() => pickProp(p.id)} title={p.name}>
-                <span class="name">{p.name}</span>
-                <span class="art">{#if pic}<img src={pic} alt="" class="tall" />{/if}</span>
-                <span class="price">{info.prices[p.tier]} <Coins size={13} /></span>
-              </button>
-            {/each}
-          </div>
-        </section>
-      {/each}
-    {/if}
+        {/if}
+      </div>
+    </div>
   </div>
 {/if}
 
@@ -488,33 +514,9 @@
   .note.bad :global(svg) {
     color: var(--danger);
   }
-  .tools {
-    display: flex;
-    gap: 0.25rem;
-    padding: 0.25rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-  }
-  .tool {
-    flex: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
-    padding: 0.45rem 0.3rem;
-    border: 0;
-    border-radius: calc(var(--radius-sm) - 2px);
-    background: transparent;
-    color: var(--text-dim);
-    font-size: 0.86rem;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-  .tool.on {
-    background: var(--accent);
-    color: var(--accent-contrast);
-  }
+
+
+
   .chosen {
     display: flex;
     align-items: center;
@@ -577,17 +579,100 @@
     background: color-mix(in srgb, var(--danger) 16%, var(--surface-2));
     color: var(--danger);
   }
-  .cost.small {
-    padding: 0.05rem 0.45rem;
+
+  .picker {
+    display: grid;
+    grid-template-columns: 5.6rem 1fr;
+    gap: 0.5rem;
+    height: min(26rem, 62vh);
+  }
+  .cats,
+  .pieces {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .cats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding-right: 0.15rem;
+  }
+  .cat {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.4rem 0.25rem 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text-dim);
+  }
+  .cat.on {
+    border-color: var(--accent);
+    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+    box-shadow: 0 0 0 1px var(--accent) inset;
+  }
+  .cat-art {
+    display: grid;
+    place-items: center;
+    height: 2.4rem;
+  }
+  .cat-art img {
+    width: 1.5rem;
+    image-rendering: pixelated;
+  }
+  .cat-art img.tall {
+    width: auto;
+    max-width: 3rem;
+    max-height: 2.4rem;
+  }
+  .cat-name {
     font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.1;
+    text-align: center;
+  }
+  .cat-price {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.7rem;
     font-weight: 600;
     color: var(--text-dim);
-    background: var(--surface-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .pieces {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr));
+    gap: 0.4rem;
+  }
+  .empty {
+    margin: 0;
+    padding: 0.5rem;
+    font-size: 0.84rem;
+    line-height: 1.4;
+    color: var(--text-dim);
   }
   .variants {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
+    padding-bottom: 0.45rem;
+    border-bottom: 1px solid var(--border);
   }
   .variant {
     display: grid;
@@ -607,29 +692,9 @@
     max-height: 2rem;
     image-rendering: pixelated;
   }
-  .group h4 {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin: 0 0 0.35rem;
-    font-size: 0.74rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-  }
-  .group h4 .cost {
-    text-transform: none;
-    letter-spacing: 0;
-  }
-  .palette {
-    display: flex;
-    gap: 0.4rem;
-    overflow-x: auto;
-    padding-bottom: 0.3rem;
-    scroll-snap-type: x proximity;
-    scrollbar-width: thin;
-  }
+
+
+
   /* A piece's card, like the shop's: its name on top, its picture, its price at the bottom */
   .piece {
     flex: none;
@@ -637,13 +702,12 @@
     flex-direction: column;
     align-items: center;
     gap: 0.2rem;
-    width: 5rem;
+    min-width: 0;
     padding: 0.35rem 0.3rem 0.4rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--surface-2);
     color: var(--text);
-    scroll-snap-align: start;
     transition:
       border-color 0.15s,
       transform 0.1s;
