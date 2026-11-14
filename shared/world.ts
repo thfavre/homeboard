@@ -155,7 +155,7 @@ export const TOWN_BENCHES: { instead: number; list: { x: number; y: number; dir:
 export const TREE_SHAKE = {
   tree: 2,
   bench: 2,
-  x: 454,
+  x: 444,
   y: 781,
   meet: [
     { x: 460, y: 805 },
