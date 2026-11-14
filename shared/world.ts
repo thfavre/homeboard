@@ -32,7 +32,7 @@ export const TOWN_SCENE = {
   ],
   lamps: [
     // (over the build lot's top fence: it lights the lot at night)
-    { x: 300, y: 494 },
+    { x: 300, y: 534 },
     { x: 620, y: 300 },
     { x: 980, y: 300 },
     { x: 1300, y: 610 },

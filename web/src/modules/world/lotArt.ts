@@ -534,8 +534,9 @@ export const buildingAt = (x: number, y: number) => inLot(x, y);
 /** The builder's hammer, knocking at the piece in front: in the hand on the side it faces, with a little dust at each knock */
 export function drawHammer(g: G, x: number, y: number, dir: WDir, now: number): void {
   const side = dir === 1 ? -1 : 1;
-  const hx = x + (dir === 0 ? 7 : dir === 2 ? 9 : 12 * side);
-  const hy = y - (dir === 0 ? 30 : 22);
+  // (seen from behind, the body is drawn over it: the hand at the shoulder, so its head shows past it)
+  const hx = x + (dir === 0 ? 12 : dir === 2 ? 9 : 12 * side);
+  const hy = y - (dir === 0 ? 36 : 22);
   const beat = (now % 520) / 520;
   const angle = side * (beat < 0.35 ? -0.9 + beat * 4 : 0.5 - (beat - 0.35) * 2);
   g.save();
