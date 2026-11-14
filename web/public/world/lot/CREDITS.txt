@@ -1,0 +1,158 @@
+Decorations of the build lot (from Eliza Wyatt's LPC Revised collection)
+Downloaded unchanged from https://github.com/ElizaWy/LPC except for the file names. Every entry is
+OGA-BY 3.0 (credit the authors below). Hyptosis has allowed his CC-BY 3.0 work to be used under OGA-BY 3.0.
+
+Presents
+  Files: presents.png
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+Christmas Tree
+  Files: christmas-tree.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original tree by Lanea Zimmerman. Recolors, animation, and festive cheer by Eliza Wyatt.
+
+Chest
+  Files: chest.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original large chests by Lanea Zimmerman. Smaller chests and recolors by Eliza Wyatt.
+
+Thrones
+  Files: thrones.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original front view by Lanea Zimmerman. Side and back views by Eliza Wyatt. Recolors by Eliza Wyatt.
+
+Wolf Stone
+  Files: wolf-stone.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt.
+
+Fire, Camp
+  Files: campfire.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-dungeon-elements
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt.
+
+Lighting, Outdoors
+  Files: lamp-outdoor.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt. Inactive version added by Eliza Wyatt.
+
+Lighting, Floor
+  Files: lamps-floor.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: 
+	Top Row: Original by Lanea Zimmerman. Adjustments and recolors by Eliza Wyatt.
+	Row 2+: Original by Eliza Wyatt.
+
+Mushrooms
+  Files: mushrooms.png
+  ARTIST(S): Eliza Wyatt (DeathsDarling), Hyptosis
+  SOURCE: https://opengameart.org/content/lots-of-free-2d-tiles-and-sprites-by-hyptosis
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original large pointed mushroom by Hyptosis, edited and recolored by Eliza Wyatt. All others are original art by Eliza Wyatt.
+
+Skeletons
+  Files: skeletons.png
+  ARTIST(S): Lanea Zimmerman (Sharm)
+  SOURCE: https://opengameart.org/content/lpc-dungeon-elements
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolored by Eliza Wyatt.
+
+Fountain A
+  Files: fountain.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-arabic-elements
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt.
+
+Hay & Straw
+  Files: hay.png
+  ARTIST(S): Lanea Zimmerman (Sharm)
+  SOURCE: https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Edited and recolored by Eliza Wyatt.
+
+Cauldron
+  Files: cauldron.png
+  ARTIST(S): Lanea Zimmerman (Sharm)
+  SOURCE: https://opengameart.org/content/lpc-dungeon-elements
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Adjustments and recolors by Eliza Wyatt.
+
+Clock, Grandfather
+  Files: clock.png
+  ARTIST(S): Lanea Zimmerman (Sharm)
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolors and animation by Eliza Wyatt.
+
+Stone Slabs
+  Files: stone-slab.png
+  ARTIST(S): BlueCarrot16
+  SOURCE: https://opengameart.org/content/lpc-blacksmith
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by BlueCarrot. Recolored by Eliza Wyatt.
+
+Vase Studies
+  Files: vases.png
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+Rocks
+  Files: rocks.png
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+Trees (all seasons)
+  Files: trees-summer.png, trees-autumn.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original trees by Lanea Zimmerman. Leafless tree and thick trunk by Eliza Wyatt. Reconfigured and recolored by Eliza Wyatt.
+
+Plants (all seasons)
+  Files: plants.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling), Hyptosis
+  SOURCE: https://opengameart.org/content/lots-of-free-2d-tiles-and-sprites-by-hyptosis
+  LICENSE: OGA-BY 3.0
+  DETAILS: Tropical bush, small tree, shrub, and first tall grasses by Hyptosis. All other plants by Eliza Wyatt. Edited, recolored, and animated by Eliza Wyatt.
+
+Buckets
+  Files: buckets.png
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt.
+
+Boxes
+  Files: boxes.png
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+Tables, Ornate Wood
+  Files: table-ornate.png
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Adjustments and recolors by Eliza Wyatt.
+

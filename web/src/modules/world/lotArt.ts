@@ -1,7 +1,7 @@
 import { SPRITE_SCALE } from '$shared/crowd.ts';
 import type { WDir } from '$shared/world.ts';
 import { BLOCK_UP, LOT, LOT_CELL, LOT_CW, LOT_FENCE, LOT_RH, LOT_ROW, blockById, inLot, propById, type BlockDef, type LotGrid, type LotProp } from '$shared/worldBuild.ts';
-import { CUT, put, tree, type Cut, type Env, type Prop } from '../games/crowd/scene.ts';
+import { CUT, put, type Cut, type Env, type Prop } from '../games/crowd/scene.ts';
 
 /**
  * The build lot as the TV and the phones draw it: its soil, its low wooden fence with the gate, the
@@ -44,26 +44,34 @@ const seedOf = (text: string) => [...text].reduce((h, ch) => Math.imul(h ^ ch.ch
 
 // ------------------------------------------------------------ extra art
 
-/** The town's art sheets the lot uses beyond the square's own */
-const EXTRA = ['bush-leafy', 'bush-round', 'barrels', 'crates', 'baskets'] as const;
-export type LotArt = Record<(typeof EXTRA)[number], HTMLImageElement>;
+/**
+ * The art sheets the lot uses beyond the square's own: more of the town's (web/public/crowd/env)
+ * and the lot's own decorations from the LPC Revised collection (web/public/world/lot, see its
+ * CREDITS.txt), by the name the art table below uses
+ */
+const EXTRA: [string, string][] = [
+  ...['bush-leafy', 'bush-round', 'bush-cypress', 'barrels', 'crates', 'baskets', 'market-tables', 'street-cones'].map((f): [string, string] => [f, `/crowd/env/${f}.png`]),
+  ...[
+    'presents', 'christmas-tree', 'chest', 'thrones', 'wolf-stone', 'campfire', 'lamp-outdoor', 'lamps-floor', 'mushrooms', 'skeletons', 'fountain', 'hay',
+    'cauldron', 'clock', 'stone-slab', 'vases', 'rocks', 'trees-summer', 'trees-autumn', 'table-ornate', 'buckets', 'plants', 'boxes',
+  ].map((f): [string, string] => [`lot:${f}`, `/world/lot/${f}.png`]),
+];
+export type LotArt = Record<string, HTMLImageElement>;
 
 let loading: Promise<LotArt | null> | null = null;
-/** Load them once (null: they cannot be; those decorations are then not drawn) */
+/** Load them once (one that cannot be is left out: its decorations are not drawn) */
 export function loadLotArt(): Promise<LotArt | null> {
   loading ??= Promise.all(
     EXTRA.map(
-      (f) =>
-        new Promise<[string, HTMLImageElement]>((resolve, reject) => {
+      ([key, url]) =>
+        new Promise<[string, HTMLImageElement] | null>((resolve) => {
           const img = new Image();
-          img.onload = () => resolve([f, img]);
-          img.onerror = () => reject(new Error(f));
-          img.src = `/crowd/env/${f}.png`;
+          img.onload = () => resolve([key, img]);
+          img.onerror = () => resolve(null);
+          img.src = url;
         }),
     ),
-  )
-    .then((list) => Object.fromEntries(list) as LotArt)
-    .catch(() => null);
+  ).then((list) => Object.fromEntries(list.filter((x): x is [string, HTMLImageElement] => !!x)));
   return loading;
 }
 
@@ -325,46 +333,110 @@ function columnProp(c: number, r: number, list: string[], ghostFrom = Infinity):
 
 // ------------------------------------------------------------ the decorations
 
-/** Where a decoration's art is: its sheet and the cut of it, by its kind and variant (null: drawn otherwise) */
-function propCut(env: Env, art: LotArt | null, p: LotProp): [HTMLImageElement, Cut] | null {
-  // (the variant's column in the art)
-  const v = propById(p.kind)?.variants?.[p.v]?.art ?? p.v;
-  switch (p.kind) {
-    case 'flower':
-      return [env.flowers, [v * 32, 96, 32, 32]];
-    case 'tallFlower':
-      return [env.flowers, [v * 32, 128, 32, 32]];
-    case 'flowerBush':
-      return [env.flowers, [v * 32, 0, 32, 32]];
-    case 'shrub':
-      return art ? [art['bush-round'], [v * 32, 32, 32, 32]] : null;
-    case 'leafy':
-      return art ? [art['bush-leafy'], [v * 32, 32, 32, 32]] : null;
-    case 'basket':
-      return art ? [art.baskets, [64, 0, 32, 32]] : null;
-    case 'barrel':
-      return art ? [art.barrels, [0, 8, 32, 46]] : null;
-    case 'crate':
-      return art ? [art.crates, [64, 32, 32, 32]] : null;
-    case 'fernPot':
-      return [env.planters, [128, 32, 32, 64]];
-    case 'planter':
-      return [env.planters, [v ? 32 : 0, 32, 32, 52]];
-    case 'topiary':
-      return [env.planters, CUT.topiary];
-    case 'bench':
-      return [env.magecity, CUT.bench];
-    case 'pillar':
-      return [env.magecity, [160, 64, 32, 64]];
-    case 'statue':
-      return [env.magecity, [64, 392, 32, 86]];
-    case 'ironStatue':
-      return [env.magecity, [224, 608, 32, 64]];
-    case 'fountain':
-      return [env.magecity, [192, 64, 64, 64]];
-    default:
-      return null;
-  }
+/**
+ * Where each decoration's picture is: its sheet (a town sheet by its name, or one of EXTRA) and its
+ * cut, one per variant (the variant's `art` picks it; one cut serves all). `frames`: an animation
+ * instead, a frame every `ms`. `lit`: the cut while it is lit at night (a lamp).
+ */
+interface ArtSpec {
+  sheet: string;
+  cuts: Cut[];
+  /** Another sheet for some variants (by the variant's `art`) */
+  sheets?: string[];
+  frames?: { cuts: Cut[]; ms: number };
+  lit?: Cut;
+}
+const row = (y: number, w: number, h: number, n: number, x0 = 0, step = w): Cut[] => Array.from({ length: n }, (_, k) => [x0 + k * step, y, w, h] as Cut);
+
+const ART: Record<string, ArtSpec> = {
+  // Flowers & plants
+  flower: { sheet: 'flowers', cuts: row(96, 32, 32, 9) },
+  tallFlower: { sheet: 'flowers', cuts: row(128, 32, 32, 9) },
+  flowerBush: { sheet: 'flowers', cuts: row(0, 32, 32, 9) },
+  roseShrub: { sheet: 'flowers', cuts: row(64, 32, 32, 9) },
+  mushroom: { sheet: 'lot:mushrooms', cuts: [[96, 32, 32, 32], [128, 32, 32, 32], [160, 32, 32, 32], [96, 64, 32, 32], [128, 64, 32, 32], [160, 64, 32, 32]] },
+  mushrooms: { sheet: 'lot:mushrooms', cuts: row(96, 32, 32, 3) },
+  grass: { sheet: 'flowers', cuts: [[288, 0, 32, 32], [320, 0, 32, 32]] },
+  tallGrass: { sheet: 'lot:plants', cuts: [[256, 64, 32, 48], [288, 64, 32, 48]] },
+  bigFern: { sheet: 'lot:plants', cuts: [[160, 64, 80, 60]] },
+  // Trees & bushes (the young tree is drawn apart)
+  shrub: { sheet: 'bush-round', cuts: row(32, 32, 32, 3) },
+  leafy: { sheet: 'bush-leafy', cuts: row(32, 32, 32, 4) },
+  cypress: { sheet: 'bush-cypress', cuts: row(0, 32, 64, 3) },
+  autumnBush: { sheet: 'magecity', cuts: [[12, 962, 76, 78], [104, 962, 76, 78]] },
+  oak: { sheet: 'lot:trees-summer', sheets: ['lot:trees-summer', 'lot:trees-autumn'], cuts: [[128, 8, 96, 104], [128, 8, 96, 104], [128, 384, 96, 116], [0, 272, 64, 128]] },
+  xmasTree: { sheet: 'lot:christmas-tree', cuts: [[0, 0, 96, 128]], frames: { cuts: [[0, 0, 96, 128], [96, 0, 96, 128]], ms: 700 } },
+  // Pots & vases
+  fernPot: { sheet: 'planters', cuts: [[128, 32, 32, 64]] },
+  planter: { sheet: 'planters', cuts: [[0, 32, 32, 52], [32, 32, 32, 52]] },
+  topiary: { sheet: 'planters', cuts: [CUT.topiary] },
+  vase: { sheet: 'planters', cuts: [[96, 0, 32, 32], [128, 0, 32, 32], [96, 44, 32, 52]] },
+  amphora: { sheet: 'lot:vases', cuts: row(0, 32, 48, 3) },
+  urn: { sheet: 'lot:vases', cuts: row(136, 32, 44, 4) },
+  pedestalPlant: { sheet: 'magecity', cuts: [[0, 66, 32, 62]] },
+  sapling: { sheet: 'magecity', cuts: [[96, 64, 34, 64]] },
+  // Market & farm
+  pumpkin: { sheet: 'magecity', cuts: [[196, 1028, 20, 20], [206, 1066, 18, 16]] },
+  sack: { sheet: 'magecity', cuts: [[226, 292, 26, 30]] },
+  jars: { sheet: 'magecity', cuts: [[162, 322, 22, 30]] },
+  herbBed: { sheet: 'magecity', cuts: [[160, 294, 32, 20]] },
+  basket: { sheet: 'baskets', cuts: row(0, 32, 32, 3) },
+  bucket: { sheet: 'lot:buckets', cuts: [[0, 0, 32, 32]] },
+  box: { sheet: 'lot:boxes', cuts: [[32, 0, 32, 32], [0, 32, 32, 32]] },
+  barrel: { sheet: 'barrels', cuts: row(8, 32, 46, 3) },
+  crate: { sheet: 'crates', cuts: [[64, 32, 32, 32], [0, 32, 32, 32], [64, 96, 32, 32], [0, 96, 32, 32]] },
+  barrelStack: { sheet: 'barrels', cuts: [[96, 0, 64, 64]] },
+  hay: { sheet: 'lot:hay', cuts: row(16, 64, 80, 2) },
+  chest: { sheet: 'lot:chest', cuts: [[0, 0, 64, 32], [64, 0, 32, 32]] },
+  // Furniture & lights (the lamp post is drawn apart)
+  bench: { sheet: 'magecity', cuts: [CUT.bench] },
+  stoneSeat: { sheet: 'lot:stone-slab', cuts: row(16, 32, 32, 2) },
+  stool: { sheet: 'market-tables', cuts: row(28, 32, 36, 3, 96) },
+  roundTable: { sheet: 'lot:table-ornate', cuts: [[0, 0, 32, 32]] },
+  table: { sheet: 'market-tables', cuts: [[8, 20, 80, 44], [8, 84, 80, 44], [8, 148, 80, 44]] },
+  woodTable: { sheet: 'magecity', cuts: [[160, 14, 64, 50]] },
+  throne: { sheet: 'lot:thrones', cuts: row(0, 32, 64, 5, 0, 64) },
+  clock: { sheet: 'lot:clock', cuts: [[0, 16, 32, 80]], frames: { cuts: row(16, 32, 80, 3), ms: 600 } },
+  gardenLamp: { sheet: 'lot:lamp-outdoor', cuts: [[32, 0, 32, 96]], lit: [0, 0, 32, 96] },
+  floorLamp: { sheet: 'lot:lamps-floor', cuts: [[0, 0, 32, 64], [32, 0, 32, 64], [128, 64, 32, 64], [160, 64, 32, 64]] },
+  candelabra: { sheet: 'lot:lamps-floor', cuts: [[64, 0, 32, 64]] },
+  trashCan: { sheet: 'bins', cuts: [[0, 0, 32, 32], [64, 0, 32, 32], [128, 0, 32, 32], [0, 64, 32, 32], [64, 64, 32, 32], [128, 64, 32, 32]] },
+  signpost: { sheet: 'magecity', cuts: [[192, 1348, 26, 36]] },
+  ironFence: { sheet: 'magecity', cuts: [[64, 1272, 64, 36]] },
+  cone: { sheet: 'street-cones', cuts: [[0, 0, 32, 32], [64, 0, 32, 32], [64, 32, 32, 32]] },
+  // Party & magic
+  present: { sheet: 'lot:presents', cuts: [[0, 0, 32, 32], [0, 32, 32, 32], [32, 0, 32, 32], [96, 0, 32, 32], [96, 32, 32, 32], [128, 0, 32, 32]] },
+  campfire: { sheet: 'lot:campfire', cuts: [[0, 32, 32, 32]], frames: { cuts: row(32, 32, 32, 4), ms: 140 } },
+  cauldron: { sheet: 'lot:cauldron', cuts: [[0, 32, 32, 32]], frames: { cuts: [[0, 32, 32, 32], [0, 64, 32, 32], [0, 96, 32, 32], [0, 128, 32, 32]], ms: 160 } },
+  skullPile: { sheet: 'lot:skeletons', cuts: [[32, 0, 32, 32]] },
+  skeleton: { sheet: 'lot:skeletons', cuts: [[64, 0, 32, 64]] },
+  // Statues & stones
+  statue: { sheet: 'magecity', cuts: [[64, 392, 32, 86]] },
+  ironStatue: { sheet: 'magecity', cuts: [[224, 608, 32, 64]] },
+  ironFigure: { sheet: 'magecity', cuts: [[128, 624, 32, 48]] },
+  wolfStone: { sheet: 'lot:wolf-stone', cuts: [[0, 0, 64, 64], [64, 0, 64, 64], [0, 64, 64, 64], [64, 64, 64, 64]] },
+  bust: { sheet: 'magecity', cuts: [[0, 580, 32, 30]] },
+  pillar: { sheet: 'magecity', cuts: [[160, 64, 32, 64]] },
+  urnPillar: { sheet: 'magecity', cuts: [[32, 544, 32, 64]] },
+  driftwood: { sheet: 'magecity', cuts: [[0, 392, 32, 92]] },
+  crystalPlinth: { sheet: 'magecity', cuts: [[32, 424, 32, 62]] },
+  woodRing: { sheet: 'magecity', cuts: [[64, 478, 64, 78]] },
+  boulder: { sheet: 'lot:rocks', cuts: [[0, 0, 64, 64], [0, 128, 64, 64], [0, 256, 64, 64]] },
+  fountain: { sheet: 'magecity', cuts: [[192, 64, 64, 64]] },
+  tieredFountain: { sheet: 'lot:fountain', cuts: [[0, 0, 64, 96]] },
+};
+
+/** A decoration's sheet and cut now (its variant, the frame of its animation, lit or not) */
+function propCut(env: Env, art: LotArt | null, kind: string, v: number, now: number): [HTMLImageElement, Cut] | null {
+  const spec = ART[kind];
+  if (!spec) return null;
+  const i = propById(kind)?.variants?.[v]?.art ?? 0;
+  const sheet = spec.sheets?.[i] ?? spec.sheet;
+  const img = (env as Record<string, HTMLImageElement>)[sheet] ?? art?.[sheet];
+  if (!img) return null;
+  if (spec.frames) return [img, spec.frames.cuts[Math.floor(now / spec.frames.ms) % spec.frames.cuts.length]];
+  if (spec.lit && lotNow.dark > 0.3) return [img, spec.lit];
+  return [img, spec.cuts[Math.min(i, spec.cuts.length - 1)]];
 }
 
 /** Where a decoration stands: the middle of its bottom edge (world units) */
@@ -376,21 +448,36 @@ function propFoot(p: LotProp): { x: number; y: number } {
 /** How dark it is for the lot's lamps (set by the TV every frame; the phone shows the day) */
 export const lotNow = { dark: 0 };
 
+/** The young tree's crowns, by its variant: the summer, spring, autumn, golden and red ones; the last is bare (a whole tree) */
+const CROWNS: Cut[] = [CUT.canopySummer, CUT.canopySpring, [288, 16, 94, 80], [288, 176, 94, 80], [288, 336, 94, 80]];
+const BARE: Cut = [32, 336, 64, 128];
+
+/** The young tree: a trunk and a crown of the variant's season, swaying a pixel; or bare */
+function drawYoungTree(g: G, env: Env, x: number, y: number, v: number, now: number, phase: number, k = S * 0.55): void {
+  const art = propById('tree')?.variants?.[v]?.art ?? 0;
+  if (art >= CROWNS.length) {
+    put(g, env['tree-canopies'], BARE, x, y + 4, k);
+    return;
+  }
+  put(g, env['tree-trunks'], CUT.trunk, x, y + 4, k);
+  const sway = Math.round(Math.sin(now / 1400 + phase) * 1.3) * k;
+  put(g, env['tree-canopies'], CROWNS[art], x, y - 44 * k * 0.8, k, sway);
+}
+
 function decoration(env: Env, art: LotArt | null, p: LotProp, ghost: boolean): Prop | null {
   const { x, y } = propFoot(p);
   const alpha = ghost ? 0.45 : 1;
   if (p.kind === 'tree') {
-    const t = tree(env, x, y - 4 * S, false, p.id * 1.3, 0.55, 0.8);
     return {
       y,
-      ground: (g, now) => {
-        g.globalAlpha = alpha;
-        t.ground?.(g, now);
+      ground: (g) => {
+        g.globalAlpha = 0.5 * alpha;
+        put(g, env['tree-shadows'], CUT.treeShadow, x + 3, y + 4, S * 0.55);
         g.globalAlpha = 1;
       },
       draw: (g, now) => {
         g.globalAlpha = alpha;
-        t.draw(g, now);
+        drawYoungTree(g, env, x, y - 4 * S, p.v, now, p.id * 1.3);
         g.globalAlpha = 1;
       },
     };
@@ -405,14 +492,14 @@ function decoration(env: Env, art: LotArt | null, p: LotProp, ghost: boolean): P
       },
     };
   }
-  const cut = propCut(env, art, p);
-  if (!cut) return null;
-  const [img, c] = cut;
+  if (!ART[p.kind]) return null;
   return {
     y,
-    draw(g) {
+    draw(g, now) {
+      const cut = propCut(env, art, p.kind, p.v, now);
+      if (!cut) return;
       g.globalAlpha = alpha;
-      put(g, img, c, x, y + 2);
+      put(g, cut[0], cut[1], x, y + 2);
       g.globalAlpha = 1;
     },
   };
@@ -420,11 +507,9 @@ function decoration(env: Env, art: LotArt | null, p: LotProp, ghost: boolean): P
 
 /** A decoration's picture for the phone's palette (its art, whole) */
 export function propSwatch(env: Env, art: LotArt | null, kind: string, v: number): HTMLCanvasElement | null {
-  const p: LotProp = { id: 0, kind, v, c: 0, r: 0 };
   if (kind === 'tree') {
     const [c, g] = canvas(60, 90);
-    put(g, env['tree-trunks'], CUT.trunk, 30, 88, 0.55);
-    put(g, env['tree-canopies'], CUT.canopySummer, 30, 88 - 44 * 0.55 * 0.8, 0.55);
+    drawYoungTree(g, env, 30, 86, v, 0, 0, 0.55);
     return c;
   }
   if (kind === 'lamp') {
@@ -432,7 +517,7 @@ export function propSwatch(env: Env, art: LotArt | null, kind: string, v: number
     g.drawImage(env['lamp-post'], ...CUT.lamp, 0, 0, CUT.lamp[2], CUT.lamp[3]);
     return c;
   }
-  const cut = propCut(env, art, p);
+  const cut = propCut(env, art, kind, v, 0);
   if (!cut) return null;
   const [img, [sx, sy, sw, sh]] = cut;
   const [c, g] = canvas(sw, sh);
@@ -579,9 +664,10 @@ export function drawLotLight(g: G, grid: LotGrid | undefined, dark: number, now:
     });
   }
   for (const p of grid.props) {
-    if (!propById(p.kind)?.glow) continue;
+    const up = propById(p.kind)?.glow;
+    if (!up) continue;
     const { x, y } = propFoot(p);
-    const ly = y - 80;
+    const ly = y - up * S;
     const glow = g.createRadialGradient(x, ly, 0, x, ly, 60);
     glow.addColorStop(0, `rgba(255,210,120,${0.4 * dark})`);
     glow.addColorStop(1, 'rgba(255,210,120,0)');

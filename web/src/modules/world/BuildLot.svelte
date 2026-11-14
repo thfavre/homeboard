@@ -12,6 +12,7 @@
     LOT_CW,
     LOT_RH,
     PROPS,
+    PROP_CATS,
     applyJob,
     blockById,
     cellAt,
@@ -22,6 +23,7 @@
     type LotGrid,
     type LotJob,
     type LotMine,
+    type PropCat,
   } from '$shared/worldBuild.ts';
   import { loadEnv, type Env } from '../games/crowd/scene.ts';
   import { blockSwatch, drawLotGround, loadLotArt, lotProps, propSwatch, type LotArt } from './lotArt.ts';
@@ -40,9 +42,16 @@
 
   let mine = $state<LotMine | null>(null);
   /** The category open in the picker (the blocks, a tier of decorations, or taking pieces away), and what a tap on the lot does then */
-  type Cat = 'block' | 'fancy' | 'small' | 'big' | 'grand' | 'remove';
+  type Cat = 'block' | 'fancy' | PropCat | 'remove';
   let cat = $state<Cat>('block');
   const tool = $derived(cat === 'remove' ? 'remove' : cat === 'block' || cat === 'fancy' ? 'block' : 'prop');
+  /** What a category's pieces cost: one price, or from the cheapest to the dearest */
+  function catPrice(c: Cat): string {
+    if (!info || c === 'remove') return 'Free';
+    if (c === 'block' || c === 'fancy') return String(info.prices[c]);
+    const list = [...new Set(propsOf(c).map((p) => info!.prices[p.tier]))].sort((a, b) => a - b);
+    return list.length > 1 ? `${list[0]}-${list.at(-1)}` : String(list[0] ?? 0);
+  }
   let block = $state('stone');
   let prop = $state('flower');
   let variant = $state(0);
@@ -190,14 +199,12 @@
   const CATS: { id: Cat; name: string; example: () => string | null }[] = [
     { id: 'block', name: 'Blocks', example: () => blockPicture('brick') },
     { id: 'fancy', name: 'Fancy blocks', example: () => blockPicture('gold') },
-    { id: 'small', name: 'Small decor', example: () => propPicture('flowerBush', 1) },
-    { id: 'big', name: 'Big decor', example: () => propPicture('bench', 0) },
-    { id: 'grand', name: 'Grand decor', example: () => propPicture('statue', 0) },
+    ...PROP_CATS.map((c) => ({ id: c.id as Cat, name: c.name, example: () => propPicture(c.example, 0) })),
     { id: 'remove', name: 'Take away', example: () => null },
   ];
   /** The pieces of a category */
   const blocksOf = (c: Cat) => BLOCKS.filter((b) => b.tier === c);
-  const propsOf = (c: Cat) => PROPS.filter((p) => p.tier === c);
+  const propsOf = (c: Cat) => PROPS.filter((p) => p.cat === c);
 
   /** Open a category: the piece in hand becomes its first one, unless the one in hand belongs to it */
   function openCat(c: Cat) {
@@ -205,7 +212,10 @@
     picking = null;
     if (c === 'block' || c === 'fancy') {
       if (blockById(block)?.tier !== c) block = blocksOf(c)[0].id;
-    } else if (c !== 'remove' && propById(prop)?.tier !== c) pickProp(propsOf(c)[0].id);
+    } else if (c !== 'remove' && propById(prop)?.cat !== c) {
+      prop = propsOf(c)[0].id;
+      variant = 0;
+    }
   }
 
   // ------------------------------------------------------------ tapping the lot
@@ -364,7 +374,7 @@
               {#if c.id === 'remove'}<Eraser size={22} />{:else if pic}<img src={pic} alt="" class:tall={c.id !== 'block' && c.id !== 'fancy'} />{/if}
             </span>
             <span class="cat-name">{c.name}</span>
-            <span class="cat-price">{#if c.id === 'remove'}Free{:else}{info.prices[c.id]} <Coins size={11} />{/if}</span>
+            <span class="cat-price">{catPrice(c.id)}{#if c.id !== 'remove'} <Coins size={11} />{/if}</span>
           </button>
         {/each}
       </div>

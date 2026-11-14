@@ -124,15 +124,28 @@ export const blockById = (id: string) => BLOCKS.find((b) => b.id === id);
  * left cell; it is drawn standing on its bottom row. `variants`: the colors or kinds it comes in (six at
  * most, like the shop's colors), each with its column in the art (`art`) and, for a color, how it looks.
  */
+/** The themes the decorations are sorted by in the phone's picker */
+export type PropCat = 'flowers' | 'trees' | 'pots' | 'market' | 'furniture' | 'party' | 'statues';
+export const PROP_CATS: { id: PropCat; name: string; example: string }[] = [
+  { id: 'flowers', name: 'Flowers & plants', example: 'flowerBush' },
+  { id: 'trees', name: 'Trees & bushes', example: 'oak' },
+  { id: 'pots', name: 'Pots & vases', example: 'urn' },
+  { id: 'market', name: 'Market & farm', example: 'pumpkin' },
+  { id: 'furniture', name: 'Furniture & lights', example: 'throne' },
+  { id: 'party', name: 'Party & magic', example: 'present' },
+  { id: 'statues', name: 'Statues & stones', example: 'wolfStone' },
+];
+
 export interface PropDef {
   id: string;
   name: string;
+  cat: PropCat;
   tier: 'small' | 'big' | 'grand';
   w: number;
   d: number;
   variants?: PropVariant[];
-  /** Shines at night (a lamp) */
-  glow?: boolean;
+  /** Shines at night: how high its light is above its foot (sprite pixels) */
+  glow?: number;
 }
 
 export interface PropVariant {
@@ -152,26 +165,87 @@ const FLOWER_COLORS: PropVariant[] = [
 ];
 /** Kinds that differ by shape, not color: shown by their picture */
 const kinds = (...names: string[]): PropVariant[] => names.map((name, art) => ({ name, art }));
+/** Colors, each with how it shows on its square */
+const colors = (...list: [string, string][]): PropVariant[] => list.map(([name, color], art) => ({ name, art, color }));
 
 export const PROPS: PropDef[] = [
-  { id: 'flower', name: 'Flower', tier: 'small', w: 1, d: 1, variants: FLOWER_COLORS },
-  { id: 'tallFlower', name: 'Tall flower', tier: 'small', w: 1, d: 1, variants: FLOWER_COLORS },
-  { id: 'flowerBush', name: 'Flower bush', tier: 'small', w: 2, d: 2, variants: FLOWER_COLORS },
-  { id: 'shrub', name: 'Shrub', tier: 'small', w: 2, d: 2, variants: kinds('Ragged', 'Lumpy', 'Round') },
-  { id: 'leafy', name: 'Leafy bush', tier: 'small', w: 2, d: 2, variants: kinds('Round', 'Bushy', 'Spiky', 'Star') },
-  { id: 'basket', name: 'Basket', tier: 'small', w: 2, d: 2 },
-  { id: 'barrel', name: 'Barrel', tier: 'small', w: 2, d: 2 },
-  { id: 'crate', name: 'Crate', tier: 'small', w: 2, d: 2 },
-  { id: 'fernPot', name: 'Potted fern', tier: 'big', w: 2, d: 2 },
-  { id: 'planter', name: 'Planter box', tier: 'big', w: 2, d: 2, variants: kinds('Fern', 'Flowers') },
-  { id: 'topiary', name: 'Topiary', tier: 'big', w: 2, d: 2 },
-  { id: 'bench', name: 'Bench', tier: 'big', w: 4, d: 2 },
-  { id: 'lamp', name: 'Lamp post', tier: 'big', w: 1, d: 1, glow: true },
-  { id: 'pillar', name: 'Stone pillar', tier: 'big', w: 2, d: 2 },
-  { id: 'statue', name: 'Statue', tier: 'grand', w: 2, d: 2 },
-  { id: 'ironStatue', name: 'Iron sculpture', tier: 'grand', w: 2, d: 2 },
-  { id: 'fountain', name: 'Fountain', tier: 'grand', w: 4, d: 3 },
-  { id: 'tree', name: 'Young tree', tier: 'grand', w: 2, d: 2 },
+  // Flowers & plants
+  { id: 'flower', name: 'Flower', cat: 'flowers', tier: 'small', w: 1, d: 1, variants: FLOWER_COLORS },
+  { id: 'tallFlower', name: 'Tall flower', cat: 'flowers', tier: 'small', w: 1, d: 1, variants: FLOWER_COLORS },
+  { id: 'flowerBush', name: 'Flower bush', cat: 'flowers', tier: 'small', w: 2, d: 2, variants: FLOWER_COLORS },
+  { id: 'roseShrub', name: 'Rose shrub', cat: 'flowers', tier: 'small', w: 2, d: 2, variants: FLOWER_COLORS },
+  { id: 'mushroom', name: 'Mushroom', cat: 'flowers', tier: 'small', w: 1, d: 1, variants: colors(['Red', '#c0392b'], ['Brown', '#7a4a2a'], ['White', '#e8e2d6'], ['Blue', '#4a5fc0'], ['Copper', '#c06a3a'], ['Slate', '#4a4f66']) },
+  { id: 'mushrooms', name: 'Mushroom patch', cat: 'flowers', tier: 'small', w: 2, d: 1, variants: kinds('Orange', 'Pale', 'Green') },
+  { id: 'grass', name: 'Grass tuft', cat: 'flowers', tier: 'small', w: 2, d: 1, variants: kinds('Green', 'Dark') },
+  { id: 'tallGrass', name: 'Tall grass', cat: 'flowers', tier: 'small', w: 2, d: 1, variants: kinds('Reeds', 'Wild') },
+  { id: 'bigFern', name: 'Big fern', cat: 'flowers', tier: 'big', w: 4, d: 2 },
+  // Trees & bushes
+  { id: 'shrub', name: 'Shrub', cat: 'trees', tier: 'small', w: 2, d: 2, variants: kinds('Ragged', 'Lumpy', 'Round') },
+  { id: 'leafy', name: 'Leafy bush', cat: 'trees', tier: 'small', w: 2, d: 2, variants: kinds('Round', 'Bushy', 'Spiky', 'Star') },
+  { id: 'cypress', name: 'Cypress', cat: 'trees', tier: 'big', w: 2, d: 2, variants: kinds('Tall', 'Full', 'Leaning') },
+  { id: 'autumnBush', name: 'Autumn bush', cat: 'trees', tier: 'big', w: 4, d: 2, variants: kinds('Round', 'Wild') },
+  { id: 'tree', name: 'Young tree', cat: 'trees', tier: 'grand', w: 2, d: 2, variants: colors(['Summer', '#4f8a32'], ['Spring', '#8cc04a'], ['Autumn', '#d0702a'], ['Golden', '#e0b830'], ['Red', '#b0302a'], ['Bare', '#5a3a2a']) },
+  { id: 'oak', name: 'Big tree', cat: 'trees', tier: 'grand', w: 4, d: 2, variants: kinds('Summer', 'Autumn', 'Pine', 'Bare') },
+  { id: 'xmasTree', name: 'Christmas tree', cat: 'trees', tier: 'grand', w: 4, d: 3, glow: 50 },
+  // Pots & vases
+  { id: 'fernPot', name: 'Potted fern', cat: 'pots', tier: 'big', w: 2, d: 2 },
+  { id: 'planter', name: 'Planter box', cat: 'pots', tier: 'big', w: 2, d: 2, variants: kinds('Fern', 'Flowers') },
+  { id: 'topiary', name: 'Topiary', cat: 'pots', tier: 'big', w: 2, d: 2 },
+  { id: 'vase', name: 'Flower vase', cat: 'pots', tier: 'small', w: 2, d: 1, variants: kinds('Red bloom', 'Pink bloom', 'Empty') },
+  { id: 'amphora', name: 'Amphora', cat: 'pots', tier: 'big', w: 2, d: 1, variants: kinds('Tall', 'Handled', 'Earth') },
+  { id: 'urn', name: 'Painted urn', cat: 'pots', tier: 'big', w: 2, d: 1, variants: kinds('Plain', 'Blue band', 'Stripes', 'Ornate') },
+  { id: 'pedestalPlant', name: 'Plant pedestal', cat: 'pots', tier: 'big', w: 2, d: 1 },
+  { id: 'sapling', name: 'Potted sapling', cat: 'pots', tier: 'big', w: 2, d: 2 },
+  // Market & farm
+  { id: 'pumpkin', name: 'Pumpkin', cat: 'market', tier: 'small', w: 1, d: 1, variants: kinds('Big', 'Small') },
+  { id: 'sack', name: 'Flour sack', cat: 'market', tier: 'small', w: 1, d: 1 },
+  { id: 'jars', name: 'Jars', cat: 'market', tier: 'small', w: 1, d: 1 },
+  { id: 'herbBed', name: 'Herb bed', cat: 'market', tier: 'small', w: 2, d: 2 },
+  { id: 'basket', name: 'Basket', cat: 'market', tier: 'small', w: 2, d: 2, variants: kinds('Woven', 'Box', 'Round') },
+  { id: 'bucket', name: 'Bucket', cat: 'market', tier: 'small', w: 2, d: 1 },
+  { id: 'box', name: 'Box', cat: 'market', tier: 'small', w: 2, d: 1, variants: kinds('Open', 'Hatbox') },
+  { id: 'barrel', name: 'Barrel', cat: 'market', tier: 'small', w: 2, d: 2, variants: kinds('Barrel', 'Water', 'Plain') },
+  { id: 'crate', name: 'Crate', cat: 'market', tier: 'small', w: 2, d: 2, variants: kinds('Small', 'Big', 'Pale small', 'Pale big') },
+  { id: 'barrelStack', name: 'Barrel stack', cat: 'market', tier: 'big', w: 4, d: 3 },
+  { id: 'hay', name: 'Hay', cat: 'market', tier: 'big', w: 4, d: 4, variants: kinds('Green', 'Golden') },
+  { id: 'chest', name: 'Chest', cat: 'market', tier: 'big', w: 2, d: 2, variants: kinds('Big', 'Small') },
+  // Furniture & lights
+  { id: 'bench', name: 'Bench', cat: 'furniture', tier: 'big', w: 4, d: 2 },
+  { id: 'stoneSeat', name: 'Stone seat', cat: 'furniture', tier: 'small', w: 2, d: 1, variants: kinds('Round', 'Square') },
+  { id: 'stool', name: 'Stool', cat: 'furniture', tier: 'small', w: 2, d: 1, variants: kinds('Dark', 'Oak', 'Pale') },
+  { id: 'roundTable', name: 'Round table', cat: 'furniture', tier: 'big', w: 2, d: 2 },
+  { id: 'table', name: 'Market table', cat: 'furniture', tier: 'big', w: 5, d: 2, variants: kinds('Dark', 'Oak', 'Pale') },
+  { id: 'woodTable', name: 'Wood table', cat: 'furniture', tier: 'big', w: 4, d: 2 },
+  { id: 'throne', name: 'Throne', cat: 'furniture', tier: 'grand', w: 2, d: 2, variants: colors(['Gold', '#d9a43a'], ['Red', '#a8322a'], ['Purple', '#7a3a8a'], ['Blue', '#3a6ab8'], ['White', '#e8e8e8']) },
+  { id: 'clock', name: 'Grandfather clock', cat: 'furniture', tier: 'big', w: 2, d: 1 },
+  { id: 'lamp', name: 'Lamp post', cat: 'furniture', tier: 'big', w: 1, d: 1, glow: 60 },
+  { id: 'gardenLamp', name: 'Garden lamp', cat: 'furniture', tier: 'big', w: 1, d: 1, glow: 76 },
+  { id: 'floorLamp', name: 'Floor lamp', cat: 'furniture', tier: 'big', w: 1, d: 1, glow: 50, variants: kinds('Cream', 'Brown', 'Teal', 'Navy') },
+  { id: 'candelabra', name: 'Candelabra', cat: 'furniture', tier: 'big', w: 1, d: 1, glow: 56 },
+  { id: 'trashCan', name: 'Trash can', cat: 'furniture', tier: 'small', w: 2, d: 1, variants: colors(['Blue', '#4f8fae'], ['Black', '#2c2c3a'], ['Beige', '#cfc3a8'], ['Green', '#3f7a3a'], ['Gray', '#7d8394'], ['Purple', '#6e5aa8']) },
+  { id: 'signpost', name: 'Signpost', cat: 'furniture', tier: 'small', w: 1, d: 1 },
+  { id: 'ironFence', name: 'Iron fence', cat: 'furniture', tier: 'small', w: 4, d: 1 },
+  { id: 'cone', name: 'Traffic cone', cat: 'furniture', tier: 'small', w: 2, d: 1, variants: kinds('Plain', 'Striped', 'Tall') },
+  // Party & magic
+  { id: 'present', name: 'Present', cat: 'party', tier: 'small', w: 2, d: 1, variants: colors(['Green', '#2f7a3f'], ['Purple', '#7a2f6a'], ['Red', '#a8322a'], ['Yellow', '#e0cf63'], ['Blue', '#3f86b8'], ['White', '#ececec']) },
+  { id: 'campfire', name: 'Campfire', cat: 'party', tier: 'big', w: 2, d: 2, glow: 10 },
+  { id: 'cauldron', name: 'Cauldron', cat: 'party', tier: 'big', w: 2, d: 2, glow: 12 },
+  { id: 'skullPile', name: 'Skull pile', cat: 'party', tier: 'small', w: 2, d: 1 },
+  { id: 'skeleton', name: 'Skeleton', cat: 'party', tier: 'big', w: 2, d: 1 },
+  // Statues & stones
+  { id: 'statue', name: 'Statue', cat: 'statues', tier: 'grand', w: 2, d: 2 },
+  { id: 'ironStatue', name: 'Iron sculpture', cat: 'statues', tier: 'grand', w: 2, d: 2 },
+  { id: 'ironFigure', name: 'Iron figure', cat: 'statues', tier: 'grand', w: 2, d: 2 },
+  { id: 'wolfStone', name: 'Wolf stone', cat: 'statues', tier: 'grand', w: 4, d: 2, variants: colors(['Bronze', '#8a5a32'], ['Slate', '#6c7a94'], ['Sand', '#cdbba0'], ['Night', '#3a3a52']) },
+  { id: 'bust', name: 'Bust', cat: 'statues', tier: 'big', w: 2, d: 1 },
+  { id: 'pillar', name: 'Stone pillar', cat: 'statues', tier: 'big', w: 2, d: 2 },
+  { id: 'urnPillar', name: 'Urn pillar', cat: 'statues', tier: 'big', w: 2, d: 2 },
+  { id: 'driftwood', name: 'Driftwood', cat: 'statues', tier: 'big', w: 2, d: 2 },
+  { id: 'crystalPlinth', name: 'Crystal plinth', cat: 'statues', tier: 'grand', w: 2, d: 2 },
+  { id: 'woodRing', name: 'Wooden ring', cat: 'statues', tier: 'grand', w: 4, d: 2 },
+  { id: 'boulder', name: 'Boulder', cat: 'statues', tier: 'big', w: 4, d: 3, variants: colors(['Gray', '#8a7f78'], ['Sand', '#c9b8a0'], ['Blue', '#6a7fb0']) },
+  { id: 'fountain', name: 'Fountain', cat: 'statues', tier: 'grand', w: 4, d: 3 },
+  { id: 'tieredFountain', name: 'Tiered fountain', cat: 'statues', tier: 'grand', w: 4, d: 3 },
 ];
 export const propById = (id: string) => PROPS.find((p) => p.id === id);
 
