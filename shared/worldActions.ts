@@ -55,19 +55,21 @@ export interface Mailbox {
 
 // ------------------------------------------------------------ fireworks
 
-/** The shapes a shell bursts into; `points` is how crazy it is (the price follows) */
-export const FW_SHAPES = [
-  { id: 'peony', name: 'Peony', points: 0 },
-  { id: 'ring', name: 'Ring', points: 1 },
-  { id: 'willow', name: 'Willow', points: 1 },
-  { id: 'palm', name: 'Palm', points: 1 },
-  { id: 'crossette', name: 'Crossette', points: 2 },
-  { id: 'spiral', name: 'Spiral', points: 2 },
-  { id: 'star', name: 'Star', points: 2 },
-  { id: 'heart', name: 'Heart', points: 3 },
-  { id: 'smile', name: 'Smile', points: 3 },
+/**
+ * What the stars of a shell do once it bursts: their look in the sky. `points` is how crazy it is
+ * (the price follows).
+ */
+export const FW_PARTICLES = [
+  { id: 'sparks', name: 'Sparks', about: 'Bright stars, short tails', points: 0 },
+  { id: 'glitter', name: 'Glitter', about: 'Twinkling golden tails', points: 1 },
+  { id: 'comets', name: 'Comets', about: 'Thick fiery streaks', points: 1 },
+  { id: 'crackle', name: 'Crackle', about: 'Pop in white sparks', points: 1 },
+  { id: 'strobe', name: 'Strobe', about: 'Blink on and off', points: 1 },
+  { id: 'willow', name: 'Willow', about: 'Long tails that hang', points: 2 },
+  { id: 'split', name: 'Split', about: 'Each star splits in four', points: 2 },
+  { id: 'twirl', name: 'Twirl', about: 'The burst spins round', points: 2 },
 ] as const;
-export type FwShape = (typeof FW_SHAPES)[number]['id'];
+export type FwParticle = (typeof FW_PARTICLES)[number]['id'];
 
 /** The colors of the stars */
 export const FW_COLORS = [
@@ -85,18 +87,16 @@ export const FW_COLORS = [
 export type FwColor = (typeof FW_COLORS)[number]['id'];
 export const fwHex = (c: string) => FW_COLORS.find((x) => x.id === c)?.hex ?? '#ffffff';
 
-/** The effects a shell can have on top of its shape, each worth a point */
-export const FW_EFFECTS = [
-  { id: 'crackle', name: 'Crackle', about: 'The stars pop in little white sparks as they die' },
-  { id: 'glitter', name: 'Glitter', about: 'Glittering tails behind every star' },
-  { id: 'strobe', name: 'Strobe', about: 'The stars blink on and off' },
-  { id: 'echo', name: 'Echo', about: 'A second, smaller burst a moment later', points: 2 },
-] as const;
-export type FwEffect = (typeof FW_EFFECTS)[number]['id'];
+/** A point of a drawing, in -1..1 across the burst (y down) */
+export type FwPoint = [number, number];
 
-/** One shell of a show */
+/**
+ * One shell of a show. Its stars burst into the shape drawn on the phone (`strokes`, each a line
+ * drawn with the finger; none: a round burst), in its colors and particles.
+ */
 export interface FwShell {
-  shape: FwShape;
+  strokes: FwPoint[][];
+  particles: FwParticle;
   /** 1 to 3 colors */
   colors: FwColor[];
   /** 1 small, 2 medium, 3 large */
@@ -108,7 +108,6 @@ export interface FwShell {
   delay: number;
   /** This many go up together, fanned out around x (1..5) */
   count: number;
-  effects: FwEffect[];
 }
 
 export interface FwDesign {
@@ -121,14 +120,17 @@ export interface FwDesign {
 export const FW_MAX_DELAY = 4000;
 export const FW_MAX_COUNT = 5;
 export const FW_NAME_MAX = 32;
+/** A drawing keeps at most this many lines, of at most this many points each */
+export const FW_MAX_STROKES = 12;
+export const FW_STROKE_POINTS = 160;
 
-/** How many points a shell is worth: its shape, size, extra colors and effects, times how many go up at once */
+/** How many points a shell is worth: a drawn shape, its size, extra colors and particles, times how many go up at once */
 export function shellPoints(s: FwShell): number {
-  const shape = FW_SHAPES.find((x) => x.id === s.shape)?.points ?? 0;
+  const drawn = s.strokes.length ? 2 : 0;
   const size = s.size === 3 ? 3 : s.size === 2 ? 1 : 0;
   const colors = Math.max(0, s.colors.length - 1);
-  const effects = s.effects.reduce((n, e) => n + ((FW_EFFECTS.find((x) => x.id === e) as { points?: number } | undefined)?.points ?? 1), 0);
-  return (1 + shape + size + colors + effects) * Math.max(1, s.count);
+  const particles = FW_PARTICLES.find((p) => p.id === s.particles)?.points ?? 0;
+  return (1 + drawn + size + colors + particles) * Math.max(1, s.count);
 }
 
 /** What launching a show costs: a base price, plus so much per point of craziness */
@@ -139,8 +141,8 @@ export function fireworkCost(d: Pick<FwDesign, 'shells'>, prices: { base: number
 /** How long a shell takes to rise to its height (ms) */
 export const riseMs = (s: Pick<FwShell, 'height'>) => 900 + s.height * 9;
 /** How long its stars stay in the sky after the burst (ms) */
-export const burstMs = (s: Pick<FwShell, 'shape' | 'effects' | 'size'>) =>
-  (s.shape === 'willow' ? 4200 : s.shape === 'palm' ? 3000 : 2400) + s.size * 250 + (s.effects.includes('echo') ? 700 : 0) + (s.effects.includes('crackle') ? 500 : 0);
+export const burstMs = (s: Pick<FwShell, 'particles' | 'size'>) =>
+  (s.particles === 'willow' ? 4200 : s.particles === 'comets' ? 3000 : 2400) + s.size * 250 + (s.particles === 'crackle' ? 500 : 0);
 
 /** When each shell of a show goes up (ms after the show starts) */
 export function shellTimes(d: Pick<FwDesign, 'shells'>): number[] {
@@ -154,26 +156,109 @@ export function showMs(d: Pick<FwDesign, 'shells'>): number {
   return d.shells.reduce((end, s, i) => Math.max(end, at[i] + riseMs(s) + burstMs(s)), 0);
 }
 
+/**
+ * Points every `step` along the lines of a drawing (the stars of a drawn burst sit there), at most
+ * `max` of them: a longer drawing gets its points further apart
+ */
+export function samplePath(strokes: FwPoint[][], step: number, max: number): FwPoint[] {
+  const len = strokes.reduce((n, st) => n + st.slice(1).reduce((m, p, i) => m + Math.hypot(p[0] - st[i][0], p[1] - st[i][1]), 0), 0);
+  const gap = Math.max(step, len / max);
+  const out: FwPoint[] = [];
+  for (const st of strokes) {
+    if (!st.length) continue;
+    out.push(st[0]);
+    let carry = 0;
+    for (let i = 1; i < st.length; i++) {
+      const [ax, ay] = st[i - 1];
+      const [bx, by] = st[i];
+      const d = Math.hypot(bx - ax, by - ay);
+      if (!d) continue;
+      let t = gap - carry;
+      while (t <= d) {
+        out.push([ax + ((bx - ax) * t) / d, ay + ((by - ay) * t) / d]);
+        t += gap;
+      }
+      carry = d - (t - gap);
+    }
+  }
+  return out.slice(0, max);
+}
+
+/** Ready-made shapes to start a drawing from (or to fire as they are) */
+const arc = (n: number, r: number, cx = 0, cy = 0, from = 0, to = Math.PI * 2): FwPoint[] =>
+  Array.from({ length: n + 1 }, (_, i) => {
+    const a = from + ((to - from) * i) / n;
+    return [cx + Math.cos(a) * r, cy + Math.sin(a) * r] as FwPoint;
+  });
+export const FW_TEMPLATES: { id: string; name: string; strokes: FwPoint[][] }[] = [
+  { id: 'burst', name: 'Round', strokes: [] },
+  { id: 'ring', name: 'Ring', strokes: [arc(40, 0.8)] },
+  {
+    id: 'heart',
+    name: 'Heart',
+    strokes: [
+      Array.from({ length: 49 }, (_, i) => {
+        const t = (i / 48) * Math.PI * 2;
+        return [(16 * Math.sin(t) ** 3) / 19, -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 19 - 0.05] as FwPoint;
+      }),
+    ],
+  },
+  {
+    id: 'star',
+    name: 'Star',
+    strokes: [
+      Array.from({ length: 11 }, (_, k) => {
+        const a = -Math.PI / 2 + (k * Math.PI) / 5;
+        const r = k % 2 ? 0.36 : 0.85;
+        return [Math.cos(a) * r, Math.sin(a) * r + 0.05] as FwPoint;
+      }),
+    ],
+  },
+  { id: 'smile', name: 'Smile', strokes: [arc(36, 0.8), arc(5, 0.07, -0.3, -0.25), arc(5, 0.07, 0.3, -0.25), arc(14, 0.45, 0, 0.02, 0.2 * Math.PI, 0.8 * Math.PI)] },
+  {
+    id: 'spiral',
+    name: 'Spiral',
+    strokes: [Array.from({ length: 60 }, (_, i) => [Math.cos(i * 0.3) * (0.05 + i * 0.0135), Math.sin(i * 0.3) * (0.05 + i * 0.0135)] as FwPoint)],
+  },
+];
+
 /** Every guest starts with this one */
 export const BASIC_FIREWORK: Omit<FwDesign, 'id'> = {
   name: 'Basic',
-  shells: [{ shape: 'peony', colors: ['gold'], size: 2, x: 50, height: 60, delay: 0, count: 1, effects: [] }],
+  shells: [{ strokes: [], particles: 'sparks', colors: ['gold'], size: 2, x: 50, height: 60, delay: 0, count: 1 }],
 };
 
 /**
- * A new shell for the designer: the shape and size of the last one in another color, somewhere
- * else, so adding several reads as a show. No effects or extra copies: those are chosen (and paid)
+ * A new shell for the designer: round, in another color than the last one and somewhere else, so
+ * adding several reads as a show
  */
 export function newShell(after?: FwShell): FwShell {
-  if (!after) return { ...BASIC_FIREWORK.shells[0], colors: ['gold'], effects: [] };
+  if (!after) return structuredClone(BASIC_FIREWORK.shells[0]);
   const next = FW_COLORS[(FW_COLORS.findIndex((c) => c.id === after.colors[0]) + 3) % FW_COLORS.length].id;
-  return { ...after, colors: [next], effects: [], count: 1, x: after.x < 50 ? Math.min(85, after.x + 30) : Math.max(15, after.x - 30), delay: 700 };
+  return { strokes: [], particles: 'sparks', colors: [next], size: after.size, count: 1, height: after.height, x: after.x < 50 ? Math.min(85, after.x + 30) : Math.max(15, after.x - 30), delay: 700 };
 }
 
 const clamp = (v: unknown, lo: number, hi: number, dflt: number) => {
   const n = Math.round(Number(v));
   return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt;
 };
+
+/** A drawing from the phone, cleaned up: numbers in -1..1, a few lines of a few points */
+function validStrokes(v: unknown): FwPoint[][] {
+  if (!Array.isArray(v)) return [];
+  const out: FwPoint[][] = [];
+  for (const st of v.slice(0, FW_MAX_STROKES)) {
+    if (!Array.isArray(st)) continue;
+    const pts: FwPoint[] = [];
+    for (const p of st.slice(0, FW_STROKE_POINTS)) {
+      const x = Number(Array.isArray(p) ? p[0] : NaN);
+      const y = Number(Array.isArray(p) ? p[1] : NaN);
+      if (Number.isFinite(x) && Number.isFinite(y)) pts.push([Math.round(Math.max(-1, Math.min(1, x)) * 1000) / 1000, Math.round(Math.max(-1, Math.min(1, y)) * 1000) / 1000]);
+    }
+    if (pts.length) out.push(pts);
+  }
+  return out;
+}
 
 /** A design from the phone, cleaned up (null: not a design at all) */
 export function validDesign(v: unknown, maxShells: number): Omit<FwDesign, 'id'> | null {
@@ -182,19 +267,17 @@ export function validDesign(v: unknown, maxShells: number): Omit<FwDesign, 'id'>
   const shells: FwShell[] = [];
   for (const raw of d.shells.slice(0, Math.max(1, maxShells))) {
     const s = raw as Partial<FwShell>;
-    if (!FW_SHAPES.some((x) => x.id === s.shape)) return null;
     const colors = [...new Set((Array.isArray(s.colors) ? s.colors : []).filter((c): c is FwColor => FW_COLORS.some((x) => x.id === c)))].slice(0, 3);
     if (!colors.length) return null;
-    const effects = [...new Set((Array.isArray(s.effects) ? s.effects : []).filter((e): e is FwEffect => FW_EFFECTS.some((x) => x.id === e)))];
     shells.push({
-      shape: s.shape as FwShape,
+      strokes: validStrokes(s.strokes),
+      particles: FW_PARTICLES.find((p) => p.id === s.particles)?.id ?? 'sparks',
       colors,
       size: clamp(s.size, 1, 3, 2) as 1 | 2 | 3,
       x: clamp(s.x, 0, 100, 50),
       height: clamp(s.height, 0, 100, 60),
       delay: clamp(s.delay, 0, FW_MAX_DELAY, 600),
       count: clamp(s.count, 1, FW_MAX_COUNT, 1),
-      effects,
     });
   }
   const name = typeof d.name === 'string' && d.name.trim() ? d.name.trim().slice(0, FW_NAME_MAX) : 'My fireworks';

@@ -225,8 +225,9 @@
         <div>
           <strong>Fireworks</strong>
           <p class="faint small">
-            Guests design their own shows on the phone (shapes, colors, sizes, several at once, effects) and launch them over the town, at night only. Shows go
-            up one after the other, and the characters standing around stop to watch and cheer. Each guest starts with a basic one.
+            Guests make their own shows on the phone: each shell bursts into a shape they draw with a finger (or a round burst), in their colors and
+            particles (sparks, glitter, comets, willow...). They launch them over the town, at night only, and only see them on the TV. Shows go up one
+            after the other, and the characters standing around stop to watch and cheer. Each guest starts with a basic one.
           </p>
         </div>
         <Toggle checked={act.fireworks} label="Fireworks" onchange={(v) => setOption('fireworks', v)} />
@@ -242,7 +243,7 @@
         </label>
       </div>
       <p class="faint small">
-        Every shell is worth a point, more for a fancy shape (a heart, a smile), a bigger size, each extra color and each effect, times how many go up at once. The basic show is 1 point; a wild one easily 40.
+        Every shell is worth a point, more for a drawn shape, a bigger size, each extra color and fancier particles, times how many go up at once. The basic show is 2 points; a wild one easily 40.
       </p>
       <div class="pair">
         <label class="field">

@@ -202,6 +202,8 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
   const mine = (guestId: string): FwDesign[] => {
     let list = designs[guestId];
     if (!list?.length) list = designs[guestId] = [{ id: randomUUID().slice(0, 8), ...structuredClone(BASIC_FIREWORK) }];
+    // (a show saved in an older form is read as today's: whatever no longer exists is dropped)
+    for (const [i, d] of list.entries()) if (d.shells.some((s) => !Array.isArray(s.strokes) || !s.particles)) list[i] = { id: d.id, ...(validDesign(d, 30) ?? structuredClone(BASIC_FIREWORK)) };
     return list;
   };
 

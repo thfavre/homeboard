@@ -3,10 +3,10 @@
   import { Coins, Copy, Moon, Pencil, Plus, Rocket, Sun, Trash2 } from '@lucide/svelte';
   import { attempt, hb, rpc, serverNow } from '$lib/client.svelte.ts';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
-  import { BASIC_FIREWORK, FW_COLORS, fireworkCost, fwHex, type FwDesign } from '$shared/worldActions.ts';
+  import { BASIC_FIREWORK, fireworkCost, type FwDesign } from '$shared/worldActions.ts';
   import type { WorldState } from '$shared/world.ts';
   import FireworkDesigner from './FireworkDesigner.svelte';
-  import FireworkPreview from './FireworkPreview.svelte';
+  import ShellThumb from './ShellThumb.svelte';
 
   /**
    * The guest's fireworks: every show they made, ready to launch again (a basic one to start
@@ -22,8 +22,6 @@
   /** The show being made or changed (a copy: the saved one stays as it is until saved) */
   let draft = $state<FwDesign | null>(null);
   let busy = $state(false);
-  /** The list's preview plays this one */
-  let playing = $state<string | null>(null);
 
   let now = $state(serverNow());
   onMount(() => {
@@ -85,9 +83,6 @@
     const r = await attempt(() => rpc<FwDesign[]>('world', 'fwDelete', { id: d.id }));
     if (r) list = r;
   }
-
-  /** The colors a show uses, for its card */
-  const colorsOf = (d: FwDesign) => FW_COLORS.filter((c) => d.shells.some((s) => s.colors.includes(c.id))).map((c) => c.id);
 </script>
 
 {#if draft}
@@ -130,15 +125,12 @@
         {#each list as d (d.id)}
           {@const cost = fw ? fireworkCost(d, fw) : 0}
           <article class="show card">
-            <button type="button" class="poster" onclick={() => (playing = playing === d.id ? null : d.id)} aria-label="Preview {d.name}">
-              {#if playing === d.id}
-                <FireworkPreview design={d} compact />
-              {:else}
-                <span class="dots">
-                  {#each colorsOf(d) as c (c)}<span style:--c={fwHex(c)}></span>{/each}
-                </span>
-                <span class="tap faint small">Tap to preview</span>
-              {/if}
+            <!-- Its shells in the order they go up, as drawn -->
+            <button type="button" class="poster" onclick={() => edit(d)} aria-label="Edit {d.name}">
+              {#each d.shells.slice(0, 6) as s, i (i)}
+                <ShellThumb shell={s} size={44} />
+              {/each}
+              {#if d.shells.length > 6}<span class="more">+{d.shells.length - 6}</span>{/if}
             </button>
             <div class="info">
               <div class="title">
@@ -162,7 +154,7 @@
         {/each}
       </div>
       <button type="button" class="btn block new" onclick={create}><Plus size={18} />New firework</button>
-      <p class="faint small">Make your own show: shapes, colors, effects, several at once. The crazier it is, the more it costs. Everything you make stays here to launch again.</p>
+      <p class="faint small">Draw your own shapes, pick colors and particles, several shells in a row. The crazier it is, the more it costs. Everything you make stays here to launch again.</p>
     {/if}
   </div>
 {/if}
@@ -207,35 +199,21 @@
     padding: 0.7rem;
   }
   .poster {
-    position: relative;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
     min-height: 4.2rem;
-    padding: 0;
+    padding: 0.5rem;
     border: 0;
     border-radius: var(--radius-sm);
     background: radial-gradient(120% 140% at 50% 120%, #232a57, #060818 70%);
     overflow: hidden;
   }
-  .poster :global(canvas) {
-    border: 0;
-  }
-  .dots {
-    display: flex;
-    gap: 0.45rem;
-  }
-  .dots span {
-    width: 0.7rem;
-    height: 0.7rem;
-    border-radius: 50%;
-    background: var(--c);
-    box-shadow: 0 0 10px 2px var(--c);
-  }
-  .tap {
-    position: absolute;
-    right: 0.6rem;
-    bottom: 0.35rem;
-    color: rgba(255, 255, 255, 0.5);
+  .more {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
+    font-weight: 600;
   }
   .info {
     display: flex;

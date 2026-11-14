@@ -1,10 +1,12 @@
-import { burstMs, fwHex, riseMs, shellTimes, type FwDesign, type FwShell } from '$shared/worldActions.ts';
+import { burstMs, fwHex, riseMs, samplePath, shellTimes, type FwDesign, type FwPoint, type FwShell } from '$shared/worldActions.ts';
 
 /**
  * Fireworks, drawn from nothing but the design and the time since the show started: every star's
- * place is worked out from its start speed (slowed by the air, pulled down by gravity), so the TV
- * and the phone's preview draw the same show, and a TV that joins late picks it up mid-way. Drawn
- * in light (additive), with a flash at each burst.
+ * place is worked out from its start speed (slowed by the air, pulled down by gravity), so a TV
+ * that joins late picks a show up mid-way. A shell's stars burst into the shape its guest drew on
+ * the phone (or a round burst), and its particles set how they look: short sparks, glittering or
+ * hanging tails, comets, crackling, blinking, splitting or spinning. Each burst lights the sky
+ * around it with a flash.
  */
 
 type G = CanvasRenderingContext2D;
@@ -25,8 +27,6 @@ interface Star {
   color: string;
   /** 0..1, its own: lifetime, blink and crackle differ per star */
   seed: number;
-  /** Crossette: splits in four at this time (s), its pieces going off this way */
-  split?: number;
 }
 
 interface Burst {
@@ -34,8 +34,10 @@ interface Burst {
   /** The air slows the stars this much (1/s), gravity pulls them down this much (units/s²) */
   drag: number;
   gravity: number;
-  /** Spiral: the burst turns this fast (rad/s) */
+  /** Twirl: the burst turns this fast (rad/s) */
   spin: number;
+  /** The stars draw a shape: a little bigger, so its lines read from across the room */
+  drawn: boolean;
 }
 
 /** A small seeded random generator: the same shell always bursts the same way */
@@ -50,132 +52,46 @@ function rng(seed: number): () => number {
   };
 }
 
-/** The outline of a shape as points around it, about one unit across */
-function outline(shape: FwShell['shape'], n: number, r: () => number): [number, number][] {
-  const pts: [number, number][] = [];
-  if (shape === 'heart') {
-    for (let i = 0; i < n; i++) {
-      const t = (i / n) * Math.PI * 2;
-      pts.push([(16 * Math.sin(t) ** 3) / 17, -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 17]);
-    }
-  } else if (shape === 'star') {
-    const tips: [number, number][] = [];
-    for (let k = 0; k < 10; k++) {
-      const a = -Math.PI / 2 + (k * Math.PI) / 5;
-      const rad = k % 2 ? 0.42 : 1;
-      tips.push([Math.cos(a) * rad, Math.sin(a) * rad]);
-    }
-    for (let i = 0; i < n; i++) {
-      const p = (i / n) * 10;
-      const k = Math.floor(p);
-      const f = p - k;
-      const [ax, ay] = tips[k];
-      const [bx, by] = tips[(k + 1) % 10];
-      pts.push([ax + (bx - ax) * f, ay + (by - ay) * f]);
-    }
-  } else if (shape === 'smile') {
-    const face = Math.round(n * 0.55);
-    for (let i = 0; i < face; i++) {
-      const a = (i / face) * Math.PI * 2;
-      pts.push([Math.cos(a), Math.sin(a)]);
-    }
-    for (const ex of [-0.36, 0.36]) for (let i = 0; i < 5; i++) pts.push([ex + (r() - 0.5) * 0.12, -0.32 + (r() - 0.5) * 0.12]);
-    const mouth = n - pts.length;
-    for (let i = 0; i < mouth; i++) {
-      const a = Math.PI * (0.15 + (0.7 * i) / Math.max(1, mouth - 1));
-      pts.push([Math.cos(a) * 0.58, 0.02 + Math.sin(a) * 0.5]);
-    }
-  } else {
-    // A ring, seen tilted
-    const tilt = r() * Math.PI;
-    const flat = 0.35 + r() * 0.35;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const x = Math.cos(a);
-      const y = Math.sin(a) * flat;
-      pts.push([x * Math.cos(tilt) - y * Math.sin(tilt), x * Math.sin(tilt) + y * Math.cos(tilt)]);
-    }
-  }
-  return pts;
-}
-
 const SIZE = [0, 0.7, 1, 1.38];
 
-/** The stars of one shell's burst (the echo is a smaller, white-tinged one) */
-function makeBurst(s: FwShell, seed: number, echo: boolean): Burst {
+/** The points of a drawn shape where its stars go (empty: a round burst) */
+export function shapePoints(s: Pick<FwShell, 'strokes' | 'size'>): FwPoint[] {
+  return s.strokes.length ? samplePath(s.strokes, 0.07, 46 + s.size * 14) : [];
+}
+
+/** The stars of one shell's burst */
+function makeBurst(s: FwShell, seed: number): Burst {
   const r = rng(seed);
-  const size = SIZE[s.size] * (echo ? 0.5 : 1);
-  const colors = echo ? ['#ffffff', fwHex(s.colors[0])] : s.colors.map(fwHex);
+  const size = SIZE[s.size];
+  const colors = s.colors.map(fwHex);
   const pick = (i: number, n: number) => colors[Math.floor((i / n) * colors.length) % colors.length];
   const stars: Star[] = [];
+  const speed = 230 * size;
+  const shape = shapePoints(s);
   let drag = 1.6;
   let gravity = 55;
-  let spin = 0;
-  const speed = 230 * size;
-  const n = Math.round((s.shape === 'palm' ? 56 : s.shape === 'crossette' ? 12 : 72) * (echo ? 0.6 : 1) * (0.75 + 0.25 * s.size));
-  switch (s.shape) {
-    case 'ring':
-    case 'heart':
-    case 'star':
-    case 'smile': {
-      // The shape is in the start speeds: slowed evenly, the stars draw it out and hold it
-      drag = 2.2;
-      gravity = 22;
-      for (const [i, [x, y]] of outline(s.shape, n, r).entries()) stars.push({ vx: x * speed * 1.25, vy: y * speed * 1.25, color: pick(i, n), seed: r() });
-      break;
+  if (shape.length) {
+    // A drawn shape is in the start speeds: slowed evenly, the stars draw it out and hold it
+    drag = 2.2;
+    gravity = s.particles === 'willow' ? 30 : 20;
+    shape.forEach(([x, y], i) => stars.push({ vx: x * speed * 1.25, vy: y * speed * 1.25, color: pick(i, shape.length), seed: r() }));
+  } else {
+    // Round: the stars spread over a ball seen from the front
+    const n = Math.round(72 * (0.75 + 0.25 * s.size) * (s.particles === 'split' ? 0.25 : 1));
+    for (let i = 0; i < n; i++) {
+      const a = r() * Math.PI * 2;
+      const v = speed * (s.particles === 'split' ? 0.9 : Math.sqrt(1 - (r() * 0.95) ** 2));
+      stars.push({ vx: Math.cos(a) * v, vy: Math.sin(a) * v, color: pick(i, n), seed: r() });
     }
-    case 'willow': {
+    if (s.particles === 'willow') {
       drag = 2.6;
       gravity = 38;
-      for (let i = 0; i < n; i++) {
-        const a = r() * Math.PI * 2;
-        const v = speed * (0.8 + r() * 0.3);
-        stars.push({ vx: Math.cos(a) * v, vy: Math.sin(a) * v, color: pick(i, n), seed: r() });
-      }
-      break;
-    }
-    case 'palm': {
-      // A few thick arms, each a bundle of stars
+    } else if (s.particles === 'comets') {
       drag = 1.2;
       gravity = 70;
-      const arms = 7;
-      for (let i = 0; i < n; i++) {
-        const arm = i % arms;
-        const a = (arm / arms) * Math.PI * 2 - Math.PI / 2 + (r() - 0.5) * 0.12;
-        const v = speed * (0.75 + r() * 0.45);
-        stars.push({ vx: Math.cos(a) * v, vy: Math.sin(a) * v, color: pick(arm, arms), seed: r() });
-      }
-      break;
-    }
-    case 'crossette': {
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2 + r() * 0.2;
-        stars.push({ vx: Math.cos(a) * speed * 0.9, vy: Math.sin(a) * speed * 0.9, color: pick(i, n), seed: r(), split: 0.6 + r() * 0.2 });
-      }
-      break;
-    }
-    case 'spiral': {
-      // Arms of stars at growing speeds, the whole burst turning: a pinwheel
-      spin = 2.4 * (r() < 0.5 ? -1 : 1);
-      const arms = 4;
-      for (let i = 0; i < n; i++) {
-        const f = (Math.floor(i / arms) + 1) / Math.ceil(n / arms);
-        const a = ((i % arms) / arms) * Math.PI * 2 + f * 1.3;
-        const v = speed * (0.25 + 0.85 * f);
-        stars.push({ vx: Math.cos(a) * v, vy: Math.sin(a) * v, color: pick(i % arms, arms), seed: r() });
-      }
-      break;
-    }
-    default: {
-      // Peony: a round burst, the stars spread over a ball seen from the front
-      for (let i = 0; i < n; i++) {
-        const a = r() * Math.PI * 2;
-        const v = speed * Math.sqrt(1 - (r() * 0.95) ** 2);
-        stars.push({ vx: Math.cos(a) * v, vy: Math.sin(a) * v, color: pick(i, n), seed: r() });
-      }
     }
   }
-  return { stars, drag, gravity, spin };
+  return { stars, drag, gravity, spin: s.particles === 'twirl' ? 2.4 * (r() < 0.5 ? -1 : 1) : 0, drawn: shape.length > 0 };
 }
 
 /** Where a star is t seconds after its burst (relative to the burst) */
@@ -194,14 +110,14 @@ function at(vx: number, vy: number, t: number, b: Burst): [number, number] {
 
 /** Bursts are made once per shell, kept while they are drawn */
 const bursts = new Map<string, Burst>();
-function burstOf(s: FwShell, key: string, echo: boolean): Burst {
-  const k = `${key}|${echo ? 'e' : ''}|${s.shape}|${s.size}|${s.colors.join(',')}`;
+function burstOf(s: FwShell, key: string): Burst {
+  const k = `${key}|${s.particles}|${s.size}|${s.colors.join(',')}|${s.strokes.length}|${s.strokes.reduce((n, st) => n + st.length, 0)}|${s.strokes[0]?.[0]?.join(',') ?? ''}`;
   let b = bursts.get(k);
   if (!b) {
     if (bursts.size > 400) bursts.clear();
     let h = 2166136261;
     for (let i = 0; i < k.length; i++) h = Math.imul(h ^ k.charCodeAt(i), 16777619);
-    bursts.set(k, (b = makeBurst(s, h, echo)));
+    bursts.set(k, (b = makeBurst(s, h)));
   }
   return b;
 }
@@ -222,63 +138,71 @@ function flash(g: G, x: number, y: number, radius: number, color: string, alpha:
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   g.globalAlpha = Math.min(1, alpha);
   g.fillStyle = grad;
+  g.globalCompositeOperation = 'lighter';
   g.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  g.globalCompositeOperation = 'source-over';
 }
 
-/** Draw one burst, `t` seconds after it went off at (x, y) */
-function drawBurst(g: G, s: FwShell, b: Burst, x: number, y: number, t: number, life: number, u: number): void {
-  const glitter = s.effects.includes('glitter') || s.shape === 'willow';
-  // Points along each star's tail, close enough to read as a streak
-  const trail = glitter ? 12 : s.shape === 'palm' ? 10 : 6;
-  const gap = glitter ? 0.035 : 0.02;
-  const strobe = s.effects.includes('strobe');
-  const crackle = s.effects.includes('crackle');
-  if (t < 0.3) flash(g, x, y, 130 * SIZE[s.size] * u, fwHex(s.colors[0]), 0.55 * (1 - t / 0.3));
+/** How each kind of particle draws its tail: how many points, how far apart (s), how big the star */
+const TAILS: Record<FwShell['particles'], { n: number; gap: number; r: number }> = {
+  sparks: { n: 6, gap: 0.02, r: 2 },
+  glitter: { n: 12, gap: 0.035, r: 2 },
+  comets: { n: 12, gap: 0.03, r: 2.8 },
+  crackle: { n: 5, gap: 0.02, r: 2 },
+  strobe: { n: 3, gap: 0.02, r: 2.2 },
+  willow: { n: 16, gap: 0.05, r: 1.8 },
+  split: { n: 6, gap: 0.02, r: 2 },
+  twirl: { n: 8, gap: 0.025, r: 2 },
+};
+
+/** Draw one burst, `t` seconds after it went off at the origin */
+function drawBurst(g: G, s: FwShell, b: Burst, t: number, life: number): void {
+  const p = s.particles;
+  const tail = TAILS[p];
+  if (t < 0.3) flash(g, 0, 0, 130 * SIZE[s.size], fwHex(s.colors[0]), 0.55 * (1 - t / 0.3));
   for (const st of b.stars) {
     const own = life * (0.8 + 0.2 * st.seed);
     if (t > own) {
       // Crackle: the dying star pops in a few white sparks
-      if (crackle && t < own + 0.45) {
+      if (p === 'crackle' && t < own + 0.45) {
         const [px, py] = at(st.vx, st.vy, own, b);
         const pr = rng(Math.floor(st.seed * 1e6) + Math.floor(t * 20));
-        for (let k = 0; k < 3; k++) if (pr() < 0.6) dot(g, x + px + (pr() - 0.5) * 22 * u, y + py + (pr() - 0.5) * 22 * u, 1.3 * u, '#ffffff', 1 - (t - own) / 0.45);
+        for (let k = 0; k < 3; k++) if (pr() < 0.6) dot(g, px + (pr() - 0.5) * 22, py + (pr() - 0.5) * 22, 1.3, '#ffffff', 1 - (t - own) / 0.45);
       }
       continue;
     }
     // Bright at first (near white), fading over the last part of its life
     let alpha = t < own * 0.55 ? 1 : 1 - (t - own * 0.55) / (own * 0.45);
-    if (strobe && t > 0.5 && Math.floor(t * 14 + st.seed * 7) % 2) alpha *= 0.12;
+    if (p === 'strobe' && t > 0.5 && Math.floor(t * 14 + st.seed * 7) % 2) alpha *= 0.12;
     const hot = t < 0.18;
     const color = hot ? '#ffffff' : st.color;
-    const r = (hot ? 2.6 : 2) * u;
-    let ox = 0;
-    let oy = 0;
-    let tt = t;
-    if (st.split !== undefined && t > st.split) {
-      // A crossette star splits: its four pieces go on from where it was
-      [ox, oy] = at(st.vx, st.vy, st.split, b);
-      tt = t - st.split;
-      const pieces: [number, number][] = [
+    const r = (hot ? 2.6 : tail.r) * (b.drawn ? 1.35 : 1);
+    const tracks: { vx: number; vy: number; ox: number; oy: number; tt: number }[] = [];
+    const SPLIT = 0.55 + st.seed * 0.15;
+    if (p === 'split' && t > SPLIT) {
+      // Splitting: four pieces go on from where the star was
+      const [ox, oy] = at(st.vx, st.vy, SPLIT, b);
+      for (const [px, py] of [
         [st.vy, -st.vx],
         [-st.vy, st.vx],
         [st.vx * 0.9, st.vy * 0.9],
         [-st.vx * 0.3, -st.vy * 0.3],
-      ];
-      for (const [px, py] of pieces) {
-        for (let k = trail; k >= 0; k--) {
-          const [qx, qy] = at(px * 0.7, py * 0.7, Math.max(0, tt - k * gap), b);
-          dot(g, x + ox + qx, y + oy + qy, r * (1 - k / (trail + 2)), color, alpha * (1 - k / (trail + 1)));
+      ])
+        tracks.push({ vx: px * 0.7, vy: py * 0.7, ox, oy, tt: t - SPLIT });
+    } else tracks.push({ vx: st.vx, vy: st.vy, ox: 0, oy: 0, tt: t });
+    for (const tr of tracks) {
+      for (let k = tail.n; k >= 0; k--) {
+        const back = Math.max(0, tr.tt - k * tail.gap);
+        const [px, py] = at(tr.vx, tr.vy, back, b);
+        const fade = 1 - k / (tail.n + 1.5);
+        if (k > 0 && (p === 'glitter' || p === 'willow')) {
+          // A golden tail that twinkles (the willow's hangs long and dim)
+          const twinkle = Math.sin((st.seed * 50 + back * 40) * 3) > 0.2 ? 0.9 : 0.15;
+          dot(g, tr.ox + px, tr.oy + py, r * (1 - k / (tail.n + 2)), '#ffd27a', alpha * fade * (p === 'willow' ? 0.7 : twinkle));
+        } else {
+          dot(g, tr.ox + px, tr.oy + py, r * (1 - k / (tail.n + 2)), k > 0 && p === 'comets' ? '#ffb45a' : color, alpha * fade);
         }
       }
-      continue;
-    }
-    for (let k = trail; k >= 0; k--) {
-      const back = Math.max(0, tt - k * gap);
-      const [px, py] = at(st.vx, st.vy, back, b);
-      // Glitter: the tail twinkles gold, the star keeps its color
-      const tail = k > 0 && glitter;
-      const twinkle = tail ? (Math.sin((st.seed * 50 + back * 40) * 3) > 0.2 ? 0.9 : 0.15) : 1;
-      dot(g, x + ox + px, y + oy + py, r * (1 - k / (trail + 2)), tail ? '#ffd27a' : color, alpha * twinkle * (1 - k / (trail + 1.5)));
     }
   }
 }
@@ -297,62 +221,6 @@ function drawRocket(g: G, x0: number, y0: number, x1: number, y1: number, u01: n
   }
 }
 
-/** The dots of a shape's icon for the phone's designer, in -1..1 */
-export function shapeIcon(shape: FwShell['shape']): [number, number][] {
-  const r = rng(7);
-  switch (shape) {
-    case 'ring':
-    case 'heart':
-    case 'star':
-    case 'smile':
-      return outline(shape, shape === 'smile' ? 30 : 20, r).map(([x, y]) => [x * 0.85, y * 0.85]);
-    case 'willow': {
-      // Drooping arcs from the middle
-      const out: [number, number][] = [];
-      for (let k = 0; k < 7; k++) {
-        const a = -Math.PI + (k / 6) * Math.PI;
-        for (let i = 1; i <= 3; i++) out.push([Math.cos(a) * i * 0.27, Math.sin(a) * i * 0.2 + (i * i * 0.07)]);
-      }
-      return out;
-    }
-    case 'palm': {
-      const out: [number, number][] = [];
-      for (let k = 0; k < 6; k++) {
-        const a = (k / 6) * Math.PI * 2 - Math.PI / 2;
-        for (let i = 1; i <= 3; i++) out.push([Math.cos(a) * i * 0.28, Math.sin(a) * i * 0.28 + i * i * 0.03]);
-      }
-      return out;
-    }
-    case 'crossette': {
-      const out: [number, number][] = [];
-      for (let k = 0; k < 6; k++) {
-        const a = (k / 6) * Math.PI * 2;
-        const [cx, cy] = [Math.cos(a) * 0.55, Math.sin(a) * 0.55];
-        out.push([cx, cy], [cx + 0.17, cy], [cx - 0.17, cy], [cx, cy + 0.17], [cx, cy - 0.17]);
-      }
-      return out;
-    }
-    case 'spiral': {
-      const out: [number, number][] = [];
-      for (let arm = 0; arm < 3; arm++) {
-        for (let i = 1; i <= 6; i++) {
-          const a = (arm / 3) * Math.PI * 2 + i * 0.42;
-          out.push([Math.cos(a) * i * 0.15, Math.sin(a) * i * 0.15]);
-        }
-      }
-      return out;
-    }
-    default: {
-      const out: [number, number][] = [];
-      for (let k = 0; k < 12; k++) {
-        const a = (k / 12) * Math.PI * 2;
-        for (const d of [0.45, 0.85]) out.push([Math.cos(a) * d, Math.sin(a) * d]);
-      }
-      return out;
-    }
-  }
-}
-
 /**
  * Draw a show `ms` after it started. Returns how bright the sky is from its bursts right now (0..1,
  * for a light over the scene).
@@ -360,24 +228,24 @@ export function shapeIcon(shape: FwShell['shape']): [number, number][] {
 export function drawShow(g: G, design: Pick<FwDesign, 'shells'>, ms: number, sky: Sky, key = ''): number {
   const times = shellTimes(design);
   let light = 0;
+  // (the stars are painted plainly: in light they would add up to white where a drawn shape packs
+  // them close; only the flashes light up what is behind)
   g.save();
-  g.globalCompositeOperation = 'lighter';
   design.shells.forEach((s, i) => {
     const t0 = ms - times[i];
     const rise = riseMs(s);
-    const life = (burstMs(s) - (s.effects.includes('echo') ? 700 : 0) - (s.effects.includes('crackle') ? 500 : 0)) / 1000;
+    const life = (burstMs(s) - (s.particles === 'crackle' ? 500 : 0)) / 1000;
     if (t0 < 0 || t0 > rise + burstMs(s)) return;
     for (let c = 0; c < s.count; c++) {
       // Several at once fan out around x, a little apart in time and height
       const spread = s.count > 1 ? (c / (s.count - 1) - 0.5) * Math.min(0.5, 0.12 * s.count) : 0;
-      const lag = c * 90;
-      const tc = t0 - lag;
+      const tc = t0 - c * 90;
       if (tc < 0) continue;
-      const bx = (Math.max(0.04, Math.min(0.96, s.x / 100 + spread))) * sky.w;
+      const bx = Math.max(0.04, Math.min(0.96, s.x / 100 + spread)) * sky.w;
       const by = sky.low + (sky.high - sky.low) * (s.height / 100) + (c % 2) * 18 * sky.unit;
       const lx = (s.x / 100) * sky.w + spread * sky.w * 0.35;
       if (tc < rise) {
-        drawRocket(g, lx, sky.ground, bx, by, tc / rise, s.effects.includes('glitter'), sky.unit);
+        drawRocket(g, lx, sky.ground, bx, by, tc / rise, s.particles === 'glitter', sky.unit);
         continue;
       }
       const t = (tc - rise) / 1000;
@@ -385,8 +253,7 @@ export function drawShow(g: G, design: Pick<FwDesign, 'shells'>, ms: number, sky
       g.save();
       g.translate(bx, by);
       g.scale(sky.unit, sky.unit);
-      drawBurst(g, s, burstOf(s, `${key}|${i}|${c}`, false), 0, 0, t, life, 1);
-      if (s.effects.includes('echo') && t > 0.55) drawBurst(g, s, burstOf(s, `${key}|${i}|${c}`, true), 0, 0, t - 0.55, life * 0.7, 1);
+      drawBurst(g, s, burstOf(s, `${key}|${i}|${c}`), t, life);
       g.restore();
       if (t < 0.4) light = Math.max(light, (1 - t / 0.4) * (0.4 + 0.2 * s.size));
     }
