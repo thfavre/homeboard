@@ -155,7 +155,7 @@ const CHAT_LAUGH_MS = 900;
  * lasts (ms): told off, or laughing it off together
  */
 const SHAKE_MS = 4200;
-const REACT_MS = 2200;
+const REACT_MS = 1200;
 const SHAKE_TALK_MS: Record<Mood['kind'], [number, number]> = { angry: [6000, 10_000], funny: [4000, 7000] };
 /** In a laugh after the shake: each round of this long, both laugh for the first part */
 const FUNNY_ROUND_MS = 1800;
