@@ -276,9 +276,9 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
     if (!d.hasAvatar(guest.id)) throw new HbError('Make your look first');
     // In the day it waits for the night (a town without night never gets one)
     if (!night() && nightAt() === null) throw new HbError('Fireworks only go up at night, and the town has no night now');
-    // One show, or several picked together (in that order): they go up one after the other
+    // One show, or several picked together (in that order, the same one more than once if wanted): they go up one after the other
     const ids: unknown[] = Array.isArray(args?.ids) ? args.ids : [args?.id];
-    if (!ids.length || ids.length > MAX_TOGETHER || new Set(ids).size !== ids.length) throw new HbError(`Pick 1 to ${MAX_TOGETHER} shows`);
+    if (!ids.length || ids.length > MAX_TOGETHER) throw new HbError(`Pick 1 to ${MAX_TOGETHER} shows`);
     const designs = ids.map((id) => mine(guest.id).find((x) => x.id === id));
     if (designs.some((x) => !x)) throw new HbError('That firework is gone');
     const now = Date.now();
@@ -314,7 +314,14 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
       const shift = k === 0 && list.length % 2 ? 0 : (k % 2 ? 1 : -1) * (14 + 12 * Math.floor(k / 2));
       d.shells.forEach((s, i) => shells.push({ ...structuredClone(s), x: Math.max(0, Math.min(100, s.x + shift)), delay: i === 0 && k > 0 ? Math.max(s.delay, 900) : s.delay }));
     });
-    return { id: list.map((d) => d.id).join('+'), name: list.map((d) => d.name).join(' + '), shells };
+    // (named after them all, the same one in a row counted once: "Comet x2 + Rain")
+    const names: { name: string; n: number }[] = [];
+    for (const d of list) {
+      const last = names.at(-1);
+      if (last?.name === d.name) last.n++;
+      else names.push({ name: d.name, n: 1 });
+    }
+    return { id: list.map((d) => d.id).join('+'), name: names.map((x) => (x.n > 1 ? `${x.name} x${x.n}` : x.name)).join(' + '), shells };
   }
 
   /**
