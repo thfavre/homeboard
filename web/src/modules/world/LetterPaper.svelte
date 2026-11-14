@@ -86,7 +86,6 @@
         <p class="greeting">Dear {letter.toName},</p>
         <p class="body">{letter.text}</p>
         <p class="sign">
-          <span class="faint-ink">Yours,</span>
           <span class="name" style:--who={letter.fromColor}>{letter.fromName}</span>
         </p>
         {#if letter.coins}
@@ -322,9 +321,6 @@
     justify-items: end;
     margin-top: 1.5rem;
     font-size: 1.2rem;
-  }
-  .faint-ink {
-    opacity: 0.7;
   }
   .name {
     font-size: 1.6rem;

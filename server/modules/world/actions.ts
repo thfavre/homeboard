@@ -4,7 +4,8 @@ import { HbError, num } from '../../core/util.ts';
 import { minuteOf, minutesFrom, realAt, townMinutes, type AvatarChoices, type SheetInfo, type TownClock } from '../../../shared/world.ts';
 import {
   BASIC_FIREWORK,
-  LETTER_MAX,
+  letterText,
+  paperPrice,
   MAX_ROCKETS,
   PAPERS,
   SEALS,
@@ -43,6 +44,8 @@ export const ACTION_DEFAULTS: ActionSettings = {
   courier: true,
   courierFee: 5,
   courierMaxCoins: 200,
+  courierPaperFancy: 5,
+  courierPaperLuxe: 15,
   fireworks: true,
   fireworkBase: 10,
   fireworkPerPoint: 3,
@@ -142,6 +145,9 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
     ctx.publish();
   }
 
+  /** What the papers that are not plain cost on top of the courier */
+  const paperPrices = () => ({ fancy: Math.max(0, ctx.settings.get().courierPaperFancy), luxe: Math.max(0, ctx.settings.get().courierPaperLuxe) });
+
   const mailbox = (guestId: string): Mailbox => ({
     inbox: letters.filter((l) => l.to === guestId && l.deliveredAt !== null).sort((a, b) => b.deliveredAt! - a.deliveredAt!),
     sent: letters.filter((l) => l.from === guestId).sort((a, b) => b.sentAt - a.sentAt),
@@ -156,7 +162,7 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
     const to = ctx.session.guests.get(String(args?.to ?? ''));
     if (!to || !d.hasAvatar(to.id)) throw new HbError('Pick who the letter is for');
     if (to.id === guest.id) throw new HbError('The courier does not take letters to yourself');
-    const text = typeof args?.text === 'string' ? args.text.trim().slice(0, LETTER_MAX) : '';
+    const text = letterText(args?.text);
     if (!text) throw new HbError('Write something in the letter');
     const coins = Math.round(num(args?.coins, 0));
     if (coins < 0) throw new HbError('Put money in, not out');
@@ -164,7 +170,7 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
     if (letters.filter((l) => l.from === guest.id && l.deliveredAt === null).length >= LETTERS_ON_THE_WAY) throw new HbError('The courier is still out with your other letters');
     const paper = PAPERS.find((p) => p.id === args?.paper)?.id ?? 'parchment';
     const seal = SEALS.find((x) => x.id === args?.seal)?.id ?? 'crimson';
-    const cost = Math.max(0, Math.round(s.courierFee)) + coins;
+    const cost = Math.max(0, Math.round(s.courierFee)) + paperPrice(paper, paperPrices()) + coins;
     const balance = wallets[guest.id] ?? 0;
     const money = d.currency();
     if (balance < cost) throw new HbError(`Not enough ${money}: this costs ${cost}, you have ${balance}`, 'NO_MONEY');
@@ -321,7 +327,7 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
       // (one being set up counts for about as long as that takes)
       const busyUntil = Math.max(0, ...live.map((x) => (x.at ? x.ends : now + 15_000)));
       return {
-        courier: { on: s.courier, fee: Math.max(0, s.courierFee), maxCoins: Math.max(0, s.courierMaxCoins) },
+        courier: { on: s.courier, fee: Math.max(0, s.courierFee), maxCoins: Math.max(0, s.courierMaxCoins), papers: paperPrices() },
         fireworks: { on: s.fireworks, ...prices(), maxShells: s.fireworkShells, night: night(), nightAt: nightAt(), busyUntil },
       };
     },
@@ -349,6 +355,8 @@ export function setupActions<S extends ActionSettings>(d: Deps<S>) {
         courier: typeof args.courier === 'boolean' ? args.courier : s.courier,
         courierFee: amount(args.courierFee, s.courierFee),
         courierMaxCoins: amount(args.courierMaxCoins, s.courierMaxCoins),
+        courierPaperFancy: amount(args.courierPaperFancy, s.courierPaperFancy),
+        courierPaperLuxe: amount(args.courierPaperLuxe, s.courierPaperLuxe),
         fireworks: typeof args.fireworks === 'boolean' ? args.fireworks : s.fireworks,
         fireworkBase: amount(args.fireworkBase, s.fireworkBase),
         fireworkPerPoint: amount(args.fireworkPerPoint, s.fireworkPerPoint),
