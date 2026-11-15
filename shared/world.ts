@@ -292,8 +292,11 @@ export const BENCHES: Seat[] = TOWN_BENCHES.list.map((b) => (b.dir === 2 ? { x: 
 
 // ------------------------------------------------------------ the shops
 
-/** The places a character walks into when its guest changes their look on the phone */
-export type PlaceId = 'clothes' | 'barber';
+/**
+ * The places a character walks into: the clothes shop and the barber when its guest changes their
+ * look on the phone, the arcade while its guest plays a match in the Arcade (shared/arcade.ts)
+ */
+export type PlaceId = 'clothes' | 'barber' | 'arcade';
 
 /**
  * A shop of the town: one of the square's houses, dressed up as a shop on the TV. All in world
@@ -323,12 +326,18 @@ export const SHOPFRONTS: Partial<Record<HouseKind, { door: number; doorUp: numbe
   brickB: { door: 89, doorUp: 4, win: { x0: 18, x1: 60, top: 60, bottom: 22 } },
 };
 
-/** A shop in the house of this kind nearest to `nearX` (world units) */
-function place(id: PlaceId, name: string, kind: HouseKind, nearX: number, seats: number): TownPlace {
+/**
+ * The arcade's front on the small brick house: a wider window than the barber's (two machines in
+ * it), the door in the house's own doorway
+ */
+export const ARCADE_FRONT = { door: 89, doorUp: 4, win: { x0: 12, x1: 66, top: 62, bottom: 22 } };
+
+/** A shop in the house of this kind nearest to `nearX` (world units); `front`: its own, else its kind's */
+function place(id: PlaceId, name: string, kind: HouseKind, nearX: number, seats: number, front?: (typeof SHOPFRONTS)[HouseKind]): TownPlace {
   const S = SPRITE_SCALE;
   const row = houseRow(SQUARE_HOUSES.seed, Math.ceil(WORLD.w / S)).filter((h) => h.kind === kind);
   const h = row.reduce((a, b) => (Math.abs((b.x + b.w / 2) * S - nearX) < Math.abs((a.x + a.w / 2) * S - nearX) ? b : a));
-  const f = SHOPFRONTS[kind]!;
+  const f = front ?? SHOPFRONTS[kind]!;
   const bottom = SQUARE_HOUSES.bottom * S;
   const window = { x: (h.x + f.win.x0) * S, y: bottom - f.win.top * S, w: (f.win.x1 - f.win.x0) * S, h: (f.win.top - f.win.bottom) * S };
   const doorX = (h.x + f.door) * S;
@@ -343,10 +352,14 @@ function place(id: PlaceId, name: string, kind: HouseKind, nearX: number, seats:
   };
 }
 
-/** The clothes shop (the big house near the middle) and the barber (the small one on the right) */
+/**
+ * The clothes shop (the big house near the middle), the barber (the small one on the right) and the
+ * arcade (the small one left of the clothes shop, by the town hall)
+ */
 export const TOWN_PLACES: Record<PlaceId, TownPlace> = {
   clothes: place('clothes', 'Clothes shop', 'brickA', 860, 2),
   barber: place('barber', 'Barber', 'brickB', 1330, 1),
+  arcade: place('arcade', 'Arcade', 'brickB', 610, 2, ARCADE_FRONT),
 };
 
 // ------------------------------------------------------------ the throne room

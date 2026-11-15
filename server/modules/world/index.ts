@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineModule } from '../../core/module.ts';
+import type { ArcadeApi } from '../arcade/index.ts';
 import { JsonFile } from '../../core/jsonFile.ts';
 import { HbError, num } from '../../core/util.ts';
 import { LOOK_PARTS, TOWN_SPEEDS, kingPriceAt, minuteOf, lookCost, partyAt, validChoices, type AvatarChoices, type CeremonyHold, townMinutes, realAt, type TownClock, type KingPricing, type LookPart, type PlaceId, type Reign, type SheetInfo, type WardrobeMine, type WorldState } from '../../../shared/world.ts';
@@ -520,7 +521,8 @@ export default defineModule<WorldSettings>({
     /** A character has been to a shop: the town now shows that shop's part of the phone look */
     const dress = (id: string, place: PlaceId) => {
       const a = store.data.avatars[id];
-      if (!a) return;
+      // (nothing to put on at the arcade)
+      if (!a || place === 'arcade') return;
       const t = townSoon(id, a);
       if (place === 'clothes') setTown(id, { choices: t.choices, outfit: a.outfit ?? {} });
       else setTown(id, { choices: { ...t.choices, hair: a.choices.hair, hairColor: a.choices.hairColor, beard: a.choices.beard }, outfit: t.outfit });
@@ -1242,6 +1244,8 @@ export default defineModule<WorldSettings>({
         if (!sim.ceremonyOn && s.ceremonyOnCrowning) beginCeremony(false);
         crowned = 0;
       }
+      // The players of the Arcade's matches go and play at its machines
+      const playing = new Set(ctx.use<ArcadeApi>('arcade')?.players() ?? []);
       const roster = Object.entries(store.data.avatars)
         .map(([id, a]) => ({ a, g: ctx.session.guests.get(id) }))
         .filter((r): r is { a: StoredAvatar; g: NonNullable<typeof r.g> } => !!r.g)
@@ -1252,6 +1256,7 @@ export default defineModule<WorldSettings>({
             setTown(g.id, { choices: a.choices, outfit: a.outfit ?? {} });
             errands = [];
           }
+          if (playing.has(g.id)) errands = ['arcade', ...errands];
           return { id: g.id, online: g.sockets > 0, awayMs: g.sockets > 0 ? 0 : Math.max(0, now - g.lastSeen), ...wornLimits(g.id), errands, build: s.lot && lot.hasJobs(g.id) };
         });
       const sec = (a: number, b: number): [number, number] => [Math.min(a, b) * 1000, Math.max(a, b) * 1000];

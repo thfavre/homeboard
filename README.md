@@ -50,6 +50,11 @@ run a test copy without touching the real guests and settings).
   crowd on the TV, snipe from the phones). Their characters are LPC sprites, built by
   `scripts/crowd-sprites.ts`, and their streets and square are LPC style environment art; credits in
   `web/public/crowd/CREDITS.txt` and `web/public/crowd/env/CREDITS.txt`
+- **Arcade**: 1 vs 1 phone games with a bet, one game or a Mix of three: Knife Throw, Tower Stack,
+  Flap, Zig, Quick Maths and Slicer. Both players get the same run (same seed), played on their own
+  phone with no lag and started together by the server; the players' characters walk into the town's
+  arcade, whose marquee shows the scores. Games are Phaser 4 scenes on `ArcadeScene`
+  (`web/src/modules/arcade/engine/base.ts`, one file each in `games/`), sounds made by ZzFX
 
 Plus: selfie avatars, rotating leaderboards, activity feed, gifts, themes, and an economy editor
 for every price and reward. Every module can be turned off and configured in the admin.

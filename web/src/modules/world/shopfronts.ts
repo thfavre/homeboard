@@ -1,6 +1,7 @@
 import { SPRITE_SCALE } from '$shared/crowd.ts';
-import { SHOPFRONTS, TOWN_PLACES, type PlaceId, type TownPlace } from '$shared/world.ts';
+import { ARCADE_FRONT, SHOPFRONTS, TOWN_PLACES, type PlaceId, type TownPlace } from '$shared/world.ts';
 import { houseArt, type Env, type HouseSwap } from '../games/crowd/scene.ts';
+import { ARCADE_PAINT, buildArcade, buildArcadeRoom } from './arcadeFront.ts';
 
 /**
  * The town's two shops as buildings of their own, built once from LPC art (web/public/world/shops,
@@ -42,6 +43,7 @@ export function loadShopArt(): Promise<ShopArt | null> {
 const PAINT = {
   clothes: { line: '#3e111a', dark: '#6a1d16', mid: '#7b2008', light: '#95381c', shine: '#b54936' },
   barber: { line: '#172038', dark: '#253a5e', mid: '#3a5a72', light: '#4f899d', shine: '#7fb3bf' },
+  arcade: ARCADE_PAINT,
 };
 type Paint = (typeof PAINT)[PlaceId];
 /** The gold of the LPC sign icons */
@@ -56,13 +58,13 @@ const INDOOR = '#2a1722';
 
 type Cut = [number, number, number, number];
 /** Each shop's door in doors.png: a row of 7 frames 64x96 (open to the left ... closed ... open to the right) */
-const DOOR_ROW = { clothes: [448, 0], barber: [448, 96] } as const;
+const DOOR_ROW = { clothes: [448, 0], barber: [448, 96], arcade: [448, 672] } as const;
 /** The door itself inside a frame */
 const DOOR_IN_FRAME = { x: 32, y: 16, w: 32, h: 48 };
 /** The middle piece of an awning: the canopy, its valance and two posts (terracotta and sky blue) */
-const AWNING: Record<PlaceId, Cut> = { clothes: [256, 23, 32, 18], barber: [160, 119, 32, 18] };
+const AWNING: Partial<Record<PlaceId, Cut>> = { clothes: [256, 23, 32, 18], barber: [160, 119, 32, 18] };
 /** The sign boards: a light and a dark stone frame */
-const BOARD: Record<PlaceId, Cut> = { clothes: [36, 4, 24, 24], barber: [36, 36, 24, 24] };
+const BOARD: Record<'clothes' | 'barber', Cut> = { clothes: [36, 4, 24, 24], barber: [36, 36, 24, 24] };
 const DRESS_FORM_LIGHT: Cut = [0, 0, 32, 32];
 const DRESS_FORM_DARK: Cut = [0, 32, 32, 32];
 const FABRIC_ROLLS: Cut = [0, 0, 64, 64];
@@ -73,7 +75,7 @@ const CHAIR_FRONT: Cut = [4, 3, 24, 29];
 const DRAPES: Cut = [105, 128, 46, 63];
 export const CURTAIN: Cut = [288, 128, 48, 78];
 /** A strip of striped wallpaper: cream with rose for the clothes shop, white with blue for the barber */
-const WALLPAPER: Record<PlaceId, Cut> = { clothes: [960, 0, 96, 80], barber: [480, 0, 96, 80] };
+const WALLPAPER: Record<'clothes' | 'barber', Cut> = { clothes: [960, 0, 96, 80], barber: [480, 0, 96, 80] };
 
 // ------------------------------------------------------------ hand drawn icons (gold, in the sign icons' style)
 
@@ -204,7 +206,7 @@ export interface Front {
 }
 
 export function frontOf(p: TownPlace): Front {
-  const f = SHOPFRONTS[p.house.kind]!;
+  const f = p.id === 'arcade' ? ARCADE_FRONT : SHOPFRONTS[p.house.kind]!;
   const h = p.id === 'clothes' ? 201 : 192;
   const w = Math.round((p.house.x1 - p.house.x0) / SPRITE_SCALE);
   const glass = { x: f.win.x0, y: h - f.win.top, w: f.win.x1 - f.win.x0, h: f.win.top - f.win.bottom };
@@ -349,14 +351,16 @@ export function drawPole(g: CanvasRenderingContext2D, x: number, y: number, h: n
 // ------------------------------------------------------------ what is seen through the window (built once)
 
 /** The room behind the glass, glass-sized: wallpaper, the shop's things on the back wall, warm light */
-function buildRoom(art: ShopArt, f: Front): HTMLCanvasElement {
+function buildRoom(art: ShopArt, f: Front, p: TownPlace): HTMLCanvasElement {
+  // The arcade's machines, at the places inside (in pixels of the glass)
+  if (f.id === 'arcade') return buildArcadeRoom(f, p.seats.map((x) => (x - p.window.x) / SPRITE_SCALE));
   const { w, h } = f.glass;
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
   const g = c.getContext('2d')!;
   g.imageSmoothingEnabled = false;
-  const wp = WALLPAPER[f.id];
+  const wp = WALLPAPER[f.id as 'clothes' | 'barber'];
   for (let x = 0; x < w; x += wp[2]) g.drawImage(art.wallpaper, wp[0], wp[1], wp[2], wp[3], x, -4, wp[2], wp[3]);
   if (f.id === 'clothes') {
     // A rack of fabric rolls along the back wall
@@ -407,9 +411,9 @@ function buildFront(art: ShopArt, f: Front): HTMLCanvasElement {
     g.drawImage(art.curtains, DRAPES[0] + DRAPES[2] - dw, DRAPES[1], dw, h + 2, x + w - dw + 1, y - 1, dw, h + 2);
   }
   g.restore();
-  // The awning over it all
+  // The awning over it all (not on the arcade: its marquee is over the gable)
   const a = AWNING[f.id];
-  awning(g, art.awnings, a, x - 5, y - 11, w + 10);
+  if (a) awning(g, art.awnings, a, x - 5, y - 11, w + 10);
   return c;
 }
 
@@ -426,7 +430,7 @@ export interface ShopLook {
 let looks: Record<PlaceId, ShopLook> | null = null;
 let builtFor: [Env, ShopArt] | null = null;
 
-/** Both shops, built once for these sheets */
+/** The shops, built once for these sheets */
 export function shopLooks(env: Env, art: ShopArt): Record<PlaceId, ShopLook> {
   if (looks && builtFor?.[0] === env && builtFor[1] === art) return looks;
   const make = (p: TownPlace): ShopLook => {
@@ -439,10 +443,11 @@ export function shopLooks(env: Env, art: ShopArt): Record<PlaceId, ShopLook> {
     g.imageSmoothingEnabled = false;
     g.drawImage(house, cut[0], cut[1], cut[2], cut[3], 0, 0, cut[2], cut[3]);
     if (p.id === 'clothes') buildClothes(g, env, art, front);
+    else if (p.id === 'arcade') buildArcade(g, front);
     else buildBarber(g, art, front);
-    return { front, facade, room: buildRoom(art, front), over: buildFront(art, front) };
+    return { front, facade, room: buildRoom(art, front, p), over: buildFront(art, front) };
   };
-  looks = { clothes: make(TOWN_PLACES.clothes), barber: make(TOWN_PLACES.barber) };
+  looks = { clothes: make(TOWN_PLACES.clothes), barber: make(TOWN_PLACES.barber), arcade: make(TOWN_PLACES.arcade) };
   builtFor = [env, art];
   return looks;
 }

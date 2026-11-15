@@ -677,6 +677,9 @@
               drawPerson(q);
               drawSnips(gg, q.x, headY, now, 'rgba(58,40,30,0.9)');
             }
+          } else if (place.id === 'arcade') {
+            // At a machine, playing
+            drawPerson(q);
           } else {
             // Behind the curtain: the old look until it is closed, then the new one
             drawPerson(q, s.prev && e < SWISH_MS * 0.4 ? s.prev : s.img);
@@ -723,7 +726,7 @@
       g.fillStyle = `rgba(14,16,42,${0.44 * dark})`;
       g.fillRect(0, -BAND, TOWN.w + (wide ? HALL_PAN : 0), TOWN.h + BAND);
       // The shops stay lit inside
-      for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark);
+      for (const place of Object.values(TOWN_PLACES)) drawShopLight(g, place, dark, now);
       // The lamp posts the lamplighter has lit shine through the veil, with a pool of light on the pavement under them
       TOWN_SCENE.lamps.forEach((l, i) => {
         const level = lampLevel(i, now);
@@ -771,7 +774,8 @@
     for (const p of inside) {
       const c = byId.get(p.id);
       const place = placeAt(p.x);
-      if (c && place) nameTag(g, c.name, p.x, place.window.y + place.window.h + 14, p.alpha, p.id === world?.king?.id);
+      // (not the arcade's players, side by side at the machines: its screen shows their names)
+      if (c && place && place.id !== 'arcade') nameTag(g, c.name, p.x, place.window.y + place.window.h + 14, p.alpha, p.id === world?.king?.id);
     }
     for (const p of people) {
       const c = byId.get(p.id);

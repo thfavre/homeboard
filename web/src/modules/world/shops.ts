@@ -2,6 +2,7 @@ import type { PlaceId, TownPlace } from '$shared/world.ts';
 import { SPRITE_SCALE } from '$shared/crowd.ts';
 import type { Env } from '../games/crowd/scene.ts';
 import { CURTAIN, DOOR_FRAME, drawPole, shopLooks, worldOf, type Front, type ShopArt } from './shopfronts.ts';
+import { drawArcadeLight, drawArcadeLive, drawCabinetScreens } from './arcadeFront.ts';
 
 /**
  * The town's shops on the TV, every frame: the room seen through the shop window with whoever is
@@ -21,7 +22,7 @@ export function setShopArt(env: Env | null, shopArt: ShopArt | null): void {
 }
 
 /** How far each door is open (0 shut, 1 wide open), eased toward whether someone is going through */
-const doors: Record<PlaceId, { open: number; at: number }> = { clothes: { open: 0, at: 0 }, barber: { open: 0, at: 0 } };
+const doors: Record<PlaceId, { open: number; at: number }> = { clothes: { open: 0, at: 0 }, barber: { open: 0, at: 0 }, arcade: { open: 0, at: 0 } };
 
 /** Draw a sprite-pixel image at a shop's house-art position (x, y), on the square's pixel grid */
 function blit(g: CanvasRenderingContext2D, img: CanvasImageSource, p: TownPlace, f: Front, x: number, y: number, sx: number, sy: number, w: number, h: number): void {
@@ -46,6 +47,7 @@ export function drawShop(g: CanvasRenderingContext2D, p: TownPlace, now: number,
     g.fillStyle = '#d9c3a0';
     g.fillRect(x, y, w, h);
   }
+  if (look && p.id === 'arcade') drawCabinetScreens(g, p, now);
   people(g);
   g.restore();
   if (!look) return;
@@ -70,11 +72,16 @@ export function drawShop(g: CanvasRenderingContext2D, p: TownPlace, now: number,
     drawPole(pg, 1, 6, f.pole.h, Math.floor(now / 110));
     blit(g, c, p, f, f.pole.x - 1, f.pole.y - 6, 0, 0, c.width, c.height);
   }
+  // The arcade's marquee: its lights and the scores on its screen
+  if (p.id === 'arcade') drawArcadeLive(g, p, f.h, now);
 }
 
 /** In the evening, after the night veil: the shop window's light, and the light it spills on the pavement */
-export function drawShopLight(g: CanvasRenderingContext2D, p: TownPlace, dark: number): void {
+export function drawShopLight(g: CanvasRenderingContext2D, p: TownPlace, dark: number, now: number): void {
   const { x, y, w, h } = p.window;
+  // The arcade's neon shines through the night
+  const look = art ? shopLooks(art.env, art.art)[p.id] : null;
+  if (look && p.id === 'arcade') drawArcadeLight(g, p, look.front.h, now, dark);
   g.fillStyle = `rgba(255,214,150,${0.2 * dark})`;
   g.fillRect(x, y, w, h);
   const spill = g.createLinearGradient(0, y + h, 0, y + h + 40);

@@ -1,5 +1,5 @@
 import { SPRITE_SCALE } from '$shared/crowd.ts';
-import { CAFE, CAMPFIRE, FIRE_LOGS, NOTICE_BOARD, TOWN_BENCHES, TOWN_SCENE, type WDir } from '$shared/world.ts';
+import { CAFE, CAMPFIRE, FIRE_LOGS, NOTICE_BOARD, TOWN_BENCHES, TOWN_PLACES, TOWN_SCENE, type WDir } from '$shared/world.ts';
 import { CUT, fountain, put, sidewalkProps, still, tree, type Env, type Prop, type TreeLayers } from '../games/crowd/scene.ts';
 
 /**
@@ -565,8 +565,10 @@ export function townProps(env: Env, keep: (x: number) => boolean, layers?: (k: n
   const out: Prop[] = [fountain(env, TOWN_SCENE.fountain.x, TOWN_SCENE.fountain.y)];
   TOWN_SCENE.trees.forEach((t, k) => out.push(tree(env, t.x, t.y, k % 2 === 1, k * 1.7, t.size, 'stem' in t ? t.stem : 1, layers?.(k))));
   TOWN_SCENE.lamps.forEach((l, i) => out.push(lampPost(env, i, l.x, l.y)));
-  // The sidewalk's benches and plants, but the bench before the cafe's porch: the town's own benches instead
-  out.push(...sidewalkProps(env, (x) => keep(x) && x !== TOWN_BENCHES.instead));
+  // The sidewalk's benches and plants, but the bench before the cafe's porch (the town's own benches
+  // instead) and the plant before the arcade's window
+  const arcade = TOWN_PLACES.arcade.window;
+  out.push(...sidewalkProps(env, (x) => keep(x) && x !== TOWN_BENCHES.instead && (x < arcade.x - 10 || x > arcade.x + arcade.w + 10)));
   const side = buildSideBench();
   for (const b of TOWN_BENCHES.list) {
     if (b.dir === 2) out.push(still(env.magecity, CUT.bench, b.x, b.y));

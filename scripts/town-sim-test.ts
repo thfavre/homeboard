@@ -132,6 +132,9 @@ const report = (key: string, example: string) => {
   else problems.set(key, { n: 1, example });
 };
 const stats = { chats: 0, ceremonies: 0, visits: 0, maxKindMs: {} as Record<string, number> };
+/** Arcade matches: their two players, when they end, and the players who got to a machine before the end */
+const matches: { ids: string[]; until: number; reached: Set<string> }[] = [];
+const arcadeStats = { matches: 0, players: 0, reached: 0 };
 /** Longest a kind may last before it looks stuck (ms; a sit runs on for a tree shaken over the bench) */
 const LIMIT: Record<string, number> = {
   idle: 15_000, wander: 60_000, goBench: 60_000, sit: 36_000, goPet: 45_000, pet: 10_000, goChat: 20_000, chat: 40_000,
@@ -176,6 +179,8 @@ while (clock < end) {
     }
     if (rnd() < 0.00005) sim.cheer(r.id);
     r.errands = errands.get(r.id) ?? [];
+    // In an Arcade match: off to the arcade first, for as long as it lasts
+    if (matches.some((m) => m.ids.includes(r.id))) r.errands = ['arcade', ...r.errands];
     // Now and then a guest asks for a few pieces on the lot: blocks (often on one column), a decoration, taking something away
     if (rnd() < 0.00004) {
       const list = lotJobs.get(r.id) ?? [];
@@ -194,6 +199,27 @@ while (clock < end) {
       lotJobs.set(r.id, list);
     }
     r.build = !!lotJobs.get(r.id)?.length;
+  }
+  // Now and then two guests online play a match of one to three minutes in the Arcade
+  for (const m of matches) {
+    for (const id of m.ids) {
+      const d = simAny.walkers.get(id)?.doing;
+      if (d?.kind === 'visit' && d.place === 'arcade' && d.phase === 'inside') m.reached.add(id);
+    }
+  }
+  for (const m of matches.filter((x) => clock >= x.until)) {
+    arcadeStats.players += m.ids.length;
+    arcadeStats.reached += m.reached.size;
+    matches.splice(matches.indexOf(m), 1);
+  }
+  if (matches.length < 2 && rnd() < 0.0015) {
+    const free = roster.filter((r) => r.online && !matches.some((m) => m.ids.includes(r.id)));
+    if (free.length >= 2) {
+      const a = free[Math.floor(rnd() * free.length)];
+      const b = free.filter((r) => r !== a)[Math.floor(rnd() * (free.length - 1))];
+      matches.push({ ids: [a.id, b.id], until: clock + 60_000 + rnd() * 120_000, reached: new Set() });
+      arcadeStats.matches++;
+    }
   }
   if (clock - lastCeremony > 15 * 60_000 && sim.inTown('g1')) {
     if (sim.startCeremony()) stats.ceremonies++;
@@ -294,8 +320,9 @@ while (clock < end) {
       report(`walks without moving (${kind}${d.phase ? '/' + d.phase : ''})`, where);
       t.stillSince = clock;
     }
-    // One thing far too long (asleep is fine, the ceremony's places are held until it ends)
-    const limit = LIMIT[kind];
+    // One thing far too long (asleep is fine, the ceremony's places are held until it ends, and a
+    // trip to the arcade lasts as long as its match: up to three minutes, plus the walk)
+    const limit = kind === 'visit' && d.place === 'arcade' ? 300_000 : LIMIT[kind];
     if (limit && clock - t.since > limit && !(kind === 'pray' || kind === 'throne' || kind === 'sleep')) {
       report(`${kind} lasts over ${sec(limit)}`, where);
       t.since = clock;
@@ -327,6 +354,7 @@ console.log(`${MINUTES} min, ${N} characters, seed ${process.argv[4] ?? 1}: ${st
 const pct = (a: number[], p: number) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor((a.length - 1) * p)] : 0);
 console.log(`errands dressed: ${errandWaits.length}, waiting at the end: ${errandAt.size}, wait median ${sec(pct(errandWaits, 0.5))}, 95% ${sec(pct(errandWaits, 0.95))}, max ${sec(pct(errandWaits, 1))}`);
 console.log(`chat walks given up: ${chatGiveUps} of ${stats.chats + chatGiveUps}`);
+console.log(`arcade: ${arcadeStats.matches} matches, ${arcadeStats.reached} of ${arcadeStats.players} players got to a machine before their match ended`);
 const lotLeft = [...lotJobs.values()].reduce((n, l) => n + l.length, 0);
 console.log(`lot: ${lotWaits.length} pieces up, ${lotFailed} no longer fitting, ${lotLeft} waiting at the end; wait median ${sec(pct(lotWaits, 0.5))}, 95% ${sec(pct(lotWaits, 0.95))}, max ${sec(pct(lotWaits, 1))}`);
 console.log(`court opened after (s from the call): ${(stats as any).courtWaits?.join(' ')}, places: ${(stats as any).spots}`);

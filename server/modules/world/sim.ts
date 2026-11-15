@@ -552,7 +552,10 @@ export interface RosterEntry {
   /** See Walker.noSit and Walker.noCheer */
   noSit?: boolean;
   noCheer?: boolean;
-  /** Shops the character has to visit to look like on the phone (the latest look counts, so one trip each) */
+  /**
+   * Shops the character has to visit to look like on the phone (the latest look counts, so one trip
+   * each), and the arcade while its guest plays a match there (first: it is going on now)
+   */
   errands?: PlaceId[];
   /** Pieces wait to be built on the lot: the character goes and builds them (an errand, like a shop) */
   build?: boolean;
@@ -2664,6 +2667,14 @@ export class TownSim {
         }
         break;
       case 'inside':
+        // At a machine in the arcade for as long as the match goes on, then out
+        if (d.place === 'arcade') {
+          if (!w.errands.includes('arcade')) {
+            d.phase = 'exit';
+            w.dir = 2;
+          }
+          break;
+        }
         if (!d.dressed && now >= d.dressAt) {
           d.dressed = true;
           this.hooks.dress(w.id, d.place);
@@ -2703,9 +2714,10 @@ export class TownSim {
     return Math.max(0, Math.min(1, Math.hypot(w.x - p.door.x, w.y - p.door.y) / DOOR_FADE));
   }
 
-  /** Facing inside: turning around before the mirror at the clothes shop, still in the barber's chair */
+  /** Facing inside: turning around before the mirror at the clothes shop, still in the barber's chair, at a machine in the arcade */
   private insideDir(w: Walker, d: Visit, now: number): WDir {
     if (d.place === 'barber') return 2;
+    if (d.place === 'arcade') return 0;
     const turns: WDir[] = [2, 2, 1, 2, 3, 0, 2];
     return turns[Math.floor((now + w.id.charCodeAt(0) * 97) / 800) % turns.length];
   }
