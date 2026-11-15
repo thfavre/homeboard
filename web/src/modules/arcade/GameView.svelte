@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte';
   import { fade, fly, scale } from 'svelte/transition';
-  import { Hourglass } from '@lucide/svelte';
+  import { Hourglass, Zap } from '@lucide/svelte';
   import { ARCADE_UNIT, arcadeGame, type ArcadeGhost, type ArcadeMatch } from '$shared/arcade.ts';
   import { hb, onEvent, rpc, serverNow } from '$lib/client.svelte.ts';
   import PixelText from '$lib/ui/PixelText.svelte';
@@ -188,6 +188,11 @@
     requestAnimationFrame(() => (bump = true));
   });
 
+  /** The score bar grows with the screen (a tablet, a computer), up to a point */
+  let viewW = $state(390);
+  const k = $derived(Math.min(1.7, Math.max(1, viewW / 400)));
+  const sz = (n: number) => Math.round(n * k);
+
   const seconds = $derived(Math.ceil(left / 1000));
   const ratio = $derived(Math.max(0, Math.min(1, left / (info.seconds * 1000))));
   /** For a game with lives, the clock only matters near its end */
@@ -213,44 +218,50 @@
   {/if}
 {/snippet}
 
-<div class="view" style:--g={gradient(info.colors)} style:--a={info.colors[0]} style:--b={info.colors[1]}>
+<div class="view" bind:clientWidth={viewW} style:--g={gradient(info.colors)} style:--a={info.colors[0]} style:--b={info.colors[1]} style:--k={k}>
   <div class="hud">
     <div class="side me" class:hot={feverOn} class:pulse={leadPulse === 'me'}>
       <span class="face-wrap">
         {#if wonAlready}<span class="crown" in:scale={{ start: 0.3, duration: 300 }}>{@render crown()}</span>{/if}
-        <Face player={mine} size={36} />
+        <Face player={mine} size={sz(42)} />
       </span>
       <div class="score">
-        <PixelText text="You" size={8} color="#c9c2ff" />
-        <span class="num" class:bump><PixelText text={score} size={20} color={feverOn ? '#ffd23d' : '#ffffff'} /></span>
+        <PixelText text="You" size={sz(10)} color="#c9c2ff" />
+        <span class="num" class:bump><PixelText text={score} size={sz(24)} color={feverOn ? '#ffd23d' : '#ffffff'} /></span>
         {@render hearts(lives, '#ff4d6d')}
       </div>
     </div>
     <div class="middle">
-      <PixelText text={info.name} size={7} color="#ffd23d" />
+      <PixelText text={info.name} size={sz(9)} color="#ffd23d" />
       {#if showClock}
-        <span class="clock" class:low={seconds <= 5}><PixelText text={seconds} size={14} color={seconds <= 5 ? '#ff6b7d' : '#ffffff'} /></span>
+        <span class="clock" class:low={seconds <= 5}><PixelText text={seconds} size={sz(18)} color={seconds <= 5 ? '#ff6b7d' : '#ffffff'} /></span>
       {:else}
-        <span class="vs"><PixelText text="VS" size={10} color="#ff4fb0" /></span>
+        <span class="vs"><PixelText text="VS" size={sz(13)} color="#ff4fb0" /></span>
       {/if}
     </div>
     <div class="side them" class:out={theyAreOut} class:hot={theirFever} class:pulse={leadPulse === 'them'}>
       <div class="score right">
-        <PixelText text={firstName(other.name).slice(0, 9)} size={8} color={other.color} />
-        <span class="num"><PixelText text={theirScore} size={20} color={theirFever ? '#ffd23d' : '#ffffff'} /></span>
+        <PixelText text={firstName(other.name).slice(0, 9)} size={sz(10)} color={other.color} />
+        <span class="num"><PixelText text={theirScore} size={sz(24)} color={theirFever ? '#ffd23d' : '#ffffff'} /></span>
         {@render hearts(theirLives, other.color)}
       </div>
-      <Face player={other} size={36} />
+      <Face player={other} size={sz(42)} />
     </div>
-    <div class="lead" aria-hidden="true">
-      <span class="mine" style:width="{share}%"></span>
-      <span class="knot" style:left="{share}%"></span>
+    <div class="meters">
+      <div class="lead" aria-hidden="true">
+        <span class="mine" style:width="{share}%"></span>
+        <span class="knot" style:left="{share}%"></span>
+      </div>
+      <div class="gauges">
+        <span class="gauge-icon" class:on={feverOn}><Zap size={sz(13)} strokeWidth={2.6} /></span>
+        <div class="fever" class:on={feverOn} aria-label="Fever">
+          <span class="fill" style:transform="scaleX({fever})"></span>
+          {#each Array.from({ length: 10 }) as _, i (i)}<span class="seg" style:left="{(i + 1) * 10}%"></span>{/each}
+        </div>
+        <div class="bar" aria-label="Time left"><span style:transform="scaleX({ratio})"></span></div>
+        <span class="gauge-icon time"><Hourglass size={sz(12)} strokeWidth={2.6} /></span>
+      </div>
     </div>
-    <div class="fever" class:on={feverOn} aria-label="Fever">
-      <span class="fill" style:transform="scaleX({fever})"></span>
-      {#each Array.from({ length: 10 }) as _, i (i)}<span class="seg" style:left="{(i + 1) * 10}%"></span>{/each}
-    </div>
-    <div class="bar"><span style:transform="scaleX({ratio})"></span></div>
   </div>
 
   <div class="stage" class:fever={feverOn} bind:this={host}></div>
@@ -322,7 +333,8 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 0.4rem;
-    padding: calc(0.45rem + env(safe-area-inset-top)) 0.6rem 1.05rem;
+    /* The content stays in a column in the middle of a wide screen */
+    padding: calc(0.45rem + env(safe-area-inset-top)) max(0.6rem, calc((100% - 640px) / 2)) 0.45rem;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 60%),
       #140c28;
@@ -388,8 +400,8 @@
     gap: 2px;
   }
   .heart {
-    width: 11px;
-    height: 10px;
+    width: calc(13px * var(--k));
+    height: calc(12px * var(--k));
     fill: var(--c);
     shape-rendering: crispEdges;
     filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.6));
@@ -455,13 +467,17 @@
       transform: scale(1.2);
     }
   }
+  /* The meters under the players: who leads across, then the fever bar and the time left */
+  .meters {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: calc(5px * var(--k));
+    margin-top: 0.15rem;
+  }
   /* Who leads: my share of the points, in my color against theirs */
   .lead {
-    position: absolute;
-    left: 0.6rem;
-    right: 0.6rem;
-    bottom: 0.55rem;
-    height: 4px;
+    position: relative;
+    height: calc(5px * var(--k));
     background: var(--b);
     opacity: 0.95;
   }
@@ -475,18 +491,28 @@
     position: absolute;
     top: -3px;
     width: 4px;
-    height: 10px;
+    height: calc(100% + 6px);
     margin-left: -2px;
     background: #fff;
     transition: left 0.3s;
   }
+  .gauges {
+    display: grid;
+    grid-template-columns: auto 1fr 1fr auto;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .gauge-icon {
+    display: inline-grid;
+    color: #8a80b0;
+  }
+  .gauge-icon.on {
+    color: #ffd23d;
+  }
   /* The fever bar: 10 segments, gold, flashing once full */
   .fever {
-    position: absolute;
-    left: 0.6rem;
-    width: calc(50% - 1.2rem);
-    bottom: 0.15rem;
-    height: 5px;
+    position: relative;
+    height: calc(7px * var(--k));
     background: #2a1f4a;
     overflow: hidden;
   }
@@ -519,11 +545,7 @@
     background: #140c28;
   }
   .bar {
-    position: absolute;
-    right: 0.6rem;
-    width: calc(50% - 1.2rem);
-    bottom: 0.15rem;
-    height: 5px;
+    height: calc(7px * var(--k));
     background: #2a1f4a;
   }
   .bar span {
