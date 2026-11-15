@@ -40,6 +40,7 @@
         />
       </label>
     {/if}
+    <Toggle checked={s.settings.needCharacter} onchange={(v) => set({ needCharacter: v })} label="Only guests who made their character in the Avatar can play" />
     <Toggle checked={s.settings.sounds} onchange={(v) => set({ sounds: v })} label="Sounds and vibration on the phones" />
     <Toggle checked={s.settings.townWalk} onchange={(v) => set({ townWalk: v })} label="Players' characters walk into the town arcade while they play" />
     <Toggle checked={s.settings.townScreen} onchange={(v) => set({ townScreen: v })} label="The arcade's screen in the town shows the scores" />

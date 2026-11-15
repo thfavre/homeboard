@@ -250,6 +250,14 @@ const CEREMONY_LATE_MIN = 6 * 60;
  * town, sit on benches, pet the cat, chat in twos, and go to sleep when their guest leaves. One
  * guest holds the King's title, and the town gathers in the throne room for the King's ceremony.
  */
+/** What the town shares with other modules */
+export interface WorldApi {
+  /** A character celebrates */
+  cheer(guestId: string): void;
+  /** Has this guest made their character? (null: the town is off) */
+  hasLook(guestId: string): boolean | null;
+}
+
 export default defineModule<WorldSettings>({
   id: 'world',
   name: 'Avatar world',
@@ -894,7 +902,11 @@ export default defineModule<WorldSettings>({
         }
         store.save();
         ctx.publish();
-        if (!had) ctx.activity('{name} moved into the town', { guest });
+        if (!had) {
+          ctx.activity('{name} moved into the town', { guest });
+          // Other modules waiting for a character (the Arcade) hear about it
+          ctx.bus.emit('world:look', { guest: guest.id });
+        }
         return { url: ctx.mediaUrl(`sheets/${hash}.png`) };
       }),
     );
@@ -1301,7 +1313,10 @@ export default defineModule<WorldSettings>({
     };
 
     // Other modules can make a character celebrate (a win, a big purchase)
-    ctx.provide('world', { cheer });
+    ctx.provide<WorldApi>('world', {
+      cheer,
+      hasLook: (guestId) => (ctx.enabled() ? !!store.data.avatars[guestId] : null),
+    });
 
     // ------------------------------------------------------------ buying the title
 

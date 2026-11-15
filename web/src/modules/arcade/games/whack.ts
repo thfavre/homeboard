@@ -34,7 +34,6 @@ export class WhackScene extends ArcadeScene {
   private made = 0;
   /** When each hole is free again (from the plan, not the taps: the same on both phones) */
   private busy = Array.from({ length: 9 }, () => 0);
-  private hero!: Phaser.GameObjects.Sprite;
   private rivalHits = -1;
   /** Critters bopped, and the last one (for the rival's puffs) */
   private hits = 0;
@@ -50,7 +49,6 @@ export class WhackScene extends ArcadeScene {
       this.sprite(x, y, 'whack-hole').setDepth(row + 1);
       this.sprite(x, y + 9, 'whack-lip').setDepth(row + 3);
     }
-    this.hero = this.avatar('me', 64, 214, 1.5).setDepth(-50);
   }
 
   private hole(i: number): { x: number; y: number } {
@@ -229,7 +227,6 @@ export class WhackScene extends ArcadeScene {
       this.buzz([40, 30, 60]);
       this.shake(160, 0.01);
       this.pop(x, top - 20, `-${CAT_COST}`, '#ff6b7d', 4);
-      this.pose(this.hero, 'hurt', 8, 0);
       return;
     }
     const gold = p.kind === 'gold';
@@ -245,7 +242,6 @@ export class WhackScene extends ArcadeScene {
       const a = (i / 3) * Math.PI * 2;
       this.tweens.add({ targets: s, x: x + Math.cos(a) * 30, y: top - 10 + Math.sin(a) * 12, alpha: 0, duration: 500, onComplete: () => s.destroy() });
     }
-    if (this.combo > 0 && this.combo % 8 === 0) this.pose(this.hero, 'emote', 8, 0);
   }
 
   /** A puff in the rival's color over the critters they got */
@@ -280,6 +276,5 @@ export class WhackScene extends ArcadeScene {
 
   finished(): void {
     this.input.removeAllListeners();
-    this.pose(this.hero, 'happy');
   }
 }

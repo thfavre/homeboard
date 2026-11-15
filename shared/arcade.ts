@@ -236,6 +236,8 @@ export interface ArcadeSettings {
   screenSec: number;
   /** Sounds and vibration on the phones while playing */
   sounds: boolean;
+  /** Only guests who made their town character can play (when the town is on) */
+  needCharacter: boolean;
 }
 
 export const ARCADE_DEFAULTS: ArcadeSettings = {
@@ -245,14 +247,15 @@ export const ARCADE_DEFAULTS: ArcadeSettings = {
   townScreen: true,
   screenSec: 5,
   sounds: true,
+  needCharacter: true,
 };
 
 export interface ArcadeState {
   invites: ArcadeInvite[];
   matches: ArcadeMatch[];
   records: Partial<Record<ArcadeGameId, ArcadeRecord>>;
-  /** Guests one can challenge (not on the TV) */
-  online: (ArcadePlayer & { balance: number })[];
+  /** Guests one can challenge (not on the TV); `look`: they have their town character, or do not need one */
+  online: (ArcadePlayer & { balance: number; look: boolean })[];
   /** Guests already playing or with a challenge waiting, here or in the Games */
   busy: string[];
   settings: ArcadeSettings;

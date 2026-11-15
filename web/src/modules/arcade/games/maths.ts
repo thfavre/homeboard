@@ -37,14 +37,12 @@ export class MathsScene extends ArcadeScene {
   private question!: Phaser.GameObjects.Container;
   private buttons: Button[] = [];
   private locked = false;
-  private hero!: Phaser.GameObjects.Sprite;
 
   build(): void {
     this.paintArt();
     this.sprite(W / 2, H / 2, 'maths-wall').setDepth(-100);
     this.sprite(W / 2, 230, 'maths-board');
     this.question = this.label(W / 2, 224, 'READY?', 4, '#f4f7ee');
-    this.hero = this.avatar('me', W - 40, 400, 1.5).setDepth(5);
     for (const y of ROWS) {
       for (const x of COLS) {
         const img = this.sprite(x, y, 'mbtn');
@@ -207,7 +205,6 @@ export class MathsScene extends ArcadeScene {
       this.buzz(10);
       this.burst(b.x, b.y, '#4fffb0', 10, 220);
       this.pop(b.x, b.y - 60, quick ? `QUICK +${got}` : `+${got}`, quick ? INK.gold : '#9dffd6', 2);
-      if (this.combo % 5 === 0) this.pose(this.hero, 'emote', 8, 0);
       this.time.delayedCall(170, () => this.running && this.next());
     } else {
       this.penalty += PENALTY_MS;
@@ -216,7 +213,6 @@ export class MathsScene extends ArcadeScene {
       this.buzz([40, 30, 40]);
       this.shake(160, 0.01);
       this.pop(b.x, b.y - 60, '-2S', '#ff8a96', 3);
-      this.pose(this.hero, 'hurt', 8, 0);
       // The right one shows a moment
       const right = this.buttons.findIndex((x) => x.value === this.current!.answer);
       this.time.delayedCall(120, () => this.mark({ i: right, ok: true }));
@@ -232,6 +228,5 @@ export class MathsScene extends ArcadeScene {
     this.question.setScale(1);
     for (const b of this.buttons) this.relabel(b.t, '');
     this.mark(null);
-    this.pose(this.hero, 'happy');
   }
 }

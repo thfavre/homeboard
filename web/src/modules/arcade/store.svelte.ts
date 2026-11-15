@@ -37,5 +37,11 @@ export function showArcadeScreen(): boolean {
   return s.invites.some((i) => i.to.id === me || i.from.id === me);
 }
 
+/** This guest cannot play until they make their town character */
+export function needsCharacter(): boolean {
+  const me = hb.me?.id;
+  return !!me && arcadeState()?.online.find((p) => p.id === me)?.look === false;
+}
+
 /** A game's gradient */
 export const gradient = (c: [string, string]) => `linear-gradient(135deg, ${c[0]}, ${c[1]})`;

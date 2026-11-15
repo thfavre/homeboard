@@ -12,7 +12,7 @@
   import Reveal from './Reveal.svelte';
   import Face from './Face.svelte';
   import PixelText from '$lib/ui/PixelText.svelte';
-  import { arcadeLocal, arcadeState, gradient, myArcadeMatch } from './store.svelte.ts';
+  import { arcadeLocal, arcadeState, myArcadeMatch, needsCharacter } from './store.svelte.ts';
 
   /** The Arcade on a phone, full screen: a challenge sent or received, then the match round by round */
 
@@ -209,10 +209,15 @@
       <Versus left={received.from} right={meAsPlayer} leftLabel="Challenger" rightLabel="You" />
       {@render format(received.count)}
       {#if economy && received.stake > 0}<PotPanel inLabel="You put in" stake={received.stake} outLabel="Winner takes" pot={received.stake * 2} />{/if}
-      <div class="answer">
-        <button class="btn decline" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={20} /> Decline</button>
-        <button class="btn primary accept" disabled={busy} onclick={() => act('respond', { id: received.id, accept: true })}><Check size={20} /> Accept</button>
-      </div>
+      {#if needsCharacter()}
+        <p class="dim small">To play, make your character in the Avatar first. Decline this one, make it, then challenge {received.from.name} back.</p>
+        <button class="btn decline block" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={20} /> Decline</button>
+      {:else}
+        <div class="answer">
+          <button class="btn decline" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={20} /> Decline</button>
+          <button class="btn primary accept" disabled={busy} onclick={() => act('respond', { id: received.id, accept: true })}><Check size={20} /> Accept</button>
+        </div>
+      {/if}
       <Fuse endsAt={received.expiresAt} totalMs={ARCADE_INVITE_MS} label="Expires in" />
     </div>
   </div>

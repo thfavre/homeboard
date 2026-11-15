@@ -26,6 +26,7 @@ import { defineModule } from '../../core/module.ts';
 import type { Guest } from '../../core/session.ts';
 import { HbError, clamp, num, uid } from '../../core/util.ts';
 import type { GamesApi } from '../games/index.ts';
+import type { WorldApi } from '../world/index.ts';
 
 /** The result stays on the server (and the town's screen) this long; the phones keep it until closed */
 const RESULT_MS = 20_000;
@@ -79,6 +80,8 @@ export default defineModule<ArcadeSettings>({
     ctx.price({ key: 'arcade.challenge', label: 'Challenge someone in the Arcade', default: 1000 });
 
     const games = () => ctx.use<GamesApi>('games');
+    /** Can this guest play: their town character made, when the host asks for one and the town is on */
+    const hasLook = (guestId: string) => !ctx.settings.get().needCharacter || ctx.use<WorldApi>('world')?.hasLook(guestId) !== false;
     const fmt = (amount: number) => `${formatAmount(amount)} ${ctx.economy.currency.symbol}`;
     const offered = () => ARCADE_GAMES.map((g) => g.id).filter((id) => !ctx.settings.get().off.includes(id));
 
@@ -159,6 +162,8 @@ export default defineModule<ArcadeSettings>({
       if (!opponent) throw new HbError('Pick someone to challenge');
       if (opponent.id === guest.id) throw new HbError('You cannot challenge yourself');
       if (opponent.sockets === 0) throw new HbError(`${opponent.name} is not online`);
+      if (!hasLook(guest.id)) throw new HbError('Make your character in the Avatar first');
+      if (!hasLook(opponent.id)) throw new HbError(`${opponent.name} has not made their character yet`);
       checkFree(guest.id, null);
       checkFree(opponent.id, opponent.name);
       const stake = cleanStake(rawStake);
@@ -211,6 +216,7 @@ export default defineModule<ArcadeSettings>({
         return true;
       }
       if (games()?.busy(guest.id)) throw new HbError('Finish your game first');
+      if (!hasLook(guest.id)) throw new HbError('Make your character in the Avatar first');
       const bet = ctx.economy.pay(guest, inv.stake, `Arcade bet: ${arcadeFormat(inv.count).toLowerCase()}`);
       dropInvite(inv, null);
       const m: Match = {
@@ -436,7 +442,7 @@ export default defineModule<ArcadeSettings>({
     });
     ctx.onAdmin('setSettings', (args) => {
       const s = ctx.settings.get();
-      const bool = (key: 'townWalk' | 'townScreen' | 'sounds') => (typeof args?.[key] === 'boolean' ? args[key] : s[key]);
+      const bool = (key: 'townWalk' | 'townScreen' | 'sounds' | 'needCharacter') => (typeof args?.[key] === 'boolean' ? args[key] : s[key]);
       ctx.settings.update({
         off: Array.isArray(args?.off) ? ARCADE_GAMES.map((g) => g.id).filter((id) => (args.off as unknown[]).includes(id) && isArcadeGame(id)) : s.off,
         maxStake: args?.maxStake !== undefined ? Math.max(0, Math.round(num(args.maxStake, 0))) : s.maxStake,
@@ -444,6 +450,7 @@ export default defineModule<ArcadeSettings>({
         townWalk: bool('townWalk'),
         townScreen: bool('townScreen'),
         sounds: bool('sounds'),
+        needCharacter: bool('needCharacter'),
       });
       ctx.publish();
     });
@@ -464,7 +471,7 @@ export default defineModule<ArcadeSettings>({
         invites: role === 'tv' ? [] : [...invites.values()].map(({ charges: _c, timer: _t, ...inv }) => inv),
         matches: [...matches.values()].map(plain),
         records,
-        online: role === 'tv' ? [] : guests.filter((g) => g.sockets > 0).map((g) => ({ ...player(g), balance: g.balance })),
+        online: role === 'tv' ? [] : guests.filter((g) => g.sockets > 0).map((g) => ({ ...player(g), balance: g.balance, look: hasLook(g.id) })),
         busy: role === 'tv' ? [] : guests.filter((g) => busy(g.id) || games()?.busy(g.id)).map((g) => g.id),
         settings: ctx.settings.get(),
       };
@@ -482,6 +489,8 @@ export default defineModule<ArcadeSettings>({
     // Opponents come and go and their balance changes: keep the list fresh (publish is throttled)
     ctx.session.on('guests-changed', () => ctx.publish());
     ctx.session.on('guest-changed', () => ctx.publish());
+    // A guest made their town character: they can play now
+    ctx.bus.on('world:look', () => ctx.publish());
 
     const stopAll = (refund: boolean) => {
       for (const inv of [...invites.values()]) dropInvite(inv, refund ? 'Your challenge was cancelled' : null);

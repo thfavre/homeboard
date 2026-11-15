@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { Dices, Swords } from '@lucide/svelte';
+  import { Dices, Swords, UserRoundPlus } from '@lucide/svelte';
   import { ARCADE_COUNTS, type ArcadeCount } from '$shared/arcade.ts';
   import { formatAmount, parseAmount } from '$shared/money.ts';
   import { attempt, hb, price, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
-  import { arcadeState } from './store.svelte.ts';
+  import { openFeature } from '$lib/nav.ts';
+  import { arcadeState, needsCharacter } from './store.svelte.ts';
 
   /**
    * A challenge in the Arcade: how many games (drawn at random, each one a surprise when its round
@@ -58,6 +59,16 @@
 </script>
 
 <div class="challenge">
+  {#if needsCharacter()}
+    <div class="need card">
+      <span class="need-icon"><UserRoundPlus size={26} /></span>
+      <div class="need-text">
+        <strong>Make your character first</strong>
+        <span class="dim small">You play the Arcade's games as your character from the town.</span>
+      </div>
+      <button class="btn primary block" onclick={() => openFeature('world')}>Make my character</button>
+    </div>
+  {/if}
   <div class="field">
     <span class="label">How many games?</span>
     <div class="counts">
@@ -77,12 +88,12 @@
       {#each others as p (p.id)}
         {@const short = economy && stake > p.balance}
         {@const playing = s?.busy.includes(p.id)}
-        <button class="person" class:active={opponent === p.id} disabled={short || playing} onclick={() => (opponent = p.id)}>
+        <button class="person" class:active={opponent === p.id} disabled={short || playing || !p.look} onclick={() => (opponent = p.id)}>
           <Avatar name={p.name} color={p.color} id={p.id} size="2.2rem" />
           <span class="who">
             <span class="truncate">{p.name}</span>
             <span class="bal">
-              {#if playing}Playing{:else if short}Can't match{:else if economy}<Money amount={p.balance} whole />{/if}
+              {#if playing}Playing{:else if !p.look}No character yet{:else if short}Can't match{:else if economy}<Money amount={p.balance} whole />{/if}
             </span>
           </span>
         </button>
@@ -110,13 +121,38 @@
   {/if}
 
   {#if error}<p class="error">{error}</p>{/if}
-  <button class="btn primary block go" disabled={busy} onclick={send}><Swords size={18} /> Send the challenge</button>
+  <button class="btn primary block go" disabled={busy || needsCharacter()} onclick={send}><Swords size={18} /> Send the challenge</button>
 </div>
 
 <style>
   .challenge {
     display: grid;
     gap: 1rem;
+  }
+  .need {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.6rem 0.8rem;
+    padding: 1rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  }
+  .need .btn {
+    grid-column: 1 / -1;
+  }
+  .need-icon {
+    display: grid;
+    place-items: center;
+    width: 2.8rem;
+    height: 2.8rem;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: var(--accent);
+  }
+  .need-text {
+    display: grid;
+    gap: 0.15rem;
   }
   .counts {
     display: grid;

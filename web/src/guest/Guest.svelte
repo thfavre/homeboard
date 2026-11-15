@@ -16,6 +16,7 @@
   import WelcomeBack from './WelcomeBack.svelte';
   import { Camera } from '@lucide/svelte';
   import { avatarFlow } from './avatar.svelte.ts';
+  import { setFeatureOpener } from '$lib/nav.ts';
 
   type Tab = 'home' | 'earn' | 'me';
   let tab = $state<Tab>('home');
@@ -55,6 +56,11 @@
     feature = id;
     window.scrollTo(0, 0);
   }
+
+  setFeatureOpener((id) => {
+    tab = 'home';
+    open(id);
+  });
 
   function go(t: Tab) {
     tab = t;
