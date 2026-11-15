@@ -1,19 +1,21 @@
 import Phaser from 'phaser';
-import { ArcadeScene, H, INK, PX, W, hex, type Pen } from '../engine/base.ts';
+import { ArcadeScene, H, INK, PX, W, hex } from '../engine/base.ts';
 
 const GRAVITY = 950;
 const BOMB_COST = 3;
 const GOLD_POINTS = 5;
-/** A fruit's texture, in pixels a side */
-const S = 30;
+/** How big the fruit flies (units across, about) */
+const FRUIT_SIZE = 56;
 
-/** The fruit: its color (the juice) and how it is painted */
+/** The fruit (LPC art) and the color of its juice */
 const FRUIT = [
-  { id: 'apple', juice: '#ff4d5e' },
-  { id: 'orange', juice: '#ffa53d' },
-  { id: 'melon', juice: '#ff5f7a' },
-  { id: 'lemon', juice: '#ffe54d' },
-  { id: 'plum', juice: '#b26bff' },
+  { key: 'lpc-apple', juice: '#ff4d5e' },
+  { key: 'lpc-greenApple', juice: '#9be37a' },
+  { key: 'lpc-yellowApple', juice: '#ffe54d' },
+  { key: 'lpc-peach', juice: '#ffb08a' },
+  { key: 'lpc-orange', juice: '#ffa53d' },
+  { key: 'lpc-lemon', juice: '#fff07a' },
+  { key: 'lpc-watermelon', juice: '#ff5f7a' },
 ] as const;
 
 type Kind = number | 'bomb' | 'gold';
@@ -36,7 +38,7 @@ interface Half {
 }
 
 /**
- * Slicer: fruit is thrown up in front of the dojo's wall, now and then a bomb with it, and rarely a
+ * Slicer: fruit (LPC art) is thrown up in front of the dojo's wall, now and then a bomb with it, and rarely a
  * golden fruit worth a lot. A swipe across fruit slices it (three or more in one swipe fill the
  * fever bar fast); a sliced bomb costs points. Lasts a fixed time; the throws are drawn from the
  * seed, the same for both players.
@@ -79,47 +81,7 @@ export class SlicerScene extends ArcadeScene {
       }
       p.dither('#000000', 0, 0, w, 14);
     });
-    const ball = (p: Pen, dark: string, mid: string, light: string, rx = 13, ry = 13) => {
-      p.disc(INK.line, S / 2, S / 2 + 1, rx + 1, ry + 1);
-      p.disc(dark, S / 2, S / 2 + 1, rx, ry);
-      p.disc(mid, S / 2 - 1, S / 2, rx - 2, ry - 2);
-      p.disc(light, S / 2 - 4, S / 2 - 4, 3, 2);
-    };
-    const leaf = (p: Pen) => {
-      p.rect('#5b3a1e', 15, 1, 1, 4);
-      p.rect(INK.line, 16, 1, 6, 3);
-      p.rect('#3d8b2f', 17, 2, 4, 1);
-    };
-    this.pix('f-apple', S, S, (p) => {
-      ball(p, '#a8102a', '#e0263e', '#ff8a96');
-      leaf(p);
-    });
-    this.pix('f-orange', S, S, (p) => {
-      ball(p, '#c05208', '#f47a14', '#ffd08a');
-      for (let i = 0; i < 14; i++) p.rect('#c86210', 8 + ((i * 7) % 15), 9 + ((i * 5) % 14), 1, 1);
-    });
-    this.pix('f-melon', S, S, (p) => {
-      ball(p, '#1e5e20', '#3c9a34', '#9be37a', 14, 12);
-      for (const x of [9, 14, 19]) for (let y = 6; y < 26; y++) if (Math.abs(y - 16) < 10 - Math.abs(x - 15) / 2) p.rect('#1e5e20', x + Math.round(Math.sin(y / 3)), y, 1, 1);
-    });
-    this.pix('f-lemon', S, S, (p) => {
-      p.rect(INK.line, 1, 14, 3, 4);
-      p.rect(INK.line, 26, 14, 3, 4);
-      p.rect('#e8b80a', 2, 15, 2, 2);
-      p.rect('#e8b80a', 26, 15, 2, 2);
-      ball(p, '#d8a008', '#ffe23d', '#fff8b0', 12, 10);
-    });
-    this.pix('f-plum', S, S, (p) => {
-      ball(p, '#4a1282', '#7a2ac4', '#d9a3ff', 12, 13);
-      leaf(p);
-    });
-    this.pix('f-gold', S, S, (p) => {
-      ball(p, '#b07800', '#ffc81a', '#fff6c0');
-      leaf(p);
-      p.rect('#ffffff', 22, 7, 1, 3);
-      p.rect('#ffffff', 21, 8, 3, 1);
-    });
-    this.pix('f-bomb', S, S, (p) => {
+    this.pix('f-bomb', 30, 30, (p) => {
       p.disc(INK.line, 15, 17, 12);
       p.disc('#24243a', 15, 17, 11);
       p.disc('#4a4a64', 12, 14, 4);
@@ -178,8 +140,10 @@ export class SlicerScene extends ArcadeScene {
       const roll = this.rand();
       const kind: Kind = roll < 0.1 + late * 0.1 ? 'bomb' : roll > 0.965 ? 'gold' : Math.floor(this.rand() * FRUIT.length);
       const x = 60 + this.rand() * (W - 120);
-      const key = kind === 'bomb' ? 'f-bomb' : kind === 'gold' ? 'f-gold' : `f-${FRUIT[kind].id}`;
+      const key = kind === 'bomb' ? 'f-bomb' : kind === 'gold' ? 'lpc-goldApple' : FRUIT[kind].key;
       const img = this.sprite(x, H + 40, key).setDepth(20);
+      // The LPC fruit are small sprites: shown bigger, a whole number of units a pixel
+      if (kind !== 'bomb') img.setScale(Math.max(2, Math.round(FRUIT_SIZE / Math.max(img.width, img.height))));
       const thing: Thing = {
         img,
         kind,
@@ -229,9 +193,10 @@ export class SlicerScene extends ArcadeScene {
     this.tweens.add({ targets: splat, alpha: 0, duration: 1600, onComplete: () => splat.destroy() });
     // Two halves flying apart, across the cut
     const n = angle + Math.PI / 2;
+    const { width: tw, height: th2 } = th.img;
     for (const side of [-1, 1]) {
-      const img = this.sprite(th.img.x, th.img.y, th.img.texture.key).setDepth(19).setRotation(angle);
-      img.setCrop(0, side < 0 ? 0 : S / 2, S, S / 2);
+      const img = this.sprite(th.img.x, th.img.y, th.img.texture.key, th.img.scaleX).setDepth(19).setRotation(angle);
+      img.setCrop(0, side < 0 ? 0 : th2 / 2, tw, th2 / 2);
       this.halves.push({ img, vx: th.vx * 0.5 + Math.cos(n) * side * 140, vy: Math.min(th.vy, -120) * 0.5 + Math.sin(n) * side * 140, spin: side * (2 + Math.random() * 3) });
     }
     th.img.destroy();

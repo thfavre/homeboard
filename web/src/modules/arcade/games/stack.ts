@@ -157,7 +157,8 @@ export class StackScene extends ArcadeScene {
       }
       this.tower.push(m);
       this.ring(m.x, y, m.w);
-      this.sfx('perfect', 0.8 + Math.min(0.4, this.perfects * 0.08));
+      // Perfect drops in a row climb up the scale
+      this.sfx('perfect', 1, 1 + Math.min(0.6, (this.perfects - 1) * 0.12));
       this.buzz(15);
       const got = this.addScore(2);
       this.good(true);

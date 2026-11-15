@@ -34,7 +34,10 @@
   type Sfx = typeof import('./engine/sfx.ts');
   let sfx: Sfx | null = null;
   $effect(() => {
-    void import('./engine/sfx.ts').then((x) => (sfx = x));
+    void import('./engine/sfx.ts').then((x) => {
+      sfx = x;
+      void x.loadSounds();
+    });
     void import('./engine/run.ts').catch(() => {});
   });
 

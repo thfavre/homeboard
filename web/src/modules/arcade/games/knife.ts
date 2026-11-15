@@ -145,14 +145,6 @@ export class KnifeScene extends ArcadeScene {
       p.rect('#d8a440', 2, 37, 2, 1);
       p.rect('#d8a440', 2, 43, 2, 1);
     });
-    this.pix('knife-apple', 16, 16, (p) => {
-      p.disc(INK.line, 8, 9, 7);
-      p.disc('#d81e36', 8, 9, 6);
-      p.disc('#ff5a6a', 6, 7, 2.5);
-      p.rect('#ffd0d4', 5, 6, 2, 1);
-      p.rect('#5b3a1e', 8, 1, 1, 3);
-      p.rect('#3d8b2f', 9, 1, 4, 2);
-    });
   }
 
   /** A knife in the log at this angle (on the log) */
@@ -201,7 +193,7 @@ export class KnifeScene extends ArcadeScene {
     for (const a of stuck) this.stick(a);
     if (apple !== null) {
       const d = LOG_R + 10;
-      this.apple = this.sprite(Math.cos(apple) * d, Math.sin(apple) * d, 'knife-apple');
+      this.apple = this.sprite(Math.cos(apple) * d, Math.sin(apple) * d, 'lpc-apple');
       this.apple.rotation = apple + Math.PI / 2;
       this.log.add(this.apple);
     }

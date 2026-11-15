@@ -164,7 +164,8 @@ export class PlankScene extends ArcadeScene {
       this.growSound -= dt;
       if (this.growSound <= 0) {
         this.growSound = 0.07;
-        this.sfx('grow', 0.6 + Math.min(0.6, this.len / 600));
+        // Higher and higher as the plank grows
+        this.sfx('grow', 0.8, 0.8 + Math.min(1.4, this.len / 300));
       }
     }
     this.blink(this.hero);

@@ -74,7 +74,7 @@ export class FlapScene extends ArcadeScene {
 
   private flyer(who: 'me' | 'rival', x: number, y: number): Flyer {
     const box = this.add.container(x, y).setDepth(30);
-    const wing = this.sprite(-8, -4, 'flap-wing').setOrigin(0.9, 0.7);
+    const wing = this.sprite(-6, -6, 'flap-wing').setOrigin(0.85, 0.5);
     // Feet at the bottom of the hitbox: the body's middle is the box's middle
     const body = this.avatar(who, 0, this.avatarHeight(who, FLYER_SCALE) / 2, FLYER_SCALE);
     this.pose(body, 'run', 12);
@@ -133,13 +133,21 @@ export class FlapScene extends ArcadeScene {
         }
       }
     });
-    this.pix('flap-wing', 14, 10, (p) => {
-      p.rect(INK.line, 1, 2, 12, 6);
-      p.rect('#ffffff', 2, 3, 10, 4);
-      p.rect('#dfe6ff', 2, 6, 10, 1);
-      p.rect('#ffffff', 0, 3, 2, 2);
-      p.rect(INK.line, 4, 5, 1, 1);
-      p.rect(INK.line, 7, 5, 1, 1);
+    // A wing: three rows of white feathers, longer toward the tip, shaded underneath
+    this.pix('flap-wing', 18, 13, (p) => {
+      const feather = (x: number, y: number, len: number, shade: string) => {
+        p.rect(INK.line, x - 1, y - 1, len + 2, 4);
+        p.rect('#ffffff', x, y, len, 2);
+        p.rect(shade, x, y + 1, len, 1);
+        p.rect(INK.line, x + len, y + 1, 1, 1);
+      };
+      feather(1, 8, 15, '#c8d2ee');
+      feather(3, 5, 12, '#dde4f6');
+      feather(6, 2, 9, '#eef2ff');
+      // Where the wing joins the back
+      p.rect(INK.line, 13, 1, 5, 9);
+      p.rect('#eef2ff', 14, 2, 3, 7);
+      p.rect('#ffffff', 14, 2, 1, 6);
     });
     // A chimney: bricks (tiled down), a stone cap on the gap's side
     this.pix('flap-brick', WALL_W / PX, 12, (p) => {

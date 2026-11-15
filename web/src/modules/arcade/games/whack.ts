@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ArcadeScene, H, INK, PX, W, hex, type Pen } from '../engine/base.ts';
+import { ArcadeScene, H, INK, PX, W, hex } from '../engine/base.ts';
 
 const COLS = [82, 200, 318];
 const ROWS = [330, 460, 590];
@@ -94,54 +94,49 @@ export class WhackScene extends ArcadeScene {
       p.rect('#5aa83a', 0, 4, 46, 4);
       p.rect('#3d2a18', 4, 4, 38, 1);
     });
-    const face = (p: Pen, fur: string, light: string, belly: string) => {
-      p.disc(INK.line, C / 2, 15, 11, 12);
-      p.disc(fur, C / 2, 15, 10, 11);
-      p.disc(light, C / 2 - 3, 10, 4, 3);
-      p.disc(belly, C / 2, 21, 6, 5);
-    };
-    this.pix('whack-mole', C, C, (p) => {
-      face(p, '#7a5034', '#9a6a48', '#c89a72');
-      p.rect(INK.line, 9, 11, 2, 3);
-      p.rect(INK.line, 15, 11, 2, 3);
-      p.rect('#ffffff', 9, 11, 1, 1);
-      p.rect('#ffffff', 15, 11, 1, 1);
-      p.disc('#ff8aa0', C / 2, 16, 2, 1.5);
-      p.rect('#ffffff', 12, 18, 1, 2);
-      p.rect('#ffffff', 14, 18, 1, 2);
-      // Little claws
-      p.rect('#f4e0c8', 4, 22, 3, 2);
-      p.rect('#f4e0c8', 19, 22, 3, 2);
-    });
-    this.pix('whack-gold', C, C, (p) => {
-      face(p, '#e8a312', '#ffd23d', '#fff0a0');
-      p.rect(INK.line, 9, 11, 2, 3);
-      p.rect(INK.line, 15, 11, 2, 3);
-      p.disc('#ff8aa0', C / 2, 16, 2, 1.5);
-      p.rect('#ffffff', 4, 4, 1, 3);
-      p.rect('#ffffff', 3, 5, 3, 1);
-      p.rect('#ffffff', 21, 2, 1, 3);
-      p.rect('#ffffff', 20, 3, 3, 1);
-    });
-    this.pix('whack-cat', C, C, (p) => {
-      // Ears, the face, stripes, green eyes, whiskers
-      for (const x of [4, 17]) {
-        p.rect(INK.line, x, 2, 6, 7);
-        p.rect('#f08a3a', x + 1, 3, 4, 6);
-        p.rect('#ffb0c0', x + 2, 5, 2, 3);
-      }
-      face(p, '#f08a3a', '#ffb060', '#fff0e0');
-      p.rect('#c0601e', 12, 5, 2, 4);
-      p.rect('#c0601e', 6, 12, 3, 1);
-      p.rect('#c0601e', 17, 12, 3, 1);
-      p.rect('#3dd06a', 8, 11, 3, 3);
-      p.rect('#3dd06a', 15, 11, 3, 3);
-      p.rect(INK.line, 9, 11, 1, 3);
-      p.rect(INK.line, 16, 11, 1, 3);
-      p.rect('#ff6a8a', 12, 16, 2, 1);
-      p.rect('#ffffff', 2, 16, 6, 1);
-      p.rect('#ffffff', 18, 16, 6, 1);
-    });
+    // A mole looking out: fur shaded round, a pale muzzle, a big pink nose, teeth, claws on the edge
+    const mole = (key: string, fur: string, dark: string, light: string, muzzle: string, sparkle: boolean) =>
+      this.pix(key, C, C, (p) => {
+        p.disc(INK.line, C / 2, 15, 12, 12);
+        p.disc(dark, C / 2, 15, 11, 11);
+        p.disc(fur, C / 2 - 1, 14, 10, 10);
+        p.dither(light, 6, 5, 9, 6);
+        p.disc(light, C / 2 - 4, 8, 3, 2);
+        // Ears
+        p.rect(dark, 4, 8, 2, 3);
+        p.rect(dark, 20, 8, 2, 3);
+        // The muzzle, the nose, whiskers, two teeth
+        p.disc(INK.line, C / 2, 17, 6, 4);
+        p.disc(muzzle, C / 2, 17, 5, 3);
+        p.disc(INK.line, C / 2, 14, 3, 2);
+        p.disc('#ff7a9a', C / 2, 14, 2.4, 1.5);
+        p.rect('#ffd0dc', C / 2 - 1, 13, 1, 1);
+        p.rect(INK.line, 5, 16, 4, 1);
+        p.rect(INK.line, 17, 16, 4, 1);
+        p.rect('#ffffff', 11, 19, 2, 2);
+        p.rect('#ffffff', 14, 19, 2, 2);
+        p.rect(INK.line, 13, 19, 1, 2);
+        // Small shiny eyes
+        p.rect(INK.line, 8, 10, 2, 2);
+        p.rect(INK.line, 16, 10, 2, 2);
+        p.rect('#ffffff', 8, 10, 1, 1);
+        p.rect('#ffffff', 16, 10, 1, 1);
+        // Paws gripping the edge, pale claws
+        for (const x of [3, 18]) {
+          p.rect(INK.line, x, 21, 6, 4);
+          p.rect(dark, x + 1, 22, 4, 2);
+          p.rect('#f4e8d8', x + 1, 24, 1, 1);
+          p.rect('#f4e8d8', x + 3, 24, 1, 1);
+        }
+        if (sparkle) {
+          p.rect('#ffffff', 2, 2, 1, 3);
+          p.rect('#ffffff', 1, 3, 3, 1);
+          p.rect('#ffffff', 22, 1, 1, 3);
+          p.rect('#ffffff', 21, 2, 3, 1);
+        }
+      });
+    mole('whack-mole', '#7a5034', '#5a3820', '#a07250', '#d8b48c', false);
+    mole('whack-gold', '#f0b020', '#b87a08', '#ffe27a', '#fff2b8', true);
     this.pix('whack-star', 5, 5, (p) => {
       p.rect('#ffd23d', 2, 0, 1, 5);
       p.rect('#ffd23d', 0, 2, 5, 1);
@@ -167,7 +162,11 @@ export class WhackScene extends ArcadeScene {
     const hole = free[Math.floor(pick * free.length)];
     const kind: Kind = this.t > 3 && roll < 0.13 ? 'cat' : roll > 0.93 ? 'gold' : 'mole';
     const { x, y } = this.hole(hole);
-    const img = this.sprite(x, y, `whack-${kind}`).setOrigin(0.5, 0).setDepth(Math.floor(hole / 3) * 3 + 2).setVisible(false);
+    // (the cat is LPC art, a little bigger: its pixels drawn larger)
+    const img = this.sprite(x, y, kind === 'cat' ? 'lpc-cat' : `whack-${kind}`, kind === 'cat' ? 2.6 : PX)
+      .setOrigin(0.5, 0)
+      .setDepth(Math.floor(hole / 3) * 3 + 2)
+      .setVisible(false);
     this.busy[hole] = this.t + stay + 0.3;
     this.pops.push({ id: this.made++, hole, kind, at: this.t, until: this.t + stay, img, hit: false });
   }
@@ -193,10 +192,11 @@ export class WhackScene extends ArcadeScene {
     for (const p of this.pops) {
       const k = this.out(p);
       const { y } = this.hole(p.hole);
-      const vis = Math.round(k * (C - 2));
+      const { width: tw, height: th } = p.img.frame;
+      const vis = Math.round(k * (th - 2));
       p.img.setVisible(vis > 0);
-      p.img.setCrop(0, 0, C, vis);
-      p.img.y = y + 8 - vis * PX;
+      p.img.setCrop(0, 0, tw, vis);
+      p.img.y = y + 8 - vis * p.img.scaleY;
     }
     this.pops = this.pops.filter((p) => {
       if (this.t < p.until + 0.3) return true;
@@ -210,7 +210,7 @@ export class WhackScene extends ArcadeScene {
     for (const p of this.pops) {
       if (p.hit || this.out(p) < 0.35) continue;
       const { x, y } = this.hole(p.hole);
-      if (Math.abs(pt.x - x) > 56 || pt.y > y + 30 || pt.y < y - C * PX - 20) continue;
+      if (Math.abs(pt.x - x) > 56 || pt.y > y + 30 || pt.y < y - p.img.displayHeight - 20) continue;
       p.hit = true;
       p.until = this.t;
       this.bop(p, x, y);
@@ -219,7 +219,7 @@ export class WhackScene extends ArcadeScene {
   }
 
   private bop(p: Pop, x: number, y: number): void {
-    const top = y - C * PX + 10;
+    const top = y - p.img.displayHeight + 10;
     if (p.kind === 'cat') {
       this.addScore(-CAT_COST);
       this.miss();

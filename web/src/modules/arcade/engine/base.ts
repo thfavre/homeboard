@@ -3,6 +3,7 @@ import { ARCADE_FEVER_MS, ARCADE_GHOST_MS, arcadeRandom, type ArcadeGameId } fro
 import type { SheetInfo } from '$shared/world.ts';
 import { PIXEL_CHARS, PIXEL_FONT, pixelClean } from '$lib/pixelFont.ts';
 import { buzz, play, type SoundId } from './sfx.ts';
+import { LPC_FRAMES, type LpcImages } from './lpc.ts';
 
 /** Every game is laid out on this portrait board; the phone shows it as big as it fits */
 export const W = 400;
@@ -49,6 +50,8 @@ export interface RunOptions {
   lives: number;
   me: Fighter;
   rival: Fighter;
+  /** The LPC sheets (crates, barrels, fruit), loaded */
+  lpc: LpcImages;
   onScore(score: number): void;
   /** The run is over: the last life lost ('out') or the time is up */
   onOver(score: number, why: 'out' | 'time'): void;
@@ -164,6 +167,10 @@ export abstract class ArcadeScene extends Phaser.Scene {
     this.makeFont();
     this.makeFighter('me', this.opts.me);
     this.makeFighter('rival', this.opts.rival);
+    // Each LPC sprite as a texture of its own (lpc-apple, lpc-crate...), in the sheets' pixels
+    for (const [name, [sheet, x, y, w, h]] of Object.entries(LPC_FRAMES)) {
+      this.pix(`lpc-${name}`, w, h, (p) => p.g.drawImage(this.opts.lpc[sheet], x, y, w, h, 0, 0, w, h));
+    }
     this.build();
     this.opts.onTime(this.left());
   }
@@ -531,8 +538,9 @@ export abstract class ArcadeScene extends Phaser.Scene {
     this.cameras.main.flash(ms, c.red, c.green, c.blue);
   }
 
-  sfx(id: SoundId, volume = 1): void {
-    play(id, volume);
+  /** A sound (`rate` above 1: faster and higher, for a rising combo) */
+  sfx(id: SoundId, volume = 1, rate = 1): void {
+    play(id, volume, rate);
   }
 
   buzz(pattern: number | number[]): void {

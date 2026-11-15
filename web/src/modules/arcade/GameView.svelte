@@ -74,9 +74,10 @@
     }
     void (async () => {
       try {
-        const [{ startRun }, sfx, { loadFighter }] = await Promise.all([import('./engine/run.ts'), import('./engine/sfx.ts'), import('./engine/fighters.ts')]);
-        const [meF, rivalF] = await Promise.all([loadFighter(mine), loadFighter(other)]);
+        const [{ startRun }, sfx, { loadFighter }, { loadLpc }] = await Promise.all([import('./engine/run.ts'), import('./engine/sfx.ts'), import('./engine/fighters.ts'), import('./engine/lpc.ts')]);
+        const [meF, rivalF, lpc] = await Promise.all([loadFighter(mine), loadFighter(other), loadLpc()]);
         if (gone || !host) return;
+        void sfx.loadSounds();
         sfx.soundsOn(!!(hb.modules.arcade as { settings?: { sounds?: boolean } })?.settings?.sounds);
         run = startRun(host, {
           game: info.id,
@@ -85,6 +86,7 @@
           lives: info.lives,
           me: meF,
           rival: rivalF,
+          lpc,
           onScore: (s) => {
             score = s;
             send(false);

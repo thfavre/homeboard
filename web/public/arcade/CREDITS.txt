@@ -1,0 +1,50 @@
+Art and sounds of the Arcade's phone games (web/src/modules/arcade/engine/lpc.ts cuts the sprites
+out, engine/sfx.ts plays the sounds). Downloaded unchanged except for the file names, from
+OpenGameArt. They are NOT under Homeboard's MIT license: each keeps its own license and authors
+(and, for the LPC sheets, the full credits file that came with it). Everything else in the games
+(backgrounds, knives, the log, the wings, the road, the moles, the coins, the bomb...) is drawn in
+code for Homeboard.
+
+[LPC] Containers (crates and barrels in Street Dash)
+  Files: lpc-containers.png (container-v4_2.zip: container.png)
+  License: CC-BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+  Authors: bluecarrot16, Lanea Zimmerman (Sharm), William Thompson, Tuomo Untinen (Reemax), Evert,
+    Buch, Blarumyrran, n2liquid, Jetrel, Guido Bos, Hyptosis, Bonsaiheldin, NaRNeRZz, PriorBlue,
+    Jerom, 7Soul, Wolthera van Hövell tot Westerflier (TheraHedwig)
+  From: https://opengameart.org/content/lpc-containers
+  Full credits: CREDITS-container.txt (to be kept with the art)
+
+[LPC] Food (the fruit in Slicer, the apples in Knife Throw)
+  Files: lpc-fruits-veggies.png (lpc-food-v2.zip: fruits-veggies.png)
+  License: CC-BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/) or GPL 3.0; many of the
+    items are also CC0 (see CREDITS-food.txt)
+  Authors: bluecarrot16, Daniel Eddeland (daneeklu), Joshua Taylor, Richard Kettering (Jetrel),
+    thekingphoenix, RedVoxel, Molly "Cougarmint" Willits
+  From: https://opengameart.org/content/lpc-food
+  Full credits: CREDITS-food.txt
+
+[LPC] Cats and Dogs (the cat in Pop Up)
+  Files: lpc-cat.png (cat.png)
+  License: OGA-BY 3.0 (https://static.opengameart.org/OGA-BY-3.0.txt); also offered as CC-BY 3.0,
+    GPL 3.0 or GPL 2.0
+  Authors: bluecarrot16
+  From: https://opengameart.org/content/lpc-cats-and-dogs
+
+The Essential Retro Video Game Sound Effects Collection [512 sounds] (every sound in sfx/)
+  Files: sfx/*.wav, each renamed after the game event it plays for, from the collection's files:
+    throw: Weapons/Melee/sfx_wpn_sword1.wav          thunk: General Sounds/Impacts/sfx_sounds_impact5.wav
+    clang: Weapons/Melee/sfx_wpn_sword3.wav          point: General Sounds/Coins/sfx_coin_single3.wav
+    perfect: Positive Sounds/sfx_sounds_powerup15    level: General Sounds/Fanfares/sfx_sounds_fanfare3.wav
+    flap: Jumping and Landing/sfx_movement_jump14    crash: Explosions/Shortest/sfx_exp_shortest_hard4.wav
+    slice: Weapons/Melee/sfx_wpn_sword2.wav          bomb: Explosions/Short/sfx_exp_short_hard2.wav
+    right: Positive Sounds/sfx_sounds_powerup5       wrong: Negative Sounds/sfx_sounds_error3.wav
+    turn: Menu Sounds/sfx_menu_move3.wav             beep: Simple Bleeps/sfx_sounds_Blip5.wav
+    go: Menu Sounds/sfx_menu_select2.wav             win: General Sounds/Fanfares/sfx_sounds_fanfare1.wav
+    fever: Positive Sounds/sfx_sounds_powerup2       life: Negative Sounds/sfx_sounds_damage1.wav
+    coin: General Sounds/Coins/sfx_coin_double1.wav  gem: General Sounds/Coins/sfx_coin_cluster3.wav
+    bonk: Weapons/Melee/sfx_wpn_punch2.wav           grow: Menu Sounds/sfx_menu_move1.wav
+    land: Jumping and Landing/sfx_movement_jump10_landing.wav
+    combo: Positive Sounds/sfx_sounds_powerup10
+  License: CC0 (https://creativecommons.org/publicdomain/zero/1.0/)
+  Author: Juhani Junkala (SubspaceAudio)
+  From: https://opengameart.org/content/512-sound-effects-8-bit-style

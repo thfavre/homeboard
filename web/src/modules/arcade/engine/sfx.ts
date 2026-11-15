@@ -1,10 +1,12 @@
 import { ZZFX, zzfx } from 'zzfx';
 
 /**
- * The Arcade's sounds, made on the fly by ZzFX (no sound files): a few numbers each, shaped by ear.
- * See https://killedbyapixel.github.io/ZzFX/ to hear or change one.
+ * The Arcade's sounds: retro sound effects by Juhani Junkala (CC0, web/public/arcade/sfx, see
+ * web/public/arcade/CREDITS.txt), loaded once and played through the audio context ZzFX already
+ * uses. Until a file is there (and for the cat, which the pack has none of), a sound made on the
+ * fly by ZzFX plays instead: a few numbers each, see https://killedbyapixel.github.io/ZzFX/.
  */
-const SOUNDS = {
+const MADE = {
   throw: [0.5, 0.05, 520, 0, 0.02, 0.06, 1, 1.8, -24],
   thunk: [1.1, 0.05, 130, 0, 0.02, 0.12, 4, 2, -6, 0, 0, 0, 0, 0.7],
   clang: [1.1, 0.05, 950, 0, 0.04, 0.32, 2, 0.5, 0, 0, 0, 0, 0.05, 0, 40],
@@ -32,7 +34,54 @@ const SOUNDS = {
   combo: [0.7, 0, 760, 0, 0.05, 0.18, 0, 1.4, 0, 0, 380, 0.04, 0.05],
 } satisfies Record<string, number[]>;
 
-export type SoundId = keyof typeof SOUNDS;
+export type SoundId = keyof typeof MADE;
+
+/** The sounds that have a file in web/public/arcade/sfx (named after them), and how loud they play */
+const FILES: Partial<Record<SoundId, number>> = {
+  throw: 0.8,
+  thunk: 1,
+  clang: 1,
+  point: 0.8,
+  perfect: 0.9,
+  level: 0.9,
+  flap: 0.7,
+  crash: 1,
+  slice: 0.8,
+  bomb: 1,
+  right: 0.8,
+  wrong: 0.9,
+  turn: 0.6,
+  beep: 0.8,
+  go: 0.9,
+  win: 1,
+  fever: 1,
+  life: 1,
+  coin: 0.7,
+  gem: 0.9,
+  bonk: 1,
+  grow: 0.5,
+  land: 1,
+  combo: 0.9,
+};
+
+const buffers = new Map<SoundId, AudioBuffer>();
+let loading: Promise<void> | null = null;
+
+/** Fetches and decodes the sound files (once; a file that fails keeps its ZzFX sound) */
+export function loadSounds(): Promise<void> {
+  loading ??= Promise.all(
+    (Object.keys(FILES) as SoundId[]).map(async (id) => {
+      try {
+        const res = await fetch(`/arcade/sfx/${id}.wav`);
+        if (!res.ok) return;
+        buffers.set(id, await ZZFX.audioContext.decodeAudioData(await res.arrayBuffer()));
+      } catch {
+        // The made-up sound plays instead
+      }
+    }),
+  ).then(() => {});
+  return loading;
+}
 
 let on = true;
 export function soundsOn(value: boolean): void {
@@ -44,11 +93,25 @@ export function wakeSound(): void {
   void ZZFX.audioContext.resume().catch(() => {});
 }
 
-export function play(id: SoundId, volume = 1): void {
+/** Plays a sound (`volume` 0 to about 1.5; `rate` above 1 plays it faster and higher) */
+export function play(id: SoundId, volume = 1, rate = 1): void {
   if (!on || ZZFX.audioContext.state !== 'running') return;
-  const p = [...SOUNDS[id]];
-  p[0] *= volume;
   try {
+    const buffer = buffers.get(id);
+    if (buffer) {
+      const ctx = ZZFX.audioContext;
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.playbackRate.value = rate;
+      const gain = ctx.createGain();
+      gain.gain.value = Math.min(1.5, volume * (FILES[id] ?? 1)) * 0.6;
+      src.connect(gain).connect(ctx.destination);
+      src.start();
+      return;
+    }
+    const p = [...MADE[id]];
+    p[0] *= volume;
+    p[2] *= rate;
     zzfx(...p);
   } catch {
     // A sound that cannot be played is not worth stopping the game for

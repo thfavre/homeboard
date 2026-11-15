@@ -10,6 +10,9 @@ const RUNNER_Y = 600;
 const RUNNER_R = 15;
 /** A row of things every this many units run */
 const ROW_GAP = 165;
+/** The LPC crates and barrels' scale (units a pixel of their art): about a lane wide; the stack of crates takes two */
+const THING_SCALE = 1.5;
+const STACK_SCALE = 1.65;
 
 type Kind = 'crate' | 'barrel' | 'cart' | 'coin' | 'gem';
 
@@ -24,7 +27,7 @@ interface Thing {
 
 /**
  * Street Dash: the player's character runs up the town's street (seen from above) and steers with
- * a finger sliding left and right. Crates, barrels and carts stand in the way: bumping into one
+ * a finger sliding left and right. Crates, barrels and stacks of crates (LPC art) stand in the way: bumping into one
  * costs a life (the runner blinks through for a moment). Coins score, gems score more. The street is
  * drawn from the seed and runs as fast on both phones: the rival runs beside, as a ghost.
  */
@@ -99,71 +102,17 @@ export class DodgeScene extends ArcadeScene {
         p.rect('#7a6a84', w - 10, y + 10, 10, 2);
       }
     });
-    this.pix('dodge-crate', 22, 22, (p) => {
-      p.rect(INK.shadow, 2, 3, 22, 21);
-      p.rect(INK.line, 0, 0, 22, 22);
-      p.rect('#b07a40', 1, 1, 20, 20);
-      p.rect('#d49a5a', 1, 1, 20, 2);
-      p.rect('#7a4e24', 1, 19, 20, 2);
-      for (let i = 0; i < 18; i++) {
-        p.rect('#7a4e24', 2 + i, 2 + i, 2, 1);
-        p.rect('#7a4e24', 19 - i, 2 + i, 2, 1);
-      }
-      p.rect(INK.line, 1, 10, 20, 1);
-    });
-    this.pix('dodge-barrel', 20, 20, (p) => {
-      p.disc(INK.shadow, 11, 12, 10);
-      p.disc(INK.line, 10, 10, 10);
-      p.disc('#8a5028', 10, 10, 9);
-      p.disc('#a8683a', 9, 9, 6);
-      p.disc('#6a3818', 10, 10, 3);
-      for (let a = 0; a < 6.28; a += 0.4) p.rect('#5a5a6a', 10 + Math.cos(a) * 8, 10 + Math.sin(a) * 8, 1, 1);
-    });
-    // A market cart seen from above: wheels on the sides, a wooden bed, a bin of apples and a bin of oranges
-    this.pix('dodge-cart', 52, 30, (p) => {
-      p.rect(INK.shadow, 5, 5, 46, 25);
-      // The wheels, sticking out on both sides
-      for (const x of [0, 47]) {
-        for (const y of [3, 19]) {
-          p.rect(INK.line, x, y, 5, 9);
-          p.rect('#4a4a5a', x + 1, y + 1, 3, 7);
-          p.rect('#7a7a8a', x + 1, y + 1, 3, 1);
-          p.rect('#2a2a36', x + 1, y + 4, 3, 1);
-        }
-      }
-      // The bed: planks lit from the top, a darker rim
-      p.rect(INK.line, 3, 0, 46, 29);
-      p.rect('#7a4a24', 4, 1, 44, 27);
-      for (let y = 2; y < 27; y += 5) {
-        p.rect('#b07a40', 5, y, 42, 4);
-        p.rect('#c8925a', 5, y, 42, 1);
-      }
-      p.rect('#5a3418', 4, 1, 44, 1);
-      p.rect('#5a3418', 4, 27, 44, 1);
-      // Two bins, heaped with fruit (bigger in the middle of the heap)
-      const bin = (x0: number, fruit: string, dark: string, light: string) => {
-        p.rect(INK.line, x0, 4, 19, 21);
-        p.rect('#3a2210', x0 + 1, 5, 17, 19);
-        const spots: [number, number][] = [];
-        for (let y = 7; y <= 22; y += 4) for (let x = x0 + 3 + ((y - 7) / 4 % 2) * 2; x <= x0 + 16; x += 4) spots.push([x, y]);
-        for (const [x, y] of spots) {
-          const mid = 1 - Math.abs(x - (x0 + 9.5)) / 10 - Math.abs(y - 14.5) / 14;
-          p.disc(dark, x, y + 1, 1.8 + mid);
-          p.disc(fruit, x - 0.3, y, 1.4 + mid);
-          p.rect(light, Math.round(x - 1), Math.round(y - 1), 1, 1);
-        }
-      };
-      bin(5, '#e0263e', '#8a1020', '#ffb0b8');
-      bin(28, '#f48a1a', '#a8500a', '#ffe0a8');
-      // A leaf here and there on the apples
-      p.rect('#4dbb5a', 9, 8, 2, 1);
-      p.rect('#4dbb5a', 16, 17, 2, 1);
-    });
-    this.pix('dodge-coin', 9, 9, (p) => {
-      p.disc(INK.line, 4.5, 4.5, 4.5);
-      p.disc('#e8a312', 4.5, 4.5, 3.6);
-      p.disc('#ffd23d', 4, 4, 2.6);
-      p.rect('#fff6c0', 3, 2, 1, 3);
+    // A gold coin: a dark rim, a raised edge, a star stamped in the middle, a shine
+    this.pix('dodge-coin', 12, 12, (p) => {
+      p.disc(INK.line, 6, 6, 6);
+      p.disc('#a86a08', 6, 6, 5.2);
+      p.disc('#ffc21d', 5.6, 5.6, 4.6);
+      p.disc('#e8a312', 6, 6, 3.4);
+      p.disc('#ffd84a', 5.7, 5.7, 2.8);
+      p.rect('#b07808', 5, 4, 2, 5);
+      p.rect('#b07808', 4, 5, 4, 2);
+      p.rect('#fff6c0', 3, 2, 2, 1);
+      p.rect('#fff6c0', 2, 3, 1, 2);
     });
     this.pix('dodge-gem', 11, 11, (p) => {
       for (let y = 0; y < 11; y++) {
@@ -212,11 +161,12 @@ export class DodgeScene extends ArcadeScene {
       // A cart takes two lanes side by side
       if (roll < 0.22 && lane < LANES - 1 && !used.has(lane + 1)) {
         used.add(lane).add(lane + 1);
-        this.add_('cart', ROAD_L + (lane + 1) * LANE_W, 52, 30);
+        this.add_('cart', ROAD_L + (lane + 1) * LANE_W, 'lpc-crateStack', STACK_SCALE);
       } else {
         used.add(lane);
-        if (roll < 0.6) this.add_('crate', ROAD_L + (lane + 0.5) * LANE_W, 22, 22);
-        else this.add_('barrel', ROAD_L + (lane + 0.5) * LANE_W, 20, 20);
+        // (which crate or barrel follows the lane: no draw from the seed)
+        if (roll < 0.6) this.add_('crate', ROAD_L + (lane + 0.5) * LANE_W, lane % 2 ? 'lpc-crate' : 'lpc-crateCorner', THING_SCALE);
+        else this.add_('barrel', ROAD_L + (lane + 0.5) * LANE_W, lane % 2 ? 'lpc-barrel' : 'lpc-barrelBanded', THING_SCALE);
       }
     }
     // Coins in a line in a free lane, now and then a gem instead
@@ -224,14 +174,15 @@ export class DodgeScene extends ArcadeScene {
     if (free.length && r() < 0.8) {
       const lane = free[Math.floor(r() * free.length)];
       const x = ROAD_L + (lane + 0.5) * LANE_W;
-      if (r() < 0.12) this.add_('gem', x, 11, 11);
-      else for (let k = 0; k < 3; k++) this.add_('coin', x, 9, 9, -k * 44);
+      if (r() < 0.12) this.add_('gem', x, 'dodge-gem');
+      else for (let k = 0; k < 3; k++) this.add_('coin', x, 'dodge-coin', PX, -k * 46);
     }
   }
 
-  private add_(kind: Kind, x: number, w: number, h: number, dy = 0): void {
-    const img = this.sprite(x, -60 + dy, `dodge-${kind}`).setDepth(kind === 'coin' || kind === 'gem' ? 12 : 20);
-    this.things.push({ kind, img, hw: (w * PX) / 2 - 3, hh: (h * PX) / 2 - 3, done: false });
+  /** A thing on the road at x (`key`: its texture, at `scale` units a pixel); bumping counts on a box a little smaller than the art */
+  private add_(kind: Kind, x: number, key: string, scale = PX, dy = 0): void {
+    const img = this.sprite(x, -60 + dy, key, scale).setDepth(kind === 'coin' || kind === 'gem' ? 12 : 20);
+    this.things.push({ kind, img, hw: img.displayWidth / 2 - 4, hh: img.displayHeight / 2 - 6, done: false });
   }
 
   tick(dt: number): void {
