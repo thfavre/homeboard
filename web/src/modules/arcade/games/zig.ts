@@ -5,9 +5,8 @@ import { ArcadeScene, H, INK, PX, W } from '../engine/base.ts';
 const TW = 56;
 const TH = 32;
 const DEPTH = 20;
-/** Where the runner is on the screen: low, the road climbs ahead */
-const RUNNER_ON_SCREEN = 520;
-const RUNNER_SCALE = 1.2;
+/** Where the ball is on the screen: low, the road climbs ahead */
+const BALL_ON_SCREEN = 520;
 /** A turn this close (in tiles) to the middle of the corner is perfect */
 const PERFECT = 0.22;
 
@@ -26,26 +25,25 @@ interface Tile {
 const key = (i: number, j: number) => `${i},${j}`;
 
 /**
- * Zig: the player's character runs along a zigzag road of cobbled blocks floating in the evening
- * sky, climbing up the screen; a tap turns the other way. A turn right in the middle of the corner
- * scores double, gems on the road score too. Turn too early or too late and the runner falls off: a
- * life lost, and they start again at the next corner. Each corner turned is a point, and it gets
- * faster. The road is drawn from the seed: the rival runs on the same one, as a ghost.
+ * Zig: a ball rolls along a zigzag road of cobbled blocks floating in the evening sky, climbing up
+ * the screen; a tap turns it the other way. A turn right in the middle of the corner scores double,
+ * gems on the road score too. Turn too early or too late and the ball falls off: a life lost, and it
+ * starts again at the next corner. Each corner turned is a point, and it gets faster. The road is
+ * drawn from the seed, the same for both players.
  */
 export class ZigScene extends ArcadeScene {
   private tiles = new Map<string, Tile>();
   /** The road being laid ahead: its last tile, its direction, tiles left in this stretch */
   private end = { i: 0, j: 0, dir: 0, left: 5, seg: 0, n: 0 };
-  /** The runner in road coordinates (i: up right, j: up left) and their direction (0: i, 1: j) */
+  /** The ball in road coordinates (i: up right, j: up left) and its direction (0: i, 1: j) */
   private u = 0;
   private v = 0;
   private dir = 0;
   private seg = 0;
   private perfectTurn = false;
-  private runner!: Phaser.GameObjects.Sprite;
+  private ball!: Phaser.GameObjects.Image;
+  private bob = 0;
   private shadow!: Phaser.GameObjects.Ellipse;
-  private ghostBody!: Phaser.GameObjects.Sprite;
-  private tag!: Phaser.GameObjects.Container;
   private bg!: Phaser.GameObjects.Image;
   private clouds: Phaser.GameObjects.Image[] = [];
   private hue = 0;
@@ -53,7 +51,6 @@ export class ZigScene extends ArcadeScene {
   private falling = false;
 
   build(): void {
-    this.canWatch = true;
     this.bg = this.backdrop('zig-sky', ['#120624', '#1f0b3d', '#2f1257', '#47186b', '#6a2079']);
     this.hue = this.rand();
     this.paintArt();
@@ -62,14 +59,10 @@ export class ZigScene extends ArcadeScene {
     }
     this.lay(48);
     this.shadow = this.add.ellipse(0, 0, 24, 10, 0x000000, 0.3).setDepth(9);
-    this.ghostBody = this.avatar('rival', 0, 0, RUNNER_SCALE).setAlpha(0.45).setDepth(9).setVisible(false);
-    this.pose(this.ghostBody, 'walkUp', 12);
-    this.tag = this.rivalTag().setVisible(false);
-    this.runner = this.avatar('me', 0, 0, RUNNER_SCALE).setDepth(10);
-    this.pose(this.runner, 'idleUp');
+    this.ball = this.sprite(0, 0, 'zig-ball').setDepth(10);
     this.place();
     const p = this.screen(0, 0);
-    this.cam = { x: p.x, y: p.y - (RUNNER_ON_SCREEN - H / 2) };
+    this.cam = { x: p.x, y: p.y - (BALL_ON_SCREEN - H / 2) };
     this.cameras.main.centerOn(this.cam.x, this.cam.y);
   }
 
@@ -96,6 +89,14 @@ export class ZigScene extends ArcadeScene {
         const half = (th / 2 - Math.abs(y - th / 2)) * (tw / th) - 3;
         for (let x = tw / 2 - half + ((y / 3) % 2) * 2; x < tw / 2 + half - 2; x += 5) p.rect('#cfcfcf', x, y, 3, 1);
       }
+    });
+    // The ball: shiny, lit from the top left
+    this.pix('zig-ball', 13, 13, (p) => {
+      p.disc(INK.line, 6.5, 6.5, 6.5);
+      p.disc('#d8337a', 6.5, 6.5, 5.5);
+      p.disc('#ff5fa2', 6, 6, 4.5);
+      p.disc('#ff9cc8', 5, 5, 2.5);
+      p.rect('#ffffff', 4, 3, 2, 2);
     });
     this.pix('zig-gem', 9, 11, (p) => {
       p.rect(INK.line, 2, 0, 5, 1);
@@ -159,12 +160,12 @@ export class ZigScene extends ArcadeScene {
 
   private place(): void {
     const p = this.screen(this.u, this.v);
-    this.runner.setPosition(p.x, p.y + 4);
+    const y = p.y - 12 + (this.running ? 0 : Math.sin(this.bob * 5) * 3);
+    this.ball.setPosition(p.x, y);
     this.shadow.setPosition(p.x, p.y + 2);
   }
 
   started(): void {
-    this.pose(this.runner, 'walkUp', 12);
     this.input.on('pointerdown', () => this.turn());
   }
 
@@ -190,10 +191,8 @@ export class ZigScene extends ArcadeScene {
   }
 
   tick(dt: number): void {
-    this.runner.anims.timeScale = this.speed() / 4;
-    this.drawGhost();
     if (this.falling) {
-      this.follow(dt, this.runner);
+      this.follow(dt);
       return;
     }
     const step = this.speed() * dt;
@@ -210,7 +209,7 @@ export class ZigScene extends ArcadeScene {
       if (this.perfectTurn) {
         const got = this.addScore(2);
         this.good(true);
-        this.pop(this.runner.x, this.runner.y - 70, `PERFECT +${got}`, INK.gold, 3);
+        this.pop(this.ball.x, this.ball.y - 70, `PERFECT +${got}`, INK.gold, 3);
         this.sfx('perfect', 0.6);
       } else {
         this.addScore(1);
@@ -219,7 +218,7 @@ export class ZigScene extends ArcadeScene {
       }
       if (this.seg % 8 === 0) {
         this.sfx('level');
-        this.pop(this.runner.x, this.runner.y - 100, 'FASTER', '#ffd6f0', 3);
+        this.pop(this.ball.x, this.ball.y - 100, 'FASTER', '#ffd6f0', 3);
       }
     }
     this.perfectTurn = false;
@@ -235,8 +234,10 @@ export class ZigScene extends ArcadeScene {
     }
     this.keepRoad(here.n);
     this.place();
-    this.blink(this.runner);
-    this.follow(dt, this.runner);
+    // It rolls: turning with its speed, the way it goes
+    this.ball.rotation += (this.dir === 0 ? 1 : -1) * this.speed() * dt * 1.6;
+    this.blink(this.ball);
+    this.follow(dt);
   }
 
   /** Lay ahead of the place `n` on the road, drop the tiles left behind it */
@@ -251,8 +252,8 @@ export class ZigScene extends ArcadeScene {
     }
   }
 
-  private follow(dt: number, target: Phaser.GameObjects.Sprite): void {
-    const want = { x: target.x, y: target.y - 10 - (RUNNER_ON_SCREEN - H / 2) };
+  private follow(dt: number): void {
+    const want = { x: this.ball.x, y: this.ball.y + 2 - (BALL_ON_SCREEN - H / 2) };
     const k = Math.min(1, dt * 4);
     this.cam.x += (want.x - this.cam.x) * k;
     this.cam.y += (want.y - this.cam.y) * k;
@@ -266,22 +267,12 @@ export class ZigScene extends ArcadeScene {
     }
   }
 
-  private drawGhost(): void {
-    const d = this.ghostNow();
-    if (!d || this.rivalDone) return;
-    const p = this.screen(d[0], d[1]);
-    this.ghostBody.setVisible(!d[2]).setPosition(p.x, p.y + 4);
-    this.placeTag(this.tag.setVisible(!d[2]), p.x, p.y - this.avatarHeight('rival', RUNNER_SCALE) - 10);
-  }
-
   private fall(): void {
     this.falling = true;
     this.shadow.setVisible(false);
     // Behind the road's edge, down into the dark
-    this.runner.setDepth(-50);
-    this.pose(this.runner, 'hurt', 8, 0);
-    const from = { x: this.runner.x, y: this.runner.y };
-    this.tweens.add({ targets: this.runner, y: from.y + 320, scale: RUNNER_SCALE * 0.5, alpha: 0, duration: 800, ease: 'Quad.In' });
+    this.ball.setDepth(-50);
+    this.tweens.add({ targets: this.ball, y: this.ball.y + 320, scale: PX * 0.5, alpha: 0, duration: 800, ease: 'Quad.In' });
     this.shake(220, 0.012);
     if (this.miss()) this.time.delayedCall(850, () => this.respawn());
   }
@@ -298,39 +289,20 @@ export class ZigScene extends ArcadeScene {
     this.dir = next.dir;
     this.seg = next.seg;
     this.falling = false;
-    this.tweens.killTweensOf(this.runner);
-    this.runner.setDepth(10).setScale(RUNNER_SCALE).setAlpha(1);
+    this.tweens.killTweensOf(this.ball);
+    this.ball.setDepth(10).setScale(PX).setAlpha(1);
     this.shadow.setVisible(true);
-    this.pose(this.runner, 'walkUp', 12);
     this.place();
-    this.burst(this.runner.x, this.runner.y - 30, '#ffffff', 12, 180, 0);
-  }
-
-  ghost(): number[] {
-    return [Math.round(this.u * 100) / 100, Math.round(this.v * 100) / 100, this.falling ? 1 : 0];
-  }
-
-  watch(dt: number): void {
-    this.drawGhost();
-    const d = this.ghostNow();
-    if (!d) return;
-    const t = this.tiles.get(key(Math.round(d[0]), Math.round(d[1])));
-    if (t) this.keepRoad(t.n);
-    this.follow(dt, this.ghostBody);
-  }
-
-  rivalGone(): void {
-    this.tag.setVisible(false);
-    this.tweens.add({ targets: this.ghostBody, alpha: 0, y: this.ghostBody.y + 120, duration: 700 });
+    this.burst(this.ball.x, this.ball.y - 30, '#ffffff', 12, 180, 0);
   }
 
   idle(dt: number): void {
+    this.bob += dt;
     if (!this.ended && !this.falling) this.place();
-    if (!this.falling) this.follow(dt, this.runner);
+    if (!this.falling) this.follow(dt);
   }
 
   finished(): void {
     this.input.removeAllListeners();
-    if (!this.falling) this.pose(this.runner, 'idleUp');
   }
 }

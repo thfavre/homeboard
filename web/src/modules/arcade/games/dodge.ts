@@ -49,7 +49,7 @@ export class DodgeScene extends ArcadeScene {
     this.paintArt();
     this.street = this.add.tileSprite(W / 2, H / 2, W / PX, H / PX, 'dodge-street').setScale(PX).setDepth(-100);
     this.shadow = this.add.ellipse(W / 2, RUNNER_Y, 30, 10, 0x000000, 0.3).setDepth(9);
-    this.ghostBody = this.avatar('rival', W / 2, RUNNER_Y).setAlpha(0.42).setDepth(9).setVisible(false);
+    this.ghostBody = this.avatar('rival', W / 2, RUNNER_Y).setAlpha(0.28).setDepth(9).setVisible(false);
     this.pose(this.ghostBody, 'walkUp', 13);
     this.tag = this.rivalTag().setVisible(false);
     this.runner = this.avatar('me', W / 2, RUNNER_Y).setDepth(30);

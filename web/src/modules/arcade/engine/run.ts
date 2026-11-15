@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { ArcadeGameId } from '$shared/arcade.ts';
-import { H, R, W, type ArcadeScene, type RunOptions } from './base.ts';
+import { DPR, type ArcadeScene, type RunOptions } from './base.ts';
 import { KnifeScene } from '../games/knife.ts';
 import { StackScene } from '../games/stack.ts';
 import { FlapScene } from '../games/flap.ts';
@@ -37,27 +37,42 @@ export interface Run {
 }
 
 /**
- * One run of a game in `parent`, on the phone: Phaser draws it in a canvas sized to the parent (the
- * board scaled to fit, sharp at the phone's pixel density, pixels kept square). It shows the board
- * at once and starts when `begin` is called, at the time the server set for both players.
+ * One run of a game in `parent`, on the phone: Phaser draws it in a canvas filling the parent, as
+ * many pixels as the screen has there (sharp, pixels kept square), the board scaled to fit inside
+ * (see ArcadeScene.fit). The canvas follows the parent's size when it changes. It shows the board at
+ * once and starts when `begin` is called, at the time the server set for both players.
  */
 export function startRun(parent: HTMLElement, opts: RunOptions): Run {
   let scene: ArcadeScene | null = null;
   let wantBegin = false;
+  const size = () => {
+    const r = parent.getBoundingClientRect();
+    return { w: Math.max(2, Math.round(r.width * DPR)), h: Math.max(2, Math.round(r.height * DPR)) };
+  };
+  const first = size();
   const game = new Phaser.Game({
     type: Phaser.WEBGL,
     parent,
-    width: W * R,
-    height: H * R,
+    width: first.w,
+    height: first.h,
     transparent: false,
     backgroundColor: '#0b0718',
     smoothPixelArt: true,
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    // The canvas is stretched to the parent by CSS (GameView): its pixels are the screen's
+    scale: { mode: Phaser.Scale.NONE },
     input: { activePointers: 2 },
     banner: false,
     audio: { noAudio: true },
     fps: { target: 60 },
   });
+  const resized = new ResizeObserver(() => {
+    if (!game.isBooted) return;
+    const s = size();
+    if (s.w === game.scale.width && s.h === game.scale.height) return;
+    game.scale.resize(s.w, s.h);
+    game.scale.refresh();
+  });
+  resized.observe(parent);
   const Scene = SCENES[opts.game];
   /** The scene, once it is created and running */
   const live = () => (scene?.sys.isActive() && scene.opts ? scene : null);
@@ -83,6 +98,7 @@ export function startRun(parent: HTMLElement, opts: RunOptions): Run {
       live()?.banner(text, color, 3, -170);
     },
     destroy() {
+      resized.disconnect();
       game.destroy(true);
     },
   };

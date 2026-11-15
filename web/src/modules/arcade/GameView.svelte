@@ -2,7 +2,7 @@
   import { onDestroy, onMount, untrack } from 'svelte';
   import { fade, fly, scale } from 'svelte/transition';
   import { Hourglass } from '@lucide/svelte';
-  import { ARCADE_UNIT, arcadeGame, type ArcadeGhost, type ArcadeMatch } from '$shared/arcade.ts';
+  import { ARCADE_UNIT, arcadeGame, type ArcadeGhost, type ArcadeMatch, type ArcadeState } from '$shared/arcade.ts';
   import { hb, onEvent, rpc, serverNow } from '$lib/client.svelte.ts';
   import PixelText from '$lib/ui/PixelText.svelte';
   import type { Run } from './engine/run.ts';
@@ -186,6 +186,16 @@
     knownOut = true;
     run?.rivalOver();
     if (!over) callout(info.lives && theirScore >= score ? `${firstName(other.name)} IS OUT. BEAT ${theirScore}` : `${firstName(other.name)} IS DONE`, other.color);
+  });
+
+  // The rival is out and behind: the round is won, the run goes on for the best score
+  let wonAlready = false;
+  $effect(() => {
+    if (wonAlready || over || !theyAreOut || score <= theirScore) return;
+    wonAlready = true;
+    const record = (hb.modules.arcade as ArcadeState | undefined)?.records?.[info.id]?.score ?? 0;
+    callout('THE ROUND IS YOURS', '#4dff9e');
+    callout(record > score ? `GO FOR THE RECORD: ${record}` : 'KEEP GOING FOR A HIGH SCORE', '#ffd23d');
   });
 
   let knownFever = false;
@@ -528,8 +538,13 @@
       box-shadow: inset 0 0 0 4px #4fe8ff;
     }
   }
+  /* The game's canvas fills the stage whatever size Phaser gives its style (see engine/run.ts) */
   .stage :global(canvas) {
+    position: absolute;
+    inset: 0;
     display: block;
+    width: 100% !important;
+    height: 100% !important;
   }
   .versus {
     position: fixed;

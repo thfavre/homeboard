@@ -7,8 +7,8 @@ import { buzz, play, type SoundId } from './sfx.ts';
 /** Every game is laid out on this portrait board; the phone shows it as big as it fits */
 export const W = 400;
 export const H = 720;
-/** The canvas is drawn this many device pixels per board unit, so it stays sharp on a phone */
-export const R = Math.min(3, Math.max(1, Math.round((window.devicePixelRatio || 1) * 4) / 4));
+/** The canvas has this many pixels per CSS pixel of the screen, so it stays sharp on a phone */
+export const DPR = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
 /**
  * Board units per pixel of the games' pixel art, the same as the characters' sprites: everything
  * is drawn in pixels of one size, like the town
@@ -159,15 +159,27 @@ export abstract class ArcadeScene extends Phaser.Scene {
   }
 
   create(): void {
-    const cam = this.cameras.main;
-    cam.setZoom(R);
-    cam.centerOn(W / 2, H / 2);
+    this.fit(true);
+    // The space on the phone changes (the address bar, a turn of the phone): the board follows
+    this.scale.on(Phaser.Scale.Events.RESIZE, () => this.fit(false));
     this.pix('px', 1, 1, (p) => p.rect('#fff', 0, 0));
     this.makeFont();
     this.makeFighter('me', this.opts.me);
     this.makeFighter('rival', this.opts.rival);
     this.build();
     this.opts.onTime(this.left());
+  }
+
+  /**
+   * The board as big as the canvas allows, in its middle (the game moves the view from there):
+   * on a resize the view stays centered where it was
+   */
+  fit(first: boolean): void {
+    const cam = this.cameras.main;
+    const mid = first ? { x: W / 2, y: H / 2 } : { x: cam.midPoint.x, y: cam.midPoint.y };
+    cam.setSize(this.scale.width, this.scale.height);
+    cam.setZoom(Math.min(this.scale.width / W, this.scale.height / H));
+    cam.centerOn(mid.x, mid.y);
   }
 
   /** The board as it is before the start */
@@ -356,7 +368,7 @@ export abstract class ArcadeScene extends Phaser.Scene {
   /** The rival's name over their ghost */
   rivalTag(): Phaser.GameObjects.Container {
     const name = pixelClean(this.opts.rival.name.trim().split(/\s+/)[0] ?? '').slice(0, 8) || 'RIVAL';
-    return this.label(0, 0, name, 2, this.opts.rival.color).setDepth(70).setAlpha(0.85);
+    return this.label(0, 0, name, 2, this.opts.rival.color).setDepth(70).setAlpha(0.6);
   }
 
   /** Puts a name tag at x, y, kept inside the view */

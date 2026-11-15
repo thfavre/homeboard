@@ -342,20 +342,11 @@ export default defineModule<ArcadeSettings>({
     });
 
     /**
-     * Ends the round once both runs are over, or as soon as the one still playing passes the score of
-     * the one who is out (a game with lives: nothing more can change)
+     * Ends the round once both runs are over (or the time is up): the one still playing goes on for
+     * their best score even once the round is theirs
      */
     const settle = (m: Match) => {
-      const r = round(m);
-      if (r.done.length === m.players.length) {
-        endRound(m);
-        return;
-      }
-      const info = arcadeGame(r.game)!;
-      if (!info.lives || r.done.length !== 1) return;
-      const out = r.done[0];
-      const still = m.players.find((p) => p.id !== out)!.id;
-      if (r.scores[still] > r.scores[out]) endRound(m);
+      if (round(m).done.length === m.players.length) endRound(m);
     };
 
     const endRound = (m: Match) => {

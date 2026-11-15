@@ -22,10 +22,8 @@ interface Block {
 /**
  * Tower Stack: a skyscraper rising into the night. A floor slides over the tower; a tap drops it.
  * What hangs over the edge is cut off and falls, so the tower gets thinner; a perfect drop cuts
- * nothing and scores double, and three in a row widen the floor again. The player's character
- * stands on the roof and hops onto each new floor. Missing the tower costs a life (the floor comes
- * again). Each floor slides a little faster. A dashed line in the rival's color shows how high their
- * tower is.
+ * nothing and scores double, and three in a row widen the floor again. Missing the tower costs a
+ * life (the floor comes again). Each floor slides a little faster.
  */
 export class StackScene extends ArcadeScene {
   private tower: Block[] = [];
@@ -39,10 +37,6 @@ export class StackScene extends ArcadeScene {
   private stars: Phaser.GameObjects.Rectangle[] = [];
   private skyline!: Phaser.GameObjects.TileSprite;
   private moon!: Phaser.GameObjects.Image;
-  private hero!: Phaser.GameObjects.Sprite;
-  private line!: Phaser.GameObjects.Graphics;
-  private tag!: Phaser.GameObjects.Container;
-  private ghostBody!: Phaser.GameObjects.Sprite;
 
   build(): void {
     this.bg = this.backdrop('stack-sky', ['#060816', '#0b1030', '#121a48', '#1b2560', '#28306e']);
@@ -85,10 +79,6 @@ export class StackScene extends ArcadeScene {
     for (let x = -40; x < W + 40; x += 40) ground.fillStyle(0xffd23d, 0.7).fillRect(x, BASE_Y + BH / 2 + 30, 20, PX * 2);
     for (let i = 0; i < BASE_FLOORS; i++) this.tower.push(this.block(W / 2, this.floorY(i), START_W, i));
 
-    this.line = this.add.graphics().setDepth(60);
-    this.tag = this.rivalTag().setVisible(false);
-    this.ghostBody = this.avatar('rival', W - 34, 0, PX).setAlpha(0.45).setDepth(61).setVisible(false);
-    this.hero = this.avatar('me', W / 2, this.floorY(BASE_FLOORS - 1) - BH / 2).setDepth(50);
     this.follow(1);
   }
 
@@ -172,7 +162,6 @@ export class StackScene extends ArcadeScene {
       const got = this.addScore(2);
       this.good(true);
       this.pop(m.x, y - 60, this.perfects > 1 ? `PERFECT X${this.perfects} +${got}` : `PERFECT +${got}`, INK.gold, 3);
-      this.climb(true);
       this.spawn();
       return;
     }
@@ -183,8 +172,6 @@ export class StackScene extends ArcadeScene {
       // Missed the tower: it falls, and the same floor comes again
       this.fall(m.g, m.x, y, dx > 0 ? 1 : -1);
       this.shake(240, 0.015);
-      this.pose(this.hero, 'hurt', 8, 0);
-      this.time.delayedCall(600, () => this.running && this.pose(this.hero, 'idleDown'));
       if (this.miss()) this.time.delayedCall(350, () => this.running && !this.moving && this.spawn());
       return;
     }
@@ -205,25 +192,7 @@ export class StackScene extends ArcadeScene {
     this.burst(dx > 0 ? right : left, y, this.color(floor).color, 6, 160, 600);
     this.addScore(1);
     if (overlap / m.w > 0.8) this.good();
-    this.climb(false);
     this.spawn();
-  }
-
-  /** The character hops onto the new roof (a cheer on a perfect drop) */
-  private climb(cheer: boolean): void {
-    const top = this.tower[this.tower.length - 1];
-    const toY = this.floorY(this.tower.length - 1) - BH / 2;
-    const toX = Phaser.Math.Clamp(this.hero.x, top.x - top.w / 2 + 16, top.x + top.w / 2 - 16);
-    this.tweens.killTweensOf(this.hero);
-    this.pose(this.hero, 'jump', 14, 0);
-    this.tweens.add({ targets: this.hero, x: toX, duration: 240 });
-    this.tweens.add({
-      targets: this.hero,
-      y: { from: this.hero.y, to: toY - 26 },
-      duration: 120,
-      ease: 'Quad.Out',
-      onComplete: () => this.tweens.add({ targets: this.hero, y: toY, duration: 120, ease: 'Quad.In', onComplete: () => this.running && this.pose(this.hero, cheer ? 'emote' : 'idleDown', 8, cheer ? 0 : -1) }),
-    });
   }
 
   /** A piece falling off, turning */
@@ -270,43 +239,6 @@ export class StackScene extends ArcadeScene {
     for (const s of this.stars) s.y += moved * 0.85;
     this.skyline.y += moved * 0.6;
     this.moon.y += moved * 0.95;
-    this.drawRival();
-  }
-
-  /** The rival's roof: a dashed line across at its height, their ghost standing on it (an arrow when higher than the view) */
-  private drawRival(): void {
-    const d = this.ghostLast();
-    const g = this.line;
-    g.clear();
-    if (!d) return;
-    const floors = d[0];
-    const y = this.floorY(floors - 1) - BH / 2;
-    const color = hex(this.opts.rival.color);
-    const top = this.camY - H / 2;
-    if (y < top + 50) {
-      // Higher than the view: a little arrow at the top with how many floors more
-      const ahead = floors - this.tower.length;
-      this.ghostBody.setVisible(false);
-      g.fillStyle(color, 0.9);
-      g.fillTriangle(W - 34, top + 14, W - 46, top + 30, W - 22, top + 30);
-      this.placeTag(this.tag.setVisible(true), W - 34, top + 44);
-      this.relabel(this.tag, ahead > 0 ? `+${ahead}` : `${floors}`);
-      return;
-    }
-    g.fillStyle(color, 0.7);
-    for (let x = 0; x < W; x += PX * 8) g.fillRect(x, y - PX / 2, PX * 4, PX);
-    this.ghostBody.setVisible(true).setPosition(W - 34, y);
-    const name = this.opts.rival.name.trim().split(/\s+/)[0] ?? '';
-    this.relabel(this.tag, name.slice(0, 8));
-    this.placeTag(this.tag.setVisible(true), W - 34, y - this.avatarHeight('rival') - 12);
-  }
-
-  ghost(): number[] {
-    return [this.tower.length, this.tower[this.tower.length - 1].w];
-  }
-
-  rivalGone(): void {
-    this.ghostBody.setAlpha(0.25);
   }
 
   finished(why: 'out' | 'time'): void {
@@ -315,7 +247,5 @@ export class StackScene extends ArcadeScene {
       this.moving.g.destroy();
       this.moving = null;
     }
-    this.pose(this.hero, why === 'out' ? 'hurt' : 'happy', 8, 0);
-    this.skyline.setAlpha(0.9);
   }
 }

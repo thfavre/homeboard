@@ -57,7 +57,7 @@ export class PlankScene extends ArcadeScene {
     // The first roof is wide; the others come from the seed
     this.addRoof(-40, 130);
     while (this.roofs.length < 6) this.nextRoof();
-    this.ghostBody = this.avatar('rival', 0, ROOF_Y).setAlpha(0.45).setDepth(18).setVisible(false);
+    this.ghostBody = this.avatar('rival', 0, ROOF_Y).setAlpha(0.3).setDepth(18).setVisible(false);
     this.tag = this.rivalTag().setVisible(false);
     this.hero = this.avatar('me', this.roofs[0].x1 - 14, ROOF_Y).setDepth(20);
     this.pose(this.hero, 'idleRight');

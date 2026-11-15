@@ -68,7 +68,7 @@ export const ARCADE_GAMES: ArcadeGameInfo[] = [
     id: 'zig',
     name: 'Zig',
     tagline: 'Turn at every corner of the zigzag road',
-    steps: ['You run along a zigzag road in the sky', 'Tap to turn at each corner, grab the gems', 'Off the road and you lose a life. It gets faster'],
+    steps: ['Your ball rolls along a zigzag road in the sky', 'Tap to turn at each corner, grab the gems', 'Off the road and you lose a life. It gets faster'],
     colors: ['#c879ff', '#ff3d8b'],
     control: 'tap',
     lives: 3,

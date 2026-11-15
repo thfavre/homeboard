@@ -69,7 +69,7 @@ export class FlapScene extends ArcadeScene {
     this.street = this.add.tileSprite(W / 2, GROUND + (H - GROUND) / 2, W / PX, (H - GROUND) / PX, 'flap-street').setScale(PX).setDepth(20);
 
     this.them = this.flyer('rival', FLYER_X - 26, 300);
-    this.them.box.setAlpha(0.42).setDepth(28).setVisible(false);
+    this.them.box.setAlpha(0.28).setDepth(28).setVisible(false);
     this.tag = this.rivalTag().setVisible(false);
     this.me = this.flyer('me', FLYER_X, 330);
   }
