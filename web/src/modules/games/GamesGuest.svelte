@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, ChevronRight, Joystick, Music, Pause, Play, Search, Shuffle, Swords, User, Users, VolumeX, X } from '@lucide/svelte';
+  import { Check, ChevronRight, Joystick, Music, Pause, Play, Search, Swords, User, Users, VolumeX, X } from '@lucide/svelte';
   import {
     GAMES,
     RHYTHM_COLORS,
@@ -18,7 +18,7 @@
   } from '$shared/games.ts';
   import { formatAmount, parseAmount } from '$shared/money.ts';
   import { hb, rpc, attempt, price, enabled } from '$lib/client.svelte.ts';
-  import { ARCADE_GAMES, ARCADE_MIX_ROUNDS, arcadeGame, type ArcadeGameId } from '$shared/arcade.ts';
+  import { ARCADE_GAMES } from '$shared/arcade.ts';
   import ArcadeChallenge from '../arcade/ArcadeChallenge.svelte';
   import { ARCADE_ICONS, arcadeState } from '../arcade/store.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
@@ -30,8 +30,8 @@
 
   let mode = $state<GameMode>('duel');
   let picked = $state<GameInfo | null>(null);
-  /** An Arcade game picked from the 1 vs 1 list (played on the phones, see the Arcade module) */
-  let arcadePick = $state<ArcadeGameId | 'mix' | null>(null);
+  /** The Arcade's challenge open from the 1 vs 1 list (played on the phones, see the Arcade module) */
+  let arcadeOpen = $state(false);
   const arcadeGames = $derived(enabled('arcade') ? ARCADE_GAMES.filter((g) => arcadeState()?.settings.games.includes(g.id)) : []);
   let opponent = $state<string | null>(null);
   let stakeText = $state('');
@@ -247,37 +247,27 @@
   {#if mode === 'duel' && arcadeGames.length}
     <div class="arcade-head">
       <span class="eyebrow"><Joystick size={14} /> Arcade</span>
-      <p class="dim small">Quick games on your two phones, the same run for both of you. Your characters walk into the town's arcade to play.</p>
     </div>
-    <div class="list">
-      {#each arcadeGames as g (g.id)}
-        {@const Icon = ARCADE_ICONS[g.id]}
-        <button class="tile card" style:--g1={g.colors[0]} style:--g2={g.colors[1]} onclick={() => (arcadePick = g.id)}>
-          <span class="icon"><Icon size={22} strokeWidth={2.2} /></span>
-          <span class="text">
-            <span class="title">{g.name}</span>
-            <span class="tagline">{g.tagline}</span>
-          </span>
-          <ChevronRight size={18} class="chev" />
-        </button>
-      {/each}
-      {#if arcadeGames.length >= 2}
-        <button class="tile card" style:--g1="#ff4fb0" style:--g2="#4fe8ff" onclick={() => (arcadePick = 'mix')}>
-          <span class="icon"><Shuffle size={22} strokeWidth={2.2} /></span>
-          <span class="text">
-            <span class="title">Arcade Mix</span>
-            <span class="tagline">{Math.min(ARCADE_MIX_ROUNDS, arcadeGames.length)} games drawn at random, win most of them</span>
-          </span>
-          <ChevronRight size={18} class="chev" />
-        </button>
-      {/if}
-    </div>
+    <button class="tile card arcade-tile" style:--g1="#ff4fb0" style:--g2="#8b5bff" onclick={() => (arcadeOpen = true)}>
+      <span class="icon"><Joystick size={22} strokeWidth={2.2} /></span>
+      <span class="text">
+        <span class="title">Arcade challenge</span>
+        <span class="tagline">1, 3 or 5 quick games on your phones, picked at random</span>
+        <span class="minis" aria-hidden="true">
+          {#each arcadeGames as g (g.id)}
+            {@const Icon = ARCADE_ICONS[g.id]}
+            <span class="mini" style:--m1={g.colors[0]} style:--m2={g.colors[1]}><Icon size={13} /></span>
+          {/each}
+        </span>
+      </span>
+      <ChevronRight size={18} class="chev" />
+    </button>
   {/if}
 </div>
 
-{#if arcadePick}
-  <Sheet title={arcadePick === 'mix' ? 'Arcade Mix' : arcadeGame(arcadePick)!.name} onclose={() => (arcadePick = null)}>
-    <ArcadeChallenge game={arcadePick} onsent={() => (arcadePick = null)} />
+{#if arcadeOpen}
+  <Sheet title="Arcade challenge" onclose={() => (arcadeOpen = false)}>
+    <ArcadeChallenge onsent={() => (arcadeOpen = false)} />
   </Sheet>
 {/if}
 
@@ -536,8 +526,19 @@
     align-items: center;
     gap: 0.4rem;
   }
-  .arcade-head p {
-    margin: 0;
+  .minis {
+    display: flex;
+    gap: 0.3rem;
+    margin-top: 0.35rem;
+  }
+  .mini {
+    display: grid;
+    place-items: center;
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 7px;
+    background: linear-gradient(135deg, var(--m1), var(--m2));
+    color: #fff;
   }
   .tile {
     display: flex;

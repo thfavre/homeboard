@@ -303,7 +303,7 @@ function drawMatch(g: CanvasRenderingContext2D, m: ArcadeMatch, x: number, y: nu
   if (m.phase === 'ready') [mid, midColor] = [blink ? 'READY' : shortGame(r.game), NEON.gold];
   else if (m.phase === 'play' && m.startsAt && serverNow() < m.startsAt) [mid, midColor] = [String(Math.max(1, Math.ceil((m.startsAt - serverNow()) / 1000))), NEON.gold];
   text(g, mid, x + Math.round((W - textWidth(mid)) / 2), y + 3, midColor);
-  if (m.games.length > 1) {
+  if (m.count > 1) {
     const wins = `${m.wins[a.id] ?? 0}-${m.wins[b.id] ?? 0}`;
     text(g, wins, x + Math.round((W - textWidth(wins)) / 2), y + 13, '#9a8cff');
   }

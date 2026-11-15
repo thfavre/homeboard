@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Square, Trophy, X } from '@lucide/svelte';
-  import { ARCADE_GAMES, arcadeGame, type ArcadeSettings } from '$shared/arcade.ts';
+  import { ARCADE_GAMES, arcadeFormat, arcadeGame, type ArcadeSettings } from '$shared/arcade.ts';
   import { attempt, hb, rpc } from '$lib/client.svelte.ts';
   import { Synced } from '$lib/synced.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -60,7 +60,7 @@
     </label>
   </Section>
 
-  <Section title="Games" hint="The games guests can pick. A Mix draws among these (it needs two or more).">
+  <Section title="Games" hint="The games the Arcade draws from: a challenge is 1, 3 or 5 of them, picked at random.">
     <div class="games">
       {#each ARCADE_GAMES as g (g.id)}
         {@const Icon = ARCADE_ICONS[g.id]}
@@ -87,7 +87,7 @@
         <span class="text">
           <strong>{m.players.map((p) => p.name).join(' vs ')}</strong>
           <span class="faint small">
-            {m.mix ? `Mix, game ${m.rounds.length} of ${m.games.length}: ` : ''}{arcadeGame(r.game)?.name}, {m.players.map((p) => r.scores[p.id] ?? 0).join(' - ')}
+            {m.count > 1 ? `Best of ${m.count}, game ${m.rounds.length}: ` : ''}{arcadeGame(r.game)?.name}, {m.players.map((p) => r.scores[p.id] ?? 0).join(' - ')}
             {#if m.phase === 'result'}(over){/if}
           </span>
         </span>
@@ -104,7 +104,7 @@
       <div class="row">
         <span class="text">
           <strong>{inv.from.name} challenged {inv.to.name}</strong>
-          <span class="faint small">{inv.mix ? 'Mix' : arcadeGame(inv.games[0])?.name}, waiting for an answer</span>
+          <span class="faint small">{arcadeFormat(inv.count)}, waiting for an answer</span>
         </span>
         <button class="btn ghost small" onclick={() => attempt(() => rpc('arcade', 'cancelInvite', { id: inv.id }))}><X size={15} /> Cancel</button>
       </div>

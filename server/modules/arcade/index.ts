@@ -4,11 +4,11 @@ import {
   ARCADE_GAMES,
   ARCADE_GRACE_MS,
   ARCADE_INVITE_MS,
-  ARCADE_MIX_ROUNDS,
   ARCADE_READY_MS,
   ARCADE_ROUND_MS,
+  arcadeFormat,
   arcadeGame,
-  isArcadeGame,
+  isArcadeCount,
   type ArcadeGameId,
   type ArcadeInvite,
   type ArcadeMatch,
@@ -33,6 +33,8 @@ interface Invite extends ArcadeInvite {
 }
 
 interface Match extends ArcadeMatch {
+  /** The games drawn for it, in order (the players learn each one when its round starts) */
+  draw: ArcadeGameId[];
   /** Everything paid for this match, given back if it is cancelled */
   charges: Charge[];
   timer: NodeJS.Timeout | null;
@@ -108,14 +110,22 @@ export default defineModule<ArcadeSettings>({
       }
     };
 
-    /** A Mix: different games drawn at random among the ones offered (fewer when fewer are offered) */
-    const drawMix = (): ArcadeGameId[] => {
-      const pool = [...offered()];
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
+    /**
+     * The games of a match, drawn at random among the ones offered: all different while there are
+     * enough, then again from the start, never the same one twice in a row
+     */
+    const drawGames = (count: number): ArcadeGameId[] => {
+      const out: ArcadeGameId[] = [];
+      while (out.length < count) {
+        const pool = [...offered()];
+        for (let i = pool.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+        if (pool.length > 1 && pool[0] === out[out.length - 1]) pool.push(pool.shift()!);
+        out.push(...pool);
       }
-      return pool.slice(0, ARCADE_MIX_ROUNDS);
+      return out.slice(0, count);
     };
 
     // ------------------------------------------------------------ challenges
@@ -127,11 +137,11 @@ export default defineModule<ArcadeSettings>({
       ctx.publish();
     };
 
-    /** A challenge from `guest` to `to`: one game, or 'mix' */
-    const challenge = (guest: Guest, to: unknown, game: unknown, rawStake: unknown) => {
-      const mix = game === 'mix';
-      if (!mix && (!isArcadeGame(game) || !offered().includes(game))) throw new HbError('This game is not in the Arcade');
-      if (mix && offered().length < 2) throw new HbError('A Mix needs at least two games in the Arcade');
+    /** A challenge from `guest` to `to`, for this many games */
+    const challenge = (guest: Guest, to: unknown, rawCount: unknown, rawStake: unknown) => {
+      const count = Number(rawCount);
+      if (!isArcadeCount(count)) throw new HbError('Pick how many games');
+      if (!offered().length) throw new HbError('The Arcade has no games right now');
       const opponent = ctx.session.guests.get(String(to ?? ''));
       if (!opponent) throw new HbError('Pick someone to challenge');
       if (opponent.id === guest.id) throw new HbError('You cannot challenge yourself');
@@ -140,8 +150,7 @@ export default defineModule<ArcadeSettings>({
       checkFree(opponent.id, opponent.name);
       const stake = cleanStake(rawStake);
       if (stake > opponent.balance) throw new HbError(`${opponent.name} cannot match that bet`);
-      const list = mix ? drawMix() : [game as ArcadeGameId];
-      const title = mix ? 'Arcade Mix' : arcadeGame(list[0])!.name;
+      const title = `Arcade, ${arcadeFormat(count).toLowerCase()}`;
 
       const fee = ctx.economy.charge(guest, 'arcade.challenge', 1, `Arcade: ${title}`);
       let bet: Charge;
@@ -155,8 +164,7 @@ export default defineModule<ArcadeSettings>({
         id: uid(6),
         from: player(guest),
         to: player(opponent),
-        games: list,
-        mix,
+        count,
         stake,
         expiresAt: Date.now() + ARCADE_INVITE_MS,
         charges: [fee, bet],
@@ -165,20 +173,20 @@ export default defineModule<ArcadeSettings>({
         }, ARCADE_INVITE_MS),
       };
       invites.set(inv.id, inv);
-      ctx.activity(`{name} challenged ${opponent.name} to ${title} in the Arcade${stake ? ` for ${fmt(stake)}` : ''}`, { guest, sensitive: true });
+      ctx.activity(`{name} challenged ${opponent.name} in the Arcade${count > 1 ? ` (best of ${count})` : ''}${stake ? ` for ${fmt(stake)}` : ''}`, { guest, sensitive: true });
       ctx.publish();
       return { id: inv.id };
     };
 
-    ctx.onGuest('invite', (args, guest) => challenge(guest, args?.to, args?.game, args?.stake));
+    ctx.onGuest('invite', (args, guest) => challenge(guest, args?.to, args?.count, args?.stake));
 
-    /** The same challenge again, from the end of a match: the same game (a new draw for a Mix), the same bet */
+    /** The same challenge again, from the end of a match: as many games (a new draw), the same bet */
     ctx.onGuest('rematch', (args, guest) => {
       const m = matches.get(String(args?.match ?? ''));
       const other = m?.players.find((p) => p.id !== guest.id);
       if (!m || !other || !m.players.some((p) => p.id === guest.id)) throw new HbError('This match is over');
       const stake = Math.min(m.stake, ctx.settings.get().maxStake || Infinity);
-      return challenge(guest, other.id, m.mix ? 'mix' : m.games[0], stake);
+      return challenge(guest, other.id, m.count, stake);
     });
 
     ctx.onGuest('respond', (args, guest) => {
@@ -190,13 +198,13 @@ export default defineModule<ArcadeSettings>({
         return true;
       }
       if (games()?.busy(guest.id)) throw new HbError('Finish your game first');
-      const bet = ctx.economy.pay(guest, inv.stake, `Arcade bet: ${inv.mix ? 'Arcade Mix' : arcadeGame(inv.games[0])!.name}`);
+      const bet = ctx.economy.pay(guest, inv.stake, `Arcade bet: ${arcadeFormat(inv.count).toLowerCase()}`);
       dropInvite(inv, null);
       const m: Match = {
         id: uid(6),
         players: [inv.from, player(guest)],
-        games: inv.games,
-        mix: inv.mix,
+        count: inv.count,
+        draw: drawGames(inv.count),
         stake: inv.stake,
         pot: inv.stake * 2,
         rounds: [],
@@ -240,7 +248,9 @@ export default defineModule<ArcadeSettings>({
 
     /** The rules of the next game, until both are ready (or the time is up) */
     const nextRound = (m: Match) => {
-      const game = m.games[m.rounds.length];
+      // (a game the host took out since the draw: another one instead)
+      const drawn = m.draw[m.rounds.length];
+      const game = offered().includes(drawn) || !offered().length ? drawn : drawGames(1)[0];
       m.rounds.push({ game, seed: Math.floor(Math.random() * 2 ** 31), scores: Object.fromEntries(m.players.map((p) => [p.id, 0])), done: [] });
       m.phase = 'ready';
       m.ready = [];
@@ -328,14 +338,14 @@ export default defineModule<ArcadeSettings>({
 
     /** The match is decided: one game played, or a Mix that one player won most of (or all its games played) */
     const over = (m: Match) => {
-      const need = Math.floor(m.games.length / 2) + 1;
-      return m.rounds.length >= m.games.length || Object.values(m.wins).some((w) => w >= need);
+      const need = Math.floor(m.count / 2) + 1;
+      return m.rounds.length >= m.count || Object.values(m.wins).some((w) => w >= need);
     };
 
     const finish = (m: Match) => {
       const [a, b] = m.players.map((p) => p.id);
       const winner = m.wins[a] > m.wins[b] ? a : m.wins[b] > m.wins[a] ? b : null;
-      const title = m.mix ? 'Arcade Mix' : arcadeGame(m.games[0])!.name;
+      const title = m.count === 1 ? arcadeGame(m.rounds[0].game)!.name : `Arcade, best of ${m.count}`;
       const payouts: Record<string, number> = { [a]: 0, [b]: 0 };
       if (winner) payouts[winner] = m.pot;
       else for (const p of m.players) payouts[p.id] = m.stake;
@@ -411,7 +421,8 @@ export default defineModule<ArcadeSettings>({
       players: () => (ctx.settings.get().townWalk ? [...matches.values()].filter((m) => m.phase !== 'result').flatMap((m) => m.players.map((p) => p.id)) : []),
     });
 
-    const plain = ({ charges: _c, timer: _t, lastAt: _l, ...m }: Match): ArcadeMatch => m;
+    // (the games still to come stay on the server)
+    const plain = ({ charges: _c, timer: _t, lastAt: _l, draw: _d, ...m }: Match): ArcadeMatch => m;
 
     ctx.state((role): ArcadeState => {
       const guests = [...ctx.session.guests.values()];

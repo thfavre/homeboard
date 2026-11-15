@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Swords } from '@lucide/svelte';
-  import { arcadeGame, type ArcadeGameId } from '$shared/arcade.ts';
+  import { Dices, Swords } from '@lucide/svelte';
+  import { ARCADE_COUNTS, type ArcadeCount } from '$shared/arcade.ts';
   import { formatAmount, parseAmount } from '$shared/money.ts';
   import { attempt, hb, price, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
@@ -8,14 +8,17 @@
   import { arcadeState } from './store.svelte.ts';
 
   /**
-   * A challenge in the Arcade for one game (or a Mix): how to play, who to play, the bet, and the
-   * button. Used by the Arcade's panel, the town's actions and the Games' 1 vs 1 list.
+   * A challenge in the Arcade: how many games (drawn at random, each one a surprise when its round
+   * starts), who to play, the bet, and the button. Used by the Arcade's panel, the town's actions
+   * and the Games' 1 vs 1 list.
    */
-  let { game, onsent }: { game: ArcadeGameId | 'mix'; onsent?: () => void } = $props();
+  let { onsent }: { onsent?: () => void } = $props();
 
   const s = $derived(arcadeState());
   const economy = $derived(!!hb.core?.economyEnabled);
-  const info = $derived(game === 'mix' ? null : arcadeGame(game));
+  let count = $state<ArcadeCount>(3);
+  const COUNT_TEXT: Record<ArcadeCount, string> = { 1: 'One game', 3: 'Best of 3', 5: 'Best of 5' };
+  const COUNT_HINT: Record<ArcadeCount, string> = { 1: 'Quick: one random game decides it', 3: 'First to win 2 of 3 random games', 5: 'First to win 3 of 5 random games' };
 
   let opponent = $state<string | null>(null);
   let stakeText = $state('');
@@ -44,7 +47,7 @@
       return;
     }
     busy = true;
-    const ok = await attempt(() => rpc('arcade', 'invite', { game, to: opponent, stake }));
+    const ok = await attempt(() => rpc('arcade', 'invite', { count, to: opponent, stake }));
     busy = false;
     if (ok) {
       opponent = null;
@@ -55,11 +58,18 @@
 </script>
 
 <div class="challenge">
-  {#if info}
-    <ol class="steps">
-      {#each info.steps as step, i (i)}<li><span class="n">{i + 1}</span>{step}</li>{/each}
-    </ol>
-  {/if}
+  <div class="field">
+    <span class="label">How many games?</span>
+    <div class="counts">
+      {#each ARCADE_COUNTS as n (n)}
+        <button class="count" class:active={count === n} onclick={() => (count = n)}>
+          <span class="dice" aria-hidden="true">{#each Array.from({ length: n }) as _, i (i)}<span class="pip"></span>{/each}</span>
+          <strong>{COUNT_TEXT[n]}</strong>
+        </button>
+      {/each}
+    </div>
+    <span class="hint dim small"><Dices size={15} /> {COUNT_HINT[count]}. The Arcade picks the games: you find out each one when it starts.</span>
+  </div>
 
   <div class="field">
     <span class="label">Who do you challenge?</span>
@@ -108,29 +118,49 @@
     display: grid;
     gap: 1rem;
   }
-  .steps {
+  .counts {
     display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+  .count {
+    display: grid;
+    justify-items: center;
     gap: 0.45rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    font-size: 0.9rem;
+    padding: 0.8rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 0.88rem;
   }
-  .steps li {
+  .count.active {
+    border-color: transparent;
+    background: linear-gradient(135deg, #ff4fb0, #8b5bff);
+    color: #fff;
+    box-shadow: 0 8px 20px -10px #ff4fb0;
+  }
+  .dice {
     display: flex;
+    gap: 3px;
+    height: 0.6rem;
     align-items: center;
-    gap: 0.6rem;
   }
-  .n {
-    display: grid;
+  .pip {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 3px;
+    background: currentColor;
+    opacity: 0.85;
+  }
+  .hint {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+  .hint :global(svg) {
     flex: none;
-    place-items: center;
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 50%;
-    background: var(--surface-3);
-    font-size: 0.75rem;
-    font-weight: 700;
+    margin-top: 0.1rem;
   }
   .field {
     display: grid;

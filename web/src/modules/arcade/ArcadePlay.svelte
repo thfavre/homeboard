@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Check, Crown, RotateCcw, Shuffle, Swords, X } from '@lucide/svelte';
   import { fly, scale } from 'svelte/transition';
-  import { ARCADE_INVITE_MS, ARCADE_READY_MS, ARCADE_ROUND_MS, arcadeGame, type ArcadeGameId, type ArcadePlayer } from '$shared/arcade.ts';
+  import { ARCADE_GAMES, ARCADE_INVITE_MS, ARCADE_READY_MS, ARCADE_ROUND_MS, arcadeFormat, arcadeGame, type ArcadePlayer } from '$shared/arcade.ts';
   import { attempt, hb, rpc } from '$lib/client.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
   import Money from '$lib/ui/Money.svelte';
@@ -10,7 +10,8 @@
   import Fuse from '../games/ui/Fuse.svelte';
   import MoneyFlow from '../games/ui/MoneyFlow.svelte';
   import GameView from './GameView.svelte';
-  import { ARCADE_ICONS, arcadeLocal, arcadeState, gradient, myArcadeMatch } from './store.svelte.ts';
+  import Reveal from './Reveal.svelte';
+  import { arcadeLocal, arcadeState, gradient, myArcadeMatch } from './store.svelte.ts';
 
   /** The Arcade on a phone, full screen: a challenge sent or received, then the match round by round */
   const s = $derived(arcadeState());
@@ -42,31 +43,27 @@
     void act('ready', { match: m!.id });
   }
 
-  const title = (games: ArcadeGameId[], mix: boolean) => (mix ? 'Mix' : arcadeGame(games[0])!.name);
+  /** The games the draw picks from (the reveal flashes through them) */
+  const pool = $derived(ARCADE_GAMES.filter((g) => s?.settings.games.includes(g.id)).map((g) => g.id));
   const other = $derived(m?.players.find((p) => p.id !== me));
   const round = $derived(m ? m.rounds[m.rounds.length - 1] : null);
   const info = $derived(round ? arcadeGame(round.game)! : null);
+  /** The match is won (or all its games played): no more games after this round */
+  const decided = $derived(!!m && (m.rounds.length >= m.count || Object.values(m.wins).some((w) => w > m.count / 2)));
 </script>
 
-{#snippet gameList(games: ArcadeGameId[], mix: boolean)}
-  <div class="games-list">
-    {#if mix}<span class="mix-label"><Shuffle size={14} /> Mix, best of {games.length}</span>{/if}
-    {#each games as id (id)}
-      {@const g = arcadeGame(id)!}
-      {@const Icon = ARCADE_ICONS[id]}
-      <div class="chip" style:--g={gradient(g.colors)}>
-        <span class="chip-icon"><Icon size={18} /></span>
-        <span class="chip-text">
-          <strong>{g.name}</strong>
-          <span>{g.tagline}</span>
-        </span>
-      </div>
-    {/each}
+{#snippet format(count: number)}
+  <div class="format">
+    <span class="format-name"><Shuffle size={16} /> {arcadeFormat(count)}</span>
+    <div class="mystery">
+      {#each Array.from({ length: count }) as _, i (i)}<span class="card-back" style:animation-delay="{i * 0.15}s">?</span>{/each}
+    </div>
+    <span class="dim small">{count === 1 ? 'A game drawn at random' : `${count} games drawn at random, first to ${Math.floor(count / 2) + 1} wins`}: you find out each one when it starts.</span>
   </div>
 {/snippet}
 
 {#snippet tally()}
-  {#if m && other && m.games.length > 1}
+  {#if m && other && m.count > 1}
     <div class="tally">
       <span class="t-name truncate">You</span>
       <strong class="mono">{m.wins[me] ?? 0}</strong>
@@ -81,17 +78,12 @@
   {#if m.phase === 'play'}
     {#key m.rounds.length}<GameView match={m} />{/key}
   {:else if m.phase === 'ready'}
-    {@const Icon = ARCADE_ICONS[info.id]}
     {@const iAmReady = m.ready.includes(me)}
     <div class="screen">
       <div class="col" in:fly={{ y: 24, duration: 300 }}>
-        {#if m.games.length > 1}<span class="eyebrow center">Game {m.rounds.length} of {m.games.length}</span>{/if}
+        {#if m.count > 1}<span class="eyebrow center">Game {m.rounds.length} of up to {m.count}</span>{/if}
         {@render tally()}
-        <div class="poster" style:--g={gradient(info.colors)}>
-          <span class="poster-icon"><Icon size={40} strokeWidth={2.2} /></span>
-          <h1>{info.name}</h1>
-          <p>{info.tagline}</p>
-        </div>
+        {#key m.rounds.length}<Reveal game={info.id} {pool} onstep={() => sfx?.play('turn', 0.6)} onland={() => sfx?.play('level')} />{/key}
         <ol class="steps">
           {#each info.steps as step, i (i)}<li><span class="n">{i + 1}</span>{step}</li>{/each}
         </ol>
@@ -122,7 +114,7 @@
           {/each}
         </div>
         {@render tally()}
-        {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={ARCADE_ROUND_MS} label={m.rounds.length < m.games.length ? 'Next game in' : 'Result in'} />{/if}
+        {#if m.endsAt}<Fuse endsAt={m.endsAt} totalMs={ARCADE_ROUND_MS} label={decided ? 'Result in' : 'Next game in'} />{/if}
       </div>
     </div>
   {:else}
@@ -133,13 +125,13 @@
       <div class="col result" class:won in:scale={{ start: 0.85, duration: 320 }}>
         <span class="medal" class:won>{#if won}<Crown size={40} />{:else if tie}<Swords size={36} />{:else}<X size={38} />{/if}</span>
         <h1>{tie ? 'A tie' : won ? 'You win' : `${other.name} wins`}</h1>
-        <span class="dim">{title(m.games, m.mix)}{m.games.length > 1 ? `, ${m.wins[me] ?? 0} - ${m.wins[other.id] ?? 0}` : ''}</span>
+        <span class="dim">{m.count === 1 ? arcadeGame(m.rounds[0].game)?.name : `Best of ${m.count}, ${m.wins[me] ?? 0} - ${m.wins[other.id] ?? 0}`}</span>
         {#if economy && m.stake > 0}<MoneyFlow amount={gain} delay={300} />{/if}
         <div class="answer">
           <button class="btn decline" onclick={() => (arcadeLocal.closed = m.id)}>Close</button>
           <button class="btn primary accept" disabled={busy} onclick={() => act('rematch', { match: m.id })}><RotateCcw size={18} /> Rematch</button>
         </div>
-        {#if economy && m.stake > 0}<span class="faint small">A rematch is the same game, the same bet of <Money amount={m.stake} /></span>{/if}
+        <span class="faint small">A rematch: {arcadeFormat(m.count).toLowerCase()}, new games drawn{#if economy && m.stake > 0}, the same bet of <Money amount={m.stake} />{/if}</span>
       </div>
     </div>
   {/if}
@@ -148,7 +140,7 @@
     <div class="col" in:fly={{ y: 24, duration: 300 }}>
       <span class="eyebrow center"><Swords size={14} /> Arcade challenge</span>
       <Versus left={received.from} right={meAsPlayer} leftLabel="Challenger" rightLabel="You" />
-      {@render gameList(received.games, received.mix)}
+      {@render format(received.count)}
       {#if economy && received.stake > 0}<PotPanel inLabel="You put in" stake={received.stake} outLabel="Winner takes" pot={received.stake * 2} />{/if}
       <div class="answer">
         <button class="btn decline" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={20} /> Decline</button>
@@ -162,7 +154,7 @@
     <div class="col" in:fly={{ y: 24, duration: 300 }}>
       <span class="eyebrow center"><Swords size={14} /> Challenge sent</span>
       <Versus left={meAsPlayer} right={sent.to} leftLabel="You" rightLabel="Thinking..." waiting />
-      {@render gameList(sent.games, sent.mix)}
+      {@render format(sent.count)}
       {#if economy && sent.stake > 0}<PotPanel inLabel="You put in" stake={sent.stake} outLabel="Winner takes" pot={sent.stake * 2} />{/if}
       <Fuse endsAt={sent.expiresAt} totalMs={ARCADE_INVITE_MS} label={`Waiting for ${sent.to.name}`} />
       <button class="btn ghost block" disabled={busy} onclick={() => act('cancelInvite', { id: sent.id })}>Cancel the challenge</button>
@@ -188,45 +180,45 @@
     align-items: center;
     gap: 0.4rem;
   }
-  .games-list {
+  .format {
     display: grid;
-    gap: 0.5rem;
+    justify-items: center;
+    gap: 0.6rem;
     width: 100%;
+    padding: 1rem;
+    border-radius: var(--radius);
+    background: linear-gradient(135deg, color-mix(in srgb, #ff4fb0 18%, transparent), color-mix(in srgb, #4fe8ff 12%, transparent));
   }
-  .mix-label {
+  .format-name {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
+    gap: 0.4rem;
+    font-family: var(--font-display);
+    font-size: 1.2rem;
     font-weight: 700;
-    font-size: 0.85rem;
   }
-  .chip {
+  .mystery {
     display: flex;
-    align-items: center;
-    gap: 0.7rem;
-    padding: 0.6rem 0.8rem;
-    border-radius: var(--radius-sm);
-    background: var(--g);
-    color: #fff;
-    text-align: left;
+    gap: 0.45rem;
   }
-  .chip-icon {
+  .card-back {
     display: grid;
-    flex: none;
     place-items: center;
-    width: 2.2rem;
-    height: 2.2rem;
+    width: 2.6rem;
+    height: 3.3rem;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.22);
+    background: linear-gradient(135deg, #ff4fb0, #8b5bff);
+    color: #fff;
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 800;
+    box-shadow: 0 6px 16px -8px #ff4fb0;
+    animation: bob 1.6s ease-in-out infinite;
   }
-  .chip-text {
-    display: grid;
-    font-size: 0.8rem;
-    line-height: 1.25;
-  }
-  .chip-text strong {
-    font-size: 0.95rem;
+  @keyframes bob {
+    50% {
+      transform: translateY(-4px);
+    }
   }
   .answer {
     display: grid;
@@ -245,36 +237,6 @@
   }
   .accept {
     background: var(--gradient);
-  }
-  .poster {
-    display: grid;
-    justify-items: center;
-    gap: 0.3rem;
-    width: 100%;
-    padding: 1.6rem 1rem 1.3rem;
-    border-radius: var(--radius);
-    background: var(--g);
-    color: #fff;
-    box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.8);
-  }
-  .poster-icon {
-    display: grid;
-    place-items: center;
-    width: 4.4rem;
-    height: 4.4rem;
-    border-radius: 22px;
-    background: rgba(255, 255, 255, 0.22);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  }
-  .poster h1 {
-    margin: 0.3rem 0 0;
-    font-family: var(--font-display);
-    font-size: 1.9rem;
-  }
-  .poster p {
-    margin: 0;
-    opacity: 0.9;
-    font-size: 0.9rem;
   }
   .steps {
     display: grid;

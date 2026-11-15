@@ -103,8 +103,15 @@ export const ARCADE_GAMES: ArcadeGameInfo[] = [
 export const arcadeGame = (id: string) => ARCADE_GAMES.find((g) => g.id === id);
 export const isArcadeGame = (id: unknown): id is ArcadeGameId => typeof id === 'string' && ARCADE_GAMES.some((g) => g.id === id);
 
-/** A Mix is this many different games drawn at random; the first to win most of them takes it */
-export const ARCADE_MIX_ROUNDS = 3;
+/**
+ * How many games a challenge is: the games are drawn at random (different ones while there are
+ * enough), each one shown only when its round starts; who wins most of them takes the pot
+ */
+export const ARCADE_COUNTS = [1, 3, 5] as const;
+export type ArcadeCount = (typeof ARCADE_COUNTS)[number];
+export const isArcadeCount = (n: unknown): n is ArcadeCount => ARCADE_COUNTS.includes(n as ArcadeCount);
+/** "One game", "Best of 3"... */
+export const arcadeFormat = (count: number) => (count === 1 ? 'One game' : `Best of ${count}`);
 /** Time the challenged guest has to answer */
 export const ARCADE_INVITE_MS = 60_000;
 /** Time to read the rules before a round (it starts sooner once both pressed Ready) */
@@ -126,9 +133,8 @@ export interface ArcadeInvite {
   id: string;
   from: ArcadePlayer;
   to: ArcadePlayer;
-  /** One game, or the games of a Mix in the order they are played */
-  games: ArcadeGameId[];
-  mix: boolean;
+  /** How many games (drawn when the challenge is accepted) */
+  count: ArcadeCount;
   stake: number;
   expiresAt: number;
 }
@@ -153,8 +159,8 @@ export interface ArcadeRound {
 export interface ArcadeMatch {
   id: string;
   players: [ArcadePlayer, ArcadePlayer];
-  games: ArcadeGameId[];
-  mix: boolean;
+  /** How many games; the ones to come stay secret (rounds has the ones played and the one being played) */
+  count: ArcadeCount;
   stake: number;
   pot: number;
   /** The rounds so far, the one being played last */
@@ -180,7 +186,7 @@ export interface ArcadeRecord {
 }
 
 export interface ArcadeSettings {
-  /** The games offered */
+  /** The games the draw picks from */
   games: ArcadeGameId[];
   /** Highest bet (0: no limit) */
   maxStake: number;
