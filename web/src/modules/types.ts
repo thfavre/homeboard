@@ -29,6 +29,8 @@ export interface GuestFeature {
   stayAfterTakeover?: () => boolean;
   /** Shown in the page header next to the coins while this panel is open (e.g. a module's own money) */
   header?: Component;
+  /** No tile on the home screen while this is true (the feature is reached from another one's panel) */
+  hidden?: () => boolean;
 }
 
 /** Groups of the admin side menu, for the features: play, sound, and what shows on the TV or the lights */

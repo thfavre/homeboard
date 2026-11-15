@@ -18,7 +18,7 @@
   );
   const features = $derived(
     activeModules()
-      .filter((m) => m.guest)
+      .filter((m) => m.guest && !m.guest.hidden?.())
       .sort((a, b) => a.guest!.order - b.guest!.order),
   );
 
