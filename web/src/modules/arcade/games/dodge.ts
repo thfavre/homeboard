@@ -119,17 +119,45 @@ export class DodgeScene extends ArcadeScene {
       p.disc('#6a3818', 10, 10, 3);
       for (let a = 0; a < 6.28; a += 0.4) p.rect('#5a5a6a', 10 + Math.cos(a) * 8, 10 + Math.sin(a) * 8, 1, 1);
     });
+    // A market cart seen from above: wheels on the sides, a wooden bed, a bin of apples and a bin of oranges
     this.pix('dodge-cart', 52, 30, (p) => {
-      p.rect(INK.shadow, 3, 4, 52, 28);
-      p.rect(INK.line, 0, 0, 52, 30);
-      p.rect('#6a3a7a', 1, 1, 50, 28);
-      p.rect('#8a4e9e', 1, 1, 50, 3);
-      // Apples piled in the cart, the wheels on the sides
-      for (let y = 6; y < 24; y += 5) for (let x = 4 + (y % 2) * 2; x < 48; x += 5) p.disc(y % 3 ? '#e0263e' : '#4dbb5a', x + 2, y + 2, 2);
-      for (const x of [-2, 48]) {
-        p.rect(INK.line, x, 4, 6, 8);
-        p.rect(INK.line, x, 18, 6, 8);
+      p.rect(INK.shadow, 5, 5, 46, 25);
+      // The wheels, sticking out on both sides
+      for (const x of [0, 47]) {
+        for (const y of [3, 19]) {
+          p.rect(INK.line, x, y, 5, 9);
+          p.rect('#4a4a5a', x + 1, y + 1, 3, 7);
+          p.rect('#7a7a8a', x + 1, y + 1, 3, 1);
+          p.rect('#2a2a36', x + 1, y + 4, 3, 1);
+        }
       }
+      // The bed: planks lit from the top, a darker rim
+      p.rect(INK.line, 3, 0, 46, 29);
+      p.rect('#7a4a24', 4, 1, 44, 27);
+      for (let y = 2; y < 27; y += 5) {
+        p.rect('#b07a40', 5, y, 42, 4);
+        p.rect('#c8925a', 5, y, 42, 1);
+      }
+      p.rect('#5a3418', 4, 1, 44, 1);
+      p.rect('#5a3418', 4, 27, 44, 1);
+      // Two bins, heaped with fruit (bigger in the middle of the heap)
+      const bin = (x0: number, fruit: string, dark: string, light: string) => {
+        p.rect(INK.line, x0, 4, 19, 21);
+        p.rect('#3a2210', x0 + 1, 5, 17, 19);
+        const spots: [number, number][] = [];
+        for (let y = 7; y <= 22; y += 4) for (let x = x0 + 3 + ((y - 7) / 4 % 2) * 2; x <= x0 + 16; x += 4) spots.push([x, y]);
+        for (const [x, y] of spots) {
+          const mid = 1 - Math.abs(x - (x0 + 9.5)) / 10 - Math.abs(y - 14.5) / 14;
+          p.disc(dark, x, y + 1, 1.8 + mid);
+          p.disc(fruit, x - 0.3, y, 1.4 + mid);
+          p.rect(light, Math.round(x - 1), Math.round(y - 1), 1, 1);
+        }
+      };
+      bin(5, '#e0263e', '#8a1020', '#ffb0b8');
+      bin(28, '#f48a1a', '#a8500a', '#ffe0a8');
+      // A leaf here and there on the apples
+      p.rect('#4dbb5a', 9, 8, 2, 1);
+      p.rect('#4dbb5a', 16, 17, 2, 1);
     });
     this.pix('dodge-coin', 9, 9, (p) => {
       p.disc(INK.line, 4.5, 4.5, 4.5);
