@@ -1,7 +1,8 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
-  import { ChevronLeft, ChevronRight, Hammer, Inbox, Mail, Moon, Sparkles } from '@lucide/svelte';
-  import { hb } from '$lib/client.svelte.ts';
+  import { ChevronLeft, ChevronRight, Hammer, Inbox, Joystick, Mail, Moon, Sparkles } from '@lucide/svelte';
+  import { enabled, hb } from '$lib/client.svelte.ts';
+  import ArcadeGuest from '../arcade/ArcadeGuest.svelte';
   import { SEALS, type Letter } from '$shared/worldActions.ts';
   import type { WorldState } from '$shared/world.ts';
   import BuildLot from './BuildLot.svelte';
@@ -13,11 +14,11 @@
 
   /**
    * Things a guest makes happen in the town from the phone, beyond their look: send a letter by
-   * courier, launch fireworks, build on the lot. Each opens on its own page; the letters received and sent are kept
-   * here too.
+   * courier, launch fireworks, build on the lot, challenge someone at the arcade. Each opens on its
+   * own page; the letters received and sent are kept here too.
    */
 
-  type View = 'menu' | 'courier' | 'fireworks' | 'build' | 'letters';
+  type View = 'menu' | 'courier' | 'fireworks' | 'build' | 'arcade' | 'letters';
   let view = $state<View>('menu');
 
   const world = $derived(hb.modules.world as WorldState | undefined);
@@ -28,7 +29,12 @@
     if (hb.connected) void loadMail();
   });
 
-  const TITLES: Record<Exclude<View, 'menu'>, string> = { courier: 'Send a letter', fireworks: 'Fireworks', build: 'Build lot', letters: 'Letters' };
+  const TITLES: Record<Exclude<View, 'menu'>, string> = { courier: 'Send a letter', fireworks: 'Fireworks', build: 'Build lot', arcade: 'Arcade', letters: 'Letters' };
+  const arcadeOn = $derived(enabled('arcade'));
+  // The arcade turned off while its page is open: back to the list
+  $effect(() => {
+    if (view === 'arcade' && !arcadeOn) view = 'menu';
+  });
 
   const time = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const sealOf = (l: Letter) => SEALS.find((s) => s.id === l.seal)?.color ?? SEALS[0].color;
@@ -68,6 +74,16 @@
           <ChevronRight size={20} />
         </button>
       {/if}
+      {#if arcadeOn}
+        <button type="button" class="item card" onclick={() => (view = 'arcade')}>
+          <span class="icon arcade"><Joystick size={24} /></span>
+          <span class="text">
+            <strong>Arcade</strong>
+            <span class="dim">Challenge someone to a quick 1 vs 1 game: your characters walk into the town's arcade to play.</span>
+          </span>
+          <ChevronRight size={20} />
+        </button>
+      {/if}
       <button type="button" class="item card" onclick={() => (view = 'letters')}>
         <span class="icon box"><Inbox size={24} /></span>
         <span class="text">
@@ -77,7 +93,7 @@
         {#if waiting}<span class="badge">{waiting}</span>{/if}
         <ChevronRight size={20} />
       </button>
-      {#if !actions?.courier.on && !actions?.fireworks.on && !world?.lot?.on}
+      {#if !actions?.courier.on && !actions?.fireworks.on && !world?.lot?.on && !arcadeOn}
         <p class="faint small">The host has turned the town's actions off for now.</p>
       {/if}
     </div>
@@ -90,6 +106,8 @@
         <Fireworks />
       {:else if view === 'build'}
         <BuildLot />
+      {:else if view === 'arcade'}
+        <ArcadeGuest />
       {:else}
         <section class="letters">
           <h3 class="eyebrow">Received</h3>
@@ -158,6 +176,10 @@
   .icon.build {
     background: color-mix(in srgb, var(--warning) 22%, transparent);
     color: var(--warning);
+  }
+  .icon.arcade {
+    background: linear-gradient(135deg, color-mix(in srgb, #ff4fb0 30%, transparent), color-mix(in srgb, #4fe8ff 22%, transparent));
+    color: #ff7ac8;
   }
   .icon.box {
     background: var(--surface-3);
