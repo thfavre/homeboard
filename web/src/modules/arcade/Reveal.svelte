@@ -41,13 +41,16 @@
   onDestroy(() => timer && clearTimeout(timer));
 
   const info = $derived(arcadeGame(shown)!);
+  // The drawn game's tagline from the start (hidden while the games flash by): the poster keeps one height
+  // svelte-ignore state_referenced_locally
+  const tagline = arcadeGame(game)?.tagline ?? '';
   const Icon = $derived(ARCADE_ICONS[shown]);
 </script>
 
 <div class="poster" class:landed style:--a={info.colors[0]} style:--b={info.colors[1]}>
   <span class="poster-icon"><Icon size={34} strokeWidth={2.4} /></span>
   <span class="title"><PixelText text={info.name} size={22} color="#ffffff" /></span>
-  <p class:hidden={!landed}>{info.tagline}</p>
+  <p class:hidden={!landed}>{tagline}</p>
   {#if landed}<span class="burst" aria-hidden="true"></span>{/if}
 </div>
 
