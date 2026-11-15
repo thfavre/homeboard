@@ -88,7 +88,7 @@
       {#each others as p (p.id)}
         {@const short = economy && stake > p.balance}
         {@const playing = s?.busy.includes(p.id)}
-        <button class="person" class:active={opponent === p.id} disabled={short || playing || !p.look} onclick={() => (opponent = p.id)}>
+        <button class="person" class:active={opponent === p.id} disabled={short || playing} onclick={() => (opponent = p.id)}>
           <Avatar name={p.name} color={p.color} id={p.id} size="2.2rem" />
           <span class="who">
             <span class="truncate">{p.name}</span>
@@ -120,6 +120,9 @@
     <p class="faint small">Everything comes back if they decline, do not answer within a minute, or you cancel.</p>
   {/if}
 
+  {#if opponent && others.find((p) => p.id === opponent)?.look === false}
+    <p class="faint small">{opponentName} has no character yet: they make one first, then answer.</p>
+  {/if}
   {#if error}<p class="error">{error}</p>{/if}
   <button class="btn primary block go" disabled={busy || needsCharacter()} onclick={send}><Swords size={18} /> Send the challenge</button>
 </div>

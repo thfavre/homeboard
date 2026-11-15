@@ -148,6 +148,8 @@ export const isArcadeCount = (n: unknown): n is ArcadeCount => ARCADE_COUNTS.inc
 export const arcadeFormat = (count: number) => (count === 1 ? 'One game' : `Best of ${count}`);
 /** Time the challenged guest has to answer */
 export const ARCADE_INVITE_MS = 60_000;
+/** Time to answer once the challenged guest went to make their character first */
+export const ARCADE_CREATE_MS = 4 * 60_000;
 /** Time to read the rules before a round (it starts sooner once both pressed Ready) */
 export const ARCADE_READY_MS = 20_000;
 /** The 3, 2, 1 before a round */
@@ -171,6 +173,8 @@ export interface ArcadeInvite {
   count: ArcadeCount;
   stake: number;
   expiresAt: number;
+  /** The challenged guest went to make their character, to come back and answer */
+  creating?: boolean;
 }
 
 /**

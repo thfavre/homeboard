@@ -1,5 +1,6 @@
 import {
   ARCADE_COUNTDOWN_MS,
+  ARCADE_CREATE_MS,
   ARCADE_DEFAULTS,
   ARCADE_GAMES,
   ARCADE_GHOST_MS,
@@ -153,7 +154,14 @@ export default defineModule<ArcadeSettings>({
       ctx.publish();
     };
 
-    /** A challenge from `guest` to `to`, for this many games */
+    /** Drops the challenge if it is still unanswered after `ms` */
+    const expire = (inv: () => Invite, ms: number) =>
+      setTimeout(() => {
+        const i = inv();
+        if (invites.get(i.id) === i) dropInvite(i, `${i.to.name} did not answer your challenge`);
+      }, ms);
+
+    /** A challenge from `guest` to `to`, for this many games (someone without a character makes it first, see `creating`) */
     const challenge = (guest: Guest, to: unknown, rawCount: unknown, rawStake: unknown) => {
       const count = Number(rawCount);
       if (!isArcadeCount(count)) throw new HbError('Pick how many games');
@@ -163,7 +171,6 @@ export default defineModule<ArcadeSettings>({
       if (opponent.id === guest.id) throw new HbError('You cannot challenge yourself');
       if (opponent.sockets === 0) throw new HbError(`${opponent.name} is not online`);
       if (!hasLook(guest.id)) throw new HbError('Make your character in the Avatar first');
-      if (!hasLook(opponent.id)) throw new HbError(`${opponent.name} has not made their character yet`);
       checkFree(guest.id, null);
       checkFree(opponent.id, opponent.name);
       const stake = cleanStake(rawStake);
@@ -186,9 +193,7 @@ export default defineModule<ArcadeSettings>({
         stake,
         expiresAt: Date.now() + ARCADE_INVITE_MS,
         charges: [fee, bet],
-        timer: setTimeout(() => {
-          if (invites.has(inv.id)) dropInvite(inv, `${opponent.name} did not answer your challenge`);
-        }, ARCADE_INVITE_MS),
+        timer: expire(() => inv, ARCADE_INVITE_MS),
       };
       invites.set(inv.id, inv);
       ctx.activity(`{name} challenged ${opponent.name} in the Arcade${count > 1 ? ` (best of ${count})` : ''}${stake ? ` for ${fmt(stake)}` : ''}`, { guest, sensitive: true });
@@ -240,6 +245,19 @@ export default defineModule<ArcadeSettings>({
       matches.set(m.id, m);
       nextRound(m);
       ctx.activity(`{name} took on ${inv.from.name} in the Arcade`, { guest, sensitive: true });
+      return true;
+    });
+
+    /** The challenged guest goes to make their character first: more time to answer, the challenger is told */
+    ctx.onGuest('creating', (args, guest) => {
+      const inv = invites.get(String(args?.id ?? ''));
+      if (!inv || inv.to.id !== guest.id) throw new HbError('This challenge is gone');
+      if (inv.creating) return true;
+      inv.creating = true;
+      clearTimeout(inv.timer);
+      inv.expiresAt = Date.now() + ARCADE_CREATE_MS;
+      inv.timer = expire(() => inv, ARCADE_CREATE_MS);
+      ctx.publish();
       return true;
     });
 

@@ -17,8 +17,11 @@ export const ARCADE_ICONS: Record<ArcadeGameId, Component<any>> = {
 
 export const arcadeState = () => hb.modules.arcade as ArcadeState | undefined;
 
-/** Results this phone closed */
-export const arcadeLocal = $state({ closed: '' });
+/**
+ * Results this phone closed, and the challenge it put aside to make its character first (the full
+ * screen comes back once the character exists)
+ */
+export const arcadeLocal = $state({ closed: '', creating: '' });
 
 export function myArcadeMatch(): ArcadeMatch | null {
   const me = hb.me?.id;
@@ -34,7 +37,7 @@ export function showArcadeScreen(): boolean {
   const me = hb.me?.id;
   if (!s || !me) return false;
   if (myArcadeMatch()) return true;
-  return s.invites.some((i) => i.to.id === me || i.from.id === me);
+  return s.invites.some((i) => i.from.id === me || (i.to.id === me && !(arcadeLocal.creating === i.id && needsCharacter())));
 }
 
 /** This guest cannot play until they make their town character */

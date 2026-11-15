@@ -6,6 +6,9 @@
  *
  *   PORT=4395 HB_DATA_DIR=/tmp/hb-test npx tsx scripts/arcade-bot.ts [game]
  *
+ * With INVITE=<name>, the bot also challenges that guest (one game, no bet) whenever they are online
+ * and free.
+ *
  * With a game (knife, stack, flap...), the host's settings of the test copy are changed so the draw
  * only picks that game, and the challenge fee is set to 0. Never run it against a live party.
  */
@@ -18,6 +21,7 @@ import { randomChoices } from '../shared/world.ts';
 const port = Number(process.env.PORT) || 4300;
 const dataDir = process.env.HB_DATA_DIR || join(import.meta.dirname, '..', 'data');
 const only = process.argv[2];
+const inviteName = process.env.INVITE;
 if (port === 4300) {
   console.log('Not on the live party (port 4300): set PORT to a test copy');
   process.exit(1);
@@ -56,6 +60,7 @@ s.on('state', (msg: { module: string; data: unknown }) => {
 });
 
 const playing = new Set<string>();
+let inviting = false;
 async function react() {
   if (!state || !me) return;
   for (const inv of state.invites) {
@@ -65,6 +70,15 @@ async function react() {
     }
   }
   const m = state.matches.find((x) => x.players.some((p) => p.id === me) && x.phase !== 'result');
+  if (!m && inviteName && !state.invites.length && !inviting) {
+    const target = state.online.find((p) => p.name === inviteName);
+    if (target && !state.busy.includes(target.id)) {
+      inviting = true;
+      console.log(`Challenging ${target.name}`);
+      await rpc(s, 'arcade', 'invite', { to: target.id, count: 1, stake: 0 }).catch((e) => console.log(e.message));
+      setTimeout(() => (inviting = false), 3000);
+    }
+  }
   if (!m) return;
   if (m.phase === 'ready' && !m.ready.includes(me)) await rpc(s, 'arcade', 'ready', { match: m.id }).catch(() => {});
   const key = `${m.id}:${m.rounds.length}`;

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Check, Hand, Heart, MousePointerClick, MoveHorizontal, RotateCcw, Shuffle, Swords, Timer, Wand, X, Zap } from '@lucide/svelte';
+  import { Check, Hand, UserRoundPlus, Heart, MousePointerClick, MoveHorizontal, RotateCcw, Shuffle, Swords, Timer, Wand, X, Zap } from '@lucide/svelte';
   import { fly, scale } from 'svelte/transition';
-  import { ARCADE_INVITE_MS, ARCADE_UNIT, arcadeOffered, ARCADE_READY_MS, ARCADE_ROUND_MS, arcadeFormat, arcadeGame, type ArcadePlayer } from '$shared/arcade.ts';
+  import { ARCADE_CREATE_MS, ARCADE_INVITE_MS, ARCADE_UNIT, arcadeOffered, ARCADE_READY_MS, ARCADE_ROUND_MS, arcadeFormat, arcadeGame, type ArcadePlayer } from '$shared/arcade.ts';
   import { attempt, hb, rpc } from '$lib/client.svelte.ts';
   import Money from '$lib/ui/Money.svelte';
   import Versus from '../games/ui/Versus.svelte';
@@ -12,6 +12,7 @@
   import Reveal from './Reveal.svelte';
   import Face from './Face.svelte';
   import PixelText from '$lib/ui/PixelText.svelte';
+  import { openFeature } from '$lib/nav.ts';
   import { arcadeLocal, arcadeState, myArcadeMatch, needsCharacter } from './store.svelte.ts';
 
   /** The Arcade on a phone, full screen: a challenge sent or received, then the match round by round */
@@ -41,6 +42,16 @@
     busy = true;
     await attempt(() => rpc('arcade', method, args));
     busy = false;
+  }
+
+  /** To the character creator: the challenge waits (longer), and comes back once the character exists */
+  async function makeCharacter(id: string) {
+    busy = true;
+    const ok = await attempt(() => rpc('arcade', 'creating', { id }));
+    busy = false;
+    if (!ok) return;
+    arcadeLocal.creating = id;
+    openFeature('world');
   }
 
   function ready() {
@@ -210,25 +221,32 @@
       {@render format(received.count)}
       {#if economy && received.stake > 0}<PotPanel inLabel="You put in" stake={received.stake} outLabel="Winner takes" pot={received.stake * 2} />{/if}
       {#if needsCharacter()}
-        <p class="dim small">To play, make your character in the Avatar first. Decline this one, make it, then challenge {received.from.name} back.</p>
-        <button class="btn decline block" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={20} /> Decline</button>
+        <div class="need">
+          <span class="need-icon"><UserRoundPlus size={24} /></span>
+          <span class="need-text"><strong>Make your character first</strong><span class="dim small">You play as your character from the town. {received.from.name} waits while you make it, then you accept.</span></span>
+        </div>
+        <div class="answer">
+          <button class="btn decline" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={20} /> Decline</button>
+          <button class="btn primary accept" disabled={busy} onclick={() => makeCharacter(received.id)}><UserRoundPlus size={20} /> Make it</button>
+        </div>
       {:else}
         <div class="answer">
           <button class="btn decline" disabled={busy} onclick={() => act('respond', { id: received.id, accept: false })}><X size={20} /> Decline</button>
           <button class="btn primary accept" disabled={busy} onclick={() => act('respond', { id: received.id, accept: true })}><Check size={20} /> Accept</button>
         </div>
       {/if}
-      <Fuse endsAt={received.expiresAt} totalMs={ARCADE_INVITE_MS} label="Expires in" />
+      <Fuse endsAt={received.expiresAt} totalMs={received.creating ? ARCADE_CREATE_MS : ARCADE_INVITE_MS} label="Expires in" />
     </div>
   </div>
 {:else if sent}
   <div class="screen">
     <div class="col" in:fly={{ y: 24, duration: 300 }}>
       <span class="eyebrow center"><Swords size={14} /> Challenge sent</span>
-      <Versus left={meAsPlayer} right={sent.to} leftLabel="You" rightLabel="Thinking..." waiting />
+      <Versus left={meAsPlayer} right={sent.to} leftLabel="You" rightLabel={sent.creating ? 'Making their character...' : 'Thinking...'} waiting />
+      {#if sent.creating}<p class="dim small center">{sent.to.name} had no character yet and is making one: the challenge waits for them.</p>{/if}
       {@render format(sent.count)}
       {#if economy && sent.stake > 0}<PotPanel inLabel="You put in" stake={sent.stake} outLabel="Winner takes" pot={sent.stake * 2} />{/if}
-      <Fuse endsAt={sent.expiresAt} totalMs={ARCADE_INVITE_MS} label={`Waiting for ${sent.to.name}`} />
+      <Fuse endsAt={sent.expiresAt} totalMs={sent.creating ? ARCADE_CREATE_MS : ARCADE_INVITE_MS} label={`Waiting for ${sent.to.name}`} />
       <button class="btn ghost block" disabled={busy} onclick={() => act('cancelInvite', { id: sent.id })}>Cancel the challenge</button>
     </div>
   </div>
@@ -291,6 +309,31 @@
     50% {
       transform: translateY(-4px);
     }
+  }
+  .need {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    width: 100%;
+    padding: 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+    text-align: left;
+  }
+  .need-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: var(--accent);
+  }
+  .need-text {
+    display: grid;
+    gap: 0.15rem;
   }
   .answer {
     display: grid;
