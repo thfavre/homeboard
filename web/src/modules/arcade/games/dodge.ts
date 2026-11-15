@@ -34,7 +34,6 @@ export class DodgeScene extends ArcadeScene {
   private runner!: Phaser.GameObjects.Sprite;
   private shadow!: Phaser.GameObjects.Ellipse;
   private ghostBody!: Phaser.GameObjects.Sprite;
-  private tag!: Phaser.GameObjects.Container;
   private x = W / 2;
   private want = W / 2;
   private grab: { px: number; x: number } | null = null;
@@ -51,7 +50,6 @@ export class DodgeScene extends ArcadeScene {
     this.shadow = this.add.ellipse(W / 2, RUNNER_Y, 30, 10, 0x000000, 0.3).setDepth(9);
     this.ghostBody = this.avatar('rival', W / 2, RUNNER_Y).setAlpha(0.28).setDepth(9).setVisible(false);
     this.pose(this.ghostBody, 'walkUp', 13);
-    this.tag = this.rivalTag().setVisible(false);
     this.runner = this.avatar('me', W / 2, RUNNER_Y).setDepth(30);
     this.pose(this.runner, 'idleUp');
   }
@@ -274,7 +272,6 @@ export class DodgeScene extends ArcadeScene {
     if (d && !this.rivalDone) {
       this.ghostBody.setVisible(true).setX(d[0]);
       this.ghostBody.anims.timeScale = v / 300;
-      this.placeTag(this.tag.setVisible(true), d[0], RUNNER_Y - this.avatarHeight('rival') - 12);
     }
   }
 
@@ -287,7 +284,6 @@ export class DodgeScene extends ArcadeScene {
   }
 
   rivalGone(): void {
-    this.tag.setVisible(false);
     this.tweens.add({ targets: this.ghostBody, alpha: 0, duration: 500 });
   }
 

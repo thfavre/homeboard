@@ -42,7 +42,6 @@ export class PlankScene extends ArcadeScene {
   private moon!: Phaser.GameObjects.Image;
   private stars: Phaser.GameObjects.Rectangle[] = [];
   private ghostBody!: Phaser.GameObjects.Sprite;
-  private tag!: Phaser.GameObjects.Container;
   private planks: Phaser.GameObjects.Container[] = [];
 
   build(): void {
@@ -58,7 +57,6 @@ export class PlankScene extends ArcadeScene {
     this.addRoof(-40, 130);
     while (this.roofs.length < 6) this.nextRoof();
     this.ghostBody = this.avatar('rival', 0, ROOF_Y).setAlpha(0.3).setDepth(18).setVisible(false);
-    this.tag = this.rivalTag().setVisible(false);
     this.hero = this.avatar('me', this.roofs[0].x1 - 14, ROOF_Y).setDepth(20);
     this.pose(this.hero, 'idleRight');
     this.newPlank();
@@ -216,7 +214,7 @@ export class PlankScene extends ArcadeScene {
       const got = this.addScore(2);
       this.good(true);
       this.sfx('perfect');
-      this.pop(this.hero.x, ROOF_Y - 120, `PERFECT +${got}`, INK.gold, 3);
+      this.pop(this.hero.x, ROOF_Y - 120, `+${got}`, INK.gold, 3);
       this.burst((this.roofs[this.onRoof].x0 + this.roofs[this.onRoof].x1) / 2, ROOF_Y, INK.gold, 14, 220);
     } else {
       const got = this.addScore(1);
@@ -280,10 +278,6 @@ export class PlankScene extends ArcadeScene {
     const x = d[1];
     const right = this.camX + W - 24;
     this.ghostBody.setVisible(x < right).setPosition(x, d[2] ? ROOF_Y + 200 : ROOF_Y);
-    // Ahead of the view: their name at the right edge, with an arrow
-    this.placeTag(this.tag.setVisible(true), x, ROOF_Y - this.avatarHeight('rival') - 14);
-    const name = this.opts.rival.name.trim().split(/\s+/)[0] ?? '';
-    this.relabel(this.tag, x < right ? name.slice(0, 8) : `${name.slice(0, 6)} >`);
   }
 
   ghost(): number[] {
@@ -296,7 +290,6 @@ export class PlankScene extends ArcadeScene {
   }
 
   rivalGone(): void {
-    this.tag.setVisible(false);
     this.tweens.add({ targets: this.ghostBody, alpha: 0, duration: 600 });
   }
 

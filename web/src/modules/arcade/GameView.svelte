@@ -2,7 +2,7 @@
   import { onDestroy, onMount, untrack } from 'svelte';
   import { fade, fly, scale } from 'svelte/transition';
   import { Hourglass } from '@lucide/svelte';
-  import { ARCADE_UNIT, arcadeGame, type ArcadeGhost, type ArcadeMatch, type ArcadeState } from '$shared/arcade.ts';
+  import { ARCADE_UNIT, arcadeGame, type ArcadeGhost, type ArcadeMatch } from '$shared/arcade.ts';
   import { hb, onEvent, rpc, serverNow } from '$lib/client.svelte.ts';
   import PixelText from '$lib/ui/PixelText.svelte';
   import type { Run } from './engine/run.ts';
@@ -152,32 +152,20 @@
     run?.destroy();
   });
 
-  // ------------------------------------------------------------ callouts about the race
+  // ------------------------------------------------------------ the race, shown in the score bar
 
-  let calledAt = 0;
-  function callout(text: string, color: string) {
-    if (!run || over) return;
-    const now = Date.now();
-    // Never two on top of each other
-    const wait = Math.max(0, calledAt + 1300 - now);
-    calledAt = now + wait;
-    timers.push(setTimeout(() => !over && run?.callout(text, color), wait));
-  }
-
+  /** Who just took the lead: their side pulses a moment */
+  let leadPulse = $state<'me' | 'them' | null>(null);
   let leader: 'me' | 'them' | null = null;
   $effect(() => {
     const a = score;
     const b = theirScore;
     const now = a > b ? 'me' : b > a ? 'them' : leader;
-    if (now !== leader && leader !== null) callout(now === 'me' ? 'YOU TAKE THE LEAD' : `${firstName(other.name)} TAKES THE LEAD`, now === 'me' ? '#4dff9e' : other.color);
+    if (now !== leader && leader !== null && now) {
+      leadPulse = now;
+      timers.push(setTimeout(() => (leadPulse = null), 700));
+    }
     if (a + b > 0) leader = now;
-  });
-
-  let knownLives = untrack(() => info.lives);
-  $effect(() => {
-    const n = theirLives;
-    if (n < knownLives && n > 0) callout(`${firstName(other.name)} CRASHED`, other.color);
-    knownLives = n;
   });
 
   let knownOut = false;
@@ -185,24 +173,10 @@
     if (!theyAreOut || knownOut) return;
     knownOut = true;
     run?.rivalOver();
-    if (!over) callout(info.lives && theirScore >= score ? `${firstName(other.name)} IS OUT. BEAT ${theirScore}` : `${firstName(other.name)} IS DONE`, other.color);
   });
 
-  // The rival is out and behind: the round is won, the run goes on for the best score
-  let wonAlready = false;
-  $effect(() => {
-    if (wonAlready || over || !theyAreOut || score <= theirScore) return;
-    wonAlready = true;
-    const record = (hb.modules.arcade as ArcadeState | undefined)?.records?.[info.id]?.score ?? 0;
-    callout('THE ROUND IS YOURS', '#4dff9e');
-    callout(record > score ? `GO FOR THE RECORD: ${record}` : 'KEEP GOING FOR A HIGH SCORE', '#ffd23d');
-  });
-
-  let knownFever = false;
-  $effect(() => {
-    if (theirFever && !knownFever) callout(`${firstName(other.name)} FEVER`, '#ffd23d');
-    knownFever = theirFever;
-  });
+  /** The rival is out and behind: the round is won (a crown), the run goes on for the best score */
+  const wonAlready = $derived(!over && theyAreOut && score > theirScore);
 
   // The score bumps a little each time it goes up
   let bump = $state(false);
@@ -223,6 +197,10 @@
   const unit = (n: number) => (n === 1 ? ARCADE_UNIT.one : ARCADE_UNIT.many);
 </script>
 
+{#snippet crown()}
+  <svg viewBox="0 0 9 7" aria-hidden="true"><path fill="#120c26" d="M0 1h1v1h1v1h1V1h1V0h1v1h1v2h1V2h1V1h1v6H0z" /><path fill="#ffd23d" d="M1 3h1v1h1V2h1V1h1v1h1v2h1V3h1v3H1z" /><path fill="#fff3b0" d="M1 5h7v1H1z" /><path fill="#ff4fb0" d="M4 4h1v1H4z" /></svg>
+{/snippet}
+
 {#snippet hearts(n: number, color: string)}
   {#if info.lives}
     <span class="hearts" aria-label="{n} lives">
@@ -237,8 +215,11 @@
 
 <div class="view" style:--g={gradient(info.colors)} style:--a={info.colors[0]} style:--b={info.colors[1]}>
   <div class="hud">
-    <div class="side me" class:hot={feverOn}>
-      <Face player={mine} size={36} />
+    <div class="side me" class:hot={feverOn} class:pulse={leadPulse === 'me'}>
+      <span class="face-wrap">
+        {#if wonAlready}<span class="crown" in:scale={{ start: 0.3, duration: 300 }}>{@render crown()}</span>{/if}
+        <Face player={mine} size={36} />
+      </span>
       <div class="score">
         <PixelText text="You" size={8} color="#c9c2ff" />
         <span class="num" class:bump><PixelText text={score} size={20} color={feverOn ? '#ffd23d' : '#ffffff'} /></span>
@@ -253,7 +234,7 @@
         <span class="vs"><PixelText text="VS" size={10} color="#ff4fb0" /></span>
       {/if}
     </div>
-    <div class="side them" class:out={theyAreOut} class:hot={theirFever}>
+    <div class="side them" class:out={theyAreOut} class:hot={theirFever} class:pulse={leadPulse === 'them'}>
       <div class="score right">
         <PixelText text={firstName(other.name).slice(0, 9)} size={8} color={other.color} />
         <span class="num"><PixelText text={theirScore} size={20} color={theirFever ? '#ffd23d' : '#ffffff'} /></span>
@@ -417,6 +398,48 @@
   .heart.lost {
     fill: #3a2f55;
     filter: none;
+    animation: heart-break 0.6s steps(6);
+  }
+  /* A life lost: the heart jumps, flashes white and goes dark */
+  @keyframes heart-break {
+    0% {
+      fill: #ffffff;
+      transform: scale(1.8) rotate(-12deg);
+    }
+    50% {
+      fill: #ff4d6d;
+      transform: scale(1.3) rotate(10deg);
+    }
+  }
+  .side.pulse {
+    animation: pulse-lead 0.7s steps(4);
+  }
+  @keyframes pulse-lead {
+    0%,
+    50% {
+      background: rgba(77, 255, 158, 0.25);
+      transform: scale(1.06);
+    }
+  }
+  .face-wrap {
+    position: relative;
+    display: inline-grid;
+  }
+  .crown {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    width: 22px;
+    height: 17px;
+    margin-left: -11px;
+    filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.6));
+    z-index: 1;
+  }
+  .crown :global(svg) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    shape-rendering: crispEdges;
   }
   .middle {
     display: grid;

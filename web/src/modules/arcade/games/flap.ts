@@ -41,7 +41,6 @@ interface Flyer {
 export class FlapScene extends ArcadeScene {
   private me!: Flyer;
   private them!: Flyer;
-  private tag!: Phaser.GameObjects.Container;
   private vy = 0;
   private walls: Wall[] = [];
   private made = 0;
@@ -70,7 +69,6 @@ export class FlapScene extends ArcadeScene {
 
     this.them = this.flyer('rival', FLYER_X - 26, 300);
     this.them.box.setAlpha(0.28).setDepth(28).setVisible(false);
-    this.tag = this.rivalTag().setVisible(false);
     this.me = this.flyer('me', FLYER_X, 330);
   }
 
@@ -259,7 +257,8 @@ export class FlapScene extends ArcadeScene {
       const got = this.addScore(2);
       this.good(true);
       this.sfx('perfect', 0.7);
-      this.pop(FLYER_X + 10, this.me.box.y - 50, `NICE +${got}`, INK.gold, 3);
+      this.pop(FLYER_X + 10, this.me.box.y - 50, `+${got}`, INK.gold, 3);
+      this.burst(FLYER_X, this.me.box.y, INK.gold, 10, 200, 0);
     } else {
       const got = this.addScore(1);
       this.good();
@@ -310,7 +309,6 @@ export class FlapScene extends ArcadeScene {
     box.y = d[0];
     box.rotation = Phaser.Math.Clamp(d[1] / 1000, -0.4, 0.9);
     this.them.wing.rotation = Math.sin(this.time.now / 70) * 0.5;
-    this.placeTag(this.tag.setVisible(true), box.x, box.y - 46);
     void dt;
   }
 
@@ -349,7 +347,6 @@ export class FlapScene extends ArcadeScene {
 
   rivalGone(): void {
     const box = this.them.box;
-    this.tag.setVisible(false);
     this.tweens.add({ targets: box, y: GROUND - FLYER_R, rotation: 1.4, alpha: 0, duration: 700, ease: 'Quad.In' });
   }
 

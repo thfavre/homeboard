@@ -223,9 +223,7 @@ export class SlicerScene extends ArcadeScene {
     this.sfx(gold ? 'gem' : 'slice', 0.8 + Math.min(0.5, this.swipe * 0.1));
     this.buzz(8);
     this.burst(th.img.x, th.img.y, juice, 14, 280);
-    if (gold) this.pop(th.img.x, th.img.y - 40, `GOLD +${got}`, INK.gold, 4);
-    else if (combo) this.pop(th.img.x, th.img.y - 40, `COMBO X${this.swipe}`, '#ffe9a0', 3);
-    else if (got > 1) this.pop(th.img.x, th.img.y - 40, `+${got}`, INK.gold, 3);
+    if (got > 1) this.pop(th.img.x, th.img.y - 40, `+${got}`, INK.gold, gold ? 4 : 3);
     // A splash left on the wall
     const splat = this.sprite(th.img.x, th.img.y, 'splat', PX * (1.6 + Math.random())).setTint(hex(juice)).setAlpha(0.35).setDepth(-80).setRotation(Math.random() * 6);
     this.tweens.add({ targets: splat, alpha: 0, duration: 1600, onComplete: () => splat.destroy() });

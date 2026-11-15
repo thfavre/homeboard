@@ -161,7 +161,7 @@ export class StackScene extends ArcadeScene {
       this.buzz(15);
       const got = this.addScore(2);
       this.good(true);
-      this.pop(m.x, y - 60, this.perfects > 1 ? `PERFECT X${this.perfects} +${got}` : `PERFECT +${got}`, INK.gold, 3);
+      this.pop(m.x, y - 60, `+${got}`, INK.gold, 3);
       this.spawn();
       return;
     }

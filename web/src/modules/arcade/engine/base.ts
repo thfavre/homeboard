@@ -135,8 +135,6 @@ export abstract class ArcadeScene extends Phaser.Scene {
   /** The world goes on with the rival's ghost after this run is over (see watch) */
   canWatch = false;
   private told = 0;
-  /** The big words showing, by their place */
-  private banners = new Map<number, Phaser.GameObjects.Container>();
   private sentAt = 0;
   private ghostPrev: number[] | null = null;
   private ghostNext: number[] | null = null;
@@ -266,10 +264,7 @@ export abstract class ArcadeScene extends Phaser.Scene {
       this.fever = Math.min(1, this.fever + (great ? 0.2 : 0.075));
       if (this.fever >= 1) this.startFever();
     }
-    if (this.combo % 10 === 0 && !this.feverOn) {
-      this.banner(`COMBO ${this.combo}`, INK.cyan, 4);
-      this.sfx('combo');
-    }
+    if (this.combo % 10 === 0 && !this.feverOn) this.sfx('combo');
     this.opts.onFever(this.fever, this.feverOn);
   }
 
@@ -279,7 +274,9 @@ export abstract class ArcadeScene extends Phaser.Scene {
     this.sfx('fever');
     this.buzz([30, 40, 30]);
     this.flash(INK.gold, 220);
-    this.banner('FEVER X2', INK.gold, 7);
+    // A shower of gold over the view (the score bar's frame turns rainbow while it lasts)
+    const m = this.cameras.main.worldView;
+    for (let i = 0; i < 5; i++) this.burst(m.x + (m.width * (i + 0.5)) / 5, m.y + 40, i % 2 ? INK.gold : INK.pink, 10, 260, 700);
   }
 
   /** A slip: the combo is gone and the fever bar drops (a fever going on keeps running) */
@@ -311,9 +308,8 @@ export abstract class ArcadeScene extends Phaser.Scene {
     }
     this.sfx('life');
     this.safeUntil = this.played + 1600;
-    const m = this.cameras.main.midPoint;
-    const t = this.label(m.x, m.y + 90, this.lives === 1 ? 'LAST LIFE' : `${this.lives} LIVES LEFT`, 3, INK.red).setDepth(95);
-    this.tweens.add({ targets: t, alpha: 0, delay: 800, duration: 400, onComplete: () => t.destroy() });
+    // (the score bar breaks a heart)
+    this.flash('#ff2040', 200);
     return true;
   }
 
@@ -331,8 +327,6 @@ export abstract class ArcadeScene extends Phaser.Scene {
     this.opts.onFever(0, false);
     this.opts.onOver(this.score, why);
     this.finished(why);
-    if (why === 'time') this.banner('TIME', INK.white, 8);
-    else if (this.opts.lives > 0) this.banner('OUT', INK.red, 8);
   }
 
   // ------------------------------------------------------------ the rival
@@ -363,19 +357,6 @@ export abstract class ArcadeScene extends Phaser.Scene {
   /** The rival's last place as sent (no smoothing: for counts and flags) */
   ghostLast(): number[] | null {
     return this.ghostNext;
-  }
-
-  /** The rival's name over their ghost */
-  rivalTag(): Phaser.GameObjects.Container {
-    const name = pixelClean(this.opts.rival.name.trim().split(/\s+/)[0] ?? '').slice(0, 8) || 'RIVAL';
-    return this.label(0, 0, name, 2, this.opts.rival.color).setDepth(70).setAlpha(0.6);
-  }
-
-  /** Puts a name tag at x, y, kept inside the view */
-  placeTag(tag: Phaser.GameObjects.Container, x: number, y: number): void {
-    const view = this.cameras.main.worldView;
-    const half = (tag.list[1] as Phaser.GameObjects.BitmapText).width / 2 + 6;
-    tag.setPosition(Phaser.Math.Clamp(x, view.x + half, view.right - half), y);
   }
 
   // ------------------------------------------------------------ pixel art
@@ -525,24 +506,6 @@ export abstract class ArcadeScene extends Phaser.Scene {
     this.tweens.add({ targets: t, scale: 1, duration: 140, ease: 'Back.Out' });
     this.tweens.add({ targets: t, y: y - 60, alpha: 0, delay: 300, duration: 480, ease: 'Cubic.In', onComplete: () => t.destroy() });
   }
-
-  /** A big word over the middle of the view (FEVER, TIME, a callout about the rival) */
-  banner(s: string, color = INK.white, k = 5, y = 0): void {
-    const m = this.cameras.main.midPoint;
-    // Never wider than the board (a long callout gets smaller letters)
-    const fit = (W - 40) / (Math.max(1, pixelClean(s).length) * 6 * PX);
-    // A new one replaces the one still showing at the same place
-    const old = this.banners.get(y);
-    if (old?.active) {
-      this.tweens.killTweensOf(old);
-      old.destroy();
-    }
-    const t = this.label(m.x, m.y - 40 + y, s, Math.max(1.5, Math.min(k, fit)), color).setDepth(96).setScale(0.3);
-    this.banners.set(y, t);
-    this.tweens.add({ targets: t, scale: 1, duration: 220, ease: 'Back.Out' });
-    this.tweens.add({ targets: t, alpha: 0, scale: 1.15, delay: 900, duration: 400, ease: 'Cubic.In', onComplete: () => t.destroy() });
-  }
-
   /** Square bits flying out of a point */
   burst(x: number, y: number, color: string | number, count = 14, speed = 260, gravity = 500, size = 2): void {
     const e = this.add.particles(x, y, 'px', {

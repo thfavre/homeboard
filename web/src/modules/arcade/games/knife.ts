@@ -51,8 +51,6 @@ export class KnifeScene extends ArcadeScene {
   private icons: Phaser.GameObjects.Image[] = [];
   private hero!: Phaser.GameObjects.Sprite;
   private flames: Phaser.GameObjects.Image[] = [];
-  private rivalLabel!: Phaser.GameObjects.Container;
-  private logLabel!: Phaser.GameObjects.Container;
 
   build(): void {
     this.paintArt();
@@ -72,8 +70,6 @@ export class KnifeScene extends ArcadeScene {
     this.hero = this.avatar('me', CX - 58, H - 40).setDepth(30);
     this.pose(this.hero, 'idleUp');
     this.held = this.sprite(CX, HOLD_Y, 'knife').setDepth(31);
-    this.logLabel = this.label(CX, CY - LOG_R - 44, 'LOG 1', 2, INK.cream).setDepth(20);
-    this.rivalLabel = this.label(W - 70, 28, '', 2, this.opts.rival.color).setDepth(20).setVisible(false);
   }
 
   private paintArt(): void {
@@ -262,7 +258,6 @@ export class KnifeScene extends ArcadeScene {
     this.spinT += dt;
     this.log.rotation += this.spinSpeed() * dt;
     this.flicker();
-    this.showRival();
     const k = this.flying;
     if (!k) return;
     k.y -= THROW_SPEED * dt;
@@ -300,7 +295,7 @@ export class KnifeScene extends ArcadeScene {
     this.sfx('slice');
     this.burst(wp.tx, wp.ty, '#ff4d5e', 14, 260);
     this.burst(wp.tx, wp.ty, '#fff0d0', 6, 200);
-    this.pop(wp.tx, wp.ty - 30, `APPLE +${got}`, INK.red, 3);
+    this.pop(wp.tx, wp.ty - 30, `+${got}`, INK.gold, 3);
   }
 
   /** The log is full: it bursts, its knives fly off, and the next one comes */
@@ -330,12 +325,11 @@ export class KnifeScene extends ArcadeScene {
     this.log.removeAll(true);
     const got = this.addScore(1);
     this.good(true);
-    this.pop(CX, CY, `LOG CLEAR +${got}`, INK.gold, 4);
+    this.pop(CX, CY - 20, `+${got}`, INK.gold, 4);
     this.pose(this.hero, 'emote', 8, 0);
     this.level++;
     this.time.delayedCall(520, () => {
       this.newLevel(true);
-      this.relabel(this.logLabel, `LOG ${this.level + 1}`);
       this.changing = false;
       if (this.running) this.pose(this.hero, 'idleUp');
     });
@@ -358,17 +352,6 @@ export class KnifeScene extends ArcadeScene {
       f.setScale(PX * (0.9 + Math.abs(Math.sin(t / 90 + i * 2)) * 0.25), PX * (0.85 + Math.abs(Math.sin(t / 70 + i)) * 0.35));
     });
   }
-
-  /** Which log the rival is on, in the corner */
-  private showRival(): void {
-    const d = this.ghostLast();
-    if (!d) return;
-    const name = this.opts.rival.name.trim().split(/\s+/)[0] ?? '';
-    this.rivalLabel.setVisible(true);
-    this.relabel(this.rivalLabel, `${name.slice(0, 7)} LOG ${d[0] + 1}`);
-    this.placeTag(this.rivalLabel, W, 28);
-  }
-
   ghost(): number[] {
     return [this.level, this.stuckHere];
   }
@@ -382,6 +365,5 @@ export class KnifeScene extends ArcadeScene {
     // The log turns slowly before the start, and goes on after the end
     this.log.rotation += (this.ended ? 0.6 : 0.9) * dt * (this.lv?.dir ?? 1);
     this.flicker();
-    if (this.ended) this.showRival();
   }
 }

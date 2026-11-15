@@ -209,7 +209,8 @@ export class ZigScene extends ArcadeScene {
       if (this.perfectTurn) {
         const got = this.addScore(2);
         this.good(true);
-        this.pop(this.ball.x, this.ball.y - 70, `PERFECT +${got}`, INK.gold, 3);
+        this.pop(this.ball.x, this.ball.y - 50, `+${got}`, INK.gold, 3);
+        this.burst(this.ball.x, this.ball.y, INK.gold, 10, 180, 0);
         this.sfx('perfect', 0.6);
       } else {
         this.addScore(1);
@@ -218,7 +219,6 @@ export class ZigScene extends ArcadeScene {
       }
       if (this.seg % 8 === 0) {
         this.sfx('level');
-        this.pop(this.ball.x, this.ball.y - 100, 'FASTER', '#ffd6f0', 3);
       }
     }
     this.perfectTurn = false;

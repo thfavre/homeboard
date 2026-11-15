@@ -204,7 +204,7 @@ export class MathsScene extends ArcadeScene {
       this.sfx('right', 0.8 + Math.min(0.4, this.combo * 0.05));
       this.buzz(10);
       this.burst(b.x, b.y, '#4fffb0', 10, 220);
-      this.pop(b.x, b.y - 60, quick ? `QUICK +${got}` : `+${got}`, quick ? INK.gold : '#9dffd6', 2);
+      this.pop(b.x, b.y - 60, `+${got}`, quick ? INK.gold : '#9dffd6', 3);
       this.time.delayedCall(170, () => this.running && this.next());
     } else {
       this.penalty += PENALTY_MS;

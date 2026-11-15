@@ -254,9 +254,6 @@ export class WhackScene extends ArcadeScene {
     const { x, y } = this.hole(p.hole);
     const color = hex(this.opts.rival.color);
     this.burst(x + 30, y - 40, color, 6, 120, 0);
-    const name = this.opts.rival.name.trim()[0] ?? '?';
-    const t = this.label(x + 34, y - 54, name, 2, this.opts.rival.color).setDepth(85);
-    this.tweens.add({ targets: t, y: y - 80, alpha: 0, duration: 600, onComplete: () => t.destroy() });
   }
 
   ghost(): number[] {

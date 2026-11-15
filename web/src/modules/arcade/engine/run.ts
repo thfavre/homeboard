@@ -31,8 +31,6 @@ export interface Run {
   rival(d: number[]): void;
   /** The rival's run is over */
   rivalOver(): void;
-  /** A big word over the game (a callout about the race) */
-  callout(text: string, color: string): void;
   destroy(): void;
 }
 
@@ -93,9 +91,6 @@ export function startRun(parent: HTMLElement, opts: RunOptions): Run {
     },
     rivalOver() {
       live()?.rivalOver();
-    },
-    callout(text, color) {
-      live()?.banner(text, color, 3, -170);
     },
     destroy() {
       resized.disconnect();
