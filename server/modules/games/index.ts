@@ -38,6 +38,7 @@ import type { Guest } from '../../core/session.ts';
 import { HbError, clamp, num, uid } from '../../core/util.ts';
 import type { LightsApi } from '../wled/index.ts';
 import type { MusicApi } from '../spotify/index.ts';
+import type { ArcadeApi } from '../arcade/index.ts';
 import { FRAME_MS, type GameFactory, type GameRuntime, type MatchApi, type MatchOptions, type Outcome } from './engine.ts';
 import { blindTimer } from './timer.ts';
 import { lightSimon } from './simon.ts';
@@ -277,7 +278,8 @@ export default defineModule<GamesSettings>({
 
     /** Throws when this guest is already playing or has a challenge waiting (who: their name, or null for "you") */
     const checkFree = (guestId: string, who: string | null) => {
-      if (matchOf(guestId)) {
+      // (a match in the Arcade counts too)
+      if (matchOf(guestId) || ctx.use<ArcadeApi>('arcade')?.busy(guestId)) {
         throw new HbError(who ? `${who} is already in a game` : 'You are already in a game');
       }
       for (const inv of invites.values()) {
