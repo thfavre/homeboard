@@ -1,5 +1,5 @@
 import type { Component } from 'svelte';
-import { Bird, Calculator, Cherry, Layers, Route, Swords } from '@lucide/svelte';
+import { Bird, Calculator, Cherry, Footprints, Hammer, Layers, Route, Ruler, Swords } from '@lucide/svelte';
 import type { ArcadeGameId, ArcadeMatch, ArcadeState } from '$shared/arcade.ts';
 import { hb } from '$lib/client.svelte.ts';
 
@@ -8,6 +8,9 @@ export const ARCADE_ICONS: Record<ArcadeGameId, Component<any>> = {
   stack: Layers,
   flap: Bird,
   zig: Route,
+  plank: Ruler,
+  dodge: Footprints,
+  whack: Hammer,
   maths: Calculator,
   slicer: Cherry,
 };

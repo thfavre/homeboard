@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Square, Trophy, X } from '@lucide/svelte';
-  import { ARCADE_GAMES, arcadeFormat, arcadeGame, type ArcadeSettings } from '$shared/arcade.ts';
+  import { ARCADE_GAMES, arcadeFormat, arcadeGame, type ArcadeGameId, type ArcadeSettings } from '$shared/arcade.ts';
   import { attempt, hb, rpc } from '$lib/client.svelte.ts';
   import { Synced } from '$lib/synced.svelte.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -15,9 +15,9 @@
   const screenSec = new Synced(() => s?.settings.screenSec, 5);
 
   const set = (args: Partial<ArcadeSettings>) => attempt(() => rpc('arcade', 'setSettings', args));
-  function toggleGame(id: string, on: boolean) {
-    const now = s?.settings.games ?? [];
-    set({ games: (on ? [...now, id] : now.filter((g) => g !== id)) as ArcadeSettings['games'] });
+  function toggleGame(id: ArcadeGameId, on: boolean) {
+    const off = s?.settings.off ?? [];
+    set({ off: on ? off.filter((g) => g !== id) : [...off, id] });
   }
   const names = (ids: string[]) => ids.map((id) => s?.online.find((p) => p.id === id)?.name ?? '?');
 </script>
@@ -64,12 +64,12 @@
     <div class="games">
       {#each ARCADE_GAMES as g (g.id)}
         {@const Icon = ARCADE_ICONS[g.id]}
-        {@const on = s.settings.games.includes(g.id)}
+        {@const on = !s.settings.off.includes(g.id)}
         <div class="game" class:off={!on}>
           <span class="icon" style:--g={gradient(g.colors)}><Icon size={20} /></span>
           <span class="text">
             <strong>{g.name}</strong>
-            <span class="faint small">{g.tagline}. {g.oneLife ? `One life, ${g.seconds} s at most` : `${g.seconds} s`}.</span>
+            <span class="faint small">{g.tagline}. {g.lives ? `${g.lives} lives, ${g.seconds} s at most` : `${g.seconds} s`}.</span>
           </span>
           <Toggle checked={on} onchange={(v) => toggleGame(g.id, v)} label={`Offer ${g.name}`} />
         </div>

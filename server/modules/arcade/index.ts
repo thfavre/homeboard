@@ -2,6 +2,7 @@ import {
   ARCADE_COUNTDOWN_MS,
   ARCADE_DEFAULTS,
   ARCADE_GAMES,
+  ARCADE_GHOST_MS,
   ARCADE_GRACE_MS,
   ARCADE_INVITE_MS,
   ARCADE_READY_MS,
@@ -9,7 +10,9 @@ import {
   arcadeFormat,
   arcadeGame,
   isArcadeCount,
+  isArcadeGame,
   type ArcadeGameId,
+  type ArcadeGhost,
   type ArcadeInvite,
   type ArcadeMatch,
   type ArcadePlayer,
@@ -40,6 +43,8 @@ interface Match extends ArcadeMatch {
   timer: NodeJS.Timeout | null;
   /** When each player's last score came in (a score is a number they can only send so fast) */
   lastAt: Record<string, number>;
+  /** When each player's last ghost went out */
+  ghostAt: Record<string, number>;
 }
 
 /** What the Arcade shares with other modules */
@@ -53,10 +58,11 @@ export interface ArcadeApi {
 const player = (g: Guest): ArcadePlayer => ({ id: g.id, name: g.name, color: g.color });
 
 /**
- * The Arcade: 1 vs 1 games played on the two phones, with a bet. A challenge is one game or a Mix
- * of three; each round both players play the same run (same seed), their phones send the score as
- * it goes, and the best score wins the round. The town shows the players going into the arcade
- * and the scores on its screen.
+ * The Arcade: 1 vs 1 games played on the two phones, with a bet. A challenge is 1, 3 or 5 games
+ * drawn at random; each round both players play the same run (same seed), their phones send the
+ * score as it goes (with the lives left and the fever), and where they are about 10 times a second,
+ * which goes on to the other phone to draw their ghost. The best score wins the round. The town
+ * shows the players going into the arcade and the race on its screen.
  */
 export default defineModule<ArcadeSettings>({
   id: 'arcade',
@@ -74,7 +80,14 @@ export default defineModule<ArcadeSettings>({
 
     const games = () => ctx.use<GamesApi>('games');
     const fmt = (amount: number) => `${formatAmount(amount)} ${ctx.economy.currency.symbol}`;
-    const offered = () => ctx.settings.get().games;
+    const offered = () => ARCADE_GAMES.map((g) => g.id).filter((id) => !ctx.settings.get().off.includes(id));
+
+    // Settings saved before the new games: they listed the games in the draw, now the ones out of it
+    const legacy = (ctx.settings.get() as { games?: unknown }).games;
+    if (Array.isArray(legacy)) {
+      const before: ArcadeGameId[] = ['knife', 'stack', 'flap', 'zig', 'maths', 'slicer'];
+      ctx.settings.update({ off: before.filter((id) => !legacy.includes(id)), games: undefined } as Partial<ArcadeSettings>);
+    }
     const alive = (m: Match) => matches.get(m.id) === m;
     /** The match this guest plays in (not one whose result is showing) */
     const matchOf = (guestId: string) => [...matches.values()].find((m) => m.phase !== 'result' && m.players.some((p) => p.id === guestId));
@@ -216,6 +229,7 @@ export default defineModule<ArcadeSettings>({
         charges: [...inv.charges, bet],
         timer: null,
         lastAt: {},
+        ghostAt: {},
       };
       matches.set(m.id, m);
       nextRound(m);
@@ -251,7 +265,15 @@ export default defineModule<ArcadeSettings>({
       // (a game the host took out since the draw: another one instead)
       const drawn = m.draw[m.rounds.length];
       const game = offered().includes(drawn) || !offered().length ? drawn : drawGames(1)[0];
-      m.rounds.push({ game, seed: Math.floor(Math.random() * 2 ** 31), scores: Object.fromEntries(m.players.map((p) => [p.id, 0])), done: [] });
+      const lives = arcadeGame(game)!.lives;
+      m.rounds.push({
+        game,
+        seed: Math.floor(Math.random() * 2 ** 31),
+        scores: Object.fromEntries(m.players.map((p) => [p.id, 0])),
+        lives: Object.fromEntries(m.players.map((p) => [p.id, lives])),
+        fever: [],
+        done: [],
+      });
       m.phase = 'ready';
       m.ready = [];
       m.startsAt = null;
@@ -280,7 +302,7 @@ export default defineModule<ArcadeSettings>({
       return true;
     });
 
-    /** A player's score as their run goes; `over`: their run is over (a mistake, or the time is up) */
+    /** A player's score as their run goes (lives left, fever on); `over`: their run is over (the last life, or the time is up) */
     ctx.onGuest('score', (args, guest) => {
       const m = matches.get(String(args?.match ?? ''));
       if (!m || m.phase !== 'play' || !m.startsAt || !m.players.some((p) => p.id === guest.id)) return false;
@@ -292,6 +314,9 @@ export default defineModule<ArcadeSettings>({
       const elapsed = Math.max(0, now - m.startsAt + 1500) / 1000;
       const most = Math.ceil(elapsed * info.maxPerSec) + 2;
       r.scores[guest.id] = Math.round(clamp(num(args?.score, 0), 0, most));
+      if (info.lives > 0) r.lives[guest.id] = Math.round(clamp(num(args?.lives, r.lives[guest.id]), 0, r.lives[guest.id]));
+      r.fever = r.fever.filter((id) => id !== guest.id);
+      if (args?.fever && !args?.over) r.fever.push(guest.id);
       m.lastAt[guest.id] = now;
       if (args?.over) r.done.push(guest.id);
       settle(m);
@@ -300,8 +325,25 @@ export default defineModule<ArcadeSettings>({
     });
 
     /**
+     * Where a player is in their run: on to the other player's phone, which draws their ghost (not
+     * kept, not on the TV; dropped when it comes faster than the phones send it)
+     */
+    ctx.onGuest('ghost', (args, guest) => {
+      const m = matches.get(String(args?.match ?? ''));
+      if (!m || m.phase !== 'play' || !m.players.some((p) => p.id === guest.id)) return false;
+      if (Number(args?.round) !== m.rounds.length - 1 || !Array.isArray(args?.d)) return false;
+      const now = Date.now();
+      if (now - (m.ghostAt[guest.id] ?? 0) < ARCADE_GHOST_MS / 2) return false;
+      m.ghostAt[guest.id] = now;
+      const d = (args.d as unknown[]).slice(0, 8).map((n) => Math.round(num(n, 0) * 100) / 100);
+      const other = m.players.find((p) => p.id !== guest.id)!;
+      ctx.emit({ guest: other.id }, 'ghost', { match: m.id, round: m.rounds.length - 1, from: guest.id, d } satisfies ArcadeGhost);
+      return true;
+    });
+
+    /**
      * Ends the round once both runs are over, or as soon as the one still playing passes the score of
-     * the one who is out (a game of one life: nothing more can change)
+     * the one who is out (a game with lives: nothing more can change)
      */
     const settle = (m: Match) => {
       const r = round(m);
@@ -310,7 +352,7 @@ export default defineModule<ArcadeSettings>({
         return;
       }
       const info = arcadeGame(r.game)!;
-      if (!info.oneLife || r.done.length !== 1) return;
+      if (!info.lives || r.done.length !== 1) return;
       const out = r.done[0];
       const still = m.players.find((p) => p.id !== out)!.id;
       if (r.scores[still] > r.scores[out]) endRound(m);
@@ -321,6 +363,7 @@ export default defineModule<ArcadeSettings>({
       const r = round(m);
       const [a, b] = m.players.map((p) => p.id);
       r.winner = r.scores[a] > r.scores[b] ? a : r.scores[b] > r.scores[a] ? b : null;
+      r.fever = [];
       if (r.winner) m.wins[r.winner]++;
       // The best score of the game this party, and each player's own best
       for (const p of m.players) {
@@ -404,7 +447,7 @@ export default defineModule<ArcadeSettings>({
       const s = ctx.settings.get();
       const bool = (key: 'townWalk' | 'townScreen' | 'sounds') => (typeof args?.[key] === 'boolean' ? args[key] : s[key]);
       ctx.settings.update({
-        games: Array.isArray(args?.games) ? ARCADE_GAMES.map((g) => g.id).filter((id) => args.games.includes(id)) : s.games,
+        off: Array.isArray(args?.off) ? ARCADE_GAMES.map((g) => g.id).filter((id) => (args.off as unknown[]).includes(id) && isArcadeGame(id)) : s.off,
         maxStake: args?.maxStake !== undefined ? Math.max(0, Math.round(num(args.maxStake, 0))) : s.maxStake,
         screenSec: args?.screenSec !== undefined ? Math.round(clamp(num(args.screenSec, 5), 2, 30)) : s.screenSec,
         townWalk: bool('townWalk'),
@@ -422,7 +465,7 @@ export default defineModule<ArcadeSettings>({
     });
 
     // (the games still to come stay on the server)
-    const plain = ({ charges: _c, timer: _t, lastAt: _l, draw: _d, ...m }: Match): ArcadeMatch => m;
+    const plain = ({ charges: _c, timer: _t, lastAt: _l, ghostAt: _g, draw: _d, ...m }: Match): ArcadeMatch => m;
 
     ctx.state((role): ArcadeState => {
       const guests = [...ctx.session.guests.values()];

@@ -51,10 +51,14 @@ run a test copy without touching the real guests and settings).
   `scripts/crowd-sprites.ts`, and their streets and square are LPC style environment art; credits in
   `web/public/crowd/CREDITS.txt` and `web/public/crowd/env/CREDITS.txt`
 - **Arcade**: 1 vs 1 phone games with a bet: 1, 3 or 5 games drawn at random among Knife Throw,
-  Tower Stack, Flap, Zig, Quick Maths and Slicer, each revealed when its round starts. Both players get the same run (same seed), played on their own
-  phone with no lag and started together by the server; the players' characters walk into the town's
-  arcade, whose marquee shows the scores. Games are Phaser 4 scenes on `ArcadeScene`
-  (`web/src/modules/arcade/engine/base.ts`, one file each in `games/`), sounds made by ZzFX
+  Tower Stack, Flap, Zig, Plank, Street Dash, Pop Up, Quick Maths and Slicer, each revealed when its
+  round starts. Both players get the same run (same seed), played on their own phone with no lag and
+  started together by the server, in pixel art with their own town character; each sees the other's
+  ghost as they play (relayed by the server), with lives, combos and a fever bar that doubles points.
+  The players' characters walk into the town's arcade, whose marquee shows the race. Games are
+  Phaser 4 scenes on `ArcadeScene` (`web/src/modules/arcade/engine/base.ts`, one file each in
+  `games/`), sounds made by ZzFX. `scripts/arcade-bot.ts` is a fake opponent for trying them on a
+  test copy
 
 Plus: selfie avatars, rotating leaderboards, activity feed, gifts, themes, and an economy editor
 for every price and reward. Every module can be turned off and configured in the admin.

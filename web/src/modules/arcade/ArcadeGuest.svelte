@@ -1,12 +1,12 @@
 <script lang="ts">
   import { Trophy } from '@lucide/svelte';
-  import { ARCADE_GAMES } from '$shared/arcade.ts';
+  import { arcadeOffered } from '$shared/arcade.ts';
   import ArcadeChallenge from './ArcadeChallenge.svelte';
   import { ARCADE_ICONS, arcadeState, gradient } from './store.svelte.ts';
 
   /** The Arcade's panel: the challenge (how many games, who, the bet), the games that can come up, the best scores */
   const s = $derived(arcadeState());
-  const games = $derived(ARCADE_GAMES.filter((g) => s?.settings.games.includes(g.id)));
+  const games = $derived(arcadeOffered(s?.settings));
   const records = $derived(games.filter((g) => s?.records[g.id]).map((g) => ({ g, r: s!.records[g.id]! })));
 </script>
 

@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
-import { ArcadeScene, H, W } from '../engine/base.ts';
+import { ArcadeScene, H, INK, PX, W } from '../engine/base.ts';
 
 /** A wrong answer takes this off the clock */
 const PENALTY_MS = 2000;
+/** An answer this quick (ms) fills the fever bar a lot more */
+const QUICK_MS = 1800;
 const BTN_W = 168;
 const BTN_H = 104;
-const ROWS = [470, 592];
+const ROWS = [490, 610];
 const COLS = [W / 2 - 88, W / 2 + 88];
 
 interface Question {
@@ -15,55 +17,89 @@ interface Question {
 }
 
 interface Button {
-  g: Phaser.GameObjects.Graphics;
-  t: Phaser.GameObjects.Text;
+  img: Phaser.GameObjects.Image;
+  t: Phaser.GameObjects.Container;
   x: number;
   y: number;
   value: number;
 }
 
 /**
- * Quick Maths: a sum, four answers. The right one scores and the next sum comes; a wrong one costs
- * two seconds. The sums get harder as they go (adding, taking away, times tables, dividing), and
- * come in the same order for both players, drawn from the seed.
+ * Quick Maths: a sum in chalk on the board, four answers on wooden tiles. The right one scores and
+ * the next sum comes (a quick one fills the fever bar faster); a wrong one costs two seconds. The
+ * sums get harder as they go (adding, taking away, times tables, dividing), and come in the same
+ * order for both players, drawn from the seed.
  */
 export class MathsScene extends ArcadeScene {
   private q = 0;
   private current: Question | null = null;
-  private card!: Phaser.GameObjects.Container;
-  private question!: Phaser.GameObjects.Text;
+  private shownAt = 0;
+  private question!: Phaser.GameObjects.Container;
   private buttons: Button[] = [];
   private locked = false;
-  private streak = 0;
+  private hero!: Phaser.GameObjects.Sprite;
 
   build(): void {
-    this.backdrop('maths-bg', '#0d3b46', '#081420');
-    // A faint grid, like squared paper
-    const grid = this.add.graphics().setDepth(-90);
-    grid.lineStyle(1, 0xffffff, 0.05);
-    for (let x = 0; x <= W; x += 32) grid.lineBetween(x, 0, x, H);
-    for (let y = 0; y <= H; y += 32) grid.lineBetween(0, y, W, y);
-
-    this.card = this.add.container(W / 2, 250);
-    const bg = this.add.graphics();
-    bg.fillStyle(0xffffff, 0.08).fillRoundedRect(-170, -90, 340, 180, 26);
-    bg.lineStyle(2, 0x6ff0d0, 0.35).strokeRoundedRect(-170, -90, 340, 180, 26);
-    this.question = this.text(0, 0, '?', 64, '#ffffff', 800);
-    this.card.add([bg, this.question]);
-    for (const y of ROWS) for (const x of COLS) this.buttons.push({ g: this.add.graphics({ x, y }), t: this.text(x, y, '', 40, '#ffffff', 800), x, y, value: 0 });
-    this.drawButtons(null);
-    this.question.setText('Ready?');
-    this.question.setFontSize(48);
+    this.paintArt();
+    this.sprite(W / 2, H / 2, 'maths-wall').setDepth(-100);
+    this.sprite(W / 2, 230, 'maths-board');
+    this.question = this.label(W / 2, 224, 'READY?', 4, '#f4f7ee');
+    this.hero = this.avatar('me', W - 40, 400, 1.5).setDepth(5);
+    for (const y of ROWS) {
+      for (const x of COLS) {
+        const img = this.sprite(x, y, 'mbtn');
+        this.buttons.push({ img, t: this.label(x, y - 4, '', 4, INK.cream).setDepth(2), x, y, value: 0 });
+      }
+    }
   }
 
-  private drawButtons(mark: { i: number; ok: boolean } | null): void {
-    this.buttons.forEach((b, i) => {
-      const color = mark?.i === i ? (mark.ok ? 0x2fd27a : 0xff4d5e) : 0x1d5a6e;
-      b.g.clear();
-      b.g.fillStyle(0x000000, 0.25).fillRoundedRect(-BTN_W / 2, -BTN_H / 2 + 6, BTN_W, BTN_H, 22);
-      b.g.fillStyle(color, 1).fillRoundedRect(-BTN_W / 2, -BTN_H / 2, BTN_W, BTN_H, 22);
-      b.g.fillStyle(0xffffff, 0.12).fillRoundedRect(-BTN_W / 2, -BTN_H / 2, BTN_W, BTN_H / 2, { tl: 22, tr: 22, bl: 0, br: 0 });
+  private paintArt(): void {
+    this.pix('maths-wall', W / PX, H / PX, (p) => {
+      const w = W / PX;
+      const h = H / PX;
+      p.rect('#2e4a52', 0, 0, w, h);
+      p.dither('#34545c', 0, 0, w, h);
+      // A wooden rail along the wall, the floor
+      p.rect('#5a3a24', 0, 200, w, 6);
+      p.rect('#7a5234', 0, 200, w, 2);
+      p.rect('#24343a', 0, 206, w, h - 206);
+      for (let y = 210; y < h; y += 12) p.rect('#2c3e44', 0, y, w, 1);
     });
+    const bw = 176;
+    const bh = 112;
+    this.pix('maths-board', bw, bh, (p) => {
+      p.rect(INK.line, 0, 0, bw, bh);
+      p.rect('#8a5a34', 1, 1, bw - 2, bh - 2);
+      p.rect('#a8744a', 1, 1, bw - 2, 2);
+      p.rect('#1f4a3a', 6, 6, bw - 12, bh - 16);
+      p.dither('#245442', 6, 6, bw - 12, bh - 16);
+      // Old chalk smudges, the chalk ledge with two sticks
+      p.dither('rgba(255,255,255,0.08)', 20, 14, 40, 10);
+      p.dither('rgba(255,255,255,0.06)', 110, 70, 50, 12, 1);
+      p.rect('#6a4428', 4, bh - 10, bw - 8, 5);
+      p.rect('#f4f4f0', 30, bh - 12, 8, 2);
+      p.rect('#ffd0e0', 44, bh - 12, 6, 2);
+    });
+    const tile = (key: string, face: string, light: string, dark: string) =>
+      this.pix(key, BTN_W / PX, BTN_H / PX, (p) => {
+        const w = BTN_W / PX;
+        const h = BTN_H / PX;
+        p.rect(INK.line, 0, 0, w, h);
+        p.rect(dark, 1, 1, w - 2, h - 2);
+        p.rect(face, 1, 1, w - 2, h - 6);
+        p.rect(light, 1, 1, w - 2, 2);
+        p.rect(light, 1, 1, 2, h - 6);
+        // Wood grain
+        for (let y = 8; y < h - 8; y += 7) p.rect(dark, 6 + ((y * 5) % 9), y, w - 16 - ((y * 3) % 11), 1);
+      });
+    tile('mbtn', '#b07a4a', '#d49a62', '#7a4e2c');
+    tile('mbtn-right', '#3fae5a', '#7ae08a', '#24703a');
+    tile('mbtn-wrong', '#c8384a', '#f0707e', '#802030');
+  }
+
+  /** One tile green or red, the others plain */
+  private mark(state: { i: number; ok: boolean } | null): void {
+    this.buttons.forEach((b, i) => b.img.setTexture(state?.i === i ? (state.ok ? 'mbtn-right' : 'mbtn-wrong') : 'mbtn'));
   }
 
   private int(a: number, b: number): number {
@@ -133,17 +169,17 @@ export class MathsScene extends ArcadeScene {
 
   private next(): void {
     this.current = this.sumFor(this.q++);
-    this.question.setFontSize(this.current.text.length > 7 ? 58 : 66);
-    this.question.setText(this.current.text);
-    this.card.setScale(0.85).setAlpha(0.3);
-    this.tweens.add({ targets: this.card, scale: 1, alpha: 1, duration: 180, ease: 'Back.Out' });
+    this.relabel(this.question, this.current.text);
+    this.question.setScale(this.current.text.length > 6 ? 0.8 : 1).setAlpha(0);
+    this.tweens.add({ targets: this.question, alpha: 1, duration: 140 });
     this.buttons.forEach((b, i) => {
       b.value = this.current!.choices[i];
-      b.t.setText(String(b.value));
+      this.relabel(b.t, String(b.value));
       b.t.setScale(0.7);
       this.tweens.add({ targets: b.t, scale: 1, duration: 160, delay: i * 25, ease: 'Back.Out' });
     });
-    this.drawButtons(null);
+    this.mark(null);
+    this.shownAt = this.played;
     this.locked = false;
   }
 
@@ -161,26 +197,29 @@ export class MathsScene extends ArcadeScene {
     this.locked = true;
     const b = this.buttons[i];
     const ok = b.value === this.current.answer;
-    this.drawButtons({ i, ok });
-    this.tweens.add({ targets: [b.g, b.t], scale: { from: 0.92, to: 1 }, duration: 160, ease: 'Back.Out' });
+    this.mark({ i, ok });
+    this.tweens.add({ targets: b.img, scale: { from: PX * 0.92, to: PX }, duration: 160, ease: 'Back.Out' });
     if (ok) {
-      this.streak++;
-      this.addScore(1);
-      this.sfx('right', 0.8 + Math.min(0.4, this.streak * 0.05));
+      const quick = this.played - this.shownAt < QUICK_MS;
+      const got = this.addScore(1);
+      this.good(quick);
+      this.sfx('right', 0.8 + Math.min(0.4, this.combo * 0.05));
       this.buzz(10);
       this.burst(b.x, b.y, '#4fffb0', 10, 220);
-      this.pop(b.x, b.y - 50, '+1', '#9dffd6', 30);
+      this.pop(b.x, b.y - 60, quick ? `QUICK +${got}` : `+${got}`, quick ? INK.gold : '#9dffd6', 2);
+      if (this.combo % 5 === 0) this.pose(this.hero, 'emote', 8, 0);
       this.time.delayedCall(170, () => this.running && this.next());
     } else {
-      this.streak = 0;
       this.penalty += PENALTY_MS;
+      this.miss();
       this.sfx('wrong');
       this.buzz([40, 30, 40]);
       this.shake(160, 0.01);
-      this.pop(b.x, b.y - 50, '-2s', '#ff8a96', 30);
+      this.pop(b.x, b.y - 60, '-2S', '#ff8a96', 3);
+      this.pose(this.hero, 'hurt', 8, 0);
       // The right one shows a moment
       const right = this.buttons.findIndex((x) => x.value === this.current!.answer);
-      this.time.delayedCall(120, () => this.drawButtons({ i: right, ok: true }));
+      this.time.delayedCall(120, () => this.mark({ i: right, ok: true }));
       this.time.delayedCall(520, () => this.running && this.next());
     }
   }
@@ -189,9 +228,10 @@ export class MathsScene extends ArcadeScene {
 
   finished(): void {
     this.input.removeAllListeners();
-    this.question.setText('TIME');
-    this.question.setFontSize(58);
-    for (const b of this.buttons) b.t.setText('');
-    this.drawButtons(null);
+    this.relabel(this.question, 'TIME');
+    this.question.setScale(1);
+    for (const b of this.buttons) this.relabel(b.t, '');
+    this.mark(null);
+    this.pose(this.hero, 'happy');
   }
 }

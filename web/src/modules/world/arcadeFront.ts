@@ -2,6 +2,7 @@ import { SPRITE_SCALE } from '$shared/crowd.ts';
 import { ARCADE_GAMES, arcadeGame, type ArcadeMatch, type ArcadeState } from '$shared/arcade.ts';
 import type { TownPlace } from '$shared/world.ts';
 import { enabled, hb, serverNow } from '$lib/client.svelte.ts';
+import { drawPixelText, pixelClean, pixelTextWidth } from '$lib/pixelFont.ts';
 
 /**
  * The town's arcade, on the small brick house by the town hall: a deep purple shopfront, two arcade
@@ -24,77 +25,10 @@ export const MARQUEE = { x: 8, y: 66, w: 128, h: 60 };
 const TITLE = { y: 70, h: 16 };
 export const SCREEN = { x: 14, y: 89, w: 116, h: 32 };
 
-// ------------------------------------------------------------ a 5 x 7 pixel font
-
-const FONT: Record<string, string[]> = {
-  A: ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
-  B: ['####.', '#...#', '#...#', '####.', '#...#', '#...#', '####.'],
-  C: ['.###.', '#...#', '#....', '#....', '#....', '#...#', '.###.'],
-  D: ['####.', '#...#', '#...#', '#...#', '#...#', '#...#', '####.'],
-  E: ['#####', '#....', '#....', '####.', '#....', '#....', '#####'],
-  F: ['#####', '#....', '#....', '####.', '#....', '#....', '#....'],
-  G: ['.###.', '#...#', '#....', '#.###', '#...#', '#...#', '.####'],
-  H: ['#...#', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
-  I: ['.###.', '..#..', '..#..', '..#..', '..#..', '..#..', '.###.'],
-  J: ['..###', '...#.', '...#.', '...#.', '...#.', '#..#.', '.##..'],
-  K: ['#...#', '#..#.', '#.#..', '##...', '#.#..', '#..#.', '#...#'],
-  L: ['#....', '#....', '#....', '#....', '#....', '#....', '#####'],
-  M: ['#...#', '##.##', '#.#.#', '#.#.#', '#...#', '#...#', '#...#'],
-  N: ['#...#', '#...#', '##..#', '#.#.#', '#..##', '#...#', '#...#'],
-  O: ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
-  P: ['####.', '#...#', '#...#', '####.', '#....', '#....', '#....'],
-  Q: ['.###.', '#...#', '#...#', '#...#', '#.#.#', '#..#.', '.##.#'],
-  R: ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
-  S: ['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
-  T: ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
-  U: ['#...#', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
-  V: ['#...#', '#...#', '#...#', '#...#', '#...#', '.#.#.', '..#..'],
-  W: ['#...#', '#...#', '#...#', '#.#.#', '#.#.#', '#.#.#', '.#.#.'],
-  X: ['#...#', '#...#', '.#.#.', '..#..', '.#.#.', '#...#', '#...#'],
-  Y: ['#...#', '#...#', '.#.#.', '..#..', '..#..', '..#..', '..#..'],
-  Z: ['#####', '....#', '...#.', '..#..', '.#...', '#....', '#####'],
-  '0': ['.###.', '#...#', '#..##', '#.#.#', '##..#', '#...#', '.###.'],
-  '1': ['..#..', '.##..', '..#..', '..#..', '..#..', '..#..', '.###.'],
-  '2': ['.###.', '#...#', '....#', '...#.', '..#..', '.#...', '#####'],
-  '3': ['####.', '....#', '....#', '.###.', '....#', '....#', '####.'],
-  '4': ['...#.', '..##.', '.#.#.', '#..#.', '#####', '...#.', '...#.'],
-  '5': ['#####', '#....', '####.', '....#', '....#', '#...#', '.###.'],
-  '6': ['.###.', '#....', '#....', '####.', '#...#', '#...#', '.###.'],
-  '7': ['#####', '....#', '...#.', '..#..', '.#...', '.#...', '.#...'],
-  '8': ['.###.', '#...#', '#...#', '.###.', '#...#', '#...#', '.###.'],
-  '9': ['.###.', '#...#', '#...#', '.####', '....#', '....#', '.###.'],
-  ' ': ['.....', '.....', '.....', '.....', '.....', '.....', '.....'],
-  '-': ['.....', '.....', '.....', '.###.', '.....', '.....', '.....'],
-  ':': ['.....', '..#..', '..#..', '.....', '..#..', '..#..', '.....'],
-  '/': ['....#', '....#', '...#.', '..#..', '.#...', '#....', '#....'],
-  '.': ['.....', '.....', '.....', '.....', '.....', '.##..', '.##..'],
-  '!': ['..#..', '..#..', '..#..', '..#..', '..#..', '.....', '..#..'],
-  '*': ['.....', '..#..', '#.#.#', '.###.', '#.#.#', '..#..', '.....'],
-  '?': ['.###.', '#...#', '....#', '...#.', '..#..', '.....', '..#..'],
-};
-
-/** Letters the font has: the rest of a name goes (accents lose theirs) */
-function clean(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toUpperCase()
-    .split('')
-    .filter((c) => FONT[c])
-    .join('');
-}
-
-const textWidth = (s: string, k = 1) => (s.length ? s.length * 6 * k - k : 0);
-
-/** Text in the pixel font, `k` pixels a font pixel, top left at x, y */
-function text(g: CanvasRenderingContext2D, s: string, x: number, y: number, color: string, k = 1): void {
-  g.fillStyle = color;
-  for (let i = 0; i < s.length; i++) {
-    const glyph = FONT[s[i]];
-    if (!glyph) continue;
-    for (let r = 0; r < 7; r++) for (let c = 0; c < 5; c++) if (glyph[r][c] === '#') g.fillRect(x + (i * 6 + c) * k, y + r * k, k, k);
-  }
-}
+/** Letters the font has: the rest of a name goes */
+const clean = pixelClean;
+const textWidth = pixelTextWidth;
+const text = drawPixelText;
 
 function px(g: CanvasRenderingContext2D, color: string, x: number, y: number, w = 1, h = 1): void {
   g.fillStyle = color;
@@ -283,7 +217,7 @@ function boardCanvas(): HTMLCanvasElement {
 }
 
 /** A short name for the screen: a game's first word, a player's name cut to fit */
-const SHORT: Record<string, string> = { knife: 'KNIFE', stack: 'STACK', flap: 'FLAP', zig: 'ZIG', maths: 'MATHS', slicer: 'SLICER' };
+const SHORT: Record<string, string> = { knife: 'KNIFE', stack: 'STACK', flap: 'FLAP', zig: 'ZIG', plank: 'PLANK', dodge: 'DASH', whack: 'POP UP', maths: 'MATHS', slicer: 'SLICER' };
 const shortGame = (id: string) => SHORT[id] ?? clean(arcadeGame(id)?.name ?? '').slice(0, 6);
 const shortName = (name: string, max = 6) => clean(name.trim().split(/\s+/)[0] ?? '').slice(0, max) || '?';
 
@@ -317,11 +251,33 @@ function drawMatch(g: CanvasRenderingContext2D, m: ArcadeMatch, x: number, y: nu
     text(g, sb, x + W - 3 - textWidth(sb), y + 13, '#ffffff');
     return;
   }
-  // The scores, big
+  // The scores, big (gold blinking in a fever: points doubled)
   const sa = String(r.scores[a.id] ?? 0);
   const sb = String(r.scores[b.id] ?? 0);
-  text(g, sa, x + 3, y + 13, r.done.includes(a.id) ? '#8a86a0' : '#ffffff', 2);
-  text(g, sb, x + W - 3 - textWidth(sb, 2), y + 13, r.done.includes(b.id) ? '#8a86a0' : '#ffffff', 2);
+  const scoreColor = (id: string) => (r.done.includes(id) ? '#8a86a0' : r.fever?.includes(id) && blink ? NEON.gold : '#ffffff');
+  text(g, sa, x + 3, y + 13, scoreColor(a.id), 2);
+  text(g, sb, x + W - 3 - textWidth(sb, 2), y + 13, scoreColor(b.id), 2);
+  if (m.phase !== 'play' || !m.startsAt || serverNow() < m.startsAt) return;
+  // The lives left, little hearts in the middle (games with lives)
+  const lives = arcadeGame(r.game)?.lives ?? 0;
+  for (let i = 0; i < lives; i++) {
+    heart(g, x + W / 2 - 6 - i * 4, y + 22, i < (r.lives?.[a.id] ?? lives) ? '#ff4d6d' : '#3a2f55');
+    heart(g, x + W / 2 + 3 + i * 4, y + 22, i < (r.lives?.[b.id] ?? lives) ? '#ff4d6d' : '#3a2f55');
+  }
+  // The race: a bar along the bottom, each player's share of the points in their color
+  const total = (r.scores[a.id] ?? 0) + (r.scores[b.id] ?? 0);
+  const split = Math.round((W - 6) * (total ? (r.scores[a.id] ?? 0) / total : 0.5));
+  px(g, a.color, x + 3, y + 29, split, 2);
+  px(g, b.color, x + 3 + split, y + 29, W - 6 - split, 2);
+  px(g, '#ffffff', x + 2 + split, y + 28, 2, 4);
+}
+
+/** A heart of 3 x 3 pixels */
+function heart(g: CanvasRenderingContext2D, x: number, y: number, color: string): void {
+  px(g, color, x, y, 1, 1);
+  px(g, color, x + 2, y, 1, 1);
+  px(g, color, x, y + 1, 3, 1);
+  px(g, color, x + 1, y + 2, 1, 1);
 }
 
 /** Nobody plays: the best scores of the party scroll by between the arcade's own calls (nothing of the world outside the town) */

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { ARCADE_GAMES, arcadeGame, type ArcadeGameId } from '$shared/arcade.ts';
-  import { ARCADE_ICONS, gradient } from './store.svelte.ts';
+  import PixelText from '$lib/ui/PixelText.svelte';
+  import { ARCADE_ICONS } from './store.svelte.ts';
 
   /**
    * The game of a round, drawn like a slot machine: the games flash by, slow down and stop on the
@@ -43,31 +44,38 @@
   const Icon = $derived(ARCADE_ICONS[shown]);
 </script>
 
-<div class="poster" class:landed style:--g={gradient(info.colors)}>
-  <span class="poster-icon"><Icon size={40} strokeWidth={2.2} /></span>
-  <h1>{info.name}</h1>
+<div class="poster" class:landed style:--a={info.colors[0]} style:--b={info.colors[1]}>
+  <span class="poster-icon"><Icon size={34} strokeWidth={2.4} /></span>
+  <span class="title"><PixelText text={info.name} size={22} color="#ffffff" /></span>
   <p class:hidden={!landed}>{info.tagline}</p>
   {#if landed}<span class="burst" aria-hidden="true"></span>{/if}
 </div>
 
 <style>
+  /* The cabinet's screen: dark glass with scanlines, lit in the game's colors */
   .poster {
     position: relative;
     display: grid;
     justify-items: center;
-    gap: 0.3rem;
+    gap: 0.55rem;
     width: 100%;
-    padding: 1.6rem 1rem 1.3rem;
-    border-radius: var(--radius);
-    background: var(--g);
+    padding: 1.3rem 1rem 1.1rem;
+    border: 3px solid #0b0718;
+    border-radius: 6px;
+    background:
+      repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.22) 0 2px, transparent 2px 4px),
+      radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--a) 55%, #140c28), color-mix(in srgb, var(--b) 45%, #0b0718) 75%);
     color: #fff;
     overflow: hidden;
-    box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.8);
+    box-shadow:
+      0 0 0 3px var(--a),
+      0 0 26px -4px var(--a),
+      inset 0 0 30px rgba(0, 0, 0, 0.6);
   }
   .poster:not(.landed) .poster-icon,
-  .poster:not(.landed) h1 {
+  .poster:not(.landed) .title {
     filter: blur(0.6px);
-    opacity: 0.9;
+    opacity: 0.85;
   }
   .landed {
     animation: land 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
@@ -83,21 +91,25 @@
   .poster-icon {
     display: grid;
     place-items: center;
-    width: 4.4rem;
-    height: 4.4rem;
-    border-radius: 22px;
-    background: rgba(255, 255, 255, 0.22);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    width: 4rem;
+    height: 4rem;
+    border: 3px solid #0b0718;
+    border-radius: 4px;
+    background: linear-gradient(135deg, var(--a), var(--b));
+    box-shadow:
+      inset 0 3px 0 rgba(255, 255, 255, 0.35),
+      inset 0 -3px 0 rgba(0, 0, 0, 0.25),
+      3px 3px 0 rgba(0, 0, 0, 0.45);
   }
-  h1 {
-    margin: 0.3rem 0 0;
-    font-family: var(--font-display);
-    font-size: 1.9rem;
+  .title {
+    min-height: 26px;
   }
   p {
     margin: 0;
-    opacity: 0.9;
+    max-width: 18rem;
+    opacity: 0.92;
     font-size: 0.9rem;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
     transition: opacity 0.2s;
   }
   p.hidden {

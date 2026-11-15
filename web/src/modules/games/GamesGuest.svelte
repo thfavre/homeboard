@@ -18,7 +18,7 @@
   } from '$shared/games.ts';
   import { formatAmount, parseAmount } from '$shared/money.ts';
   import { hb, rpc, attempt, price, enabled } from '$lib/client.svelte.ts';
-  import { ARCADE_GAMES } from '$shared/arcade.ts';
+  import { arcadeOffered } from '$shared/arcade.ts';
   import ArcadeChallenge from '../arcade/ArcadeChallenge.svelte';
   import { ARCADE_ICONS, arcadeState } from '../arcade/store.svelte.ts';
   import Avatar from '$lib/ui/Avatar.svelte';
@@ -32,7 +32,7 @@
   let picked = $state<GameInfo | null>(null);
   /** The Arcade's challenge open from the 1 vs 1 list (played on the phones, see the Arcade module) */
   let arcadeOpen = $state(false);
-  const arcadeGames = $derived(enabled('arcade') ? ARCADE_GAMES.filter((g) => arcadeState()?.settings.games.includes(g.id)) : []);
+  const arcadeGames = $derived(enabled('arcade') ? arcadeOffered(arcadeState()?.settings) : []);
   let opponent = $state<string | null>(null);
   let stakeText = $state('');
   /** Rhythm Rain: number of colors (keys) and difficulty, sent with the challenge */
