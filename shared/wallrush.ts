@@ -10,22 +10,24 @@ export type WallRushModel = 'lite' | 'full' | 'heavy';
 
 export const WALLRUSH_LEVELS: { id: WallRushLevel; name: string; help: string; margin: number; outside: number }[] = [
   // margin: room around every limb of the hole (world units). outside: share of the body allowed out of it
-  { id: 'easy', name: 'Easy', help: 'Wide holes, a hand out still passes', margin: 0.05, outside: 0.12 },
-  { id: 'normal', name: 'Normal', help: 'The hole is a bit bigger than the body', margin: 0.035, outside: 0.08 },
-  { id: 'hard', name: 'Hard', help: 'Tight holes, the pose has to be right', margin: 0.022, outside: 0.05 },
+  { id: 'easy', name: 'Easy', help: 'Wide holes, a hand out still passes', margin: 0.065, outside: 0.2 },
+  { id: 'normal', name: 'Normal', help: 'The hole is a bit bigger than the body', margin: 0.05, outside: 0.13 },
+  { id: 'hard', name: 'Hard', help: 'Tight holes, the pose has to be right', margin: 0.032, outside: 0.07 },
 ];
 export const wallRushLevel = (id: string) => WALLRUSH_LEVELS.find((l) => l.id === id) ?? WALLRUSH_LEVELS[1];
 
 /** Time a wall takes to reach the player: the first wall, then the last one (they speed up in between) */
 export const WALLRUSH_SPEEDS: { id: WallRushSpeed; name: string; firstMs: number; lastMs: number }[] = [
-  { id: 'chill', name: 'Chill', firstMs: 6500, lastMs: 4500 },
-  { id: 'normal', name: 'Normal', firstMs: 5500, lastMs: 3200 },
-  { id: 'fast', name: 'Fast', firstMs: 4200, lastMs: 2400 },
+  { id: 'chill', name: 'Chill', firstMs: 4800, lastMs: 3400 },
+  { id: 'normal', name: 'Normal', firstMs: 4000, lastMs: 2500 },
+  { id: 'fast', name: 'Fast', firstMs: 3200, lastMs: 1900 },
 ];
 export const wallRushSpeed = (id: string) => WALLRUSH_SPEEDS.find((s) => s.id === id) ?? WALLRUSH_SPEEDS[1];
 
-/** Pause between a wall reaching the player and the next one setting off (the result shows meanwhile) */
-export const WALLRUSH_GAP_MS = 1100;
+/** Shortest time between two walls reaching the player (the next one is already on its way) */
+export const WALLRUSH_GAP_MS = 1500;
+/** The TV judges the best fit over this last stretch before a wall arrives (forgives a shaky frame) */
+export const WALLRUSH_JUDGE_MS = 350;
 /** "3, 2, 1" before the first wall */
 export const WALLRUSH_COUNTDOWN_MS = 3000;
 /** Longest the player has to set the camera up and stand in front of it */
@@ -107,6 +109,15 @@ export interface PoseDef {
   torso?: number;
   arms: { l: [number, number]; r: [number, number] };
   legs: { l: [number, number]; r: [number, number] };
+  /** A move instead of a pose: the hole is a plain opening (duck under it, step to a side) */
+  rects?: Rect[];
+}
+
+export interface Rect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
 }
 
 const DOWN = -90;
@@ -124,7 +135,15 @@ export const POSES: PoseDef[] = [
   { id: 'lowy', name: 'Low Y', level: 3, arms: { l: [120, 120], r: [60, 60] }, legs: { l: [-152, -98], r: [-28, -82] } },
   { id: 'kick', name: 'Karate', level: 3, torso: 98, arms: { l: [170, 120], r: [10, 60] }, legs: { l: [-98, DOWN], r: [-10, -15] } },
 ];
-export const poseDef = (id: string) => POSES.find((p) => p.id === id) ?? POSES[0];
+
+/** Quick moves mixed between the poses: no pose to read, just move */
+const STILL = { arms: { l: [DOWN, DOWN] as [number, number], r: [DOWN, DOWN] as [number, number] }, legs: { l: [DOWN, DOWN] as [number, number], r: [DOWN, DOWN] as [number, number] } };
+export const MOVES: PoseDef[] = [
+  { id: 'duck', name: 'Duck!', level: 1, ...STILL, rects: [{ x0: -1.3, y0: 0, x1: 1.3, y1: 0.6 }] },
+  { id: 'left', name: 'Step left', level: 1, ...STILL, rects: [{ x0: -1.3, y0: 0, x1: -0.06, y1: 1.12 }] },
+  { id: 'right', name: 'Step right', level: 1, ...STILL, rects: [{ x0: 0.06, y0: 0, x1: 1.3, y1: 1.12 }] },
+];
+export const poseDef = (id: string) => POSES.find((p) => p.id === id) ?? MOVES.find((p) => p.id === id) ?? POSES[0];
 
 export interface Point {
   x: number;
@@ -132,9 +151,11 @@ export interface Point {
 }
 /** A pose as segments with a thickness, plus the head: what the hole is cut from */
 export interface PoseShape {
-  head: Point & { r: number };
+  head: (Point & { r: number }) | null;
   torso: Point[];
   limbs: { a: Point; b: Point; w: number }[];
+  /** A move: plain openings */
+  rects: Rect[];
   /** Lowest and highest points, to size the wall */
   top: number;
 }
@@ -158,6 +179,7 @@ const add = (p: Point, d: Point, len: number): Point => ({ x: p.x + d.x * len, y
 
 /** The pose's shape, standing on the floor, its middle at x (world units) */
 export function poseShape(pose: PoseDef, x = 0): PoseShape {
+  if (pose.rects) return { head: null, torso: [], limbs: [], rects: pose.rects, top: Math.max(...pose.rects.map((r) => r.y1)) };
   const t = dir(pose.torso ?? 90);
   // Across the body (to the right of the screen when upright)
   const side: Point = { x: t.y, y: -t.x };
@@ -196,9 +218,10 @@ export function poseShape(pose: PoseDef, x = 0): PoseShape {
     head: { ...move(head), r: HEAD_R },
     torso: [shoulderL, shoulderR, hipR, hipL].map(move),
     limbs: limbs.map((l) => ({ a: move(l.a), b: move(l.b), w: l.w })),
+    rects: [],
     top: 0,
   };
-  shape.top = Math.max(shape.head.y + HEAD_R, ...shape.limbs.flatMap((l) => [l.a.y, l.b.y]));
+  shape.top = Math.max(move(head).y + HEAD_R, ...shape.limbs.flatMap((l) => [l.a.y, l.b.y]));
   return shape;
 }
 
@@ -209,6 +232,13 @@ export function poseShape(pose: PoseDef, x = 0): PoseShape {
 export function drawPoseShape(g: CanvasRenderingContext2D, shape: PoseShape, grow: number, map: (p: Point) => Point, scale: number): void {
   g.lineCap = 'round';
   g.lineJoin = 'round';
+  for (const r of shape.rects) {
+    // A move's opening: grown like the poses, but not past the floor
+    const a = map({ x: r.x0 - grow, y: r.y1 + grow });
+    const b = map({ x: r.x1 + grow, y: Math.max(r.y0 - grow, -0.1) });
+    g.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+  }
+  if (!shape.head) return;
   g.beginPath();
   const torso = shape.torso.map(map);
   torso.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
@@ -251,9 +281,34 @@ export interface WallRushFit {
   coverage: number;
 }
 
+export type WallRushGrade = 'perfect' | 'great' | 'good' | 'hit';
+
 export interface WallRushResult extends WallRushFit {
   pass: boolean;
+  grade: WallRushGrade;
   points: number;
+}
+
+/** How well a fit went: the less sticks out, the better */
+export function wallRushGrade(fit: WallRushFit, outsideMax: number): WallRushGrade {
+  if (!fit.seen || fit.outside > outsideMax) return 'hit';
+  if (fit.outside <= outsideMax * 0.35) return 'perfect';
+  if (fit.outside <= outsideMax * 0.7) return 'great';
+  return 'good';
+}
+export const WALLRUSH_POINTS: Record<WallRushGrade, number> = { perfect: 300, great: 200, good: 100, hit: 0 };
+
+/** The song the walls come on (Rhythm Rain's songs) */
+export interface WallRushMusic {
+  url: string;
+  title: string;
+  artist: string;
+  bpm: number;
+  /** Server time the song plays from `fromMs` (ms into the song) */
+  at: number;
+  fromMs: number;
+  /** Server time the music fades out */
+  untilAt: number;
 }
 
 export interface WallRushView {
@@ -272,6 +327,10 @@ export interface WallRushView {
   model: WallRushModel;
   /** The TV said the camera picture arrives */
   cameraOn: boolean;
+  /** Walls on the beat of a song (null: no music) */
+  music: WallRushMusic | null;
+  /** Sound delay of the TV (ms, the music plays this much early), the host's Rhythm Rain setting */
+  audioOffset: number;
 }
 
 /** Points multiplier for a streak of walls passed */

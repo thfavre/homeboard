@@ -148,7 +148,7 @@ export const GAMES: GameInfo[] = [
     id: 'wallrush',
     name: 'Wall Rush',
     tagline: 'Strike the pose of the hole before the wall hits you',
-    rules: 'Your phone films you and the TV turns you into a glowing silhouette. Glowing walls rush at you, each with a hole in the shape of a pose: take that pose, in the right place, before the wall reaches you. The parts of you that stick out turn red. Fit through and you score, more if you fill the hole well, and walls passed in a row multiply your points. Hit the wall and you lose a life.',
+    rules: 'Your phone films you and the TV turns you into a glowing silhouette. Glowing walls rush at you on the beat of the music, each with a hole in the shape of a pose: take that pose, in the right place, before the wall reaches you. Some walls just make you duck or step aside. The parts of you that stick out turn red, and you glow green when you fit. Perfect, great or good: the less sticks out, the more you score, and walls passed in a row multiply your points. Hit the wall and you lose a life.',
     modes: ['solo'],
     addon: true,
     steps: ['Put your phone on a stand facing you, 3 m away, and step back until the TV sees all of you', 'A wall comes with a hole in the shape of a pose: take that pose', 'Red parts stick out. Fit through to score, keep the streak going'],
@@ -403,6 +403,8 @@ export interface GamesSettings {
   wallrushSpeed: WallRushSpeed;
   wallrushLives: number;
   wallrushModel: WallRushModel;
+  /** Walls on the beat of one of the Rhythm Rain songs (when there are some) */
+  wallrushMusic: boolean;
 }
 
 // ------------------------------------------------------------ per game views

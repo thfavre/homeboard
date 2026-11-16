@@ -4,6 +4,7 @@
   import { WALLRUSH_LEVELS, WALLRUSH_MEDIAPIPE, WALLRUSH_MODELS, WALLRUSH_SPEEDS, wallRushBytes, type AddonStatus, type WallRushModel } from '$shared/wallrush.ts';
   import { attempt, rpc } from '$lib/client.svelte.ts';
   import TwoStepButton from '$lib/ui/TwoStepButton.svelte';
+  import Toggle from '$lib/ui/Toggle.svelte';
 
   /**
    * Wall Rush options, and its add-on: the body tracking is downloaded here, only on the computers
@@ -87,6 +88,10 @@
 
 {@render stepper('Walls', '3 to 30 a game', settings.wallrushWalls, 3, 30, (n) => setSettings({ wallrushWalls: n }))}
 {@render stepper('Lives', 'Walls you can hit, 0 = unlimited', settings.wallrushLives, 0, 10, (n) => setSettings({ wallrushLives: n }))}
+<div class="line">
+  <span class="label">Music <span class="faint small">The walls come on the beat of one of the Rhythm Rain songs, drawn at random (Spotify pauses meanwhile)</span></span>
+  <Toggle checked={settings.wallrushMusic} onchange={(v) => setSettings({ wallrushMusic: v })} label="Music" />
+</div>
 <div class="line">
   <span class="label">Holes <span class="faint small">{WALLRUSH_LEVELS.find((l) => l.id === settings.wallrushLevel)?.help}</span></span>
   <select class="input" value={settings.wallrushLevel} onchange={(e) => setSettings({ wallrushLevel: e.currentTarget.value as GamesSettings['wallrushLevel'] })}>

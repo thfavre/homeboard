@@ -102,10 +102,13 @@ export function wallPicture(shape: PoseShape, margin: number): { pic: HTMLCanvas
   return { pic: c, rim };
 }
 
-/** The corridor: floor grid lines rushing towards the player, neon rails on both sides */
-export function drawCorridor(g: CanvasRenderingContext2D, l: Look, w: number, h: number, t: number, speed: number, tint: string): void {
+/**
+ * The corridor: floor grid lines rushing towards the player, neon rails on both sides. `pulse` (0 to 1)
+ * flashes it on the beat of the music.
+ */
+export function drawCorridor(g: CanvasRenderingContext2D, l: Look, w: number, h: number, t: number, speed: number, tint: string, pulse = 0): void {
   const bg = g.createRadialGradient(l.vx, l.vy, 0, l.vx, l.vy, Math.max(w, h) * 0.75);
-  bg.addColorStop(0, '#2a0b4d');
+  bg.addColorStop(0, pulse > 0 ? `rgb(${42 + 50 * pulse}, ${11 + 10 * pulse}, ${77 + 60 * pulse})` : '#2a0b4d');
   bg.addColorStop(0.45, '#0d0420');
   bg.addColorStop(1, '#030108');
   g.fillStyle = bg;
@@ -116,8 +119,8 @@ export function drawCorridor(g: CanvasRenderingContext2D, l: Look, w: number, h:
   g.shadowBlur = 14;
 
   // Lines along the floor, out to the sides
-  g.strokeStyle = g.shadowColor = 'rgba(0, 229, 255, 0.35)';
-  g.lineWidth = 2;
+  g.strokeStyle = g.shadowColor = `rgba(0, 229, 255, ${0.35 + 0.4 * pulse})`;
+  g.lineWidth = 2 + 2 * pulse;
   for (let x = -3; x <= 3; x += 0.5) {
     const a = project(l, x, 0, 1.6);
     const b = project(l, x, 0, -0.06);
@@ -132,8 +135,8 @@ export function drawCorridor(g: CanvasRenderingContext2D, l: Look, w: number, h:
   for (let z = 1.6 - shift; z > -0.06; z -= step) {
     const a = project(l, -3, 0, z);
     const b = project(l, 3, 0, z);
-    g.globalAlpha = Math.min(1, (1.6 - z) * 1.5) * 0.7;
-    g.lineWidth = Math.max(1, 3 * a.s);
+    g.globalAlpha = Math.min(1, (1.6 - z) * 1.5) * (0.7 + 0.3 * pulse);
+    g.lineWidth = Math.max(1, (3 + 3 * pulse) * a.s);
     g.beginPath();
     g.moveTo(a.x, a.y);
     g.lineTo(b.x, b.y);
@@ -143,7 +146,8 @@ export function drawCorridor(g: CanvasRenderingContext2D, l: Look, w: number, h:
 
   // Rails: two glowing lines high on each side
   g.strokeStyle = g.shadowColor = tint;
-  g.lineWidth = 4;
+  g.lineWidth = 4 + 5 * pulse;
+  g.shadowBlur = 14 + 30 * pulse;
   for (const x of [-1.9, 1.9]) {
     for (const y of [0, 1.5]) {
       const a = project(l, x, y, 1.6);
@@ -181,10 +185,17 @@ export class Silhouette {
     this.img = this.g.createImageData(GW, GH);
   }
 
-  /** `hole`: the hole to show against (null: all cyan). `warn`: 0 to 1, how red the parts out turn */
-  paint(cells: Uint8Array, hole: Uint8Array | null, warn: number): void {
+  /**
+   * `hole`: the hole to show against (null: all cyan). `warn`: 0 to 1, how red the parts out turn.
+   * `fits`: 0 to 1, how green the body turns (the player fits the coming hole)
+   */
+  paint(cells: Uint8Array, hole: Uint8Array | null, warn: number, fits = 0): void {
     const d = this.img.data;
-    const r = Math.round(0 + (255 - 0) * warn);
+    const ir = Math.round(61 * fits);
+    const ig = Math.round(229 + (255 - 229) * fits);
+    const ib = Math.round(255 + (155 - 255) * fits);
+    // Cyan to red through pink (a straight blend goes grey half way)
+    const r = Math.round(255 * Math.min(1, warn * 2));
     const gr = Math.round(229 + (51 - 229) * warn);
     const b = Math.round(255 + (85 - 255) * warn);
     for (let i = 0; i < cells.length; i++) {
@@ -198,9 +209,9 @@ export class Silhouette {
         d[o + 1] = gr;
         d[o + 2] = b;
       } else {
-        d[o] = 0;
-        d[o + 1] = 229;
-        d[o + 2] = 255;
+        d[o] = ir;
+        d[o + 1] = ig;
+        d[o + 2] = ib;
       }
       d[o + 3] = 255;
     }
@@ -224,4 +235,58 @@ export class Silhouette {
     g.drawImage(this.c, a.x, a.y, w, h);
     g.restore();
   }
+}
+
+/** Sparks: bursts of glowing bits when a wall is passed or hit */
+export class Sparks {
+  private list: { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number }[] = [];
+
+  /** A burst at (x, y), screen pixels */
+  burst(x: number, y: number, n: number, colors: string[], speed: number, size = 6): void {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = speed * (0.3 + Math.random() * 0.9);
+      const max = 0.5 + Math.random() * 0.7;
+      this.list.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - speed * 0.25, life: max, max, color: colors[i % colors.length], size: size * (0.5 + Math.random()) });
+    }
+  }
+
+  /** Bits flying out along an outline (the rim of a hole), screen pixels */
+  along(points: { x: number; y: number }[], colors: string[], speed: number, size = 5): void {
+    for (const p of points) this.burst(p.x, p.y, 1, colors, speed, size);
+  }
+
+  draw(g: CanvasRenderingContext2D, dt: number): void {
+    if (!this.list.length) return;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    this.list = this.list.filter((p) => (p.life -= dt) > 0);
+    for (const p of this.list) {
+      p.vy += 900 * dt;
+      p.vx *= 1 - 1.5 * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      const k = p.life / p.max;
+      g.globalAlpha = k;
+      // Added light, no blur: hundreds of them stay cheap
+      g.fillStyle = p.color;
+      g.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    g.restore();
+  }
+}
+
+/** Points on the outline of a hole (world units), for sparks to fly from */
+export function holeOutline(hole: Uint8Array, gw: number, gh: number, every = 9): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  let n = 0;
+  for (let j = 1; j < gh - 1; j++) {
+    for (let i = 1; i < gw - 1; i++) {
+      const k = j * gw + i;
+      if (!hole[k] || (hole[k - 1] && hole[k + 1] && hole[k - gw] && hole[k + gw])) continue;
+      if (n++ % every) continue;
+      out.push({ x: GRID.x0 + (i + 0.5) / GRID.res, y: GRID.y1 - (j + 0.5) / GRID.res });
+    }
+  }
+  return out;
 }

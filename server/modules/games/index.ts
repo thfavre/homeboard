@@ -149,7 +149,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmHolds: true, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'tv', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {}, ...CROWD_DEFAULTS, ...SPY_DEFAULTS, ...SNIPER_DEFAULTS, wallrushWalls: 12, wallrushLevel: 'normal', wallrushSpeed: 'normal', wallrushLives: 3, wallrushModel: 'full' },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmHolds: true, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'tv', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {}, ...CROWD_DEFAULTS, ...SPY_DEFAULTS, ...SNIPER_DEFAULTS, wallrushWalls: 12, wallrushLevel: 'normal', wallrushSpeed: 'normal', wallrushLives: 3, wallrushModel: 'full', wallrushMusic: true },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -364,7 +364,8 @@ export default defineModule<GamesSettings>({
         music()?.level(ctx.settings.get().sniperMusic);
         return;
       }
-      if (!gameInfo(m.game)?.pausesMusic) return;
+      // Wall Rush pauses it only when it plays a song of its own
+      if (!gameInfo(m.game)?.pausesMusic && !(m.game === 'wallrush' && m.options.song)) return;
       void music()
         ?.pause()
         .then((paused) => {
@@ -784,7 +785,10 @@ export default defineModule<GamesSettings>({
       const name = gameInfo(game)!.name;
       const fee = ctx.economy.charge(guest, song ? 'games.rhythmMusic' : 'games.solo', 1, `Solo: ${name}${song ? ' with music' : ''}`);
       try {
-        const m = createMatch(game, 'solo', player(guest), [player(guest)], 0, [fee], game === 'rhythm' ? rhythmOptions(args, song) : {});
+        // Wall Rush: the walls come on the beat of one of the Rhythm Rain songs, when the host has some
+        const wallSong = game === 'wallrush' && ctx.settings.get().wallrushMusic ? drawSong() : null;
+        const options = game === 'rhythm' ? rhythmOptions(args, song) : wallSong ? { song: wallSong.key } : {};
+        const m = createMatch(game, 'solo', player(guest), [player(guest)], 0, [fee], options);
         intro(m);
       } catch (err) {
         ctx.economy.refund(fee);
@@ -1175,6 +1179,7 @@ export default defineModule<GamesSettings>({
         wallrushLives: int('wallrushLives', 0, 10),
         wallrushLevel: WALLRUSH_LEVELS.find((l) => l.id === args?.wallrushLevel)?.id ?? s.wallrushLevel,
         wallrushSpeed: WALLRUSH_SPEEDS.find((l) => l.id === args?.wallrushSpeed)?.id ?? s.wallrushSpeed,
+        wallrushMusic: typeof args?.wallrushMusic === 'boolean' ? args.wallrushMusic : s.wallrushMusic,
         // Only a model that is downloaded
         wallrushModel: WALLRUSH_MODELS.find((l) => l.id === args?.wallrushModel && wallrushAddon.installed(l.id))?.id ?? s.wallrushModel,
         scratchLight:
