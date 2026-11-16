@@ -15,6 +15,8 @@
   import PirateSoundsAdmin from './PirateSoundsAdmin.svelte';
   import PirateSongsAdmin from './PirateSongsAdmin.svelte';
   import CrowdAdmin from './crowd/CrowdAdmin.svelte';
+  import WallRushAdmin from './wallrush/WallRushAdmin.svelte';
+  import { wallRushLevel, wallRushModel, wallRushSpeed } from '$shared/wallrush.ts';
 
   const s = $derived(gamesState());
   const roomGames = GAMES.filter((g) => g.modes.includes('room'));
@@ -98,6 +100,10 @@
         return `${plural(st.crowdRounds, 'round')}, ${st.crowdNpcs} passers-by, ${st.crowdShots ? plural(st.crowdShots, 'shot') : 'unlimited shots'} each`;
       case 'spy':
         return `${plural(st.spyRounds, 'round')} of ${st.spyMinutes} min, ${st.spyShots ? plural(st.spyShots, 'shot') : 'unlimited shots'} per sniper, ${st.spyNeeded} of 4 suitcases`;
+      case 'wallrush':
+        return s?.wallrushAddon?.models.length
+          ? `${plural(st.wallrushWalls, 'wall')}, ${wallRushLevel(st.wallrushLevel).name.toLowerCase()} holes, ${wallRushSpeed(st.wallrushSpeed).name.toLowerCase()} walls, ${wallRushModel(st.wallrushModel).name.toLowerCase()} tracking`
+          : 'needs its body tracking';
       default:
         return '';
     }
@@ -307,6 +313,8 @@
     <PartyAdmin settings={s!.settings} lights={s!.lightDevices ?? []} />
   {:else if id === 'crowd' || id === 'spy'}
     <CrowdAdmin game={id} settings={s!.settings} />
+  {:else if id === 'wallrush'}
+    <WallRushAdmin settings={s!.settings} addon={s!.wallrushAddon} />
   {/if}
 {/snippet}
 
@@ -379,7 +387,7 @@
               <span class="label">
                 <strong>{g.name}</strong>
                 <span class="faint small truncate">
-                  {modes(g.id)}{#if expandable}<span class:warn={(g.id === 'rhythm' && !s.settings.rhythmLight) || (g.id === 'party' && !s.settings.partyLight)}> · {summary(g.id, s.settings)}</span>{/if}
+                  {modes(g.id)}{#if expandable}<span class:warn={(g.id === 'rhythm' && !s.settings.rhythmLight) || (g.id === 'party' && !s.settings.partyLight) || s.missing.includes(g.id)}> · {summary(g.id, s.settings)}</span>{/if}
                 </span>
               </span>
               {#if expandable}<span class="chev"><ChevronDown size={18} /></span>{/if}

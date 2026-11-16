@@ -2,8 +2,9 @@
 
 import type { PartyMiniId, PartyOptions } from './party.ts';
 import type { SpyGadget } from './crowd.ts';
+import type { AddonStatus, WallRushLevel, WallRushModel, WallRushSpeed } from './wallrush.ts';
 
-export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm' | 'pirates' | 'party' | 'crowd' | 'spy';
+export type GameId = 'timer' | 'simon' | 'reflex' | 'circle' | 'bluff' | 'coin' | 'rhythm' | 'pirates' | 'party' | 'crowd' | 'spy' | 'wallrush';
 export type GameMode = 'duel' | 'room' | 'solo';
 
 export interface GameInfo {
@@ -27,6 +28,8 @@ export interface GameInfo {
   colors: [string, string];
   /** Most players a room game takes (no limit when unset) */
   maxPlayers?: number;
+  /** Needs files the host downloads from the admin first (Wall Rush: the body tracking) */
+  addon?: boolean;
 }
 
 export const GAMES: GameInfo[] = [
@@ -140,6 +143,16 @@ export const GAMES: GameInfo[] = [
     steps: ['The spy walks in the crowd and opens the suitcases in the corners', 'Snipers aim with the joystick, SHOOT, and DRAW to point out suspects', 'Spy escapes: 3 points. Sniper who shoots the spy: 2. Time up: 1 per sniper'],
     colors: ['#3dd6ff', '#8b5bff'],
     maxPlayers: 10,
+  },
+  {
+    id: 'wallrush',
+    name: 'Wall Rush',
+    tagline: 'Strike the pose of the hole before the wall hits you',
+    rules: 'Your phone films you and the TV turns you into a glowing silhouette. Glowing walls rush at you, each with a hole in the shape of a pose: take that pose, in the right place, before the wall reaches you. The parts of you that stick out turn red. Fit through and you score, more if you fill the hole well, and walls passed in a row multiply your points. Hit the wall and you lose a life.',
+    modes: ['solo'],
+    addon: true,
+    steps: ['Put your phone on a stand facing you, 3 m away, and step back until the TV sees all of you', 'A wall comes with a hole in the shape of a pose: take that pose', 'Red parts stick out. Fit through to score, keep the streak going'],
+    colors: ['#00e5ff', '#ff2bd6'],
   },
 ];
 
@@ -271,6 +284,10 @@ export interface GamesState {
   /** Guests online with their balance, to pick an opponent who can match the bet */
   online: (GamePlayer & { balance: number })[];
   settings: GamesSettings;
+  /** Games whose add-on files are not downloaded: guests cannot start them */
+  missing: GameId[];
+  /** Admin only: the Wall Rush add-on on this computer */
+  wallrushAddon?: AddonStatus;
 }
 
 export interface GamesSettings {
@@ -380,6 +397,12 @@ export interface GamesSettings {
   sniperMusic: number;
   sniperSounds: number;
   sniperLights: boolean;
+  /** Wall Rush: walls a game, how tight the holes are, how fast the walls come, lives (0: unlimited) and the tracking model */
+  wallrushWalls: number;
+  wallrushLevel: WallRushLevel;
+  wallrushSpeed: WallRushSpeed;
+  wallrushLives: number;
+  wallrushModel: WallRushModel;
 }
 
 // ------------------------------------------------------------ per game views

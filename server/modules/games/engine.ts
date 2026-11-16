@@ -72,6 +72,8 @@ export interface MatchApi {
   sound(name: string, data: unknown): void;
   /** One-off event to every TV (Crowd Race: the frames of the crowd) */
   tv(name: string, data: unknown): void;
+  /** One-off event to one player's phones (Wall Rush: the TV's answer to the camera) */
+  toPlayer(playerId: string, name: string, data: unknown): void;
   /**
    * A short effect over whatever the lights show, which then carry on as they were (the game does not hold
    * them). Does nothing when the host turned the game's flashes off or no light can show it.

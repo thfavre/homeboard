@@ -96,10 +96,15 @@
   /** Played alone (games that can be, from the 1 vs 1 sheet): no opponent, no bet */
   let solo = $state(false);
   const canSolo = $derived(mode === 'duel' && !!picked?.modes.includes('solo'));
-  const isSolo = $derived(canSolo && solo);
+  /** A game for one only (Wall Rush): no opponent to pick */
+  const soloOnly = (g: GameInfo | null) => !!g && g.modes.length === 1 && g.modes[0] === 'solo';
+  const isSolo = $derived(canSolo && (solo || soloOnly(picked)));
   const withMusic = $derived(picked?.id === 'rhythm' && music && !!song);
   const economy = $derived(!!hb.core?.economyEnabled);
-  const list = $derived(GAMES.filter((g) => g.modes.includes(mode) && s?.settings.enabled.includes(g.id)));
+  // Games for one only are listed with the 1 vs 1 games (played solo); games whose add-on is not downloaded are hidden
+  const list = $derived(
+    GAMES.filter((g) => (g.modes.includes(mode) || (mode === 'duel' && soloOnly(g))) && s?.settings.enabled.includes(g.id) && !s?.missing?.includes(g.id)),
+  );
   // Richest first: the ones who can match a big bet
   const others = $derived((s?.online ?? []).filter((p) => p.id !== hb.me?.id).sort((a, b) => b.balance - a.balance));
   const opponentName = $derived(others.find((p) => p.id === opponent)?.name);
@@ -397,7 +402,7 @@
       {/if}
     {/if}
 
-    {#if mode === 'duel'}
+    {#if mode === 'duel' && !soloOnly(picked)}
       <div class="field">
         <span class="label">{canSolo ? 'Who do you play against?' : 'Who do you challenge?'}</span>
         {#if canSolo}

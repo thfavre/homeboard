@@ -55,6 +55,9 @@ import { loadSong, searchSongs, songKey, type Song } from './beatsaver.ts';
 import { lightParty } from './party/index.ts';
 import { crowdRace } from './crowd/race.ts';
 import { spyHunt } from './crowd/spy.ts';
+import { wallRush } from './wallrush/game.ts';
+import { WallRushAddon } from './wallrush/addon.ts';
+import { WALLRUSH_LEVELS, WALLRUSH_MODELS, WALLRUSH_SPEEDS, wallRushModel } from '../../../shared/wallrush.ts';
 import { CROWD_DEFAULTS, CROWD_LIMITS, SNIPER_DEFAULTS, SPY_DEFAULTS, SPY_GADGETS } from '../../../shared/crowd.ts';
 import { PARTY_MINIS, cleanPartyOptions } from '../../../shared/party.ts';
 
@@ -73,6 +76,7 @@ const FACTORIES: Record<GameId, GameFactory> = {
   party: lightParty,
   crowd: crowdRace,
   spy: spyHunt,
+  wallrush: wallRush,
 };
 
 /** Games played on one light the host picks: the setting that names it */
@@ -145,7 +149,7 @@ export default defineModule<GamesSettings>({
   id: 'games',
   name: 'Games',
   description: 'Duels and party games on the TV, played from the phones',
-  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmHolds: true, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'tv', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {}, ...CROWD_DEFAULTS, ...SPY_DEFAULTS, ...SNIPER_DEFAULTS },
+  settings: { enabled: GAMES.map((g) => g.id), maxStake: 0, tvColors: true, timerRounds: 3, circleCount: 3, reflexRounds: 5, simonStart: 1, reflexPerkSec: 60, circlePerkSec: 60, rhythmPerkSec: 45, bluffMultiplier: 0.5, bluffCooldownMin: 30, bluffChooseSec: 30, scratchLight: '', rhythmLight: '', rhythmReverse: false, rhythmMinSec: 60, rhythmMaxSec: 120, rhythmFullSong: false, rhythmHolds: true, rhythmSongs: STARTER_SONGS, rhythmRatings: {}, rhythmAudioOffset: 0, rhythmSoloTaps: 'tv', pirateLight: '', pirateReverse: false, pirateTreasure: 100, pirateLength: 'normal', pirateAudioOffset: 0, pirateSounds: {}, pirateSongs: [], pirateSongVolume: 70, pirateDrumVolume: 100, partyLight: '', partyReverse: false, partyRounds: 3, partyMinis: PARTY_MINIS.map((g) => g.id), partyOptions: {}, ...CROWD_DEFAULTS, ...SPY_DEFAULTS, ...SNIPER_DEFAULTS, wallrushWalls: 12, wallrushLevel: 'normal', wallrushSpeed: 'normal', wallrushLives: 3, wallrushModel: 'full' },
 
   setup(ctx) {
     const invites = new Map<string, Invite>();
@@ -264,7 +268,13 @@ export default defineModule<GamesSettings>({
 
     const lights = () => ctx.use<LightsApi>('lights');
     const lightsOn = () => !!lights()?.available();
-    const allowed = (game: GameId, mode: GameMode) => ctx.settings.get().enabled.includes(game) && !!gameInfo(game)?.modes.includes(mode);
+    // Wall Rush: its body tracking files are downloaded from the admin, and served to the TV from here
+    const wallrushAddon = new WallRushAddon(join(ctx.dataDir, 'wallrush'), () => ctx.publish());
+    ctx.http.use('/wallrush', express.static(wallrushAddon.dir, { maxAge: '7d', fallthrough: false }));
+    /** Games that need add-on files the host has not downloaded */
+    const missing = (): GameId[] => (wallrushAddon.installed(ctx.settings.get().wallrushModel) ? [] : ['wallrush']);
+    const allowed = (game: GameId, mode: GameMode) =>
+      ctx.settings.get().enabled.includes(game) && !!gameInfo(game)?.modes.includes(mode) && !missing().includes(game);
     const fmt = (amount: number) => `${formatAmount(amount)} ${ctx.economy.currency.symbol}`;
 
     const cleanStake = (raw: unknown): number => {
@@ -584,6 +594,7 @@ export default defineModule<GamesSettings>({
           (lights()?.list() ?? []).filter((d) => d.online).map((d) => ({ id: d.id, leds: Math.min(490, d.leds ?? 60), send: (rgb: Uint8Array) => lights()?.frame(d.id, rgb) })),
         sound: (name, data) => ctx.emit('tv-audio', name, data),
         tv: (name, data) => ctx.emit('tv', name, data),
+        toPlayer: (id, name, data) => ctx.emit({ guest: id }, name, data),
         flash: (kind, opts) => {
           if (ctx.settings.get().sniperLights) lights()?.flash(kind, opts);
         },
@@ -626,6 +637,7 @@ export default defineModule<GamesSettings>({
         ctx.session.count(guest, 'games');
         if (outcome.winners.includes(p.id) && m.players.length > 1) ctx.session.count(guest, 'wins');
         if (board && outcome.scores?.[p.id] !== undefined) ctx.session.best(guest, board, outcome.scores[p.id]);
+        if (m.game === 'wallrush' && outcome.scores?.[p.id] !== undefined) ctx.session.best(guest, 'wallrush', outcome.scores[p.id]);
       }
 
       for (const [id, amount] of Object.entries(payouts)) {
@@ -762,6 +774,7 @@ export default defineModule<GamesSettings>({
     /** A game for one, on the TV or its light (no bet: just the fee) */
     ctx.onGuest('solo', (args, guest) => {
       const game = String(args?.game ?? '') as GameId;
+      if (missing().includes(game)) throw new HbError(`${gameInfo(game)?.name ?? 'This game'} is not installed on this party`);
       if (!allowed(game, 'solo')) throw new HbError('This game cannot be played solo');
       tvFree(game);
       checkLight(game);
@@ -1115,6 +1128,30 @@ export default defineModule<GamesSettings>({
       const inv = invites.get(String(args?.id ?? ''));
       if (inv) dropInvite(inv, 'The host cancelled your challenge');
     });
+    /** Download the Wall Rush tracking with one model; answers at once, the progress shows in the state */
+    ctx.onAdmin('wallrushInstall', (args) => {
+      const model = wallRushModel(String(args?.model ?? '')).id;
+      void wallrushAddon
+        .install(model)
+        .then(() => {
+          ctx.settings.update({ wallrushModel: model });
+          ctx.publish();
+        })
+        .catch((err) => ctx.log.warn('Wall Rush download failed:', (err as Error).message));
+      return true;
+    });
+    /** Delete one model (model given) or the whole add-on */
+    ctx.onAdmin('wallrushRemove', (args) => {
+      if ([...matches.values()].some((m) => m.game === 'wallrush')) throw new HbError('Wall Rush is being played, wait for it to end');
+      const model = args?.model ? wallRushModel(String(args.model)).id : undefined;
+      wallrushAddon.remove(model);
+      // Another model still there: the game uses it
+      const left = wallrushAddon.models();
+      if (left.length && !left.includes(ctx.settings.get().wallrushModel)) ctx.settings.update({ wallrushModel: left[0] });
+      ctx.publish();
+      return true;
+    });
+
     ctx.onAdmin('setSettings', (args) => {
       const s = ctx.settings.get();
       /** A whole number setting from the page, kept between min and max (unchanged when not sent) */
@@ -1134,6 +1171,12 @@ export default defineModule<GamesSettings>({
         bluffMultiplier: args?.bluffMultiplier !== undefined ? Math.round(clamp(num(args.bluffMultiplier, 0.5), 0, 3) * 100) / 100 : s.bluffMultiplier,
         bluffCooldownMin: args?.bluffCooldownMin !== undefined ? Math.round(clamp(num(args.bluffCooldownMin, 30), 0, 240)) : s.bluffCooldownMin,
         bluffChooseSec: args?.bluffChooseSec !== undefined ? Math.round(clamp(num(args.bluffChooseSec, 30), 10, 180)) : s.bluffChooseSec,
+        wallrushWalls: int('wallrushWalls', 3, 30),
+        wallrushLives: int('wallrushLives', 0, 10),
+        wallrushLevel: WALLRUSH_LEVELS.find((l) => l.id === args?.wallrushLevel)?.id ?? s.wallrushLevel,
+        wallrushSpeed: WALLRUSH_SPEEDS.find((l) => l.id === args?.wallrushSpeed)?.id ?? s.wallrushSpeed,
+        // Only a model that is downloaded
+        wallrushModel: WALLRUSH_MODELS.find((l) => l.id === args?.wallrushModel && wallrushAddon.installed(l.id))?.id ?? s.wallrushModel,
         scratchLight:
           typeof args?.scratchLight === 'string' && (args.scratchLight === '' || lights()?.list().some((d) => d.id === args.scratchLight))
             ? args.scratchLight
@@ -1251,6 +1294,8 @@ export default defineModule<GamesSettings>({
         rhythmSongs: s.rhythmSongs.map((key) => songs.get(key)?.info ?? { key, status: 'loading' as const }),
         online: role === 'tv' ? [] : [...ctx.session.guests.values()].filter((g) => g.sockets > 0).map((g) => ({ ...player(g), balance: g.balance })),
         settings: s,
+        missing: missing(),
+        ...(role === 'admin' ? { wallrushAddon: wallrushAddon.status() } : {}),
       };
     });
 

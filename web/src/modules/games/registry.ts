@@ -19,6 +19,8 @@ import RacePhone from './crowd/RacePhone.svelte';
 import RaceTv from './crowd/RaceTv.svelte';
 import SpyPhone from './crowd/SpyPhone.svelte';
 import SpyTv from './crowd/SpyTv.svelte';
+import WallRushPhone from './wallrush/WallRushPhone.svelte';
+import WallRushTv from './wallrush/WallRushTv.svelte';
 
 type View = Component<{ m: MatchState }>;
 
@@ -39,4 +41,5 @@ export const GAME_UI: Record<GameId, { phone: View; tv?: View; tvResult?: boolea
   party: { phone: PartyPhone, tv: PartyTv },
   crowd: { phone: RacePhone, tv: RaceTv, fill: true },
   spy: { phone: SpyPhone, tv: SpyTv, fill: true },
+  wallrush: { phone: WallRushPhone, tv: WallRushTv },
 };

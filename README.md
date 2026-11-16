@@ -49,7 +49,13 @@ run a test copy without touching the real guests and settings).
   Perfect Circle, Bluff, Coin Flip, Rhythm Rain, Pirate Race, Crowd Race and Spy Hunt (hide in a
   crowd on the TV, snipe from the phones). Their characters are LPC sprites, built by
   `scripts/crowd-sprites.ts`, and their streets and square are LPC style environment art; credits in
-  `web/public/crowd/CREDITS.txt` and `web/public/crowd/env/CREDITS.txt`
+  `web/public/crowd/CREDITS.txt` and `web/public/crowd/env/CREDITS.txt`.
+  Plus **Wall Rush** (solo): the player's phone films them and streams to the TV over the Wi-Fi
+  (WebRTC), the TV tracks the body with MediaPipe on the TV computer's graphics card, and the player
+  takes the pose of the hole in each neon wall rushing at them. Its body tracking (15 to 40 MB) is an
+  optional add-on downloaded from the admin (**Games > Wall Rush**), never shipped with Homeboard, so
+  a Raspberry Pi install never needs it. Code in `server/modules/games/wallrush/` and
+  `web/src/modules/games/wallrush/`
 - **Arcade**: 1 vs 1 phone games with a bet: 1, 3 or 5 games drawn at random among Knife Throw,
   Tower Stack, Flap, Zig, Plank, Street Dash, Pop Up, Quick Maths and Slicer, each revealed when its
   round starts. Both players get the same run (same seed), played on their own phone with no lag and
