@@ -944,6 +944,8 @@ export interface WorldState {
   day?: { on: boolean } & TownClock;
   /** Leaves now and then falling from the trees on the TV */
   leaves?: boolean;
+  /** The TV draws the town the cheap way, for a Raspberry Pi: the art at its own pixel size (scaled up by the screen), 30 frames a second, without the small effects */
+  lite?: boolean;
   /** How long each tree waits before dropping its next leaf: from, to (seconds) */
   leavesSec?: [number, number];
   /** Guest: the own choices (to edit again), set once the avatar exists */

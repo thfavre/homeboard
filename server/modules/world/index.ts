@@ -111,6 +111,8 @@ interface WorldSettings extends ActionSettings, LotSettings {
   lamplighter: boolean;
   /** Leaves now and then falling from the trees on the TV */
   leaves: boolean;
+  /** The TV draws the town the cheap way (fewer pixels, fewer frames, no small effects): for a Raspberry Pi or another slow TV computer */
+  lite: boolean;
   /** Now and then someone shakes the tree over the bench next to it while somebody sits there: the chance each time a character picks something to do (percent), and the least time between two (town minutes) */
   treeShake: boolean;
   treeShakePct: number;
@@ -319,6 +321,7 @@ export default defineModule<WorldSettings>({
     campfire: true,
     lamplighter: true,
     leaves: true,
+    lite: false,
     leavesMinSec: 8,
     leavesMaxSec: 20,
     treeShake: true,
@@ -719,6 +722,7 @@ export default defineModule<WorldSettings>({
         shop: { currencyName: s.currencyName, prices: tierPrices(), look: lookPrices(), unlockPieces: s.unlockPieces, secretPieces: s.secretPieces },
         day: { on: s.dayCycle, ...townClock() },
         leaves: s.leaves,
+        lite: s.lite,
         leavesSec: [s.leavesMinSec, s.leavesMaxSec],
         king: { on: s.king, id: crowned, since: king.since, price: kingPrice(), pricing: kingPricing(), ceremony: s.ceremony ? { everyDays: s.ceremonyEveryDays, time: s.ceremonyTime } : null, reigns },
         lot: lot.info(),
@@ -1464,6 +1468,7 @@ export default defineModule<WorldSettings>({
         campfire: typeof args.campfire === 'boolean' ? args.campfire : s.campfire,
         lamplighter: typeof args.lamplighter === 'boolean' ? args.lamplighter : s.lamplighter,
         leaves: typeof args.leaves === 'boolean' ? args.leaves : s.leaves,
+        lite: typeof args.lite === 'boolean' ? args.lite : s.lite,
         leavesMinSec: Math.max(0.5, secs(args.leavesMinSec, s.leavesMinSec, 600)),
         leavesMaxSec: Math.max(0.5, secs(args.leavesMaxSec, s.leavesMaxSec, 600)),
         treeShake: typeof args.treeShake === 'boolean' ? args.treeShake : s.treeShake,

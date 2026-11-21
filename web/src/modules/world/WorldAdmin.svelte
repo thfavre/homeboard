@@ -144,6 +144,16 @@
 
 {#if mod}
   <Section title="Settings">
+    <div class="line">
+      <div>
+        <strong>Lite mode for a Raspberry Pi</strong>
+        <p class="faint small">
+          The TV draws the town the cheap way, for a slow TV computer: the art at its own pixel size scaled up by the screen, 30 frames a second, and
+          without the small effects (falling leaves, glints on the river, the lamps' pools of light, the barber's falling hair). The town still lives the same.
+        </p>
+      </div>
+      <Toggle checked={!!mod.lite} label="Lite mode for a Raspberry Pi" onchange={(v) => setOption('lite', v)} />
+    </div>
     <label class="field">
       <span>Money name</span>
       <input class="input" type="text" maxlength="24" value={mod.shop?.currencyName ?? ''} onchange={(e) => setOption('currencyName', e.currentTarget.value)} />

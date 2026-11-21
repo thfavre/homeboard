@@ -34,6 +34,14 @@
 
   const world = $derived(hb.modules.world as WorldState | undefined);
   /**
+   * Lite mode (the admin's setting), for a Raspberry Pi: the canvas has one pixel per pixel of the art
+   * and the screen scales it up, it is drawn 30 times a second on an opaque canvas, and the small
+   * effects are left out (falling leaves, the river's glints, the lamps' pools, the cut hair falling,
+   * the fireworks' flash); the names are drawn once each and kept
+   */
+  const lite = $derived(!!world?.lite);
+  const LITE_FPS = 30;
+  /**
    * How many times faster than real time the town runs, and its button: pressed again within a few
    * seconds it goes on to the next speed; pressed later while sped up, back to real time
    */
@@ -55,7 +63,8 @@
     if (tvFull.on) leaveFull();
   });
 
-  let canvas: HTMLCanvasElement;
+  // (state: lite mode swaps the canvas for a new one)
+  let canvas = $state<HTMLCanvasElement>();
   let wrap: HTMLDivElement;
   let env: Env | null = null;
   let shopArt: ShopArt | null = null;
@@ -143,8 +152,13 @@
       frames.push(f);
       if (frames.length > 30) frames = frames.slice(-15);
     });
-    const loop = () => {
-      draw();
+    // (in lite mode only every other frame or so is drawn: a few ms of slack so a 60 Hz screen gets an even 30)
+    let drawn = 0;
+    const loop = (at: number) => {
+      if (!lite || at - drawn >= 1000 / LITE_FPS - 4) {
+        drawn = at;
+        draw();
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -155,7 +169,7 @@
   });
 
   /** A lamp post at night: a warm glow around its light, and a pool of it on the ground */
-  function drawLampLight(g: CanvasRenderingContext2D, x: number, y: number, dark: number, now: number): void {
+  function drawLampLight(g: CanvasRenderingContext2D, x: number, y: number, dark: number, now: number, pool = true): void {
     const ly = y - 82;
     const glow = g.createRadialGradient(x, ly, 0, x, ly, 60);
     glow.addColorStop(0, `rgba(255,214,130,${(0.34 + 0.04 * Math.sin(now / 700 + x)) * dark})`);
@@ -164,13 +178,14 @@
     g.beginPath();
     g.arc(x, ly, 60, 0, Math.PI * 2);
     g.fill();
+    if (!pool) return;
     g.save();
     g.translate(x, y);
     g.scale(1, 0.4);
-    const pool = g.createRadialGradient(0, 0, 0, 0, 0, 80);
-    pool.addColorStop(0, `rgba(255,205,130,${0.16 * dark})`);
-    pool.addColorStop(1, 'rgba(255,205,130,0)');
-    g.fillStyle = pool;
+    const spot = g.createRadialGradient(0, 0, 0, 0, 0, 80);
+    spot.addColorStop(0, `rgba(255,205,130,${0.16 * dark})`);
+    spot.addColorStop(1, 'rgba(255,205,130,0)');
+    g.fillStyle = spot;
     g.beginPath();
     g.arc(0, 0, 80, 0, Math.PI * 2);
     g.fill();
@@ -179,6 +194,11 @@
 
   /** A name over a head, like a game nametag; the King's is gold, with a crown before the name */
   function nameTag(g: CanvasRenderingContext2D, text: string, x: number, y: number, alpha: number, king = false): void {
+    if (lite) cachedTag(g, text, x, y, alpha, king);
+    else paintTag(g, text, x, y, alpha, king);
+  }
+
+  function paintTag(g: CanvasRenderingContext2D, text: string, x: number, y: number, alpha: number, king: boolean): void {
     g.font = '600 15px system-ui, sans-serif';
     const crown = king ? 18 : 0;
     const w = g.measureText(text).width + 16 + crown;
@@ -198,6 +218,42 @@
     g.textBaseline = 'middle';
     g.fillText(text, x + crown / 2, y);
     g.textBaseline = 'alphabetic';
+  }
+
+  /**
+   * Lite mode: each name drawn once into its own small canvas (at the canvas's scale, so it stays
+   * sharp) and then only copied, faded with the alpha. Made again when the scale changes.
+   */
+  const tags = new Map<string, HTMLCanvasElement>();
+  let tagScale = 0;
+  function cachedTag(g: CanvasRenderingContext2D, text: string, x: number, y: number, alpha: number, king: boolean): void {
+    const k = g.getTransform().a;
+    if (k !== tagScale) {
+      tags.clear();
+      tagScale = k;
+    }
+    const key = `${king ? 1 : 0}${text}`;
+    let c = tags.get(key);
+    if (!c) {
+      // (a sheet for every name ever shown would pile up over a long party)
+      if (tags.size > 200) tags.clear();
+      g.save();
+      g.font = '600 15px system-ui, sans-serif';
+      const w = g.measureText(text).width + 16 + (king ? 18 : 0);
+      g.restore();
+      c = document.createElement('canvas');
+      c.width = Math.ceil((w + 4) * k);
+      c.height = Math.ceil(26 * k);
+      const cg = c.getContext('2d')!;
+      cg.setTransform(k, 0, 0, k, 0, 0);
+      // (the tag's middle at the sheet's middle: 2 units of room around it for the King's outline)
+      cg.translate((w + 4) / 2, 13);
+      paintTag(cg, text, 0, 0, 1, king);
+      tags.set(key, c);
+    }
+    g.globalAlpha = alpha;
+    g.drawImage(c, x - c.width / k / 2, y - c.height / k / 2, c.width / k, c.height / k);
+    g.globalAlpha = 1;
   }
 
   /** The Zzz over a sleeper */
@@ -355,17 +411,23 @@
 
   function draw(): void {
     if (!canvas || !wrap) return;
-    const dpr = window.devicePixelRatio || 1;
+    // (lite: no more canvas pixels than the art has, one per sprite pixel; the screen scales them up)
+    const fit = Math.min(wrap.clientWidth / TOWN.w, wrap.clientHeight / TOWN.h);
+    const dpr = lite && fit > 0 ? Math.min(window.devicePixelRatio || 1, 1 / SPRITE_SCALE / fit) : window.devicePixelRatio || 1;
     const cw = Math.max(1, Math.round(wrap.clientWidth * dpr));
     const ch = Math.max(1, Math.round(wrap.clientHeight * dpr));
     if (canvas.width !== cw || canvas.height !== ch) {
       canvas.width = cw;
       canvas.height = ch;
     }
-    const g = canvas.getContext('2d')!;
+    // (lite: an opaque canvas, cheaper for the screen to show; it is a new one each time the mode changes)
+    const g = canvas.getContext('2d', lite ? { alpha: false } : undefined)!;
     g.setTransform(1, 0, 0, 1, 0, 0);
     // The whole canvas: birds fly off above the town rectangle, into the letterbox bands
-    g.clearRect(0, 0, cw, ch);
+    if (lite) {
+      g.fillStyle = '#26272c';
+      g.fillRect(0, 0, cw, ch);
+    } else g.clearRect(0, 0, cw, ch);
     g.imageSmoothingEnabled = false;
     const real = serverNow();
     // The town's own time: it can run faster than real time (the button), and everything that moves
@@ -434,7 +496,7 @@
     // The town's river flowing, glinting in the light
     if (env && ground.width >= TOWN.w) {
       if (brook) drawBrook(g, brook, now, wide);
-      drawBrookGlints(g, env['water-sparkle-anim'], now, wide);
+      if (!lite) drawBrookGlints(g, env['water-sparkle-anim'], now, wide);
     }
     // What the town's things need to know: how dark it is, which lamps are lit, a party on
     const dark = f0 ? (f0.dark ?? 0) + (f1 ? ((f1.dark ?? 0) - (f0.dark ?? 0)) * mix : 0) : 0;
@@ -528,7 +590,7 @@
     for (const p of lotThings) p.ground?.(g, now);
     for (const p of inHall) p.ground?.(g, now);
     // Leaves now and then coming off the trees: the ones that landed lie under everyone
-    const leafy = !!env && world?.leaves !== false;
+    const leafy = !!env && world?.leaves !== false && !lite;
     leaves.on = leafy;
     shakeSince = f0?.shake ?? null;
     if (leafy) {
@@ -665,7 +727,7 @@
               }
               // What the scissors went through since the last frame falls off, in the old hair's colors
               const done = cutCols.get(p.id) ?? left - 1;
-              if (col > done && s.img) {
+              if (col > done && s.img && !lite) {
                 cutCols.set(p.id, col);
                 const l = poseOf(q);
                 const pose = { anim: gameAnim(q.anim), dir: q.dir, dist: l.dist, since: now - l.since, now, phase: l.phase };
@@ -686,7 +748,7 @@
             if (s.prev && e < SWISH_MS) drawSwish(gg, place, q.x, e / SWISH_MS);
           }
         }
-        if (place.id === 'barber') drawClippings(gg, step);
+        if (place.id === 'barber' && clippings.length) drawClippings(gg, step);
       });
     }
     // The cafe, with the dancers seen through its window on a party night
@@ -730,7 +792,7 @@
       // The lamp posts the lamplighter has lit shine through the veil, with a pool of light on the pavement under them
       TOWN_SCENE.lamps.forEach((l, i) => {
         const level = lampLevel(i, now);
-        if (level > 0) drawLampLight(g, l.x, l.y, dark * level, now);
+        if (level > 0) drawLampLight(g, l.x, l.y, dark * level, now, !lite);
       });
       drawTownHallLight(g, dark);
       drawFireLight(g, dark, now);
@@ -761,7 +823,7 @@
       g.clip();
       const light = drawShow(g, show.design, real - show.at, TV_SKY, show.id, show.pad);
       g.restore();
-      if (light > 0.01) {
+      if (light > 0.01 && !lite) {
         g.globalCompositeOperation = 'lighter';
         g.fillStyle = `rgba(255,236,210,${0.07 * light})`;
         g.fillRect(0, top, TOWN.w, TOWN.h - top);
@@ -878,7 +940,10 @@
 </script>
 
 <div class="town" class:full={tvFull.on} bind:this={wrap}>
-  <canvas bind:this={canvas}></canvas>
+  <!-- (a new canvas when lite mode changes: an opaque one cannot become transparent again) -->
+  {#key lite}
+    <canvas bind:this={canvas} class:lite></canvas>
+  {/key}
   <div class="tools">
     <button type="button" class="speed" class:on={speed > 1} aria-label="Town speed {speed} times" onclick={faster}>
       <FastForward size={18} />{speed}×
@@ -904,6 +969,10 @@
     inset: 0;
     width: 100%;
     height: 100%;
+  }
+  /* Lite mode: the canvas has the art's own pixels, scaled up square by the screen */
+  canvas.lite {
+    image-rendering: pixelated;
   }
   .town.full {
     border-radius: 0;
