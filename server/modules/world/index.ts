@@ -1529,6 +1529,12 @@ export default defineModule<WorldSettings>({
       ctx.publish();
     });
 
+    // A character stuck somewhere: back on a free spot of the square (one guest's, or everyone's)
+    ctx.onAdmin('replace', (args) => {
+      const id = args?.guestId === undefined ? undefined : String(args.guestId);
+      if (!sim.replace(id)) throw new HbError(id ? 'That character is not in the town right now' : 'Nobody is in the town right now');
+    });
+
     // Host gift (or fine): the only other way money enters the town for now
     ctx.onAdmin('grant', (args) => {
       const guest = ctx.session.guests.get(String(args?.guestId ?? ''));

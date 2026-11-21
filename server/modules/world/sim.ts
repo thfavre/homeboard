@@ -1886,6 +1886,24 @@ export class TownSim {
   }
 
   /** Everyone is gone (a new party): no ceremony, the camera back on the town at once */
+  /**
+   * The host's way out for a stuck character: everyone (or the one with `id`) stands again on a free
+   * spot of the square, doing nothing for a moment, and picks what to do next from there. What it
+   * was busy with starts over: a shop trip, bed, the ceremony are taken up again, a chat or a seat is
+   * given up, a fireworks show goes up on its own after a while. Returns how many were moved.
+   */
+  replace(id?: string): number {
+    const now = this.clock();
+    let n = 0;
+    for (const w of this.walkers.values()) {
+      if (id && w.id !== id) continue;
+      const s = randSpot();
+      Object.assign(w, { x: s.x, y: s.y, dir: 2, doing: idle(now, 300, 1200), wrapped: null, anchor: { x: s.x, y: s.y, at: now }, through: now + THROUGH_MS, turn: 0, alpha: 1, fading: false });
+      n++;
+    }
+    return n;
+  }
+
   reset(): void {
     this.couriers.clear();
     this.skyShows = [];

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Crown, Moon, PartyPopper, Sun, Sunrise } from '@lucide/svelte';
+  import { Crown, LocateFixed, Moon, PartyPopper, Sun, Sunrise } from '@lucide/svelte';
   import { attempt, hb, rpc, serverNow } from '$lib/client.svelte.ts';
   import { day } from '$lib/time.ts';
   import Section from '$lib/ui/Section.svelte';
@@ -134,6 +134,11 @@
 
   /** Amount typed per guest row (give takes it, take negates it) */
   let amounts = $state<Record<string, string>>({});
+
+  /** A stuck character (or everyone) back on a free spot of the square */
+  function replace(guestId?: string, name?: string) {
+    attempt(() => rpc('world', 'replace', guestId ? { guestId } : {}), name ? `${name} is back on the square` : 'Everyone is back on the square');
+  }
 
   function grant(guestId: string, sign: 1 | -1) {
     const amount = Math.round(Number(amounts[guestId]));
@@ -696,8 +701,22 @@
     {#if mod.characters.length}
       <div class="people">
         {#each mod.characters as c (c.id)}
-          <span class="person" style:border-color={c.color}>{c.name}</span>
+          <span class="person" style:border-color={c.color}>
+            {c.name}
+            <button type="button" class="unstick" aria-label="Put {c.name} back on the square" title="Put back on the square" onclick={() => replace(c.id, c.name)}>
+              <LocateFixed size={14} />
+            </button>
+          </span>
         {/each}
+      </div>
+      <p class="faint small">
+        A character stuck somewhere: the button by its name puts it back on a free spot of the square, where it carries on (a shop trip or bed starts over).
+      </p>
+      <div class="buttons">
+        <TwoStepButton class="small" onconfirm={() => replace()}>
+          Put everyone back
+          {#snippet armed()}Tap again to move everyone{/snippet}
+        </TwoStepButton>
       </div>
     {/if}
   </Section>
@@ -792,11 +811,27 @@
     gap: 0.4rem;
   }
   .person {
-    padding: 0.2rem 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.3rem 0.2rem 0.6rem;
     border: 1px solid var(--border);
     border-left-width: 3px;
     border-radius: var(--radius-sm);
     background: var(--surface-2);
     font-size: 0.88rem;
+  }
+  .unstick {
+    display: flex;
+    padding: 0.15rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .unstick:hover {
+    background: var(--surface);
+    color: var(--text);
   }
 </style>
