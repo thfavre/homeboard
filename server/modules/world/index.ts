@@ -265,8 +265,8 @@ export default defineModule<WorldSettings>({
   name: 'Avatar world',
   description: 'A pixel town on the TV where every guest lives as their own avatar',
   settings: {
-    sleepAfterMin: 10,
-    fadeAfterMin: 20,
+    sleepAfterMin: 120,
+    fadeAfterMin: 10,
     currencyName: 'Acorns',
     earnPerMin: 3,
     startMoney: 50,

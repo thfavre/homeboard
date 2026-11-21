@@ -205,7 +205,7 @@
       <span>Fall asleep after (minutes away)</span>
       <input class="input" type="number" min="1" max="240" value={mod.sleepAfterMin} onchange={(e) => setMinutes('sleepAfterMin', e.currentTarget.value)} />
     </label>
-    <p class="faint small">A guest who closes the page walks to the edge of the town and lies down to sleep.</p>
+    <p class="faint small">A guest who closes the page lives on in the town as usual for this long, then walks to the edge of the town and lies down to sleep.</p>
     <label class="field">
       <span>Fade out after (more minutes)</span>
       <input class="input" type="number" min="1" max="480" value={mod.fadeAfterMin} onchange={(e) => setMinutes('fadeAfterMin', e.currentTarget.value)} />
